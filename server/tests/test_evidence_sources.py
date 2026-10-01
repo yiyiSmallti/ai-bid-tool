@@ -189,9 +189,8 @@ async def test_source_role_matrix_preserves_all_prior_grants(
     assert (
         await api.get(f"/evidence-sources/{source['id']}/preview/download-link", headers=headers[0])
     ).status_code == 200
-    assert ROLE_SCOPES[role] - {"evidence:source:read", "evidence:source:write"} == set(
-        BASELINE[role]
-    )
+    later = {"evidence:source:read", "evidence:source:write", "billing:read", "billing:redeem"}
+    assert ROLE_SCOPES[role] - later == set(BASELINE[role])
     assert {"evidence:confirm", "export"}.isdisjoint(ROLE_SCOPES[role])
 
 

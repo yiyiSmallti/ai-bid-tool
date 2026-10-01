@@ -1,6 +1,7 @@
 """Inputs for the platform operator console."""
 
 import re
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import Field, field_validator, model_validator
@@ -70,3 +71,45 @@ class PlatformModelSet(Contract):
         if self.default and not self.enabled:
             raise ValueError("a default model must be enabled")
         return self
+
+
+class CardRedeem(Contract):
+    code: str = Field(min_length=1, max_length=64)
+
+
+class OrgLookup(Contract):
+    email: str = Field(min_length=3, max_length=254)
+    password: str = Field(min_length=1, max_length=1024)
+
+
+class PlatformBalanceAdjust(Contract):
+    mode: Literal["add", "set"]
+    amount: float
+    reason: str = Field(min_length=1, max_length=500)
+
+    @field_validator("reason")
+    @classmethod
+    def meaningful_reason(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("reason must contain non-whitespace characters")
+        return value.strip()
+
+    @model_validator(mode="after")
+    def bounded(self):
+        if abs(self.amount) > 10**9 or (self.mode == "set" and self.amount < 0):
+            raise ValueError("amount is out of range")
+        return self
+
+
+class PlatformCardCreate(Contract):
+    count: int = Field(ge=1, le=500)
+    face_value: float = Field(gt=0, le=10**7)
+    expires_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=200)
+
+    @field_validator("expires_at")
+    @classmethod
+    def future_with_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and (value.tzinfo is None or value <= datetime.now(UTC)):
+            raise ValueError("expires_at must be a future time with a timezone")
+        return value

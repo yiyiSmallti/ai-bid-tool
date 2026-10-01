@@ -11,6 +11,7 @@ from app.core.errors import ServiceError
 from app.core.security import Secrets
 from app.schemas.contracts import Result
 from app.schemas.platform_contracts import (
+    OrgLookup,
     PasswordSetup,
     PlatformLogin,
     PlatformModelSet,
@@ -44,6 +45,10 @@ def create_router(settings: Settings, db: Database, crypto: Secrets, transport=N
     async def setup_password(body: PasswordSetup):
         await platform.setup_password(db, crypto, body.token, body.password)
         return result("auth setup-password", {"password_set": True})
+
+    @router.post("/auth/orgs", name="auth_orgs", response_model=Result)
+    async def auth_orgs(body: OrgLookup):
+        return result("auth orgs", items=await platform.user_orgs(db, body.email, body.password))
 
     @router.get("/platform/orgs", name="platform_org_list", response_model=Result)
     async def org_list(actor=Depends(operator)):

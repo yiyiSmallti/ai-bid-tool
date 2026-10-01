@@ -198,3 +198,25 @@ async def test_memberships_listing_and_token_scope_constraint(runtime, admin_eng
                 ),
                 {"o": tenants["orgs"][0], "u": tenants["users"][0], "d": "f" * 64},
             )
+
+
+async def test_functions_restore_the_callers_org_context(runtime, admin_engine, tenants):
+    add_card(admin_engine, "2345-6789-ABCD-EFGH")
+    org, other = tenants["orgs"]
+    hashed = hashlib.sha256(b"2345-6789-ABCD-EFGH").hexdigest()
+    async with runtime.transaction(org) as session:
+        for statement, values in (
+            (
+                "SELECT * FROM redeem_card(:h, :o, :u, 'USD')",
+                {"h": hashed, "o": org, "u": tenants["users"][0]},
+            ),
+            (
+                "SELECT * FROM platform_adjust_balance(:o, 'add', 1, 'x', 'ops', 'USD')",
+                {"o": other},
+            ),
+            ("SELECT platform_set_org_active(:o, true)", {"o": other}),
+            ("SELECT * FROM platform_create_org('Context org', 'ctx@example.test', '!setup')", {}),
+        ):
+            await session.execute(text(statement), values)
+            current = await session.scalar(text("SELECT current_setting('app.current_org', true)"))
+            assert current == str(org), statement

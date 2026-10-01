@@ -49,6 +49,7 @@ from app.schemas.contracts import (
 )
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
+from app.schemas.platform_contracts import CardRedeem
 from app.schemas.profile_contracts import (
     OrgProfileCreate,
     OrgProfileUpdate,
@@ -57,6 +58,7 @@ from app.schemas.profile_contracts import (
 from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from app.services import (
+    billing,
     certificate_files,
     certificates,
     evidence_sources,
@@ -136,6 +138,7 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app):
         await db.verify_role()
+        await billing.verify_currency(db, settings.billing_currency)
         try:
             yield
         finally:
@@ -1005,6 +1008,8 @@ def create_app(
         if kind == "extract" and document.status != "parsed":
             raise ServiceError("not_parsed", "Parse the document before extraction", 400, 2)
         model = await resolve(session) if resolve is not None else llm
+        if kind == "extract" and getattr(model, "platform_model_id", None):
+            await billing.require_funds(session, settings.billing_currency)
         version = (
             f"{PARSER_VERSION}:{ocr.name}:{ocr.version}:{settings.ocr_language}"
             if kind == "parse"
@@ -1132,6 +1137,19 @@ def create_app(
             raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
         job.status, job.finished_at = "cancelled", datetime.now(UTC)
         return result("job cancel", {"id": str(job.id), "status": job.status})
+
+    @app.get("/billing", name="billing_balance", response_model=Result)
+    async def billing_balance(ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("billing:read")
+        data, items = await billing.overview(session, settings.billing_currency)
+        return result("billing balance", data, items)
+
+    @app.post("/billing/redeem", name="billing_redeem", response_model=Result)
+    async def billing_redeem(body: CardRedeem, ctx=Depends(context, scope="function")):
+        _, identity = ctx
+        data = await billing.redeem(db, identity, body.code, settings.billing_currency)
+        return result("billing redeem", data)
 
     @app.post("/tokens", name="token_create", response_model=Result)
     async def token_create(body: TokenCreate, ctx=Depends(context, scope="function")):

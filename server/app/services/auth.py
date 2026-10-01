@@ -11,6 +11,7 @@ from app.core.security import Secrets, token_digest, verify_password
 from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
+    "billing:read",
     "evidence:source:read",
     "evidence:source:write",
     "task:read",
@@ -37,6 +38,9 @@ SCOPES = {
 }
 ROLE_SCOPES = {
     "admin": {
+        # billing:redeem is deliberately absent from SCOPES: tokens can never redeem cards.
+        "billing:read",
+        "billing:redeem",
         "evidence:source:read",
         "evidence:source:write",
         "task:read",

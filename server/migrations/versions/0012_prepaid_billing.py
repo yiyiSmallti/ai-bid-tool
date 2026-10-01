@@ -16,6 +16,54 @@ NEW_FUNCTIONS = (
 )
 
 
+CREATE_ORG = """
+CREATE OR REPLACE FUNCTION platform_create_org(p_name text, p_admin_email text, p_password_hash text)
+RETURNS TABLE (new_org_id uuid, admin_user_id uuid, user_created boolean)
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_org uuid := gen_random_uuid();
+  v_email text := lower(btrim(p_admin_email));
+  v_user uuid;
+  v_created boolean := false;
+  v_previous text := coalesce(current_setting('app.current_org', true), '');
+BEGIN
+  IF length(btrim(p_name)) = 0 OR length(p_name) > 200 OR v_email !~ '^[^@\\s]+@[^@\\s]+$' THEN
+    RAISE EXCEPTION 'invalid organization input' USING ERRCODE = 'check_violation';
+  END IF;
+  SELECT u.id INTO v_user FROM users u WHERE u.email = v_email;
+  IF v_user IS NULL THEN
+    v_user := gen_random_uuid();
+    INSERT INTO users (id, email, password_hash, active) VALUES (v_user, v_email, p_password_hash, true);
+    v_created := true;
+  END IF;
+  PERFORM set_config('app.current_org', v_org::text, true);
+  INSERT INTO orgs (id, org_id, name, active) VALUES (v_org, v_org, btrim(p_name), true);
+  INSERT INTO memberships (id, org_id, user_id, role, active)
+    VALUES (gen_random_uuid(), v_org, v_user, 'admin', true);
+  PERFORM set_config('app.current_org', v_previous, true);
+  RETURN QUERY SELECT v_org, v_user, v_created;
+END
+$$
+"""
+
+SET_ACTIVE = """
+CREATE OR REPLACE FUNCTION platform_set_org_active(p_org uuid, p_active boolean)
+RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_count integer;
+  v_previous text := coalesce(current_setting('app.current_org', true), '');
+BEGIN
+  PERFORM set_config('app.current_org', p_org::text, true);
+  UPDATE orgs SET active = p_active WHERE id = p_org;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  PERFORM set_config('app.current_org', v_previous, true);
+  RETURN v_count = 1;
+END
+$$
+"""
+
+
 def upgrade():
     # Sale prices and charges are in the configured billing currency, not always USD.
     op.execute("ALTER TABLE usage_records RENAME COLUMN charge_usd TO charge")
@@ -183,6 +231,7 @@ def upgrade():
           v_card platform_cards%ROWTYPE;
           v_balance org_balances%ROWTYPE;
           v_after numeric;
+          v_previous text := coalesce(current_setting('app.current_org', true), '');
         BEGIN
           PERFORM set_config('app.current_org', p_org::text, true);
           -- Lock the balance before the card so concurrent redemptions queue per org.
@@ -192,7 +241,7 @@ def upgrade():
           IF NOT FOUND OR v_card.status <> 'active' OR v_card.currency <> p_currency
              OR (v_card.expires_at IS NOT NULL AND v_card.expires_at <= now())
              OR (v_balance.org_id IS NOT NULL AND v_balance.currency <> p_currency) THEN
-            PERFORM set_config('app.current_org', '', true);
+            PERFORM set_config('app.current_org', v_previous, true);
             RETURN;
           END IF;
           UPDATE platform_cards c SET status = 'redeemed', redeemed_org_id = p_org,
@@ -205,7 +254,7 @@ def upgrade():
           INSERT INTO balance_entries (id, org_id, kind, currency, amount, balance_after, card_id, actor)
             VALUES (gen_random_uuid(), p_org, 'redeem', p_currency, v_card.face_value, v_after,
                     v_card.id, p_user::text);
-          PERFORM set_config('app.current_org', '', true);
+          PERFORM set_config('app.current_org', v_previous, true);
           RETURN QUERY SELECT v_card.id, v_card.face_value, v_after;
         END
         $$
@@ -221,6 +270,7 @@ def upgrade():
           v_current numeric;
           v_currency text;
           v_delta numeric;
+          v_previous text := coalesce(current_setting('app.current_org', true), '');
         BEGIN
           IF NOT EXISTS (SELECT 1 FROM orgs o WHERE o.id = p_org) THEN
             RETURN;
@@ -244,7 +294,7 @@ def upgrade():
               VALUES (gen_random_uuid(), p_org, 'adjust', p_currency, v_delta, v_current + v_delta,
                       p_actor, btrim(p_reason));
           END IF;
-          PERFORM set_config('app.current_org', '', true);
+          PERFORM set_config('app.current_org', v_previous, true);
           RETURN QUERY SELECT v_delta, v_current + v_delta;
         END
         $$
@@ -262,6 +312,9 @@ def upgrade():
         $$
         """
     )
+    # The 0010 functions also restore, rather than clear, the caller's org context.
+    for body in (CREATE_ORG, SET_ACTIVE):
+        op.execute(body)
     op.execute("GRANT CREATE ON SCHEMA public TO bid_platform_fn")
     for function in NEW_FUNCTIONS:
         op.execute(f"ALTER FUNCTION {function} OWNER TO bid_platform_fn")

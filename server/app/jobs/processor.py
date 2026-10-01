@@ -13,6 +13,7 @@ from app.models.entities import Chunk, Document, Job, Requirement, UsageRecord
 from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
 from app.providers.storage import Storage
 from app.schemas.contracts import Extraction, ProviderUsage
+from app.services import billing
 from app.services.extraction import fingerprint, merge_starred, validate_extraction
 from app.services.parsing import parse_document
 
@@ -34,7 +35,13 @@ class Processor:
     async def record_usage(self, org_id: UUID, task_id: UUID, usages: list[ProviderUsage]):
         async with self.db.transaction(org_id) as session:
             for usage in usages:
-                session.add(UsageRecord(org_id=org_id, task_id=task_id, **usage.model_dump()))
+                record = UsageRecord(
+                    id=uuid4(), org_id=org_id, task_id=task_id, **usage.model_dump()
+                )
+                session.add(record)
+                await session.flush()
+                # The charge leaves the prepaid balance in the same transaction as the record.
+                await billing.charge_usage(session, org_id, record, self.settings.billing_currency)
 
     async def __call__(self, org: str, job: str):
         org_id, job_id = UUID(org), UUID(job)
@@ -109,6 +116,9 @@ class Processor:
                         400,
                         2,
                     )
+                if getattr(llm, "platform_model_id", None):
+                    async with self.db.transaction(org_id) as session:
+                        await billing.require_funds(session, self.settings.billing_currency)
                 output = await llm.extract(chunks, Extraction.model_json_schema())
                 usages = [output.usage]
                 # Usage is recorded even when output is invalid or the job is cancelled.

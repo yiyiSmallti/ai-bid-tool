@@ -8,7 +8,7 @@ import pytest
 from app.api.main import create_app
 from app.models.entities import UsageRecord
 from conftest import PASSWORD, FakeQueue
-from sqlalchemy import select
+from sqlalchemy import select, text
 from test_api import create_document, run_job
 from test_llm_providers import GOOD_ITEMS, Vendor, anthropic_reply
 from test_platform_auth import OPERATOR, platform_settings, sign_in
@@ -189,6 +189,11 @@ async def test_default_platform_model_drives_extraction_and_charges(console, ten
     ).status_code == 200
     console.vendor.responses.append(anthropic_reply(GOOD_ITEMS))
     org = tenants["orgs"][0]
+    async with console.app.state.db.transaction() as session:
+        await session.execute(
+            text("SELECT * FROM platform_adjust_balance(:o, 'add', 10, 'seed', 'ops', 'USD')"),
+            {"o": org},
+        )
     header = await org_header(console, org, "a@example.test")
     assert (await console.get("/health")).json()["data"]["real_llm_configured"] is True
     _, document = await create_document(console, header, pdf_bytes)

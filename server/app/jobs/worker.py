@@ -7,12 +7,14 @@ from app.jobs.queue import Queue
 from app.providers.llm import create_llm, resolve_llm
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
+from app.services import billing
 
 
 async def run():
     settings = Settings.load()
     db = Database(settings)
     await db.verify_role()
+    await billing.verify_currency(db, settings.billing_currency)
     queue = Queue(settings)
     fallback = create_llm(settings)
 

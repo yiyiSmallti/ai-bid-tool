@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -827,7 +828,7 @@ class OrgBalance(Base):
     __tablename__ = "org_balances"
     org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id"), primary_key=True)
     currency: Mapped[str] = mapped_column(String(3))
-    balance: Mapped[float] = mapped_column(Numeric(18, 8), default=0)
+    balance: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -837,8 +838,8 @@ class BalanceEntry(Tenant, Base):
     __tablename__ = "balance_entries"
     kind: Mapped[str] = mapped_column(String(10))
     currency: Mapped[str] = mapped_column(String(3))
-    amount: Mapped[float] = mapped_column(Numeric(18, 8))
-    balance_after: Mapped[float] = mapped_column(Numeric(18, 8))
+    amount: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    balance_after: Mapped[Decimal] = mapped_column(Numeric(18, 8))
     card_id: Mapped[UUID | None] = mapped_column()
     usage_record_id: Mapped[UUID | None] = mapped_column()
     actor: Mapped[str] = mapped_column(String(254))

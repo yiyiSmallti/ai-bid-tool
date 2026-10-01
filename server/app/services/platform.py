@@ -389,3 +389,27 @@ async def audit_entries(session: AsyncSession, limit: int) -> list[dict]:
         }
         for row in rows
     ]
+
+
+async def user_orgs(db: Database, email: str, password: str) -> list[dict]:
+    """Orgs a signed-in user can enter; same password check and timing as login."""
+    async with db.transaction() as session:
+        user = await session.scalar(
+            select(User).where(User.email == email.strip().lower(), User.active.is_(True))
+        )
+    valid = await asyncio.to_thread(
+        verify_password, password, user.password_hash if user else DUMMY_HASH
+    )
+    if user is None or not valid:
+        raise ServiceError("invalid_login", "Invalid credentials", 401, 4)
+    async with db.transaction() as session:
+        rows = await session.execute(text("SELECT * FROM user_org_memberships(:u)"), {"u": user.id})
+        return [
+            {
+                "org_id": str(row.org_id),
+                "name": row.name,
+                "role": row.role,
+                "active": row.org_active,
+            }
+            for row in rows
+        ]
