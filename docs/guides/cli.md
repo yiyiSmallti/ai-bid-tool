@@ -218,3 +218,41 @@ each request is further limited to what the owner's current role allows;
 Tokens can never hold `evidence:confirm` or `export`. Agents cannot confirm
 evidence, fabricate sources, or send confidential documents to an external
 service without the user's explicit decision.
+
+## Operate the platform
+
+Platform commands need an operator account; see
+[development.md](development.md#run-the-platform-console). They use a
+platform session, which org commands do not accept, and the reverse.
+
+```sh
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform login --email OPERATOR_EMAIL --totp 123456 --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform org create --name ORG_NAME --admin-email ADMIN_EMAIL --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform org set-active --id ORG_ID --inactive --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform model set --input MODEL.json --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform usage --from 2026-10 --to 2026-12 --json
+```
+
+1. `platform login` reads the password from `BID_PASSWORD` and takes the
+   current authenticator code. A code works once; five failures in 15 minutes
+   lock the email. The session lasts 30 minutes.
+2. `platform org create` returns `setup_url` when the admin has never set a
+   password. Give the full link to the admin; it works once within 24 hours.
+3. `platform org set-active --inactive` blocks every login, session and token
+   of the org immediately; `--active` restores access. Data is kept.
+4. `platform model set` takes the fields of `PlatformModelSet` in
+   [platform_contracts.py](../../server/app/schemas/platform_contracts.py).
+   Send `expected_revision` when updating. Setting `default: true` makes the
+   model the one used and billed for extraction.
+5. `platform model test --id MODEL_ID` makes one real vendor call.
+6. `platform org list`, `platform model list`, and `platform audit` read the
+   current state.
+
+A new org admin can set the password from the CLI instead of the browser. Put
+the token part of the link, after `#token=`, in `BID_SETUP_TOKEN` and the new
+password in `BID_PASSWORD`:
+
+```sh
+bid --mode remote --server https://YOUR_SERVER auth setup-password --json
+```
+

@@ -4,9 +4,9 @@ kind: plan
 
 # 契约草案：单位自带模型与平台付费模型
 
-状态：**待批准，未实施。** 对应[路线](roadmap.md)中的 P04。平台模型目前只能通过
-`BID_LLM_*` 环境变量配置一个，所有单位共用，用量不区分付费方，机制见
-[llm-providers.md](../notes/llm-providers.md)。
+状态：**待批准，未实施。** 对应[路线](roadmap.md)中的 P04。平台目录与平台默认模型的计费
+已经上线，机制见 [platform-console.md](../notes/platform-console.md)；本草案只剩单位自带模型
+与单位自选平台模型。
 
 ## 目标
 
@@ -16,24 +16,9 @@ kind: plan
 
 ## 平台模型目录
 
-目录放在部署配置文件中（`BID_PLATFORM_MODELS_FILE` 指向的 JSON），不进数据库，
-避免为全局表再开一个 `org_id`/RLS 例外。
-
-```python
-class PlatformModel(Contract):
-    id: str                      # 平台内稳定标识，如 "opus-standard"
-    capability: Literal["llm_extract"]
-    provider: Literal["anthropic", "openai"]
-    model: str
-    base_url: str | None
-    vendor_input_usd_per_mtok: float   # 平台向服务商支付的单价
-    vendor_output_usd_per_mtok: float
-    sale_input_usd_per_mtok: float     # 向单位收取的单价
-    sale_output_usd_per_mtok: float
-    default: bool = False
-```
-
-平台密钥仍只来自环境变量，不写入目录文件。
+目录由平台运营后台维护，字段见 `PlatformModelSet`
+（[platform_contracts.py](../../server/app/schemas/platform_contracts.py)）。单位选择目录中的哪个模型，
+由下面的单位配置决定；未配置时使用平台默认模型。
 
 ## 单位配置
 
@@ -75,17 +60,9 @@ class ProviderConfigView(Contract):
 
 ## 用量与计费归属
 
-`usage_records` 新增列：
-
-| 列 | 含义 |
-| --- | --- |
-| `billing` | `platform` 或 `org` |
-| `provider_config_id` | 使用的单位配置修订，平台默认时为 null |
-| `platform_model_id` | 使用的平台模型，单位自带时为 null |
-| `vendor_usd` | 按服务商单价计算的成本；单位自带且未填单价时为 null |
-| `charge_usd` | 平台向单位收取的金额；单位自带时为 0 |
-
-现有 `usd` 列保留为 `vendor_usd` 的同义值，旧记录不改写。
+`input_tokens`、`output_tokens`、`platform_model_id`、`charge_usd` 已由迁移 `0010` 加入，
+`usd` 即服务商成本。本草案只再新增一列 `provider_config_id`（使用的单位配置修订，未配置时为
+null），并把单位自带模型的 `charge_usd` 记为 0，汇总中归为 `org` 计费类别。
 
 ## 权限
 

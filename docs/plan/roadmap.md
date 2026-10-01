@@ -35,6 +35,8 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | [security.py](../../server/app/core/security.py) `Secrets` | 一个 Fernet 密钥同时用于会话、下载签名、令牌密文和文件加密，无轮换；ApiToken 另存可解密的 `encrypted_secret` |
 | [conftest.py](../../server/tests/conftest.py) `admin_engine` | 缺 `BID_TEST_ADMIN_URL` 时数据库测试被跳过而非失败 |
 | [auth.py](../../server/app/services/auth.py) `login` | 密码正确但非成员返回 404、密码错误返回 401，可区分密码是否正确；登录没有限速 |
+| [services/platform.py](../../server/app/services/platform.py) `test_model` | 模型测试在数据库事务内发起真实调用，等待期间占用连接 |
+| [processor.py](../../server/app/jobs/processor.py) | 提交作业与处理作业之间切换默认模型时，作业以旧缓存键记录、用新模型处理 |
 | [api/main.py](../../server/app/api/main.py) | 所有路由在 `create_app` 内，上传、作业、令牌逻辑没有进入 `services/`；五个版本化资源服务高度重复 |
 
 ## 覆盖矩阵：地基、权限和数据模型
@@ -44,7 +46,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | F01 架构 | 服务端技术栈与真实 Procrastinate worker 已落地 | Vue 入口、内置 agent 入口 | 新接口确认 |
 | F02 数据库隔离 | 现有业务表均 NOT NULL `org_id`、FORCE RLS、组织复合外键 | 每张新表、每个新接口同次带双单位与缺上下文测试 | 硬规则 |
 | F03 文件隔离 | 招标文件、模板、证书原件、来源 PNG 已加密并受签名下载约束 | 其他格式、多附件、合同、区域截图、网页、导出件 | 新契约 |
-| F04 账号与角色 | 全局 User、Membership、四种角色 | 平台管理员、成员管理入口、任务成员、评论权限、OIDC | 新契约；SSO 需授权 |
+| F04 账号与角色 | 全局 User、Membership、四种角色；平台管理员（配置名单、TOTP、运营后台） | 单位成员管理入口、任务成员、评论权限、OIDC、全局记忆维护 | 新契约；SSO 需授权 |
 | F05 ApiToken | 签发、范围、期限；DB 禁止确认/导出范围 | 吊销入口、令牌列表、签发与吊销审计 | 新接口确认 |
 | F06 Org/Task | 任务名称、编号、截止、预算字段 | 套餐与月度预算、任务成员与归档、预算执行、一次性组合创建 | 计费规则待定 |
 | F07 后台作业 | parse/extract 持久化、取消、有限重试、`run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
@@ -87,7 +89,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | P01 LLMProvider | `extract` 协议、两个 HTTP adapter、DisabledLLM、测试 fake | check/score/agent 所需的通用结构化调用 | 新契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
 | P03 Vision/Search/Embedding/Browser | 未实施 | 四个协议与实现 | 本地 Browser 可独立 |
-| P04 ProviderConfig | 平台模型来自 Settings | 单位自带模型、平台付费模型的计费归属、`provider set/test`；草案见 [provider-config.md](provider-config.md) | 待批准 |
+| P04 ProviderConfig | 平台模型目录、平台默认模型及按售价计费 | 单位自带模型、单位自选平台模型、`provider set/test`；草案见 [provider-config.md](provider-config.md) | 待批准 |
 | P05 通用控制 | ProviderFailure 与有限重试 | 统一超时、限流、日志脱敏、部分成功 | 新契约 |
 | M01 记忆存储 | 未实施 | 四层记忆 CRUD、候选审批、失效 | 全局来源待定 |
 | M02 记忆检索 | 未实施 | 强制 `org_id` 与作用域过滤、优先级 | 向量依赖 Embedding |
@@ -121,7 +123,8 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 | 决定 | 何时需要 |
 | --- | --- |
-| 平台模型的服务商、模型与单价 | 部署平台模型时 |
+| 平台模型的服务商、模型与单价 | 在运营后台配置默认模型时 |
+| 平台付费的结算方式（预付扣减或月结），决定是否在调用前检查余额 | 收款与额度功能之前 |
 | 单位自带模型与平台付费模型的契约（[provider-config.md](provider-config.md)） | 实现 P04 之前 |
 | 平台默认 Vision/Embedding/Search/OCR，及费用与数据政策 | Provider 配置之前 |
 | 模板公共共享 | 扩大模板读取边界之前 |

@@ -117,6 +117,47 @@ next `req extract` runs again instead of returning the cached job. How
 batching, errors, and costs work is described in
 [llm-providers.md](../notes/llm-providers.md).
 
+## Run the platform console
+
+The console at `/app` is for platform operators; it shows org accounts and
+usage totals, never org business data.
+
+1. Create the operator's account. An existing user works; otherwise create one
+   with `bootstrap` from [Provision a development database](#provision-a-development-database).
+2. Generate a TOTP secret and scan the printed URI in an authenticator app:
+
+   ```sh
+   uv run python -m app.admin platform-totp --email OPERATOR_EMAIL
+   ```
+
+3. Set `BID_PLATFORM_ADMIN_EMAILS` to the operator emails and
+   `BID_PLATFORM_TOTP_SECRETS` to the printed `email:SECRET` pairs, comma
+   separated. For each catalog model credential, set
+   `BID_PLATFORM_CREDENTIAL_<NAME>` to the vendor key.
+4. Build the console and point the API at it:
+
+   ```sh
+   cd web && npm ci && npm run build
+   ```
+
+   Set `BID_WEB_DIR` to the absolute path of `web/dist`, restart the API, and
+   open `http://127.0.0.1:8000/app/`. For live editing, run `npm run dev` in
+   `web/` with `BID_API_URL` pointing at the API.
+
+The end-to-end check drives a real browser through sign-in, provisioning,
+models, usage, CSV export, disabling and password setup against a running API
+that serves the build. It needs an operator account with a known password and
+TOTP secret, and writes screenshots, the CSV and `result.json` to a new
+directory:
+
+```sh
+cd web && E2E_BASE_URL=http://127.0.0.1:8000 E2E_EMAIL=OPERATOR_EMAIL E2E_PASSWORD=OPERATOR_PASSWORD E2E_TOTP_SECRET=SECRET E2E_OUTPUT=/tmp/console-e2e npx playwright test
+```
+
+The check expects an org named 计费演示单位 with platform-billed usage in the
+current month and creates an org and a model named `e2e-model`, so run it
+against a disposable database.
+
 ## Run with Docker Compose
 
 1. Copy [deploy/.env.example](../../deploy/.env.example) to an ignored env file
