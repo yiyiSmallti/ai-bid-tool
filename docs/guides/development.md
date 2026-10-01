@@ -161,8 +161,7 @@ cd web && E2E_BASE_URL=http://127.0.0.1:8000 E2E_EMAIL=OPERATOR_EMAIL E2E_PASSWO
 
 The check expects an org named 计费演示单位 with platform-billed usage in the
 current month and creates an org, a model named `e2e-model` and recharge cards,
-so run it against a disposable database. `E2E_OUTPUT` must be a real directory,
-not under a symlink such as macOS `/tmp`, only if you also save CLI output there.
+so run it against a disposable database.
 
 ## Run with Docker Compose
 
