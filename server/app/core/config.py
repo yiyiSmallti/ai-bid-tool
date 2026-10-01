@@ -25,9 +25,10 @@ class Settings(BaseSettings):
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
     llm_base_url: str | None = None
-    llm_max_output_tokens: int = 16000
+    llm_max_output_tokens: int = 32000
     llm_timeout_seconds: float = 600
-    llm_batch_chars: int = 30000
+    llm_batch_chars: int = 8000
+    llm_concurrency: int = 4
     llm_effort: str | None = "high"
     llm_anthropic_fallback: bool = True
     llm_json_mode: str = "json_schema"
@@ -95,7 +96,11 @@ class Settings(BaseSettings):
                 raise ValueError("BID_LLM_MODEL is required for the openai provider")
             if self.llm_api_key is None and not self.llm_base_url:
                 raise ValueError("BID_LLM_API_KEY is required unless BID_LLM_BASE_URL is set")
-        if self.llm_batch_chars < 1000 or self.llm_max_output_tokens < 1024:
+        if (
+            self.llm_batch_chars < 1000
+            or self.llm_max_output_tokens < 1024
+            or self.llm_concurrency < 1
+        ):
             raise ValueError("LLM batch or output limits are too small")
         secrets = self.platform_totp()
         missing = set(self.platform_admins()) - set(secrets)

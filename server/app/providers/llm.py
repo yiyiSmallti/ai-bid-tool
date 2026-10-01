@@ -175,21 +175,47 @@ class HTTPExtractor:
         self.sale = sale_usd_per_mtok
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
-        usages: list[ProviderUsage] = []
-        items: list[ExtractedRequirement] = []
+        groups = batches(chunks, self.settings.llm_batch_chars)
+        limit = asyncio.Semaphore(max(1, self.settings.llm_concurrency))
+        failed = asyncio.Event()
+
+        async def run(client: httpx.AsyncClient, batch: list[dict]):
+            async with limit:
+                # Batches not yet started are skipped once another batch has failed.
+                if failed.is_set():
+                    return None
+                try:
+                    return await self.call(client, batch)
+                except ProviderFailure:
+                    failed.set()
+                    raise
+
         async with httpx.AsyncClient(
             transport=self.transport,
             timeout=httpx.Timeout(self.settings.llm_timeout_seconds, connect=10),
             follow_redirects=False,
         ) as client:
-            for batch in batches(chunks, self.settings.llm_batch_chars):
-                try:
-                    wire, usage = await self.call(client, batch)
-                except ProviderFailure as exc:
-                    exc.usage = usages + exc.usage
-                    raise
-                usages.append(usage)
-                items.extend(self.attach(wire, batch, usages))
+            results = await asyncio.gather(
+                *(run(client, batch) for batch in groups), return_exceptions=True
+            )
+        usages: list[ProviderUsage] = []
+        failures: list[ProviderFailure] = []
+        for result in results:
+            if isinstance(result, ProviderFailure):
+                failures.append(result)
+                usages.extend(result.usage)
+            elif isinstance(result, BaseException):
+                raise result
+            elif result is not None:
+                usages.append(result[1])
+        if failures:
+            # Every finished call was billed by the vendor, so all of them are reported.
+            failures[0].usage = usages
+            raise failures[0]
+        items: list[ExtractedRequirement] = []
+        for batch, result in zip(groups, results, strict=True):
+            assert isinstance(result, tuple)
+            items.extend(self.attach(result[0], batch, usages))
         return LLMResult(extraction=Extraction(items=items), usage=self.total(usages))
 
     def attach(

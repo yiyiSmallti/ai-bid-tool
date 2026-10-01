@@ -313,3 +313,57 @@ async def test_endless_keep_alive_hits_the_total_deadline(tmp_path):
     with pytest.raises(ProviderFailure) as failure:
         await llm.extract([chunk], {})
     assert failure.value.retryable and time.monotonic() - started < 3
+
+
+async def test_batches_run_concurrently_in_order_and_stop_after_a_failure(tmp_path):
+    in_flight, peak, seen = 0, 0, []
+
+    async def handler(request):
+        nonlocal in_flight, peak
+        page = int(
+            json.loads(request.content)["messages"][0]["content"].split('number="')[1].split('"')[0]
+        )
+        seen.append(page)
+        in_flight += 1
+        peak = max(peak, in_flight)
+        await asyncio.sleep(0.1)
+        in_flight -= 1
+        if page == 99:
+            return httpx.Response(500, json={"error": {"type": "api_error"}})
+        quote = f"Requirement on page {page}"
+        return anthropic_reply(
+            [
+                {
+                    "category": "technical",
+                    "starred": False,
+                    "text": quote,
+                    "ref": str(page),
+                    "quote": quote,
+                    "condition": None,
+                }
+            ]
+        )
+
+    def chunk(page):
+        return {
+            "id": uuid4(),
+            "document_id": uuid4(),
+            "page": page,
+            "text": "x" * 900 + f"\nRequirement on page {page}",
+            "citation_verified": True,
+        }
+
+    settings = settings_for(tmp_path, "anthropic", llm_batch_chars=1000, llm_concurrency=2)
+    llm = AnthropicExtractor(settings, transport=httpx.MockTransport(handler))
+    result = await llm.extract([chunk(page) for page in range(1, 6)], {})
+    assert peak == 2
+    assert [item.source.page for item in result.extraction.items] == [1, 2, 3, 4, 5]
+    assert result.usage.tokens == 5 * 1500
+
+    seen.clear()
+    pages = [99, 1, 2, 3, 4, 5]
+    with pytest.raises(ProviderFailure) as failure:
+        await llm.extract([chunk(page) for page in pages], {})
+    # The failing batch stops batches that had not started; finished ones are billed.
+    assert len(seen) < len(pages)
+    assert len(failure.value.usage) == len(seen) - 1

@@ -85,7 +85,7 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_
     )
     settings = settings_for(tmp_path, "anthropic")
     # A tiny batch budget (below the configurable minimum) sends each section separately.
-    tiny = settings.model_copy(update={"llm_batch_chars": 40})
+    tiny = settings.model_copy(update={"llm_batch_chars": 40, "llm_concurrency": 1})
     app = create_app(
         settings,
         llm=AnthropicExtractor(tiny, transport=vendor.transport()),
