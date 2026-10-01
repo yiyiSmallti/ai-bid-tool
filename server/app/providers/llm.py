@@ -1,5 +1,6 @@
 """Requirement extraction through vendor HTTP APIs, called with httpx only."""
 
+import asyncio
 import json
 import os
 import time
@@ -244,8 +245,11 @@ class HTTPExtractor:
 
     async def post(self, client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> dict:
         try:
-            response = await client.post(url, headers=headers, json=body)
-        except (httpx.TimeoutException, httpx.TransportError):
+            # httpx timeouts restart on every received byte; vendors under load keep the
+            # connection alive with blank lines, so a total deadline is enforced here.
+            async with asyncio.timeout(self.settings.llm_timeout_seconds):
+                response = await client.post(url, headers=headers, json=body)
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError):
             raise ProviderFailure(
                 "LLM service is unreachable or timed out", retryable=True
             ) from None

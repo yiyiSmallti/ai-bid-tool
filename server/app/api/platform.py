@@ -91,8 +91,7 @@ def create_router(settings: Settings, db: Database, crypto: Secrets, transport=N
         "/platform/models/{model_id}/test", name="platform_model_test", response_model=Result
     )
     async def model_test(model_id: str, actor=Depends(operator)):
-        async with db.transaction() as session:
-            data = await platform.test_model(session, settings, actor, model_id, transport)
+        data = await platform.test_model(db, settings, actor, model_id, transport)
         return result("platform model test", data)
 
     @router.post(

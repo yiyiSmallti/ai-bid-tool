@@ -3,7 +3,10 @@
 Vendor endpoints are simulated with httpx.MockTransport; no external service is called.
 """
 
+import asyncio
 import json
+import time
+from uuid import uuid4
 
 import httpx
 import pymupdf
@@ -287,3 +290,26 @@ async def test_failure_in_later_batch_keeps_usage_of_finished_batches(tenants, t
 def test_incomplete_provider_settings_refuse_to_start(overrides, tmp_path):
     with pytest.raises(ValidationError):
         Settings(data_dir=tmp_path, **overrides)
+
+
+async def test_endless_keep_alive_hits_the_total_deadline(tmp_path):
+    async def blank_lines():
+        # What a busy vendor sends instead of an answer: keep-alive bytes forever.
+        while True:
+            await asyncio.sleep(0.05)
+            yield b"\n"
+
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, content=blank_lines()))
+    settings = settings_for(tmp_path, "anthropic", llm_timeout_seconds=0.5)
+    llm = AnthropicExtractor(settings, transport=transport)
+    chunk = {
+        "id": uuid4(),
+        "document_id": uuid4(),
+        "page": 1,
+        "text": "x",
+        "citation_verified": True,
+    }
+    started = time.monotonic()
+    with pytest.raises(ProviderFailure) as failure:
+        await llm.extract([chunk], {})
+    assert failure.value.retryable and time.monotonic() - started < 3

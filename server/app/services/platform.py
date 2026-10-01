@@ -287,17 +287,19 @@ async def set_model(session: AsyncSession, actor: PlatformIdentity, body: Platfo
 TEST_PAGE = "合成测试页面：投标人须具备有效的营业执照。"
 
 
+TEST_SECONDS = 60
+
+
 async def test_model(
-    session: AsyncSession,
-    settings: Settings,
-    actor: PlatformIdentity,
-    model_id: str,
-    transport=None,
+    db: Database, settings: Settings, actor: PlatformIdentity, model_id: str, transport=None
 ) -> dict:
-    row = await session.get(PlatformModel, model_id)
+    async with db.transaction() as session:
+        row = await session.get(PlatformModel, model_id)
     if row is None:
         raise not_found()
-    llm = platform_llm(settings, row, transport)
+    # The vendor call runs outside any transaction and with a short deadline.
+    quick = settings.model_copy(update={"llm_timeout_seconds": TEST_SECONDS})
+    llm = platform_llm(quick, row, transport)
     chunk = {
         "id": uuid4(),
         "document_id": uuid4(),
@@ -309,14 +311,15 @@ async def test_model(
         output = await llm.extract([chunk], {})
     except ProviderFailure as exc:
         usage = exc.usage[-1].model_dump() if exc.usage else None
-        audit(
-            session,
-            actor.email,
-            "platform.model.test",
-            "failed",
-            model_id,
-            {"code": exc.code, "usage": usage},
-        )
+        async with db.transaction() as session:
+            audit(
+                session,
+                actor.email,
+                "platform.model.test",
+                "failed",
+                model_id,
+                {"code": exc.code, "usage": usage},
+            )
         return {
             "model_id": model_id,
             "passed": False,
@@ -324,14 +327,15 @@ async def test_model(
             "usage": usage,
         }
     usage = output.usage.model_dump()
-    audit(
-        session,
-        actor.email,
-        "platform.model.test",
-        "success",
-        model_id,
-        {"items": len(output.extraction.items), "usage": usage},
-    )
+    async with db.transaction() as session:
+        audit(
+            session,
+            actor.email,
+            "platform.model.test",
+            "success",
+            model_id,
+            {"items": len(output.extraction.items), "usage": usage},
+        )
     return {
         "model_id": model_id,
         "passed": True,
