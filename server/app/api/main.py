@@ -19,6 +19,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
+from app.api.platform import create_router as create_platform_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
@@ -110,6 +111,7 @@ def create_app(settings: Settings | None = None, *, llm=None, ocr=None, queue=No
         storage,
         queue,
     )
+    app.state.crypto = crypto
 
     @app.middleware("http")
     async def bound_source_input(request: Request, call_next):
@@ -194,6 +196,8 @@ def create_app(settings: Settings | None = None, *, llm=None, ocr=None, queue=No
                 4 if error.status_code == 404 else 2,
             ),
         )
+
+    app.include_router(create_platform_router(settings, db, crypto))
 
     bearer = HTTPBearer(auto_error=False)
 

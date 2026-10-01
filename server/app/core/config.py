@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     llm_json_mode: str = "json_schema"
     llm_input_usd_per_mtok: float | None = None
     llm_output_usd_per_mtok: float | None = None
+    # Platform operators come from deployment config only, so the app cannot promote anyone.
+    platform_admin_emails: str | None = None
+    platform_totp_secrets: SecretStr | None = None
+    platform_session_seconds: int = 1800
 
     @classmethod
     def load(cls):
@@ -80,4 +84,31 @@ class Settings(BaseSettings):
                 raise ValueError("BID_LLM_API_KEY is required unless BID_LLM_BASE_URL is set")
         if self.llm_batch_chars < 1000 or self.llm_max_output_tokens < 1024:
             raise ValueError("LLM batch or output limits are too small")
+        secrets = self.platform_totp()
+        missing = set(self.platform_admins()) - set(secrets)
+        if missing:
+            raise ValueError("Every platform admin needs a BID_PLATFORM_TOTP_SECRETS entry")
         return self
+
+    def platform_admins(self) -> list[str]:
+        return [
+            email.strip().lower()
+            for email in (self.platform_admin_emails or "").split(",")
+            if email.strip()
+        ]
+
+    def platform_totp(self) -> dict[str, str]:
+        """Parse "email:BASE32SECRET" pairs; malformed entries stop startup."""
+        from app.core.totp import decode_secret
+
+        raw = self.platform_totp_secrets.get_secret_value() if self.platform_totp_secrets else ""
+        pairs = {}
+        for entry in filter(None, (item.strip() for item in raw.split(","))):
+            email, _, secret = entry.rpartition(":")
+            try:
+                if len(decode_secret(secret)) < 10:
+                    raise ValueError
+            except ValueError:
+                raise ValueError("BID_PLATFORM_TOTP_SECRETS has an invalid entry") from None
+            pairs[email.strip().lower()] = secret.strip()
+        return pairs

@@ -111,12 +111,26 @@ def main():
     create = commands.add_parser("bootstrap")
     create.add_argument("--org-name", required=True)
     create.add_argument("--email", required=True)
+    totp_parser = commands.add_parser("platform-totp")
+    totp_parser.add_argument("--email", required=True)
     args = parser.parse_args()
     if args.command == "init-db":
         initialize_database()
         print("Selected development database initialized; runtime role is restricted")
+    elif args.command == "platform-totp":
+        platform_totp(args.email)
     else:
         bootstrap(args.org_name, args.email)
+
+
+def platform_totp(email: str):
+    """Print a new secret for one operator; it goes into BID_PLATFORM_TOTP_SECRETS."""
+    from app.core.totp import generate_secret, provisioning_uri
+
+    email = email.strip().lower()
+    secret = generate_secret()
+    print("Add to BID_PLATFORM_TOTP_SECRETS:", f"{email}:{secret}")
+    print("Scan in an authenticator app:", provisioning_uri(email, secret))
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets, token_digest, verify_password
-from app.models.entities import ApiToken, Membership, User
+from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
     "evidence:source:read",
@@ -139,6 +139,9 @@ async def membership(session: AsyncSession, user_id: UUID, org_id: UUID) -> Memb
     )
     if member is None:
         raise not_found()
+    # Every login, session and token request passes here, so disabling an org is immediate.
+    if not await session.scalar(select(Org.active).where(Org.id == org_id)):
+        raise ServiceError("org_inactive", "Organization is disabled", 403, 4)
     return member
 
 
