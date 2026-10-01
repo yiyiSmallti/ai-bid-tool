@@ -26,6 +26,7 @@ def word_tender() -> bytes:
     table = document.add_table(rows=2, cols=2)
     table.cell(0, 0).text, table.cell(0, 1).text = "参数", "要求"
     table.cell(1, 0).text, table.cell(1, 1).text = "CPU", "★ 核心数不少于 32 核"
+    document.add_paragraph("投标文件须注明“响应内容”及具体数值。")  # p5, curly quotes
     output = io.BytesIO()
     document.save(output)
     return output.getvalue()
@@ -163,3 +164,18 @@ async def test_reparse_replaces_the_old_unverified_word_chunk(tenants, tmp_path,
         chunks = (await api.get(f"/documents/{document}/chunks", headers=header)).json()["items"]
         assert [c["text"] for c in chunks if c["text"] == "legacy flat text"] == []
         assert all(c["blocks"] and c["page"] is None for c in chunks)
+
+
+async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
+    vendor = Vendor(anthropic_reply([item("p5", '投标文件须注明"响应内容"及具体数值。')]))
+    settings = settings_for(tmp_path, "anthropic")
+    app = create_app(
+        settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        task, document = await upload_word(api, header)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        assert status["status"] == "succeeded", status
+        rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
+        assert [r["source"]["location"]["block_id"] for r in rows] == ["t1r2c2", "p5"]  # source order

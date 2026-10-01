@@ -1,5 +1,6 @@
 import hashlib
 import re
+import unicodedata
 
 from app.core.errors import ServiceError
 from app.schemas.contracts import Category, ExtractedRequirement, Extraction, Location, Source
@@ -7,8 +8,15 @@ from app.schemas.contracts import Category, ExtractedRequirement, Extraction, Lo
 PROMPT_VERSION = "req-v2"
 
 
+QUOTES = str.maketrans(
+    {"“": '"', "”": '"', "„": '"', "‟": '"', "‘": "'", "’": "'", "‚": "'", "‛": "'"}
+)
+
+
 def normalize(text: str) -> str:
-    return re.sub(r"\s+", "", text)
+    # Typographic differences only: width forms, curly quotes and whitespace. Applied
+    # to quote and source alike, so a different word still fails the comparison.
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text).translate(QUOTES))
 
 
 def location_of(block: dict) -> Location:

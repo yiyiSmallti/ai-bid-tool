@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -32,6 +33,8 @@ class Settings(BaseSettings):
     llm_effort: str | None = "high"
     llm_anthropic_fallback: bool = True
     llm_json_mode: str = "json_schema"
+    # JSON object merged into every model request, e.g. {"thinking": {"type": "disabled"}}.
+    llm_request_options: str | None = None
     llm_input_usd_per_mtok: float | None = None
     llm_output_usd_per_mtok: float | None = None
     # Platform operators come from deployment config only, so the app cannot promote anyone.
@@ -102,11 +105,24 @@ class Settings(BaseSettings):
             or self.llm_concurrency < 1
         ):
             raise ValueError("LLM batch or output limits are too small")
+        try:
+            self.request_options()
+        except ValueError:
+            raise ValueError("BID_LLM_REQUEST_OPTIONS must be a JSON object") from None
         secrets = self.platform_totp()
         missing = set(self.platform_admins()) - set(secrets)
         if missing:
             raise ValueError("Every platform admin needs a BID_PLATFORM_TOTP_SECRETS entry")
         return self
+
+    def request_options(self) -> dict:
+        """Extra vendor parameters; the adapter's own fields always take precedence."""
+        if not self.llm_request_options:
+            return {}
+        value = json.loads(self.llm_request_options)
+        if not isinstance(value, dict):
+            raise ValueError("BID_LLM_REQUEST_OPTIONS must be a JSON object")
+        return value
 
     def platform_admins(self) -> list[str]:
         return [

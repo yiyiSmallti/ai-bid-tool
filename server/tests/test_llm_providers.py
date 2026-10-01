@@ -367,3 +367,27 @@ async def test_batches_run_concurrently_in_order_and_stop_after_a_failure(tmp_pa
     # The failing batch stops batches that had not started; finished ones are billed.
     assert len(seen) < len(pages)
     assert len(failure.value.usage) == len(seen) - 1
+
+
+async def test_request_options_reach_the_vendor_without_overriding_core_fields(tmp_path):
+    vendor = Vendor(anthropic_reply([]))
+    settings = settings_for(
+        tmp_path,
+        "anthropic",
+        llm_request_options='{"thinking": {"type": "disabled"}, "model": "not-this-one"}',
+    )
+    llm = AnthropicExtractor(settings, transport=vendor.transport())
+    chunk = {
+        "id": uuid4(),
+        "document_id": uuid4(),
+        "page": 1,
+        "text": "x",
+        "citation_verified": True,
+    }
+    await llm.extract([chunk], {})
+    body = json.loads(vendor.requests[0].content)
+    assert body["thinking"] == {"type": "disabled"}
+    assert body["model"] == "claude-opus-5-5"
+    for invalid in ("not json", "[1, 2]"):
+        with pytest.raises(ValidationError):
+            settings_for(tmp_path, "anthropic", llm_request_options=invalid)

@@ -370,6 +370,7 @@ class AnthropicExtractor(HTTPExtractor):
             body["fallbacks"] = "default"
         started = time.monotonic()
         base = (settings.llm_base_url or "https://api.anthropic.com").rstrip("/")
+        body = {**self.settings.request_options(), **body}
         payload = await self.post(client, f"{base}/v1/messages", headers, body)
         tokens = payload.get("usage") or {}
         usage = self.usage(
@@ -428,6 +429,7 @@ class OpenAICompatibleExtractor(HTTPExtractor):
         }
         started = time.monotonic()
         base = (settings.llm_base_url or "https://api.openai.com/v1").rstrip("/")
+        body = {**self.settings.request_options(), **body}
         payload = await self.post(client, f"{base}/chat/completions", headers, body)
         tokens = payload.get("usage") or {}
         usage = self.usage(
