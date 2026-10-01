@@ -1,0 +1,4323 @@
+{
+  "evidence source add": {
+    "command": "evidence source add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "duplicate": false,
+      "source": {
+        "active_selection": true,
+        "certificate_file_id": "00000000-0000-0000-0000-000000000001",
+        "certificate_id": "00000000-0000-0000-0000-000000000001",
+        "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+        "confirmed_by": null,
+        "created_by": "00000000-0000-0000-0000-000000000001",
+        "dpi": 150,
+        "eligible_for_draft_export": false,
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "original": {
+          "media_type": "application/pdf",
+          "name": "synthetic.pdf",
+          "page_count": 1,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size_bytes": 1
+        },
+        "page": 1,
+        "preview": {
+          "height_px": 1,
+          "media_type": "image/png",
+          "name": "synthetic.png",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "size_bytes": 1,
+          "width_px": 1
+        },
+        "render_profile": "pdf-page-preview-v1",
+        "rendered_at": "2026-10-01T00:00:00Z",
+        "source_kind": "user_supplied_certificate_pdf",
+        "status": "unconfirmed_source",
+        "task_certificate_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Source is an unconfirmed user-supplied PDF page; authenticity and eligibility are not verified; never eligible for draft/export"
+    ]
+  },
+  "evidence source download": {
+    "command": "evidence source download",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "evidence_source_id": "00000000-0000-0000-0000-000000000001",
+      "file": {
+        "height_px": 1,
+        "media_type": "image/png",
+        "name": "synthetic.png",
+        "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "size_bytes": 1,
+        "width_px": 1
+      },
+      "output_path": "<download-output>"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Source is an unconfirmed user-supplied PDF page; authenticity and eligibility are not verified; never eligible for draft/export"
+    ]
+  },
+  "evidence source list": {
+    "command": "evidence source list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active_source_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "active_selection": true,
+        "certificate_file_id": "00000000-0000-0000-0000-000000000001",
+        "certificate_id": "00000000-0000-0000-0000-000000000001",
+        "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+        "confirmed_by": null,
+        "created_by": "00000000-0000-0000-0000-000000000001",
+        "dpi": 150,
+        "eligible_for_draft_export": false,
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "original": {
+          "media_type": "application/pdf",
+          "name": "synthetic.pdf",
+          "page_count": 1,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size_bytes": 1
+        },
+        "page": 1,
+        "preview": {
+          "height_px": 1,
+          "media_type": "image/png",
+          "name": "synthetic.png",
+          "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "size_bytes": 1,
+          "width_px": 1
+        },
+        "render_profile": "pdf-page-preview-v1",
+        "rendered_at": "2026-10-01T00:00:00Z",
+        "source_kind": "user_supplied_certificate_pdf",
+        "status": "unconfirmed_source",
+        "task_certificate_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Source is an unconfirmed user-supplied PDF page; authenticity and eligibility are not verified; never eligible for draft/export"
+    ]
+  },
+  "job cancel": {
+    "command": "job cancel",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "status": "cancelled"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "job status": {
+    "command": "job status",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "attempts": 1,
+      "error": null,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "kind": "parse",
+      "result": {
+        "pages": 1
+      },
+      "status": "succeeded"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "job wait": {
+    "command": "job wait",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "attempts": 1,
+      "error": null,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "kind": "parse",
+      "result": {
+        "pages": 1
+      },
+      "status": "succeeded"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "login": {
+    "command": "login",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "authenticated": true,
+      "expires_in": 3600,
+      "org_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "org use": {
+    "command": "org use",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "role": "admin"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "req extract": {
+    "command": "req extract",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "cached": false,
+      "job_id": "00000000-0000-0000-0000-000000000001",
+      "status": "queued"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "req list": {
+    "command": "req list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "page": 1,
+          "quote": "Synthetic source"
+        },
+        "text": "Synthetic requirement"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "resource certificate add": {
+    "command": "resource certificate add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "certificate_id": "00000000-0000-0000-0000-000000000001",
+      "data": {
+        "kind": "qualification",
+        "name": "Synthetic declaration",
+        "number": "SYNTHETIC-ONLY",
+        "valid_from": null,
+        "valid_until": null
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Certificate metadata and dates are declarations; authenticity, legality and compliance have not been verified"
+    ]
+  },
+  "resource certificate file add": {
+    "command": "resource certificate file add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "certificate_id": "00000000-0000-0000-0000-000000000001",
+      "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+      "data": {
+        "kind": "qualification",
+        "name": "Synthetic declaration",
+        "number": "SYNTHETIC-ONLY",
+        "valid_from": null,
+        "valid_until": null
+      },
+      "file": {
+        "media_type": "application/pdf",
+        "name": "synthetic.pdf",
+        "page_count": 1,
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "size_bytes": 1
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 2
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Certificate file is user-supplied; authenticity, eligibility and metadata matching have not been verified"
+    ]
+  },
+  "resource certificate file download": {
+    "command": "resource certificate file download",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+      "file": {
+        "media_type": "application/pdf",
+        "name": "synthetic.pdf",
+        "page_count": 1,
+        "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "size_bytes": 1
+      },
+      "output_path": "<download-output>"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Certificate file is user-supplied; authenticity, eligibility and metadata matching have not been verified"
+    ]
+  },
+  "resource certificate file list": {
+    "command": "resource certificate file list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "current_revisions": {
+        "00000000-0000-0000-0000-000000000001": 2
+      },
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "certificate_id": "00000000-0000-0000-0000-000000000001",
+        "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+        "data": {
+          "kind": "qualification",
+          "name": "Synthetic declaration",
+          "number": "SYNTHETIC-ONLY",
+          "valid_from": null,
+          "valid_until": null
+        },
+        "file": {
+          "media_type": "application/pdf",
+          "name": "synthetic.pdf",
+          "page_count": 1,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size_bytes": 1
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 2
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Certificate file is user-supplied; authenticity, eligibility and metadata matching have not been verified"
+    ]
+  },
+  "resource certificate list": {
+    "command": "resource certificate list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "current_revisions": {
+        "00000000-0000-0000-0000-000000000001": 1
+      },
+      "history": false,
+      "validity_by_revision": {
+        "00000000-0000-0000-0000-000000000001": {
+          "as_of": null,
+          "state": "unknown"
+        }
+      }
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "certificate_id": "00000000-0000-0000-0000-000000000001",
+        "data": {
+          "kind": "qualification",
+          "name": "Synthetic declaration",
+          "number": "SYNTHETIC-ONLY",
+          "valid_from": null,
+          "valid_until": null
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Certificate metadata and dates are declarations; authenticity, legality and compliance have not been verified"
+    ]
+  },
+  "resource certificate update": {
+    "command": "resource certificate update",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "certificate_id": "00000000-0000-0000-0000-000000000001",
+      "data": {
+        "kind": "qualification",
+        "name": "Synthetic declaration",
+        "number": "SYNTHETIC-ONLY",
+        "valid_from": null,
+        "valid_until": null
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Certificate metadata and dates are declarations; authenticity, legality and compliance have not been verified"
+    ]
+  },
+  "resource feature add": {
+    "command": "resource feature add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "description": "Synthetic declaration",
+        "name": "Synthetic feature",
+        "product_id": "00000000-0000-0000-0000-000000000001",
+        "status": "planned"
+      },
+      "feature_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Implementation status is a declaration; evidence has not been verified"
+    ]
+  },
+  "resource feature list": {
+    "command": "resource feature list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "current_revisions": {
+        "00000000-0000-0000-0000-000000000001": 1
+      },
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "description": "Synthetic declaration",
+          "name": "Synthetic feature",
+          "product_id": "00000000-0000-0000-0000-000000000001",
+          "status": "planned"
+        },
+        "feature_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Implementation status is a declaration; evidence has not been verified"
+    ]
+  },
+  "resource feature update": {
+    "command": "resource feature update",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "description": "Synthetic declaration",
+        "name": "Synthetic feature",
+        "product_id": "00000000-0000-0000-0000-000000000001",
+        "status": "planned"
+      },
+      "feature_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Implementation status is a declaration; evidence has not been verified"
+    ]
+  },
+  "resource product add": {
+    "command": "resource product add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "model": "Exact synthetic model",
+        "model_version": null,
+        "name": "Synthetic product",
+        "official_url": null,
+        "vendor": "Synthetic vendor",
+        "whitepaper_url": null
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "product_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "resource product list": {
+    "command": "resource product list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "current_revisions": {
+        "00000000-0000-0000-0000-000000000001": 1
+      },
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "model": "Exact synthetic model",
+          "model_version": null,
+          "name": "Synthetic product",
+          "official_url": null,
+          "vendor": "Synthetic vendor",
+          "whitepaper_url": null
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "product_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "resource product update": {
+    "command": "resource product update",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "model": "Exact synthetic model",
+        "model_version": null,
+        "name": "Synthetic product",
+        "official_url": null,
+        "vendor": "Synthetic vendor",
+        "whitepaper_url": null
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "product_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "resource profile add": {
+    "command": "resource profile add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "name": "Synthetic declaration",
+        "performance_summary": null,
+        "registration_details": null,
+        "standard_wording": null
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "profile_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Company metadata is a declaration; authenticity, performance and qualification have not been verified"
+    ]
+  },
+  "resource profile list": {
+    "command": "resource profile list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "current_revisions": {
+        "00000000-0000-0000-0000-000000000001": 1
+      },
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "name": "Synthetic declaration",
+          "performance_summary": null,
+          "registration_details": null,
+          "standard_wording": null
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "profile_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Company metadata is a declaration; authenticity, performance and qualification have not been verified"
+    ]
+  },
+  "resource profile update": {
+    "command": "resource profile update",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "name": "Synthetic declaration",
+        "performance_summary": null,
+        "registration_details": null,
+        "standard_wording": null
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "profile_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Company metadata is a declaration; authenticity, performance and qualification have not been verified"
+    ]
+  },
+  "resource template add": {
+    "command": "resource template add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "chapters": null,
+        "name": "Synthetic template",
+        "project_types": null
+      },
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic.docx",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size_bytes": 1
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1,
+      "template_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
+    ]
+  },
+  "resource template download": {
+    "command": "resource template download",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic.docx",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size_bytes": 1
+      },
+      "output_path": "<download-output>",
+      "template_revision_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
+    ]
+  },
+  "resource template list": {
+    "command": "resource template list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "current_revisions": {
+        "00000000-0000-0000-0000-000000000001": 1
+      },
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "chapters": null,
+          "name": "Synthetic template",
+          "project_types": null
+        },
+        "file": {
+          "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "name": "synthetic.docx",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size_bytes": 1
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "template_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
+    ]
+  },
+  "resource template update": {
+    "command": "resource template update",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "chapters": null,
+        "name": "Synthetic template",
+        "project_types": null
+      },
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic.docx",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size_bytes": 1
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "revision": 1,
+      "template_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
+    ]
+  },
+  "schema": {
+    "command": "schema",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "commands": {
+        "evidence source add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "page": {
+                "maximum": 200,
+                "minimum": 1,
+                "title": "Page",
+                "type": "integer"
+              },
+              "task_certificate_id": {
+                "format": "uuid",
+                "title": "Task Certificate Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_certificate_id",
+              "page"
+            ],
+            "title": "EvidenceSourceCreate",
+            "type": "object"
+          }
+        },
+        "evidence source download": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "evidence source list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "job cancel": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job_id",
+              "options": [
+                "job_id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "job status": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job_id",
+              "options": [
+                "job_id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "job wait": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job_id",
+              "options": [
+                "job_id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "login": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "email",
+              "options": [
+                "--email"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "org",
+              "options": [
+                "--org"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "maxLength": 254,
+                "minLength": 3,
+                "title": "Email",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "password": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "title": "Password",
+                "type": "string"
+              }
+            },
+            "required": [
+              "email",
+              "password",
+              "org_id"
+            ],
+            "title": "Login",
+            "type": "object"
+          }
+        },
+        "org use": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "org_id",
+              "options": [
+                "org_id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "req extract": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "title": "JobAction",
+            "type": "object"
+          }
+        },
+        "req list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource certificate add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CertificateData": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "qualification",
+                      "personnel"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "number": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Number",
+                    "type": "string"
+                  },
+                  "valid_from": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid From"
+                  },
+                  "valid_until": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid Until"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "number"
+                ],
+                "title": "CertificateData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/CertificateData"
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "title": "CertificateCreate",
+            "type": "object"
+          }
+        },
+        "resource certificate file add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CertificateData": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "qualification",
+                      "personnel"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "number": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Number",
+                    "type": "string"
+                  },
+                  "valid_from": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid From"
+                  },
+                  "valid_until": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid Until"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "number"
+                ],
+                "title": "CertificateData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/CertificateData"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "data"
+            ],
+            "title": "CertificateFileCreate",
+            "type": "object"
+          }
+        },
+        "resource certificate file download": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision",
+              "options": [
+                "--revision"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource certificate file list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision",
+              "options": [
+                "--revision"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource certificate list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "certificate_id",
+              "options": [
+                "--id"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "as_of",
+              "options": [
+                "--as-of"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource certificate update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "certificate_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CertificateData": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "qualification",
+                      "personnel"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "number": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Number",
+                    "type": "string"
+                  },
+                  "valid_from": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid From"
+                  },
+                  "valid_until": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid Until"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "number"
+                ],
+                "title": "CertificateData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/CertificateData"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "data"
+            ],
+            "title": "CertificateUpdate",
+            "type": "object"
+          }
+        },
+        "resource feature add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "FeatureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "description": {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "title": "Description",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "product_id": {
+                    "format": "uuid",
+                    "title": "Product Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "implemented",
+                      "developing",
+                      "planned"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "product_id",
+                  "name",
+                  "description",
+                  "status"
+                ],
+                "title": "FeatureData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/FeatureData"
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "title": "FeatureCreate",
+            "type": "object"
+          }
+        },
+        "resource feature list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "feature_id",
+              "options": [
+                "--id"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource feature update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "feature_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "FeatureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "description": {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "title": "Description",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "product_id": {
+                    "format": "uuid",
+                    "title": "Product Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "implemented",
+                      "developing",
+                      "planned"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "product_id",
+                  "name",
+                  "description",
+                  "status"
+                ],
+                "title": "FeatureData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/FeatureData"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "data"
+            ],
+            "title": "FeatureUpdate",
+            "type": "object"
+          }
+        },
+        "resource product add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ProductData": {
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "model_version": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model Version"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "official_url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 2083,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Official Url"
+                  },
+                  "vendor": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Vendor",
+                    "type": "string"
+                  },
+                  "whitepaper_url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 2083,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Whitepaper Url"
+                  }
+                },
+                "required": [
+                  "name",
+                  "vendor",
+                  "model"
+                ],
+                "title": "ProductData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/ProductData"
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "title": "ProductCreate",
+            "type": "object"
+          }
+        },
+        "resource product list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "product_id",
+              "options": [
+                "--id"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource product update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "product_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ProductData": {
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "model_version": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model Version"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "official_url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 2083,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Official Url"
+                  },
+                  "vendor": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Vendor",
+                    "type": "string"
+                  },
+                  "whitepaper_url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 2083,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Whitepaper Url"
+                  }
+                },
+                "required": [
+                  "name",
+                  "vendor",
+                  "model"
+                ],
+                "title": "ProductData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/ProductData"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "data"
+            ],
+            "title": "ProductUpdate",
+            "type": "object"
+          }
+        },
+        "resource profile add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "OrgProfileData": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "performance_summary": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Performance Summary"
+                  },
+                  "registration_details": {
+                    "anyOf": [
+                      {
+                        "maxLength": 10000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Registration Details"
+                  },
+                  "standard_wording": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Standard Wording"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "OrgProfileData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/OrgProfileData"
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "title": "OrgProfileCreate",
+            "type": "object"
+          }
+        },
+        "resource profile list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "profile_id",
+              "options": [
+                "--id"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource profile update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "profile_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "OrgProfileData": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "performance_summary": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Performance Summary"
+                  },
+                  "registration_details": {
+                    "anyOf": [
+                      {
+                        "maxLength": 10000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Registration Details"
+                  },
+                  "standard_wording": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Standard Wording"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "OrgProfileData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/OrgProfileData"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "data"
+            ],
+            "title": "OrgProfileUpdate",
+            "type": "object"
+          }
+        },
+        "resource template add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "TemplateChapter": {
+                "additionalProperties": false,
+                "properties": {
+                  "children": {
+                    "items": {
+                      "$ref": "#/$defs/TemplateChapter"
+                    },
+                    "maxItems": 100,
+                    "title": "Children",
+                    "type": "array"
+                  },
+                  "title": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "title": "TemplateChapter",
+                "type": "object"
+              },
+              "TemplateData": {
+                "additionalProperties": false,
+                "properties": {
+                  "chapters": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "$ref": "#/$defs/TemplateChapter"
+                        },
+                        "maxItems": 100,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Chapters"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "project_types": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 100,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Project Types"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "TemplateData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/TemplateData"
+              }
+            },
+            "required": [
+              "data"
+            ],
+            "title": "TemplateCreate",
+            "type": "object"
+          }
+        },
+        "resource template download": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision",
+              "options": [
+                "--revision"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource template list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "resource template update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "TemplateChapter": {
+                "additionalProperties": false,
+                "properties": {
+                  "children": {
+                    "items": {
+                      "$ref": "#/$defs/TemplateChapter"
+                    },
+                    "maxItems": 100,
+                    "title": "Children",
+                    "type": "array"
+                  },
+                  "title": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "title": "TemplateChapter",
+                "type": "object"
+              },
+              "TemplateData": {
+                "additionalProperties": false,
+                "properties": {
+                  "chapters": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "$ref": "#/$defs/TemplateChapter"
+                        },
+                        "maxItems": 100,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Chapters"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "project_types": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 100,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Project Types"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "TemplateData",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "data": {
+                "$ref": "#/$defs/TemplateData"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "data"
+            ],
+            "title": "TemplateUpdate",
+            "type": "object"
+          }
+        },
+        "schema": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "task certificate add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "certificate_id": {
+                "format": "uuid",
+                "title": "Certificate Id",
+                "type": "string"
+              },
+              "lot": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Lot"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              }
+            },
+            "required": [
+              "certificate_id"
+            ],
+            "title": "TaskCertificateSelection",
+            "type": "object"
+          }
+        },
+        "task certificate file list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "task certificate list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "as_of",
+              "options": [
+                "--as-of"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "task create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "name",
+              "options": [
+                "--name"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "tender",
+              "options": [
+                "--tender"
+              ],
+              "required": false,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "tender_number",
+              "options": [
+                "--tender-number"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "deadline",
+              "options": [
+                "--deadline"
+              ],
+              "required": false,
+              "type": "datetime"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "budget_usd",
+              "options": [
+                "--budget-usd"
+              ],
+              "required": false,
+              "type": "float"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "budget_usd": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Budget Usd"
+              },
+              "deadline": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Deadline"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "tender_number": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Tender Number"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "TaskCreate",
+            "type": "object"
+          }
+        },
+        "task feature add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "feature_id": {
+                "format": "uuid",
+                "title": "Feature Id",
+                "type": "string"
+              },
+              "lot": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Lot"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              }
+            },
+            "required": [
+              "feature_id"
+            ],
+            "title": "TaskFeatureSelection",
+            "type": "object"
+          }
+        },
+        "task feature list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "task list": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "task profile add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "lot": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Lot"
+              },
+              "profile_id": {
+                "format": "uuid",
+                "title": "Profile Id",
+                "type": "string"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              }
+            },
+            "required": [
+              "profile_id"
+            ],
+            "title": "TaskOrgProfileSelection",
+            "type": "object"
+          }
+        },
+        "task profile list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "task resource add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "lot": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Lot"
+              },
+              "product_id": {
+                "format": "uuid",
+                "title": "Product Id",
+                "type": "string"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              }
+            },
+            "required": [
+              "product_id"
+            ],
+            "title": "TaskProductSelection",
+            "type": "object"
+          }
+        },
+        "task resource list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "task template add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "lot": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Lot"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              },
+              "template_id": {
+                "format": "uuid",
+                "title": "Template Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_id"
+            ],
+            "title": "TaskTemplateSelection",
+            "type": "object"
+          }
+        },
+        "task template list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "tender parse": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "title": "JobAction",
+            "type": "object"
+          }
+        },
+        "tender upload": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "token create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "name",
+              "options": [
+                "--name"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "scope",
+              "options": [
+                "--scope"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expires_at",
+              "options": [
+                "--expires-at"
+              ],
+              "required": true,
+              "type": "datetime"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expires_at": {
+                "format": "date-time",
+                "title": "Expires At",
+                "type": "string"
+              },
+              "name": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "scopes": {
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "title": "Scopes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "name",
+              "scopes",
+              "expires_at"
+            ],
+            "title": "TokenCreate",
+            "type": "object"
+          }
+        }
+      },
+      "exit_codes": {
+        "0": "success",
+        "2": "invalid_input",
+        "3": "retryable",
+        "4": "fatal",
+        "5": "partial"
+      },
+      "global_parameters": [
+        {
+          "name": "mode",
+          "options": [
+            "--mode"
+          ],
+          "required": false,
+          "type": "text"
+        },
+        {
+          "name": "server",
+          "options": [
+            "--server"
+          ],
+          "required": false,
+          "type": "text"
+        },
+        {
+          "name": "state",
+          "options": [
+            "--state"
+          ],
+          "required": false,
+          "type": "path"
+        },
+        {
+          "name": "install_completion",
+          "options": [
+            "--install-completion"
+          ],
+          "required": false,
+          "type": "boolean"
+        },
+        {
+          "name": "show_completion",
+          "options": [
+            "--show-completion"
+          ],
+          "required": false,
+          "type": "boolean"
+        }
+      ],
+      "result": {
+        "$defs": {
+          "Cost": {
+            "additionalProperties": false,
+            "properties": {
+              "llm_tokens": {
+                "default": 0,
+                "title": "Llm Tokens",
+                "type": "integer"
+              },
+              "ocr_pages": {
+                "default": 0,
+                "title": "Ocr Pages",
+                "type": "integer"
+              },
+              "usd": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": 0.0,
+                "title": "Usd"
+              }
+            },
+            "title": "Cost",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "command": {
+            "title": "Command",
+            "type": "string"
+          },
+          "cost": {
+            "$ref": "#/$defs/Cost"
+          },
+          "data": {
+            "additionalProperties": true,
+            "title": "Data",
+            "type": "object"
+          },
+          "duration_ms": {
+            "default": 0,
+            "title": "Duration Ms",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "ok": {
+            "title": "Ok",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ok",
+          "command"
+        ],
+        "title": "Result",
+        "type": "object"
+      },
+      "version": "1.0"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "task certificate add": {
+    "command": "task certificate add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+      "data": {
+        "kind": "qualification",
+        "name": "Synthetic declaration",
+        "number": "SYNTHETIC-ONLY",
+        "valid_from": null,
+        "valid_until": null
+      },
+      "duplicate": false,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "lot": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "replaced_snapshot_id": null,
+      "revision": 1,
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Certificate metadata and dates are declarations; authenticity, legality and compliance have not been verified"
+    ]
+  },
+  "task certificate file list": {
+    "command": "task certificate file list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active_snapshot_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "certificate_file_id": "00000000-0000-0000-0000-000000000001",
+        "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+        "data": {
+          "kind": "qualification",
+          "name": "Synthetic declaration",
+          "number": "SYNTHETIC-ONLY",
+          "valid_from": null,
+          "valid_until": null
+        },
+        "file": {
+          "media_type": "application/pdf",
+          "name": "synthetic.pdf",
+          "page_count": 1,
+          "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "size_bytes": 1
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "lot": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 2,
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Certificate file is user-supplied; authenticity, eligibility and metadata matching have not been verified"
+    ]
+  },
+  "task certificate list": {
+    "command": "task certificate list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active_snapshot_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "history": false,
+      "validity_by_revision": {
+        "00000000-0000-0000-0000-000000000001": {
+          "as_of": null,
+          "state": "unknown"
+        }
+      }
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+        "data": {
+          "kind": "qualification",
+          "name": "Synthetic declaration",
+          "number": "SYNTHETIC-ONLY",
+          "valid_from": null,
+          "valid_until": null
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "lot": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Certificate metadata and dates are declarations; authenticity, legality and compliance have not been verified"
+    ]
+  },
+  "task create": {
+    "command": "task create",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "Synthetic task",
+      "org_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "task feature add": {
+    "command": "task feature add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "description": "Synthetic declaration",
+        "name": "Synthetic feature",
+        "product_id": "00000000-0000-0000-0000-000000000001",
+        "status": "planned"
+      },
+      "duplicate": false,
+      "feature_revision_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "lot": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "replaced_snapshot_id": null,
+      "revision": 1,
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Implementation status is a declaration; evidence has not been verified"
+    ]
+  },
+  "task feature list": {
+    "command": "task feature list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active_snapshot_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "description": "Synthetic declaration",
+          "name": "Synthetic feature",
+          "product_id": "00000000-0000-0000-0000-000000000001",
+          "status": "planned"
+        },
+        "feature_revision_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "lot": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Implementation status is a declaration; evidence has not been verified"
+    ]
+  },
+  "task list": {
+    "command": "task list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "name": "Synthetic task",
+        "org_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "task profile add": {
+    "command": "task profile add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "name": "Synthetic declaration",
+        "performance_summary": null,
+        "registration_details": null,
+        "standard_wording": null
+      },
+      "duplicate": false,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "lot": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "profile_revision_id": "00000000-0000-0000-0000-000000000001",
+      "replaced_snapshot_id": null,
+      "revision": 1,
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Company metadata is a declaration; authenticity, performance and qualification have not been verified"
+    ]
+  },
+  "task profile list": {
+    "command": "task profile list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active_snapshot_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "name": "Synthetic declaration",
+          "performance_summary": null,
+          "registration_details": null,
+          "standard_wording": null
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "lot": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "profile_revision_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Company metadata is a declaration; authenticity, performance and qualification have not been verified"
+    ]
+  },
+  "task resource add": {
+    "command": "task resource add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "model": "Exact synthetic model",
+        "model_version": null,
+        "name": "Synthetic product",
+        "official_url": null,
+        "vendor": "Synthetic vendor",
+        "whitepaper_url": null
+      },
+      "duplicate": false,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "lot": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "product_revision_id": "00000000-0000-0000-0000-000000000001",
+      "replaced_snapshot_id": null,
+      "revision": 1,
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "task resource list": {
+    "command": "task resource list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active_snapshot_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "model": "Exact synthetic model",
+          "model_version": null,
+          "name": "Synthetic product",
+          "official_url": null,
+          "vendor": "Synthetic vendor",
+          "whitepaper_url": null
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "lot": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "product_revision_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "task template add": {
+    "command": "task template add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "data": {
+        "chapters": null,
+        "name": "Synthetic template",
+        "project_types": null
+      },
+      "duplicate": false,
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic.docx",
+        "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "size_bytes": 1
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "lot": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "replaced_snapshot_id": null,
+      "revision": 1,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "template_revision_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": [
+      "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
+    ]
+  },
+  "task template list": {
+    "command": "task template list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active_snapshot_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "history": false
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "data": {
+          "chapters": null,
+          "name": "Synthetic template",
+          "project_types": null
+        },
+        "file": {
+          "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "name": "synthetic.docx",
+          "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "size_bytes": 1
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "lot": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "template_revision_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": [
+      "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
+    ]
+  },
+  "tender parse": {
+    "command": "tender parse",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "cached": false,
+      "job_id": "00000000-0000-0000-0000-000000000001",
+      "status": "queued"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "tender upload": {
+    "command": "tender upload",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "duplicate": false,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "name": "fixture.pdf",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "token create": {
+    "command": "token create",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "encrypted_token_file": "<encrypted-token-file>",
+      "expires_at": "2030-01-01T00:00:00+00:00",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "scopes": [
+        "task:read"
+      ]
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

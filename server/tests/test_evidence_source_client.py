@@ -1,0 +1,290 @@
+import hashlib
+import json
+from contextlib import asynccontextmanager
+from uuid import UUID
+
+import httpx
+import pytest
+from app.core.errors import ServiceError
+from app.schemas.contracts import Result
+from app.services.certificate_files import validate_file
+from app.services.evidence_sources import render_page
+from bid_cli.client import Client, State, new_output_path, save_download
+from bid_cli.main import main
+
+IDENTIFIER = "00000000-0000-0000-0000-000000000001"
+
+
+class SyntheticState(State):
+    def load(self):
+        return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
+
+
+def download_client(
+    tmp_path,
+    content,
+    *,
+    link=None,
+    served=None,
+    redirect=False,
+    wrong_scope=False,
+    transport_error=None,
+):
+    client = Client(
+        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+    )
+    path = f"/evidence-sources/{IDENTIFIER}/preview/download"
+    descriptor = {
+        "name": "synthetic.png",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "size_bytes": len(content),
+        "media_type": "image/png",
+        "width_px": 1240,
+        "height_px": 1755,
+    }
+    # Genuine PNG metadata is derived from the decoded fixture, never fabricated.
+    import pymupdf
+    from app.schemas.evidence_source_contracts import EvidenceSourcePreview
+
+    decoded = pymupdf.Pixmap(content)
+    descriptor["width_px"], descriptor["height_px"] = decoded.width, decoded.height
+    EvidenceSourcePreview.model_validate(descriptor)
+    archive = {
+        "id": IDENTIFIER,
+        "org_id": "foreign" if wrong_scope else IDENTIFIER,
+        "task_id": IDENTIFIER,
+        "task_certificate_id": IDENTIFIER,
+        "certificate_id": IDENTIFIER,
+        "certificate_revision_id": IDENTIFIER,
+        "certificate_file_id": IDENTIFIER,
+        "source_kind": "user_supplied_certificate_pdf",
+        "original": {
+            "name": "synthetic.pdf",
+            "sha256": "a" * 64,
+            "size_bytes": 1,
+            "page_count": 2,
+            "media_type": "application/pdf",
+        },
+        "page": 1,
+        "render_profile": "pdf-page-preview-v1",
+        "dpi": 150,
+        "preview": descriptor,
+        "rendered_at": "2026-10-01T00:00:00Z",
+        "created_by": IDENTIFIER,
+        "active_selection": True,
+        "status": "unconfirmed_source",
+        "confirmed_by": None,
+        "eligible_for_draft_export": False,
+    }
+    calls = []
+
+    def handler(request):
+        calls.append(request.url)
+        assert request.headers["Authorization"] == "Bearer synthetic-only-session"
+        assert request.headers["X-Org-Id"] == IDENTIFIER
+        if request.url.path == path + "-link":
+            return httpx.Response(
+                200,
+                json=Result(
+                    ok=True,
+                    command="fixture",
+                    data={"url": link or path + "?signature=synthetic-only", "expires_in": 300},
+                    items=[archive],
+                ).model_dump(mode="json"),
+            )
+        assert request.url.path == path and request.url.params["signature"] == "synthetic-only"
+        if transport_error is not None:
+            raise transport_error("Synthetic transport failure", request=request)
+        if redirect:
+            return httpx.Response(302, headers={"Location": "https://foreign.example.test/secret"})
+        return httpx.Response(200, content=content if served is None else served)
+
+    @asynccontextmanager
+    async def transport():
+        async with httpx.AsyncClient(
+            base_url="https://synthetic.example.test", transport=httpx.MockTransport(handler)
+        ) as http:
+            yield http
+
+    client.transport = transport
+    return client, calls
+
+
+async def test_source_download_verified_atomic_private_file_and_no_overwrite(tmp_path, pdf_bytes):
+    output = tmp_path.resolve() / "new.png"
+    client, calls = download_client(tmp_path, pdf_bytes)
+    result = await client.download_evidence_source(UUID(IDENTIFIER), output)
+    assert (
+        result["ok"] and result["data"]["file"]["sha256"] == hashlib.sha256(pdf_bytes).hexdigest()
+    )
+    assert output.read_bytes() == pdf_bytes and output.stat().st_mode & 0o777 == 0o600
+    assert len(calls) == 2 and not list(tmp_path.glob(".bid-download-*"))
+    with pytest.raises(ServiceError) as error:
+        await client.download_evidence_source(UUID(IDENTIFIER), output)
+    assert error.value.exit_code == 2 and len(calls) == 2 and output.read_bytes() == pdf_bytes
+
+
+@pytest.mark.parametrize(
+    "link",
+    [
+        "https://foreign.example.test/secret",
+        "//foreign.example.test/secret",
+        "/arbitrary?signature=synthetic-only",
+        f"/evidence-sources/{IDENTIFIER}/preview/download?signature=one&signature=two",
+        f"/evidence-sources/{IDENTIFIER}/preview/download?signature=synthetic-only&extra=true",
+        f"/evidence-sources/{IDENTIFIER}/preview/download?signature=synthetic-only#extra",
+    ],
+)
+async def test_source_download_rejects_external_or_malformed_links(tmp_path, pdf_bytes, link):
+    client, calls = download_client(tmp_path, pdf_bytes, link=link)
+    output = tmp_path.resolve() / "new.png"
+    with pytest.raises(ServiceError) as error:
+        await client.download_evidence_source(UUID(IDENTIFIER), output)
+    assert error.value.code == "invalid_download_link" and len(calls) == 1 and not output.exists()
+
+
+@pytest.mark.parametrize("failure", ["hash", "short", "long", "redirect", "foreign"])
+async def test_source_download_never_writes_bad_response(tmp_path, pdf_bytes, failure):
+    served = {
+        "hash": b"x" * len(pdf_bytes),
+        "short": pdf_bytes[:-1],
+        "long": pdf_bytes + b"x",
+    }.get(failure)
+    client, calls = download_client(
+        tmp_path,
+        pdf_bytes,
+        served=served,
+        redirect=failure == "redirect",
+        wrong_scope=failure == "foreign",
+    )
+    output = tmp_path.resolve() / "new.png"
+    with pytest.raises(ServiceError) as error:
+        await client.download_evidence_source(UUID(IDENTIFIER), output)
+    assert error.value.exit_code == 4 and not output.exists()
+    assert all(url.host == "synthetic.example.test" for url in calls)
+
+
+@pytest.mark.parametrize(
+    "transport_error", [httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError]
+)
+async def test_source_download_network_and_partial_connection_errors_are_retryable(
+    tmp_path, pdf_bytes, transport_error
+):
+    client, _ = download_client(tmp_path, pdf_bytes, transport_error=transport_error)
+    output = tmp_path.resolve() / "new.png"
+    with pytest.raises(ServiceError) as error:
+        await client.download_evidence_source(UUID(IDENTIFIER), output)
+    assert error.value.code == "network_unavailable" and error.value.exit_code == 3
+    assert not output.exists()
+
+
+@pytest.mark.parametrize(
+    "transport_error", [httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError]
+)
+async def test_source_metadata_transport_errors_share_cli_contract(tmp_path, transport_error):
+    client = Client(
+        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+    )
+
+    def failure(request):
+        raise transport_error("Synthetic transport failure", request=request)
+
+    @asynccontextmanager
+    async def transport():
+        async with httpx.AsyncClient(
+            base_url="https://synthetic.example.test", transport=httpx.MockTransport(failure)
+        ) as http:
+            yield http
+
+    client.transport = transport
+    with pytest.raises(ServiceError) as error:
+        await client.request("GET", f"/evidence-sources/{IDENTIFIER}/preview/download-link")
+    assert error.value.code == "network_unavailable" and error.value.exit_code == 3
+
+
+def test_source_download_existing_symlink_and_racing_file_are_preserved(tmp_path):
+    real = tmp_path.resolve() / "existing.pdf"
+    real.write_bytes(b"Synthetic existing")
+    link = tmp_path.resolve() / "linked.pdf"
+    link.symlink_to(real)
+    with pytest.raises(ServiceError):
+        new_output_path(link)
+    target = tmp_path.resolve() / "race.pdf"
+    new_output_path(target)
+    target.write_bytes(b"Synthetic racing writer")
+    with pytest.raises(ServiceError):
+        save_download(target, b"Synthetic downloaded")
+    assert (
+        target.read_bytes() == b"Synthetic racing writer"
+        and real.read_bytes() == b"Synthetic existing"
+    )
+    assert not list(tmp_path.glob(".bid-download-*"))
+
+
+@pytest.mark.parametrize(
+    "failure",
+    ["missing", "invalid_json", "oversized_metadata", "invalid_utf8", "extra", "invalid_page"],
+)
+def test_source_cli_invalid_input_before_network(failure, monkeypatch, tmp_path, capsys, pdf_bytes):
+    calls = []
+
+    async def forbidden(*args, **kwargs):
+        calls.append(True)
+        raise AssertionError("invalid input reached network")
+
+    monkeypatch.setattr(Client, "request", forbidden)
+    metadata = tmp_path / "metadata.json"
+    file = tmp_path / "synthetic.pdf"
+    file.write_bytes(pdf_bytes)
+    data = {"task_certificate_id": IDENTIFIER, "page": 1}
+    if failure == "missing":
+        pass
+    elif failure == "invalid_json":
+        metadata.write_text("invalid")
+    elif failure == "oversized_metadata":
+        metadata.write_text(" " * (128 * 1024 + 1))
+    elif failure == "invalid_utf8":
+        metadata.write_bytes(b"\xff")
+    else:
+        if failure == "extra":
+            data["org_id"] = IDENTIFIER
+        metadata.write_text(json.dumps(data))
+        if failure == "invalid_page":
+            data["page"] = 0
+            metadata.write_text(json.dumps(data))
+    with pytest.raises(SystemExit) as error:
+        main(
+            [
+                "evidence",
+                "source",
+                "add",
+                "--task",
+                IDENTIFIER,
+                "--input",
+                str(metadata),
+                "--json",
+            ]
+        )
+    body = json.loads(capsys.readouterr().out)
+    assert error.value.code == 2 and not body["ok"] and not calls
+
+
+@pytest.fixture(name="pdf_bytes")
+def png_fixture():
+    import pymupdf
+
+    with pymupdf.open() as pdf:
+        page = pdf.new_page(width=120, height=160)
+        page.insert_text((15, 40), "Synthetic only")
+        original = pdf.tobytes()
+    return render_page(
+        original, validate_file(original, "synthetic.pdf"), 1, "synthetic.png", 40 * 1024 * 1024
+    )[0]
+
+
+@pytest.mark.parametrize("command", ["add", "list", "download"])
+def test_missing_source_parameters_use_correct_nested_command(command, capsys):
+    with pytest.raises(SystemExit) as error:
+        main(["evidence", "source", command, "--json"])
+    result = json.loads(capsys.readouterr().out)
+    assert error.value.code == 2 and result["command"] == f"evidence source {command}"

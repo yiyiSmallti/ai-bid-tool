@@ -1,0 +1,1125 @@
+import asyncio
+import hashlib
+import json
+import secrets
+import time
+from contextlib import asynccontextmanager
+from datetime import UTC, date, datetime
+from pathlib import Path
+from urllib.parse import quote
+from uuid import UUID, uuid4
+
+from fastapi import Depends, FastAPI, File, Form, Header, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse, Response
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import IntegrityError
+from starlette.exceptions import HTTPException
+
+from app.core.config import Settings
+from app.core.db import Database
+from app.core.errors import ServiceError, not_found
+from app.core.security import Secrets, token_digest
+from app.jobs.processor import Processor
+from app.jobs.queue import Queue
+from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task
+from app.providers.llm import create_llm
+from app.providers.local_ocr import LocalOCR
+from app.providers.storage import create_storage
+from app.schemas.certificate_contracts import (
+    CertificateCreate,
+    CertificateUpdate,
+    TaskCertificateSelection,
+)
+from app.schemas.certificate_file_contracts import CertificateFileCreate
+from app.schemas.contracts import (
+    CONTRACT_VERSION,
+    JobAction,
+    Login,
+    Result,
+    TaskCreate,
+    TokenCreate,
+)
+from app.schemas.evidence_source_contracts import EvidenceSourceCreate
+from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
+from app.schemas.profile_contracts import (
+    OrgProfileCreate,
+    OrgProfileUpdate,
+    TaskOrgProfileSelection,
+)
+from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
+from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
+from app.services import (
+    certificate_files,
+    certificates,
+    evidence_sources,
+    features,
+    profiles,
+    resources,
+    templates,
+)
+from app.services.auth import SCOPES, authenticate, login
+from app.services.extraction import PROMPT_VERSION
+from app.services.parsing import PARSER_VERSION, validate_document
+from app.services.template_files import MAX_TEMPLATE_BYTES, validate_template
+from app.services.template_files import WARNINGS as TEMPLATE_WARNINGS
+
+
+def serial(row, fields: tuple[str, ...]) -> dict:
+    from fastapi.encoders import jsonable_encoder
+
+    return jsonable_encoder({field: getattr(row, field) for field in fields})
+
+
+def result(command: str, data=None, items=None, warnings=None) -> dict:
+    return Result(
+        ok=True, command=command, data=data or {}, items=items or [], warnings=warnings or []
+    ).model_dump(mode="json")
+
+
+def create_app(settings: Settings | None = None, *, llm=None, ocr=None, queue=None) -> FastAPI:
+    settings = settings or Settings.load()
+    db, crypto = Database(settings), Secrets(settings.encryption_key.get_secret_value())
+    storage = create_storage(settings)
+    llm = llm or create_llm(settings)
+    ocr = ocr or LocalOCR(settings.ocr_language, settings.ocr_data_dir)
+    queue = queue or Queue(settings)
+    processor = Processor(settings, db, storage, llm, ocr)
+    queue.processor = processor
+
+    @asynccontextmanager
+    async def lifespan(_app):
+        await db.verify_role()
+        try:
+            yield
+        finally:
+            await db.engine.dispose()
+
+    app = FastAPI(
+        title="Local API",
+        version=CONTRACT_VERSION,
+        lifespan=lifespan,
+        responses={code: {"model": Result} for code in (400, 401, 403, 404, 409, 413, 422, 503)},
+    )
+    app.state.db, app.state.processor, app.state.storage, app.state.queue = (
+        db,
+        processor,
+        storage,
+        queue,
+    )
+
+    @app.middleware("http")
+    async def bound_source_input(request: Request, call_next):
+        parts = request.url.path.split("/")
+        if (
+            request.method == "POST"
+            and len(parts) == 4
+            and parts[1] == "tasks"
+            and parts[3] == "evidence-sources"
+        ):
+            content = bytearray()
+            async for chunk in request.stream():
+                content.extend(chunk)
+                if len(content) > 128 * 1024:
+                    return error_response(
+                        request,
+                        ServiceError("input_too_large", "Source input exceeds JSON limit", 413, 2),
+                    )
+            # Starlette's wrapped request replays its cached body to FastAPI.
+            request._body = bytes(content)
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def contract_header(request: Request, call_next):
+        start = time.monotonic()
+        response = await call_next(request)
+        response.headers["X-Bid-Contract-Version"] = CONTRACT_VERSION
+        response.headers["X-Duration-Ms"] = str(int((time.monotonic() - start) * 1000))
+        response.headers["Cache-Control"] = "no-store"
+        if response.headers.get("content-type", "").startswith("application/json"):
+            raw = b"".join([part async for part in response.body_iterator])
+            payload = json.loads(raw)
+            if isinstance(payload, dict) and "command" in payload and "duration_ms" in payload:
+                payload["duration_ms"] = int((time.monotonic() - start) * 1000)
+                raw = json.dumps(payload, ensure_ascii=False).encode()
+            headers = {
+                key: value for key, value in response.headers.items() if key != "content-length"
+            }
+            response = Response(raw, status_code=response.status_code, headers=headers)
+        return response
+
+    def error_response(request: Request, error: ServiceError):
+        command = request.scope.get("route")
+        name = command.name.replace("_", " ") if command else "request"
+        body = Result(
+            ok=False,
+            command=name,
+            data={
+                "error": {
+                    "code": error.code,
+                    "message": error.message,
+                    "exit_code": error.exit_code,
+                }
+            },
+        )
+        return JSONResponse(status_code=error.status, content=body.model_dump(mode="json"))
+
+    @app.exception_handler(ServiceError)
+    async def service_error(request: Request, error: ServiceError):
+        return error_response(request, error)
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_error(request: Request, error: RequestValidationError):
+        return error_response(
+            request, ServiceError("invalid_input", "Invalid or missing request parameters", 422, 2)
+        )
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error(request: Request, error: IntegrityError):
+        return error_response(
+            request, ServiceError("conflict", "Input conflicts with existing records", 409, 2)
+        )
+
+    @app.exception_handler(HTTPException)
+    async def http_error(request: Request, error: HTTPException):
+        return error_response(
+            request,
+            ServiceError(
+                "http_error",
+                "Request is unavailable",
+                error.status_code,
+                4 if error.status_code == 404 else 2,
+            ),
+        )
+
+    bearer = HTTPBearer(auto_error=False)
+
+    async def context(
+        credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+        x_org_id: UUID = Header(...),
+    ):
+        if credentials is None:
+            raise ServiceError("invalid_session", "Bearer credentials required", 401, 4)
+        # Candidate scope is used only for the membership check; handlers receive a
+        # tenant transaction only after identity and active membership are verified.
+        async with db.transaction(x_org_id) as session:
+            identity = await authenticate(session, credentials.credentials, x_org_id, crypto)
+            yield session, identity
+
+    @app.get("/health", name="health", response_model=Result)
+    async def health():
+        configured = not llm.test_only and llm.name != "unconfigured"
+        return result(
+            "health",
+            {"status": "ok", "version": CONTRACT_VERSION, "real_llm_configured": configured},
+        )
+
+    @app.post("/auth/login", name="login", response_model=Result)
+    async def auth_login(body: Login):
+        async with db.transaction(body.org_id) as session:
+            user = await login(session, body.email, body.password, body.org_id)
+            token = crypto.issue(
+                {"kind": "session", "user_id": str(user.id)}, settings.session_seconds
+            )
+            return result(
+                "login",
+                {
+                    "session": token,
+                    "org_id": str(body.org_id),
+                    "expires_in": settings.session_seconds,
+                },
+            )
+
+    @app.get("/org/current", name="org_use", response_model=Result)
+    async def org_use(ctx=Depends(context, scope="function")):
+        _, identity = ctx
+        return result("org use", {"org_id": str(identity.org_id), "role": identity.role})
+
+    @app.post("/tasks", name="task_create", response_model=Result)
+    async def task_create(body: TaskCreate, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("task:create")
+        task = Task(org_id=identity.org_id, created_by=identity.user_id, **body.model_dump())
+        session.add(task)
+        await session.flush()
+        return result("task create", serial(task, ("id", "name", "org_id")))
+
+    @app.get("/tasks", name="task_list", response_model=Result)
+    async def task_list(ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("task:read")
+        tasks = (await session.scalars(select(Task).order_by(Task.created_at))).all()
+        return result("task list", items=[serial(task, ("id", "name", "org_id")) for task in tasks])
+
+    @app.post("/resources/products", name="resource_product_add", response_model=Result)
+    async def product_add(body: ProductCreate, ctx=Depends(context, scope="function")):
+        session, actor = ctx
+        return result("resource product add", await resources.create_product(session, actor, body))
+
+    @app.get("/resources/products", name="resource_product_list", response_model=Result)
+    async def product_list(
+        history: bool = False,
+        product_id: UUID | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        data, items = await resources.list_products(
+            session, actor, history=history, product_id=product_id
+        )
+        return result("resource product list", data, items)
+
+    @app.post(
+        "/resources/products/{product_id}/revisions",
+        name="resource_product_update",
+        response_model=Result,
+    )
+    async def product_update(
+        product_id: UUID, body: ProductUpdate, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "resource product update",
+            await resources.update_product(session, actor, product_id, body),
+        )
+
+    @app.post("/tasks/{task_id}/products", name="task_resource_add", response_model=Result)
+    async def task_product_add(
+        task_id: UUID, body: TaskProductSelection, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "task resource add", await resources.select_product(session, actor, task_id, body)
+        )
+
+    @app.get("/tasks/{task_id}/products", name="task_resource_list", response_model=Result)
+    async def task_product_list(
+        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        data, items = await resources.list_selections(session, actor, task_id, history=history)
+        return result("task resource list", data, items)
+
+    feature_warnings = ["Implementation status is a declaration; evidence has not been verified"]
+
+    @app.post("/resources/features", name="resource_feature_add", response_model=Result)
+    async def feature_add(body: FeatureCreate, ctx=Depends(context, scope="function")):
+        session, actor = ctx
+        return result(
+            "resource feature add",
+            await features.create_feature(session, actor, body),
+            warnings=feature_warnings,
+        )
+
+    @app.get("/resources/features", name="resource_feature_list", response_model=Result)
+    async def feature_list(
+        history: bool = False,
+        feature_id: UUID | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        data, items = await features.list_features(
+            session, actor, history=history, feature_id=feature_id
+        )
+        return result("resource feature list", data, items, feature_warnings)
+
+    @app.post(
+        "/resources/features/{feature_id}/revisions",
+        name="resource_feature_update",
+        response_model=Result,
+    )
+    async def feature_update(
+        feature_id: UUID, body: FeatureUpdate, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "resource feature update",
+            await features.update_feature(session, actor, feature_id, body),
+            warnings=feature_warnings,
+        )
+
+    @app.post("/tasks/{task_id}/features", name="task_feature_add", response_model=Result)
+    async def task_feature_add(
+        task_id: UUID, body: TaskFeatureSelection, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "task feature add",
+            await features.select_feature(session, actor, task_id, body),
+            warnings=feature_warnings,
+        )
+
+    @app.get("/tasks/{task_id}/features", name="task_feature_list", response_model=Result)
+    async def task_feature_list(
+        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        data, items = await features.list_selections(session, actor, task_id, history=history)
+        return result("task feature list", data, items, feature_warnings)
+
+    certificate_warnings = [
+        "Certificate metadata and dates are declarations; authenticity, legality and compliance have not been verified"
+    ]
+
+    @app.post("/resources/certificates", name="resource_certificate_add", response_model=Result)
+    async def certificate_add(body: CertificateCreate, ctx=Depends(context, scope="function")):
+        session, actor = ctx
+        return result(
+            "resource certificate add",
+            await certificates.create_certificate(session, actor, body),
+            warnings=certificate_warnings,
+        )
+
+    @app.get("/resources/certificates", name="resource_certificate_list", response_model=Result)
+    async def certificate_list(
+        history: bool = False,
+        certificate_id: UUID | None = None,
+        as_of: date | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        data, items = await certificates.list_certificates(
+            session, actor, history=history, certificate_id=certificate_id, as_of=as_of
+        )
+        return result("resource certificate list", data, items, certificate_warnings)
+
+    @app.post(
+        "/resources/certificates/{certificate_id}/revisions",
+        name="resource_certificate_update",
+        response_model=Result,
+    )
+    async def certificate_update(
+        certificate_id: UUID, body: CertificateUpdate, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "resource certificate update",
+            await certificates.update_certificate(session, actor, certificate_id, body),
+            warnings=certificate_warnings,
+        )
+
+    @app.post("/tasks/{task_id}/certificates", name="task_certificate_add", response_model=Result)
+    async def task_certificate_add(
+        task_id: UUID, body: TaskCertificateSelection, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "task certificate add",
+            await certificates.select_certificate(session, actor, task_id, body),
+            warnings=certificate_warnings,
+        )
+
+    @app.get("/tasks/{task_id}/certificates", name="task_certificate_list", response_model=Result)
+    async def task_certificate_list(
+        task_id: UUID,
+        history: bool = False,
+        as_of: date | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        data, items = await certificates.list_selections(
+            session, actor, task_id, history=history, as_of=as_of
+        )
+        return result("task certificate list", data, items, certificate_warnings)
+
+    profile_warnings = [
+        "Company metadata is a declaration; authenticity, performance and qualification have not been verified"
+    ]
+
+    @app.post("/resources/profiles", name="resource_profile_add", response_model=Result)
+    async def profile_add(body: OrgProfileCreate, ctx=Depends(context, scope="function")):
+        session, actor = ctx
+        return result(
+            "resource profile add",
+            await profiles.create_profile(session, actor, body),
+            warnings=profile_warnings,
+        )
+
+    @app.get("/resources/profiles", name="resource_profile_list", response_model=Result)
+    async def profile_list(
+        history: bool = False,
+        profile_id: UUID | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        data, items = await profiles.list_profiles(
+            session, actor, history=history, profile_id=profile_id
+        )
+        return result("resource profile list", data, items, profile_warnings)
+
+    @app.post(
+        "/resources/profiles/{profile_id}/revisions",
+        name="resource_profile_update",
+        response_model=Result,
+    )
+    async def profile_update(
+        profile_id: UUID, body: OrgProfileUpdate, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "resource profile update",
+            await profiles.update_profile(session, actor, profile_id, body),
+            warnings=profile_warnings,
+        )
+
+    @app.post("/tasks/{task_id}/profiles", name="task_profile_add", response_model=Result)
+    async def task_profile_add(
+        task_id: UUID, body: TaskOrgProfileSelection, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "task profile add",
+            await profiles.select_profile(session, actor, task_id, body),
+            warnings=profile_warnings,
+        )
+
+    @app.get("/tasks/{task_id}/profiles", name="task_profile_list", response_model=Result)
+    async def task_profile_list(
+        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        data, items = await profiles.list_selections(session, actor, task_id, history=history)
+        return result("task profile list", data, items, profile_warnings)
+
+    @app.post(
+        "/resources/certificates/{certificate_id}/file-revisions",
+        name="resource_certificate_file_add",
+        response_model=Result,
+    )
+    async def certificate_file_add(
+        certificate_id: UUID,
+        metadata: str = Form(...),
+        file: UploadFile = File(...),
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        actor.require("certificate:write")
+        actor.require("certificate:file:write")
+        if len(metadata.encode("utf-8")) > 128 * 1024:
+            raise ServiceError("invalid_input", "Certificate metadata exceeds input limit", 413, 2)
+        try:
+            body = CertificateFileCreate.model_validate_json(metadata)
+        except (ValueError, ValidationError):
+            raise ServiceError(
+                "invalid_input", "Invalid certificate file metadata", 422, 2
+            ) from None
+        limit = min(settings.max_upload_bytes, certificate_files.MAX_FILE_BYTES)
+        content = await file.read(limit + 1)
+        if len(content) > limit:
+            raise ServiceError("file_too_large", "File exceeds upload limit", 413, 2)
+        descriptor = await asyncio.to_thread(
+            certificate_files.validate_file, content, file.filename or ""
+        )
+        return result(
+            "resource certificate file add",
+            await certificate_files.create_file(
+                session, actor, certificate_id, body, descriptor, content, storage
+            ),
+            warnings=certificate_files.WARNINGS,
+        )
+
+    @app.get(
+        "/resources/certificates/files",
+        name="resource_certificate_file_list",
+        response_model=Result,
+    )
+    async def certificate_file_list(
+        certificate_id: UUID | None = None,
+        revision_id: UUID | None = None,
+        history: bool = False,
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        data, items, warnings = await certificate_files.list_files(
+            session, actor, certificate_id=certificate_id, revision_id=revision_id, history=history
+        )
+        return result("resource certificate file list", data, items, warnings)
+
+    @app.get(
+        "/tasks/{task_id}/certificate-files",
+        name="task_certificate_file_list",
+        response_model=Result,
+    )
+    async def task_certificate_file_list(
+        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        data, items, warnings = await certificate_files.list_task_files(
+            session, actor, task_id, history=history
+        )
+        return result("task certificate file list", data, items, warnings)
+
+    @app.get(
+        "/resources/certificates/revisions/{revision_id}/file/download-link",
+        name="resource_certificate_file_download_link",
+        response_model=Result,
+    )
+    async def certificate_file_download_link(
+        revision_id: UUID, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        await certificate_files.require_file(session, actor, revision_id)
+        signed = crypto.issue(
+            {
+                "kind": "certificate-file-download",
+                "org_id": str(actor.org_id),
+                "revision_id": str(revision_id),
+            },
+            300,
+        )
+        return result(
+            "resource certificate file download link",
+            {
+                "url": f"/resources/certificates/revisions/{revision_id}/file/download?signature={signed}",
+                "expires_in": 300,
+            },
+            warnings=certificate_files.WARNINGS,
+        )
+
+    @app.get(
+        "/resources/certificates/revisions/{revision_id}/file/download",
+        name="resource_certificate_file_download",
+    )
+    async def certificate_file_download(
+        revision_id: UUID, signature: str, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        await certificate_files.require_file(session, actor, revision_id)
+        try:
+            payload = crypto.open(signature)
+        except ServiceError as exc:
+            raise not_found() from exc
+        if (
+            payload.get("kind") != "certificate-file-download"
+            or payload.get("org_id") != str(actor.org_id)
+            or payload.get("revision_id") != str(revision_id)
+        ):
+            raise not_found()
+        content, descriptor = await certificate_files.read_revision(
+            session, actor, revision_id, storage
+        )
+        return Response(
+            content,
+            media_type=descriptor.media_type,
+            headers={
+                "Content-Disposition": "attachment; filename*=UTF-8''"
+                + quote(descriptor.name, safe="")
+            },
+        )
+
+    async def template_upload(metadata, file, model):
+        if len(metadata.encode("utf-8")) > 128 * 1024:
+            raise ServiceError("invalid_input", "Template metadata exceeds input limit", 413, 2)
+        try:
+            body = model.model_validate_json(metadata)
+        except (ValueError, ValidationError):
+            raise ServiceError("invalid_input", "Invalid template metadata", 422, 2) from None
+        limit = min(settings.max_upload_bytes, MAX_TEMPLATE_BYTES)
+        content = await file.read(limit + 1)
+        if len(content) > limit:
+            raise ServiceError("file_too_large", "File exceeds upload limit", 413, 2)
+        descriptor = await asyncio.to_thread(validate_template, content, file.filename or "")
+        return body, descriptor, content
+
+    @app.post("/resources/templates", name="resource_template_add", response_model=Result)
+    async def template_add(
+        metadata: str = Form(...),
+        file: UploadFile = File(...),
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        actor.require("template:write")
+        body, descriptor, content = await template_upload(metadata, file, TemplateCreate)
+        return result(
+            "resource template add",
+            await templates.create_template(session, actor, body, descriptor, content, storage),
+            warnings=TEMPLATE_WARNINGS,
+        )
+
+    @app.get("/resources/templates", name="resource_template_list", response_model=Result)
+    async def template_list(
+        history: bool = False,
+        template_id: UUID | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        data, items = await templates.list_templates(
+            session, actor, history=history, template_id=template_id
+        )
+        return result("resource template list", data, items, TEMPLATE_WARNINGS)
+
+    @app.post(
+        "/resources/templates/{template_id}/revisions",
+        name="resource_template_update",
+        response_model=Result,
+    )
+    async def template_update(
+        template_id: UUID,
+        metadata: str = Form(...),
+        file: UploadFile = File(...),
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        actor.require("template:write")
+        body, descriptor, content = await template_upload(metadata, file, TemplateUpdate)
+        return result(
+            "resource template update",
+            await templates.update_template(
+                session, actor, template_id, body, descriptor, content, storage
+            ),
+            warnings=TEMPLATE_WARNINGS,
+        )
+
+    @app.post("/tasks/{task_id}/templates", name="task_template_add", response_model=Result)
+    async def task_template_add(
+        task_id: UUID, body: TaskTemplateSelection, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        return result(
+            "task template add",
+            await templates.select_template(session, actor, task_id, body),
+            warnings=TEMPLATE_WARNINGS,
+        )
+
+    @app.get("/tasks/{task_id}/templates", name="task_template_list", response_model=Result)
+    async def task_template_list(
+        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        data, items = await templates.list_selections(session, actor, task_id, history=history)
+        return result("task template list", data, items, TEMPLATE_WARNINGS)
+
+    @app.get(
+        "/resources/templates/revisions/{revision_id}/download-link",
+        name="resource_template_download_link",
+        response_model=Result,
+    )
+    async def template_download_link(revision_id: UUID, ctx=Depends(context, scope="function")):
+        session, actor = ctx
+        await templates.require_revision(session, actor, revision_id)
+        signed = crypto.issue(
+            {
+                "kind": "template-download",
+                "org_id": str(actor.org_id),
+                "revision_id": str(revision_id),
+            },
+            300,
+        )
+        return result(
+            "resource template download link",
+            {
+                "url": f"/resources/templates/revisions/{revision_id}/download?signature={signed}",
+                "expires_in": 300,
+            },
+            warnings=TEMPLATE_WARNINGS,
+        )
+
+    @app.get(
+        "/resources/templates/revisions/{revision_id}/download", name="resource_template_download"
+    )
+    async def template_download(
+        revision_id: UUID, signature: str, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        await templates.require_revision(session, actor, revision_id)
+        try:
+            payload = crypto.open(signature)
+        except ServiceError as exc:
+            raise not_found() from exc
+        if (
+            payload.get("kind") != "template-download"
+            or payload.get("org_id") != str(actor.org_id)
+            or payload.get("revision_id") != str(revision_id)
+        ):
+            raise not_found()
+        content, descriptor = await templates.read_revision(session, actor, revision_id, storage)
+        return Response(
+            content,
+            media_type=descriptor.media_type,
+            headers={
+                "Content-Disposition": "attachment; filename*=UTF-8''"
+                + quote(descriptor.name, safe="")
+            },
+        )
+
+    @app.post(
+        "/tasks/{task_id}/evidence-sources", name="evidence_source_add", response_model=Result
+    )
+    async def evidence_source_add(
+        task_id: UUID, body: EvidenceSourceCreate, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        started = time.monotonic()
+        value = result(
+            "evidence source add",
+            await evidence_sources.create_source(
+                session, actor, task_id, body, storage, settings.max_upload_bytes
+            ),
+            warnings=evidence_sources.WARNINGS,
+        )
+        value["duration_ms"] = round((time.monotonic() - started) * 1000)
+        return value
+
+    @app.get(
+        "/tasks/{task_id}/evidence-sources", name="evidence_source_list", response_model=Result
+    )
+    async def evidence_source_list(
+        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        data, items, warnings = await evidence_sources.list_sources(
+            session, actor, task_id, history=history
+        )
+        return result("evidence source list", data, items, warnings)
+
+    @app.get(
+        "/evidence-sources/{source_id}/preview/download-link",
+        name="evidence_source_preview_link",
+        response_model=Result,
+    )
+    async def evidence_source_preview_link(source_id: UUID, ctx=Depends(context, scope="function")):
+        session, actor = ctx
+        row, snapshot, original = await evidence_sources.require_source(session, actor, source_id)
+        signed = crypto.issue(
+            {"kind": "source-preview", "org_id": str(actor.org_id), "source_id": str(source_id)},
+            300,
+        )
+        return result(
+            "evidence source preview link",
+            {
+                "url": f"/evidence-sources/{source_id}/preview/download?signature={signed}",
+                "expires_in": 300,
+            },
+            [evidence_sources.source_data(row, snapshot, original)],
+            evidence_sources.WARNINGS,
+        )
+
+    @app.get(
+        "/evidence-sources/{source_id}/preview/download",
+        name="evidence_source_preview_download",
+        response_class=Response,
+        responses={
+            200: {"content": {"image/png": {"schema": {"type": "string", "format": "binary"}}}}
+        },
+    )
+    async def evidence_source_preview_download(
+        source_id: UUID, signature: str, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        await evidence_sources.require_source(session, actor, source_id)
+        try:
+            payload = crypto.open(signature)
+        except ServiceError as exc:
+            raise not_found() from exc
+        if (
+            payload.get("kind") != "source-preview"
+            or payload.get("org_id") != str(actor.org_id)
+            or payload.get("source_id") != str(source_id)
+        ):
+            raise not_found()
+        content, descriptor = await evidence_sources.read_preview(
+            session, actor, source_id, storage
+        )
+        return Response(
+            content,
+            media_type=descriptor.media_type,
+            headers={
+                "Content-Disposition": "attachment; filename*=UTF-8''"
+                + quote(descriptor.name, safe="")
+            },
+        )
+
+    async def require_document(session, document_id):
+        document = await session.get(Document, document_id)
+        if document is None:
+            raise not_found()
+        return document
+
+    @app.post("/tasks/{task_id}/documents", name="tender_upload", response_model=Result)
+    async def tender_upload(
+        task_id: UUID, file: UploadFile = File(...), ctx=Depends(context, scope="function")
+    ):
+        session, identity = ctx
+        identity.require("tender:upload")
+        if await session.get(Task, task_id) is None:
+            raise not_found()
+        content = await file.read(settings.max_upload_bytes + 1)
+        if len(content) > settings.max_upload_bytes:
+            raise ServiceError("file_too_large", "File exceeds upload limit", 413, 2)
+        name = Path(file.filename or "").name
+        if not name or len(name) > 200:
+            raise ServiceError("invalid_filename", "Valid file name required", 400, 2)
+        suffix = Path(name).suffix.lower()
+        await asyncio.to_thread(validate_document, content, suffix, settings.max_pages)
+        digest = hashlib.sha256(content).hexdigest()
+        key = f"org/{identity.org_id}/task/{task_id}/{digest}{suffix}"
+        await storage.put(identity.org_id, key, content)
+        identifier = await session.scalar(
+            insert(Document)
+            .values(
+                org_id=identity.org_id,
+                task_id=task_id,
+                name=name,
+                sha256=digest,
+                storage_key=key,
+                media_type="application/pdf"
+                if suffix == ".pdf"
+                else "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+            .on_conflict_do_nothing(index_elements=["org_id", "task_id", "sha256"])
+            .returning(Document.id)
+        )
+        document = await session.scalar(
+            select(Document).where(Document.task_id == task_id, Document.sha256 == digest)
+        )
+        return result(
+            "tender upload",
+            {
+                **serial(document, ("id", "name", "sha256", "task_id")),
+                "duplicate": identifier is None,
+            },
+        )
+
+    @app.get("/documents/{document_id}", name="document_get", response_model=Result)
+    async def document_get(document_id: UUID, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("task:read")
+        document = await require_document(session, document_id)
+        return result(
+            "document get", serial(document, ("id", "name", "task_id", "status", "page_count"))
+        )
+
+    @app.get(
+        "/documents/{document_id}/download-link",
+        name="document_download_link",
+        response_model=Result,
+    )
+    async def download_link(document_id: UUID, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("task:read")
+        await require_document(session, document_id)
+        signed = crypto.issue(
+            {"kind": "download", "org_id": str(identity.org_id), "document_id": str(document_id)},
+            300,
+        )
+        return result(
+            "document download link",
+            {"url": f"/documents/{document_id}/download?signature={signed}", "expires_in": 300},
+        )
+
+    @app.get("/documents/{document_id}/download", name="document_download")
+    async def download(document_id: UUID, signature: str, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("task:read")
+        document = await require_document(session, document_id)
+        try:
+            payload = crypto.open(signature)
+        except ServiceError as exc:
+            raise not_found() from exc
+        if (
+            payload.get("kind") != "download"
+            or payload.get("org_id") != str(identity.org_id)
+            or payload.get("document_id") != str(document_id)
+        ):
+            raise not_found()
+        return Response(
+            await storage.read(identity.org_id, document.storage_key),
+            media_type=document.media_type,
+        )
+
+    async def start_job(document_id: UUID, kind: str, body: JobAction, ctx):
+        session, identity = ctx
+        identity.require("tender:parse" if kind == "parse" else "req:extract")
+        document = await require_document(session, document_id)
+        count = await session.scalar(
+            select(Chunk.id).where(Chunk.document_id == document_id).limit(1)
+        )
+        command = "tender parse" if kind == "parse" else "req extract"
+        if body.dry_run:
+            return result(
+                command,
+                {
+                    "dry_run": True,
+                    "document_id": str(document_id),
+                    "parsed": count is not None,
+                    "estimated_cost_usd": None,
+                },
+                warnings=["Cost estimate is unavailable without an approved provider."]
+                if kind == "extract"
+                else [],
+            )
+        if kind == "extract" and document.status != "parsed":
+            raise ServiceError("not_parsed", "Parse the document before extraction", 400, 2)
+        version = (
+            f"{PARSER_VERSION}:{ocr.name}:{ocr.version}:{settings.ocr_language}"
+            if kind == "parse"
+            else f"{PROMPT_VERSION}:{llm.name}:{llm.model}:{llm.version}"
+        )
+        cache_key = hashlib.sha256(
+            f"{document_id}:{document.sha256}:{kind}:{version}".encode()
+        ).hexdigest()
+        identifier = await session.scalar(
+            insert(Job)
+            .values(
+                org_id=identity.org_id,
+                task_id=document.task_id,
+                document_id=document_id,
+                kind=kind,
+                cache_key=cache_key,
+            )
+            .on_conflict_do_nothing(index_elements=["org_id", "cache_key"])
+            .returning(Job.id)
+        )
+        job = await session.scalar(select(Job).where(Job.cache_key == cache_key).with_for_update())
+        if body.retry and (
+            job.status in {"failed", "cancelled"}
+            or (job.status == "running" and job.lease_until and job.lease_until < datetime.now(UTC))
+        ):
+            job.status, job.error, job.result, job.queue_id = "queued", None, {}, None
+            job.attempts, job.lease_until, job.finished_at, job.run_id = 0, None, None, None
+        if job.status in {"failed", "cancelled"}:
+            return result(
+                command,
+                {"job_id": str(job.id), "status": job.status, "cached": True},
+                warnings=[
+                    "This identical job is terminal. Inspect its status; use --retry explicitly to run it again."
+                ],
+            )
+        if job.status == "queued" and job.queue_id is None:
+            # Commit the durable job before making it visible to the independent queue.
+            await session.commit()
+            try:
+                queue_id = await queue.enqueue(str(identity.org_id), str(job.id))
+            except Exception as exc:
+                raise ServiceError(
+                    "queue_unavailable",
+                    "Job is saved but queue is unavailable; repeat the request to schedule it",
+                    503,
+                    3,
+                ) from exc
+            async with db.transaction(identity.org_id) as update:
+                saved = await update.get(Job, job.id)
+                if saved is not None:
+                    saved.queue_id = queue_id
+        return result(
+            command, {"job_id": str(job.id), "status": job.status, "cached": identifier is None}
+        )
+
+    @app.post("/documents/{document_id}/parse", name="tender_parse", response_model=Result)
+    async def tender_parse(
+        document_id: UUID, body: JobAction, ctx=Depends(context, scope="function")
+    ):
+        return await start_job(document_id, "parse", body, ctx)
+
+    @app.post("/documents/{document_id}/extract", name="req_extract", response_model=Result)
+    async def req_extract(
+        document_id: UUID, body: JobAction, ctx=Depends(context, scope="function")
+    ):
+        return await start_job(document_id, "extract", body, ctx)
+
+    @app.get("/documents/{document_id}/chunks", name="chunk_list", response_model=Result)
+    async def chunk_list(document_id: UUID, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("task:read")
+        await require_document(session, document_id)
+        chunks = (
+            await session.scalars(
+                select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.page)
+            )
+        ).all()
+        return result(
+            "chunk list",
+            items=[
+                serial(row, ("id", "document_id", "page", "text", "ocr", "citation_verified"))
+                for row in chunks
+            ],
+        )
+
+    @app.get("/tasks/{task_id}/requirements", name="req_list", response_model=Result)
+    async def req_list(task_id: UUID, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("task:read")
+        if await session.get(Task, task_id) is None:
+            raise not_found()
+        rows = (
+            await session.scalars(
+                select(Requirement).where(Requirement.task_id == task_id).order_by(Requirement.page)
+            )
+        ).all()
+        items = [
+            {
+                **serial(row, ("id", "text", "category", "starred", "condition")),
+                "source": serial(row, ("document_id", "chunk_id", "page", "quote")),
+            }
+            for row in rows
+        ]
+        return result("req list", items=items)
+
+    @app.get("/jobs/{job_id}", name="job_status", response_model=Result)
+    async def job_status(job_id: UUID, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("job:read")
+        job = await session.get(Job, job_id)
+        if job is None:
+            raise not_found()
+        return result(
+            "job status", serial(job, ("id", "kind", "status", "result", "error", "attempts"))
+        )
+
+    @app.post("/jobs/{job_id}/cancel", name="job_cancel", response_model=Result)
+    async def job_cancel(job_id: UUID, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("job:cancel")
+        job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+        if job is None:
+            raise not_found()
+        if job.status not in {"cancelled", "queued", "running"}:
+            raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
+        job.status, job.finished_at = "cancelled", datetime.now(UTC)
+        return result("job cancel", {"id": str(job.id), "status": job.status})
+
+    @app.post("/tokens", name="token_create", response_model=Result)
+    async def token_create(body: TokenCreate, ctx=Depends(context, scope="function")):
+        session, identity = ctx
+        identity.require("token:create")
+        if (
+            identity.token_id is not None
+            or not set(body.scopes) <= SCOPES
+            or not set(body.scopes) <= identity.scopes
+        ):
+            raise ServiceError(
+                "forbidden_scopes",
+                "Token scopes must be allowed and cannot include confirmation or export",
+                403,
+                4,
+            )
+        if body.expires_at.tzinfo is None or body.expires_at <= datetime.now(UTC):
+            raise ServiceError(
+                "invalid_expiry", "A future expiry with timezone is required", 400, 2
+            )
+        secret = "bid_" + secrets.token_urlsafe(32)
+        token = ApiToken(
+            id=uuid4(),
+            org_id=identity.org_id,
+            user_id=identity.user_id,
+            name=body.name,
+            scopes=sorted(set(body.scopes)),
+            expires_at=body.expires_at,
+            digest=token_digest(secret),
+            encrypted_secret=crypto.encrypt(secret),
+        )
+        session.add(token)
+        await session.flush()
+        return result(
+            "token create",
+            {
+                "id": str(token.id),
+                "token": secret,
+                "scopes": token.scopes,
+                "expires_at": body.expires_at.isoformat(),
+            },
+        )
+
+    return app

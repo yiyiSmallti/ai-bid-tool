@@ -1,0 +1,289 @@
+"""Real HTTP extraction adapters driven end to end through the API and job processor.
+
+Vendor endpoints are simulated with httpx.MockTransport; no external service is called.
+"""
+
+import json
+
+import httpx
+import pymupdf
+import pytest
+from app.api.main import create_app
+from app.core.config import Settings
+from app.models.entities import Requirement, UsageRecord
+from app.providers.base import ProviderFailure
+from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
+from conftest import FakeQueue
+from pydantic import ValidationError
+from sqlalchemy import select
+from test_api import create_document, run_job
+from test_job_boundaries import session_for
+
+SYNTHETIC_KEY = "synthetic-test-key-not-real"
+GOOD_ITEMS = [
+    {
+        "category": "technical",
+        "starred": False,
+        "text": "内存不低于 64 GB",
+        "page": 1,
+        "quote": "Minimum memory is 64 GB.",
+        "condition": {"param": "memory", "op": ">=", "value": "64", "unit": "GB"},
+    },
+    {
+        "category": "qualification",
+        "starred": False,
+        "text": "提供有效证书",
+        "page": 2,
+        "quote": "A valid certificate must be provided.",
+        "condition": None,
+    },
+]
+
+
+def anthropic_reply(items, stop="end_turn", status=200):
+    body = {
+        "model": "claude-opus-5-5",
+        "stop_reason": stop,
+        "content": [
+            {"type": "thinking", "thinking": ""},
+            {"type": "text", "text": json.dumps({"items": items}, ensure_ascii=False)},
+        ],
+        "usage": {"input_tokens": 1200, "output_tokens": 300},
+    }
+    return httpx.Response(status, json=body)
+
+
+class Vendor:
+    """Replays scripted responses and records every request it receives."""
+
+    def __init__(self, *responses):
+        self.responses = list(responses)
+        self.requests: list[httpx.Request] = []
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        reply = self.responses.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return reply
+
+    def transport(self):
+        return httpx.MockTransport(self)
+
+
+def settings_for(tmp_path, provider, **overrides):
+    values = {
+        "data_dir": tmp_path,
+        "llm_provider": provider,
+        "llm_api_key": SYNTHETIC_KEY,
+        "llm_model": None if provider == "anthropic" else "synthetic-model",
+    }
+    return Settings(**(values | overrides))
+
+
+async def usage_rows(app, tenants):
+    async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        return (
+            await session.scalars(select(UsageRecord).where(UsageRecord.provider != "tesseract"))
+        ).all()
+
+
+async def requirement_rows(app, tenants):
+    async with app.state.db.transaction(tenants["orgs"][0]) as session:
+        return (await session.scalars(select(Requirement).order_by(Requirement.page))).all()
+
+
+async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, tmp_path, pdf_bytes):
+    vendor = Vendor(anthropic_reply(GOOD_ITEMS))
+    settings = settings_for(
+        tmp_path, "anthropic", llm_input_usd_per_mtok=4.0, llm_output_usd_per_mtok=20.0
+    )
+    llm = AnthropicExtractor(settings, transport=vendor.transport())
+    app = create_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        assert (await api.get("/health")).json()["data"]["real_llm_configured"] is True
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+
+        assert status["status"] == "succeeded", status
+        assert status["result"]["created"] == 2
+        assert status["result"]["cost"] == {"llm_tokens": 1500, "ocr_pages": 0, "usd": 0.0108}
+        rows = await requirement_rows(app, tenants)
+        assert [(r.page, r.quote) for r in rows] == [
+            (1, "Minimum memory is 64 GB."),
+            (2, "A valid certificate must be provided."),
+        ]
+        assert rows[0].condition == {"param": "memory", "op": ">=", "value": "64", "unit": "GB"}
+        assert rows[1].condition == {}
+        [usage] = await usage_rows(app, tenants)
+        assert (usage.provider, usage.model, usage.tokens) == ("anthropic", "claude-opus-5-5", 1500)
+        assert float(usage.usd) == pytest.approx(0.0108)
+
+    [request] = vendor.requests
+    body = json.loads(request.content)
+    assert str(request.url) == "https://api.anthropic.com/v1/messages"
+    assert request.headers["x-api-key"] == SYNTHETIC_KEY
+    assert request.headers["anthropic-version"] == "2023-06-01"
+    assert request.headers["anthropic-beta"] == "server-side-fallback-2026-07-01"
+    assert body["model"] == "claude-opus-5-5" and body["fallbacks"] == "default"
+    assert body["output_config"]["format"]["type"] == "json_schema"
+    assert body["output_config"]["effort"] == "high"
+    assert "tool_choice" not in body and "thinking" not in body
+    assert '<page number="1">' in body["messages"][0]["content"]
+    assert SYNTHETIC_KEY not in json.dumps(status)
+
+
+async def test_openai_compatible_extraction_without_prices_records_unknown_cost(
+    tenants, tmp_path, pdf_bytes
+):
+    reply = {
+        "model": "synthetic-model",
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {"content": json.dumps({"items": GOOD_ITEMS}, ensure_ascii=False)},
+            }
+        ],
+        "usage": {"prompt_tokens": 900, "completion_tokens": 100},
+    }
+    vendor = Vendor(httpx.Response(200, json=reply))
+    settings = settings_for(tmp_path, "openai", llm_base_url="https://llm.example.test/v1")
+    llm = OpenAICompatibleExtractor(settings, transport=vendor.transport())
+    app = create_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        assert status["status"] == "succeeded", status
+        assert status["result"]["cost"] == {"llm_tokens": 1000, "ocr_pages": 0, "usd": None}
+        assert len(await requirement_rows(app, tenants)) == 2
+
+    [request] = vendor.requests
+    body = json.loads(request.content)
+    assert str(request.url) == "https://llm.example.test/v1/chat/completions"
+    assert request.headers["authorization"] == f"Bearer {SYNTHETIC_KEY}"
+    assert body["response_format"]["type"] == "json_schema"
+    assert body["response_format"]["json_schema"]["strict"] is True
+
+
+FAILURES = {
+    "rate_limited": (
+        httpx.Response(429, json={"error": {"type": "rate_limit_error"}}),
+        "queued",
+        "provider_unavailable",
+        3,
+        0,
+    ),
+    "overloaded": (
+        httpx.Response(529, json={"error": {"type": "overloaded_error"}}),
+        "queued",
+        "provider_unavailable",
+        3,
+        0,
+    ),
+    "timeout": (httpx.ReadTimeout("synthetic"), "queued", "provider_unavailable", 3, 0),
+    "bad_key": (
+        httpx.Response(401, json={"error": {"type": "authentication_error"}}),
+        "failed",
+        "provider_unavailable",
+        4,
+        0,
+    ),
+    "truncated": (
+        anthropic_reply(GOOD_ITEMS[:1], stop="max_tokens"),
+        "failed",
+        "invalid_provider_output",
+        4,
+        1,
+    ),
+    "refused": (anthropic_reply([], stop="refusal"), "failed", "provider_refused", 4, 1),
+    "not_json": (
+        httpx.Response(
+            200,
+            json={
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": "not json"}],
+                "usage": {"input_tokens": 5, "output_tokens": 1},
+            },
+        ),
+        "failed",
+        "invalid_provider_output",
+        4,
+        1,
+    ),
+    "unknown_page": (
+        anthropic_reply([GOOD_ITEMS[0] | {"page": 9}]),
+        "failed",
+        "invalid_provider_output",
+        4,
+        1,
+    ),
+    "altered_quote": (
+        anthropic_reply([GOOD_ITEMS[0] | {"quote": "Memory must be 64GB"}]),
+        "failed",
+        "invalid_citation",
+        4,
+        1,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", FAILURES)
+async def test_vendor_failures_map_to_job_states(case, tenants, tmp_path, pdf_bytes):
+    reply, job_status, code, exit_code, billed_calls = FAILURES[case]
+    settings = settings_for(tmp_path, "anthropic")
+    llm = AnthropicExtractor(settings, transport=Vendor(reply).transport())
+    app = create_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        if job_status == "queued":
+            with pytest.raises(ProviderFailure):
+                await run_job(api, app, header, document, "extract")
+            job = (
+                await api.post(f"/documents/{document}/extract", headers=header, json={})
+            ).json()["data"]["job_id"]
+            status = (await api.get(f"/jobs/{job}", headers=header)).json()["data"]
+        else:
+            _, status = await run_job(api, app, header, document, "extract")
+
+        assert status["status"] == job_status
+        assert (status["error"]["code"], status["error"]["exit_code"]) == (code, exit_code)
+        assert SYNTHETIC_KEY not in json.dumps(status)
+        assert await requirement_rows(app, tenants) == []
+        assert len(await usage_rows(app, tenants)) == billed_calls
+
+
+async def test_failure_in_later_batch_keeps_usage_of_finished_batches(tenants, tmp_path):
+    with pymupdf.open() as pdf:
+        for line in ("Minimum memory is 64 GB.", "A valid certificate must be provided."):
+            page = pdf.new_page()
+            page.insert_textbox(pdf[-1].rect + (40, 40, -40, -40), (line + " ") * 40)
+        content = pdf.tobytes()
+    vendor = Vendor(anthropic_reply([]), httpx.Response(500, json={"error": {"type": "api_error"}}))
+    settings = settings_for(tmp_path, "anthropic", llm_batch_chars=1000)
+    llm = AnthropicExtractor(settings, transport=vendor.transport())
+    app = create_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, content)
+        await run_job(api, app, header, document, "parse")
+        with pytest.raises(ProviderFailure):
+            await run_job(api, app, header, document, "extract")
+        assert len(vendor.requests) == 2
+        [usage] = await usage_rows(app, tenants)
+        assert usage.tokens == 1500
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"llm_provider": "anthropic"},
+        {"llm_provider": "openai", "llm_api_key": SYNTHETIC_KEY},
+        {"llm_provider": "openai", "llm_model": "synthetic-model"},
+        {"llm_provider": "unknown"},
+    ],
+)
+def test_incomplete_provider_settings_refuse_to_start(overrides, tmp_path):
+    with pytest.raises(ValidationError):
+        Settings(data_dir=tmp_path, **overrides)
