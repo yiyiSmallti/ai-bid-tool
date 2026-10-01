@@ -75,7 +75,7 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await expect(row).toContainText("未配置");
   await expect(row).toContainText("默认");
   await row.getByRole("button", { name: "测试" }).click();
-  await expect(row.getByTestId("test-result")).toHaveText("未通过：provider_unavailable");
+  await expect(row.getByTestId("test-result")).toContainText("未通过：provider_unavailable");
   await shot("models");
 
   await page.click("nav >> text=卡密");

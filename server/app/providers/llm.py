@@ -251,7 +251,9 @@ class HTTPExtractor:
             ) from None
         if response.status_code != 200:
             try:
-                kind = response.json().get("error", {}).get("type") or "unknown"
+                error = response.json().get("error") or {}
+                # OpenAI and Anthropic send a type; Zhipu and others send a vendor code.
+                kind = str(error.get("type") or error.get("code") or "unknown")[:40]
             except ValueError:
                 kind = "unknown"
             # Only the status and vendor error type are kept; bodies may echo input.
