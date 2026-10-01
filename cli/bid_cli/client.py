@@ -88,6 +88,28 @@ class State:
             raise ServiceError("login_required", "Login or supply BID_SESSION and BID_ORG", 401, 4)
         return json.loads(self.cipher().decrypt(self.path.read_text()))
 
+    def load_platform(self) -> str:
+        import json
+
+        if os.environ.get("BID_PLATFORM_SESSION"):
+            return os.environ["BID_PLATFORM_SESSION"]
+        if self.path.exists():
+            saved = json.loads(self.cipher().decrypt(self.path.read_text()))
+            if saved.get("platform_session"):
+                return saved["platform_session"]
+        raise ServiceError(
+            "login_required", "Run bid platform login or supply BID_PLATFORM_SESSION", 401, 4
+        )
+
+    def save_platform(self, session: str) -> None:
+        import json
+
+        # Kept beside any org session in the same encrypted file.
+        saved = (
+            json.loads(self.cipher().decrypt(self.path.read_text())) if self.path.exists() else {}
+        )
+        self.save({**saved, "platform_session": session})
+
     def save(self, value: dict) -> None:
         import json
 
@@ -136,10 +158,19 @@ class Client:
                 yield client
 
     async def request(
-        self, method: str, path: str, *, authenticated=True, org: UUID | None = None, **kwargs
+        self,
+        method: str,
+        path: str,
+        *,
+        authenticated=True,
+        org: UUID | None = None,
+        platform=False,
+        **kwargs,
     ) -> dict:
         headers = {}
-        if authenticated:
+        if platform:
+            headers = {"Authorization": f"Bearer {self.state.load_platform()}"}
+        elif authenticated:
             saved = self.state.load()
             headers = {
                 "Authorization": f"Bearer {saved['session']}",

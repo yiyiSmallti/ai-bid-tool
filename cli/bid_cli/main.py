@@ -20,6 +20,12 @@ from app.schemas.certificate_file_contracts import CertificateFileCreate
 from app.schemas.contracts import Contract, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
+from app.schemas.platform_contracts import (
+    PasswordSetup,
+    PlatformLogin,
+    PlatformModelSet,
+    PlatformOrgCreate,
+)
 from app.schemas.profile_contracts import (
     OrgProfileCreate,
     OrgProfileUpdate,
@@ -804,6 +810,134 @@ def token_create(
         handle.write(encrypted)
     body["data"]["encrypted_token_file"] = str(output)
     emit(body, "token create", json_output)
+
+
+platform_app, platform_org_app, platform_model_app, auth_app = (typer.Typer() for _ in range(4))
+app.add_typer(platform_app, name="platform")
+app.add_typer(auth_app, name="auth")
+platform_app.add_typer(platform_org_app, name="org")
+platform_app.add_typer(platform_model_app, name="model")
+
+
+def env_secret(name: str, purpose: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        raise ServiceError(
+            f"{purpose}_required", f"Set {name}; interactive prompts are unsupported", 400, 2
+        )
+    return value
+
+
+@platform_app.command("login")
+def platform_login(
+    email: Annotated[str, typer.Option()],
+    totp: Annotated[str, typer.Option(help="Current six-digit authenticator code")],
+    json_output: JsonOption = False,
+):
+    password = env_secret("BID_PASSWORD", "password")
+    body = PlatformLogin.model_validate({"email": email, "password": password, "totp": totp})
+    client().state.cipher()
+    result = call("POST", "/platform/auth/login", authenticated=False, json=body.model_dump())
+    client().state.save_platform(result["data"].pop("session"))
+    result["data"]["authenticated"] = True
+    emit(result, "platform login", json_output)
+
+
+@platform_org_app.command("list")
+def platform_org_list(json_output: JsonOption = False):
+    emit(call("GET", "/platform/orgs", platform=True), "platform org list", json_output)
+
+
+@platform_org_app.command("create")
+def platform_org_create(
+    name: Annotated[str, typer.Option()],
+    admin_email: Annotated[str, typer.Option()],
+    json_output: JsonOption = False,
+):
+    body = PlatformOrgCreate.model_validate({"name": name, "admin_email": admin_email})
+    emit(
+        call("POST", "/platform/orgs", platform=True, json=body.model_dump()),
+        "platform org create",
+        json_output,
+    )
+
+
+@platform_org_app.command("set-active")
+def platform_org_set_active(
+    org_id: Annotated[UUID, typer.Option("--id")],
+    active: Annotated[bool, typer.Option("--active/--inactive")],
+    json_output: JsonOption = False,
+):
+    emit(
+        call("POST", f"/platform/orgs/{org_id}/active", platform=True, json={"active": active}),
+        "platform org set-active",
+        json_output,
+    )
+
+
+@platform_model_app.command("list")
+def platform_model_list(json_output: JsonOption = False):
+    emit(call("GET", "/platform/models", platform=True), "platform model list", json_output)
+
+
+@platform_model_app.command("set")
+def platform_model_set(input: Annotated[Path, typer.Option()], json_output: JsonOption = False):
+    body = input_contract(input, PlatformModelSet)
+    emit(
+        call("POST", "/platform/models", platform=True, json=body),
+        "platform model set",
+        json_output,
+    )
+
+
+@platform_model_app.command("test")
+def platform_model_test(
+    model_id: Annotated[str, typer.Option("--id")], json_output: JsonOption = False
+):
+    emit(
+        call("POST", f"/platform/models/{model_id}/test", platform=True),
+        "platform model test",
+        json_output,
+    )
+
+
+@platform_app.command("usage")
+def platform_usage(
+    start: Annotated[str | None, typer.Option("--from", help="First month, YYYY-MM")] = None,
+    end: Annotated[str | None, typer.Option("--to", help="Last month, YYYY-MM")] = None,
+    json_output: JsonOption = False,
+):
+    params = {key: value for key, value in (("from", start), ("to", end)) if value}
+    emit(
+        call("GET", "/platform/usage", platform=True, params=params), "platform usage", json_output
+    )
+
+
+@platform_app.command("audit")
+def platform_audit(
+    limit: Annotated[int, typer.Option(min=1, max=500)] = 100, json_output: JsonOption = False
+):
+    emit(
+        call("GET", "/platform/audit", platform=True, params={"limit": limit}),
+        "platform audit",
+        json_output,
+    )
+
+
+@auth_app.command("setup-password")
+def auth_setup_password(json_output: JsonOption = False):
+    # Token and password come from the environment so neither appears in argv.
+    body = PasswordSetup.model_validate(
+        {
+            "token": env_secret("BID_SETUP_TOKEN", "setup_token"),
+            "password": env_secret("BID_PASSWORD", "password"),
+        }
+    )
+    emit(
+        call("POST", "/auth/setup-password", authenticated=False, json=body.model_dump()),
+        "auth setup-password",
+        json_output,
+    )
 
 
 @app.command("schema")

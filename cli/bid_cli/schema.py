@@ -14,6 +14,13 @@ from app.schemas.contracts import (
 )
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
+from app.schemas.platform_contracts import (
+    PasswordSetup,
+    PlatformLogin,
+    PlatformModelSet,
+    PlatformOrgActive,
+    PlatformOrgCreate,
+)
 from app.schemas.profile_contracts import (
     OrgProfileCreate,
     OrgProfileUpdate,
@@ -69,6 +76,16 @@ COMMANDS = {
     "job wait": None,
     "job cancel": None,
     "token create": TokenCreate,
+    "platform login": PlatformLogin,
+    "platform org list": None,
+    "platform org create": PlatformOrgCreate,
+    "platform org set-active": PlatformOrgActive,
+    "platform model list": None,
+    "platform model set": PlatformModelSet,
+    "platform model test": None,
+    "platform usage": None,
+    "platform audit": None,
+    "auth setup-password": PasswordSetup,
     "schema": None,
 }
 

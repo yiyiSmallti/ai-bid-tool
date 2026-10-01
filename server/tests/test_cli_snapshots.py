@@ -234,6 +234,59 @@ async def fake_source_download(self, source_id, output):
     ).model_dump(mode="json")
 
 
+PLATFORM_ORG = {
+    "id": IDENTIFIER,
+    "name": "Synthetic tenant",
+    "active": True,
+    "created_at": "2026-10-01T00:00:00+00:00",
+    "member_count": 1,
+    "admin_emails": ["boss@example.test"],
+}
+PLATFORM_MODEL = {
+    "id": "opus-standard",
+    "capability": "llm_extract",
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "base_url": None,
+    "credential": "main",
+    "vendor_input_usd_per_mtok": 4.0,
+    "vendor_output_usd_per_mtok": 20.0,
+    "sale_input_usd_per_mtok": 6.0,
+    "sale_output_usd_per_mtok": 30.0,
+    "enabled": True,
+    "revision": 1,
+    "updated_by": "ops@example.test",
+    "updated_at": "2026-10-01T00:00:00+00:00",
+    "default": True,
+    "credential_configured": True,
+}
+PLATFORM_USAGE = {
+    "org_id": IDENTIFIER,
+    "org_name": "Synthetic tenant",
+    "month": "2026-10-01",
+    "billing": "platform",
+    "provider": "anthropic",
+    "model": "claude-opus-5-5",
+    "calls": 1,
+    "tokens": 10,
+    "input_tokens": 8,
+    "output_tokens": 2,
+    "ocr_pages": 0,
+    "vendor_usd": 0.1,
+    "unpriced_calls": 0,
+    "charge_usd": 0.15,
+}
+PLATFORM_AUDIT = {
+    "id": IDENTIFIER,
+    "created_at": "2026-10-01T00:00:00+00:00",
+    "actor_email": "ops@example.test",
+    "action": "platform.login",
+    "object_id": None,
+    "outcome": "success",
+    "details": {"totp_counter": 1},
+}
+
+
 async def fake_request(self, method, path, **kwargs):
     # Contract fixtures only: no real service, provider or user data is involved.
     data, items, warnings = {}, [], []
@@ -241,6 +294,43 @@ async def fake_request(self, method, path, **kwargs):
         data = {"session": "synthetic-fixture-session", "org_id": IDENTIFIER, "expires_in": 3600}
     elif path == "/org/current":
         data = {"org_id": IDENTIFIER, "role": "admin"}
+    elif path == "/platform/auth/login":
+        data = {
+            "session": "synthetic-fixture-session",
+            "email": "ops@example.test",
+            "expires_in": 1800,
+        }
+    elif path == "/platform/orgs" and method == "POST":
+        data = {
+            "org_id": IDENTIFIER,
+            "admin_user_id": IDENTIFIER,
+            "admin_email": "boss@example.test",
+            "user_created": True,
+            "setup_url": "/app/setup-password#token=synthetic-fixture-link",
+            "setup_expires_in": 86400,
+        }
+    elif path == "/platform/orgs":
+        items = [PLATFORM_ORG]
+    elif path.endswith("/active"):
+        data = {"org_id": IDENTIFIER, "active": False}
+    elif path == "/platform/models":
+        if method == "POST":
+            data = PLATFORM_MODEL
+        else:
+            items = [PLATFORM_MODEL]
+    elif path.startswith("/platform/models/"):
+        data = {"model_id": "opus-standard", "passed": True, "items": 1, "usage": {"tokens": 10}}
+    elif path == "/platform/usage":
+        data = {
+            "from": "2026-10",
+            "to": "2026-10",
+            "totals": {"calls": 1, "tokens": 10, "vendor_usd": 0.1, "charge_usd": 0.15},
+        }
+        items = [PLATFORM_USAGE]
+    elif path == "/platform/audit":
+        items = [PLATFORM_AUDIT]
+    elif path == "/auth/setup-password":
+        data = {"password_set": True}
     elif path == "/tasks" and method == "POST":
         data = {"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}
     elif path == "/tasks":
@@ -437,6 +527,17 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
     scan_file.write_bytes(pdf_bytes)
     evidence_input = tmp_path / "source.json"
     evidence_input.write_text(json.dumps({"task_certificate_id": IDENTIFIER, "page": 1}))
+    platform_model_input = tmp_path / "platform-model.json"
+    platform_model_input.write_text(
+        json.dumps(
+            {
+                k: v
+                for k, v in PLATFORM_MODEL.items()
+                if k not in {"revision", "updated_by", "updated_at", "credential_configured"}
+            }
+        )
+    )
+    monkeypatch.setenv("BID_SETUP_TOKEN", "synthetic-fixture-link")
     common = ["--state", str(tmp_path / "session.enc")]
     commands = {
         "login": ["login", "--email", "synthetic@example.test", "--org", IDENTIFIER],
@@ -641,8 +742,20 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             "--output",
             str(tmp_path / "source.png"),
         ],
+        "platform login": ["platform", "login", "--email", "ops@example.test", "--totp", "123456"],
+        "platform org list": ["platform", "org", "list"],
+        "platform org create": [
+            "platform", "org", "create", "--name", "Synthetic tenant", "--admin-email", "boss@example.test",
+        ],
+        "platform org set-active": ["platform", "org", "set-active", "--id", IDENTIFIER, "--inactive"],
+        "platform model list": ["platform", "model", "list"],
+        "platform model set": ["platform", "model", "set", "--input", str(platform_model_input)],
+        "platform model test": ["platform", "model", "test", "--id", "opus-standard"],
+        "platform usage": ["platform", "usage", "--from", "2026-10", "--to", "2026-10"],
+        "platform audit": ["platform", "audit", "--limit", "5"],
+        "auth setup-password": ["auth", "setup-password"],
         "schema": ["schema"],
-    }
+    }  # fmt: skip
     actual = {}
     for name, args in commands.items():
         main([*common, *args, "--json"])
