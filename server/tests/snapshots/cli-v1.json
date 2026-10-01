@@ -1,4 +1,24 @@
 {
+  "auth orgs": {
+    "command": "auth orgs",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "active": true,
+        "name": "Synthetic tenant",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "role": "admin"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
   "auth setup-password": {
     "command": "auth setup-password",
     "cost": {
@@ -8,6 +28,50 @@
     },
     "data": {
       "password_set": true
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "billing balance": {
+    "command": "billing balance",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "balance": 10.0,
+      "currency": "USD"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "amount": 10.0,
+        "balance_after": 10.0,
+        "created_at": "2026-10-01T00:00:00+00:00",
+        "currency": "USD",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "kind": "redeem",
+        "reason": null
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "billing redeem": {
+    "command": "billing redeem",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "amount": 10.0,
+      "balance": 10.0,
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "currency": "USD"
     },
     "duration_ms": 0,
     "items": [],
@@ -264,6 +328,85 @@
     "ok": true,
     "warnings": []
   },
+  "platform card create": {
+    "command": "platform card create",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "batch_id": "00000000-0000-0000-0000-000000000001",
+      "count": 1,
+      "currency": "USD",
+      "expires_at": null,
+      "face_value": 10.0,
+      "note": null,
+      "output_path": "<download-output>"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "platform card list": {
+    "command": "platform card list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "currency": "USD"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "batch_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-01T00:00:00+00:00",
+        "created_by": "ops@example.test",
+        "currency": "USD",
+        "expired": false,
+        "expires_at": null,
+        "face_value": 10.0,
+        "id": "00000000-0000-0000-0000-000000000001",
+        "last4": "TURE",
+        "note": null,
+        "redeemed_at": null,
+        "redeemed_org_id": null,
+        "status": "active"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "platform card void": {
+    "command": "platform card void",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "batch_id": "00000000-0000-0000-0000-000000000001",
+      "created_at": "2026-10-01T00:00:00+00:00",
+      "created_by": "ops@example.test",
+      "currency": "USD",
+      "expired": false,
+      "expires_at": null,
+      "face_value": 10.0,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "last4": "TURE",
+      "note": null,
+      "redeemed_at": null,
+      "redeemed_org_id": null,
+      "status": "void"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
   "platform login": {
     "command": "platform login",
     "cost": {
@@ -357,6 +500,25 @@
       "usage": {
         "tokens": 10
       }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "platform org balance": {
+    "command": "platform org balance",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "balance": 10.0,
+      "currency": "USD",
+      "delta": 10.0,
+      "mode": "add",
+      "org_id": "00000000-0000-0000-0000-000000000001"
     },
     "duration_ms": 0,
     "items": [],
@@ -1087,6 +1249,53 @@
     },
     "data": {
       "commands": {
+        "auth orgs": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "email",
+              "options": [
+                "--email"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "maxLength": 254,
+                "minLength": 3,
+                "title": "Email",
+                "type": "string"
+              },
+              "password": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "title": "Password",
+                "type": "string"
+              }
+            },
+            "required": [
+              "email",
+              "password"
+            ],
+            "title": "OrgLookup",
+            "type": "object"
+          }
+        },
         "auth setup-password": {
           "cli_parameters": [
             {
@@ -1121,6 +1330,51 @@
               "password"
             ],
             "title": "PasswordSetup",
+            "type": "object"
+          }
+        },
+        "billing balance": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "billing redeem": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "maxLength": 64,
+                "minLength": 1,
+                "title": "Code",
+                "type": "string"
+              }
+            },
+            "required": [
+              "code"
+            ],
+            "title": "CardRedeem",
             "type": "object"
           }
         },
@@ -1448,6 +1702,189 @@
           ],
           "input": null
         },
+        "platform card create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "count",
+              "options": [
+                "--count"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "face_value",
+              "options": [
+                "--face-value"
+              ],
+              "required": true,
+              "type": "float"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expires_at",
+              "options": [
+                "--expires-at"
+              ],
+              "required": false,
+              "type": "datetime"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "note",
+              "options": [
+                "--note"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "count": {
+                "maximum": 500,
+                "minimum": 1,
+                "title": "Count",
+                "type": "integer"
+              },
+              "expires_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expires At"
+              },
+              "face_value": {
+                "exclusiveMinimum": 0,
+                "maximum": 10000000,
+                "title": "Face Value",
+                "type": "number"
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Note"
+              }
+            },
+            "required": [
+              "count",
+              "face_value"
+            ],
+            "title": "PlatformCardCreate",
+            "type": "object"
+          }
+        },
+        "platform card list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "batch",
+              "options": [
+                "--batch"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "status",
+              "options": [
+                "--status"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "200",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "platform card void": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
         "platform login": {
           "cli_parameters": [
             {
@@ -1677,6 +2114,90 @@
             }
           ],
           "input": null
+        },
+        "platform org balance": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "org_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "add",
+              "options": [
+                "--add"
+              ],
+              "required": false,
+              "type": "float"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "set_to",
+              "options": [
+                "--set"
+              ],
+              "required": false,
+              "type": "float"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "amount": {
+                "title": "Amount",
+                "type": "number"
+              },
+              "mode": {
+                "enum": [
+                  "add",
+                  "set"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "amount",
+              "reason"
+            ],
+            "title": "PlatformBalanceAdjust",
+            "type": "object"
+          }
         },
         "platform org create": {
           "cli_parameters": [

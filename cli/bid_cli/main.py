@@ -21,7 +21,11 @@ from app.schemas.contracts import Contract, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
 from app.schemas.platform_contracts import (
+    CardRedeem,
+    OrgLookup,
     PasswordSetup,
+    PlatformBalanceAdjust,
+    PlatformCardCreate,
     PlatformLogin,
     PlatformModelSet,
     PlatformOrgCreate,
@@ -37,7 +41,7 @@ from app.services.certificate_files import read_file as read_certificate_file
 from app.services.template_files import read_template
 from pydantic import ValidationError
 
-from bid_cli.client import Client, State
+from bid_cli.client import Client, State, new_output_path, save_download
 from bid_cli.schema import command_schema
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
@@ -920,6 +924,118 @@ def platform_audit(
     emit(
         call("GET", "/platform/audit", platform=True, params={"limit": limit}),
         "platform audit",
+        json_output,
+    )
+
+
+platform_card_app, billing_app = typer.Typer(), typer.Typer()
+platform_app.add_typer(platform_card_app, name="card")
+app.add_typer(billing_app, name="billing")
+
+
+@platform_card_app.command("create")
+def platform_card_create(
+    count: Annotated[int, typer.Option(min=1, max=500)],
+    face_value: Annotated[float, typer.Option()],
+    output: Annotated[Path, typer.Option(help="New CSV file that receives the codes")],
+    expires_at: Annotated[datetime | None, typer.Option(formats=["%Y-%m-%dT%H:%M:%S%z"])] = None,
+    note: Annotated[str | None, typer.Option()] = None,
+    json_output: JsonOption = False,
+):
+    target = new_output_path(output)
+    body = PlatformCardCreate.model_validate(
+        {"count": count, "face_value": face_value, "expires_at": expires_at, "note": note}
+    )
+    result = call("POST", "/platform/cards", platform=True, json=body.model_dump(mode="json"))
+    cards = result["data"].pop("cards")
+    lines = ["code,last4,face_value,currency,batch_id,expires_at"] + [
+        ",".join(
+            [
+                card["code"],
+                card["last4"],
+                str(result["data"]["face_value"]),
+                result["data"]["currency"],
+                result["data"]["batch_id"],
+                result["data"]["expires_at"] or "",
+            ]
+        )
+        for card in cards
+    ]
+    # Codes go only to the new 0600 file, never to stdout or JSON.
+    save_download(target, ("\n".join(lines) + "\n").encode())
+    result["data"]["output_path"] = str(target)
+    emit(result, "platform card create", json_output)
+
+
+@platform_card_app.command("list")
+def platform_card_list(
+    batch: Annotated[UUID | None, typer.Option()] = None,
+    status: Annotated[str | None, typer.Option(help="active, redeemed or void")] = None,
+    limit: Annotated[int, typer.Option(min=1, max=1000)] = 200,
+    json_output: JsonOption = False,
+):
+    params: dict = {"limit": limit}
+    if batch:
+        params["batch_id"] = str(batch)
+    if status:
+        params["status"] = status
+    emit(
+        call("GET", "/platform/cards", platform=True, params=params),
+        "platform card list",
+        json_output,
+    )
+
+
+@platform_card_app.command("void")
+def platform_card_void(
+    card_id: Annotated[UUID, typer.Option("--id")], json_output: JsonOption = False
+):
+    emit(
+        call("POST", f"/platform/cards/{card_id}/void", platform=True),
+        "platform card void",
+        json_output,
+    )
+
+
+@platform_org_app.command("balance")
+def platform_org_balance(
+    org_id: Annotated[UUID, typer.Option("--id")],
+    reason: Annotated[str, typer.Option()],
+    add: Annotated[float | None, typer.Option("--add")] = None,
+    set_to: Annotated[float | None, typer.Option("--set")] = None,
+    json_output: JsonOption = False,
+):
+    if (add is None) == (set_to is None):
+        raise ServiceError("invalid_input", "Give exactly one of --add or --set", 400, 2)
+    mode, amount = ("add", add) if add is not None else ("set", set_to)
+    body = PlatformBalanceAdjust.model_validate({"mode": mode, "amount": amount, "reason": reason})
+    emit(
+        call("POST", f"/platform/orgs/{org_id}/balance", platform=True, json=body.model_dump()),
+        "platform org balance",
+        json_output,
+    )
+
+
+@billing_app.command("balance")
+def billing_balance(json_output: JsonOption = False):
+    emit(call("GET", "/billing"), "billing balance", json_output)
+
+
+@billing_app.command("redeem")
+def billing_redeem(json_output: JsonOption = False):
+    # The card code comes from the environment so it never appears in argv.
+    body = CardRedeem.model_validate({"code": env_secret("BID_CARD_CODE", "card_code")})
+    emit(call("POST", "/billing/redeem", json=body.model_dump()), "billing redeem", json_output)
+
+
+@auth_app.command("orgs")
+def auth_orgs(email: Annotated[str, typer.Option()], json_output: JsonOption = False):
+    body = OrgLookup.model_validate(
+        {"email": email, "password": env_secret("BID_PASSWORD", "password")}
+    )
+    emit(
+        call("POST", "/auth/orgs", authenticated=False, json=body.model_dump()),
+        "auth orgs",
         json_output,
     )
 

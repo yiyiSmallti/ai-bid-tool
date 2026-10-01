@@ -276,6 +276,21 @@ PLATFORM_USAGE = {
     "unpriced_calls": 0,
     "charge": 0.15,
 }
+PLATFORM_CARD = {
+    "id": IDENTIFIER,
+    "last4": "TURE",
+    "face_value": 10.0,
+    "currency": "USD",
+    "batch_id": IDENTIFIER,
+    "note": None,
+    "expires_at": None,
+    "status": "active",
+    "expired": False,
+    "created_by": "ops@example.test",
+    "created_at": "2026-10-01T00:00:00+00:00",
+    "redeemed_org_id": None,
+    "redeemed_at": None,
+}
 PLATFORM_AUDIT = {
     "id": IDENTIFIER,
     "created_at": "2026-10-01T00:00:00+00:00",
@@ -331,6 +346,47 @@ async def fake_request(self, method, path, **kwargs):
         items = [PLATFORM_AUDIT]
     elif path == "/auth/setup-password":
         data = {"password_set": True}
+    elif path == "/auth/orgs":
+        items = [
+            {"org_id": IDENTIFIER, "name": "Synthetic tenant", "role": "admin", "active": True}
+        ]
+    elif path.endswith("/balance"):
+        data = {
+            "org_id": IDENTIFIER,
+            "mode": "add",
+            "delta": 10.0,
+            "balance": 10.0,
+            "currency": "USD",
+        }
+    elif path == "/platform/cards" and method == "POST":
+        data = {
+            "batch_id": IDENTIFIER,
+            "count": 1,
+            "face_value": 10.0,
+            "currency": "USD",
+            "expires_at": None,
+            "note": None,
+            "cards": [{"id": IDENTIFIER, "code": "SYNT-HETI-CFIX-TURE", "last4": "TURE"}],
+        }
+    elif path == "/platform/cards":
+        data, items = {"currency": "USD"}, [PLATFORM_CARD]
+    elif path.endswith("/void"):
+        data = {**PLATFORM_CARD, "status": "void"}
+    elif path == "/billing":
+        data = {"currency": "USD", "balance": 10.0}
+        items = [
+            {
+                "id": IDENTIFIER,
+                "created_at": "2026-10-01T00:00:00+00:00",
+                "kind": "redeem",
+                "amount": 10.0,
+                "balance_after": 10.0,
+                "currency": "USD",
+                "reason": None,
+            }
+        ]
+    elif path == "/billing/redeem":
+        data = {"card_id": IDENTIFIER, "amount": 10.0, "balance": 10.0, "currency": "USD"}
     elif path == "/tasks" and method == "POST":
         data = {"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}
     elif path == "/tasks":
@@ -538,6 +594,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         )
     )
     monkeypatch.setenv("BID_SETUP_TOKEN", "synthetic-fixture-link")
+    monkeypatch.setenv("BID_CARD_CODE", "SYNT-HETI-CFIX-TURE")
     common = ["--state", str(tmp_path / "session.enc")]
     commands = {
         "login": ["login", "--email", "synthetic@example.test", "--org", IDENTIFIER],
@@ -754,6 +811,13 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "platform usage": ["platform", "usage", "--from", "2026-10", "--to", "2026-10"],
         "platform audit": ["platform", "audit", "--limit", "5"],
         "auth setup-password": ["auth", "setup-password"],
+        "auth orgs": ["auth", "orgs", "--email", "boss@example.test"],
+        "platform org balance": ["platform", "org", "balance", "--id", IDENTIFIER, "--add", "10", "--reason", "Synthetic credit"],
+        "platform card create": ["platform", "card", "create", "--count", "1", "--face-value", "10", "--output", str(tmp_path / "cards.csv")],
+        "platform card list": ["platform", "card", "list", "--status", "active"],
+        "platform card void": ["platform", "card", "void", "--id", IDENTIFIER],
+        "billing balance": ["billing", "balance"],
+        "billing redeem": ["billing", "redeem"],
         "schema": ["schema"],
     }  # fmt: skip
     actual = {}
@@ -766,6 +830,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         if "output_path" in body["data"]:
             body["data"]["output_path"] = "<download-output>"
         assert "synthetic-fixture-token" not in json.dumps(body)
+        assert "SYNT-HETI-CFIX-TURE" not in json.dumps(body)
         assert "synthetic-fixture-session" not in json.dumps(body)
         actual[name] = body
     snapshot = Path(__file__).with_name("snapshots") / "cli-v1.json"

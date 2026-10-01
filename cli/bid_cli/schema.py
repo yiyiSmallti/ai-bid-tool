@@ -15,7 +15,11 @@ from app.schemas.contracts import (
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
 from app.schemas.platform_contracts import (
+    CardRedeem,
+    OrgLookup,
     PasswordSetup,
+    PlatformBalanceAdjust,
+    PlatformCardCreate,
     PlatformLogin,
     PlatformModelSet,
     PlatformOrgActive,
@@ -86,6 +90,13 @@ COMMANDS = {
     "platform usage": None,
     "platform audit": None,
     "auth setup-password": PasswordSetup,
+    "auth orgs": OrgLookup,
+    "platform org balance": PlatformBalanceAdjust,
+    "platform card create": PlatformCardCreate,
+    "platform card list": None,
+    "platform card void": None,
+    "billing balance": None,
+    "billing redeem": CardRedeem,
     "schema": None,
 }
 
