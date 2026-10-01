@@ -23,11 +23,12 @@ from app.schemas.contracts import (
     ProviderUsage,
     Source,
 )
+from app.services.extraction import location_of
 
-ADAPTER_VERSION = "http-extract-v1"
+ADAPTER_VERSION = "http-extract-v2"
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 
-SYSTEM_PROMPT = """你是招标文件分析助手。从用户给出的招标文件页面中，抽取投标人必须响应的全部要求：
+SYSTEM_PROMPT = """你是招标文件分析助手。从用户给出的招标文件内容中，抽取投标人必须响应的全部要求：
 - qualification：资格要求（资质、业绩、人员、财务、信誉等）
 - technical：技术参数与功能要求
 - scoring：评分项与评分标准
@@ -35,12 +36,12 @@ SYSTEM_PROMPT = """你是招标文件分析助手。从用户给出的招标文�
 
 每条要求：
 - text：用简洁中文复述这条要求。
-- quote：逐字复制该要求在页面中的原文连续片段，不得改写、省略、补全或合并不同页的内容。
-- page：quote 所在页的页码，必须是给出的页码之一。
+- ref：要求所在位置。内容以 <page number="N"> 给出时填页码 N；以 <block id="…"> 给出时填块标识，如 p37 或 t5r3c2。
+- quote：逐字复制该位置中的原文连续片段，必须完整出现在同一个 page 或 block 内，不得改写、省略、补全或跨块合并。
 - starred：原文带 ★，或属于实质性、否决投标、废标条款时为 true。
 - condition：可量化的技术参数填写 param（参数名）、op（比较方式）、value（数值或文本）、unit（单位，无则为 null）；无法量化时为 null。
 
-只抽取页面中实际写明的要求，不推测、不编造；没有要求的页面不输出。"""
+只抽取内容中实际写明的要求，不推测、不编造；没有要求的位置不输出。"""
 
 CONDITION_SCHEMA: dict[str, Any] = {
     "anyOf": [
@@ -75,11 +76,11 @@ WIRE_SCHEMA: dict[str, Any] = {
                     "category": {"type": "string", "enum": [c.value for c in Category]},
                     "starred": {"type": "boolean"},
                     "text": {"type": "string"},
-                    "page": {"type": "integer"},
+                    "ref": {"type": "string"},
                     "quote": {"type": "string"},
                     "condition": CONDITION_SCHEMA,
                 },
-                "required": ["category", "starred", "text", "page", "quote", "condition"],
+                "required": ["category", "starred", "text", "ref", "quote", "condition"],
                 "additionalProperties": False,
             },
         }
@@ -102,7 +103,7 @@ class WireItem(BaseModel):
     category: Category
     starred: bool
     text: str
-    page: int
+    ref: str | int
     quote: str
     condition: WireCondition | None
 
@@ -130,8 +131,24 @@ def batches(chunks: list[dict], budget: int) -> list[list[dict]]:
 
 
 def render_pages(batch: list[dict]) -> str:
-    pages = "\n\n".join(f'<page number="{c["page"]}">\n{c["text"]}\n</page>' for c in batch)
-    return f"以下是招标文件的部分页面：\n\n{pages}\n\n按要求抽取这些页面中的全部要求。"
+    parts = []
+    for chunk in batch:
+        if not chunk.get("blocks"):
+            parts.append(f'<page number="{chunk["page"]}">\n{chunk["text"]}\n</page>')
+            continue
+        # Word: blocks grouped under their heading path; the model cites block ids.
+        current = None
+        for block in chunk["blocks"]:
+            path = " > ".join(block["section_path"]).replace('"', "＂")
+            if path != current:
+                if current is not None:
+                    parts.append("</section>")
+                parts.append(f'<section path="{path}">')
+                current = path
+            parts.append(f'<block id="{block["block_id"]}">\n{block["text"]}\n</block>')
+        parts.append("</section>")
+    body = "\n".join(parts)
+    return f"以下是招标文件的部分内容：\n\n{body}\n\n按要求抽取这些内容中的全部要求。"
 
 
 class HTTPExtractor:
@@ -178,13 +195,25 @@ class HTTPExtractor:
     def attach(
         self, wire: WireOutput, batch: list[dict], usages: list[ProviderUsage]
     ) -> list[ExtractedRequirement]:
-        by_page = {chunk["page"]: chunk for chunk in batch}
+        by_page = {str(chunk["page"]): chunk for chunk in batch if chunk.get("page")}
+        by_block = {
+            block["block_id"]: (chunk, block)
+            for chunk in batch
+            for block in chunk.get("blocks") or []
+        }
         output = []
         for item in wire.items:
-            chunk = by_page.get(item.page)
-            if chunk is None:
+            ref = str(item.ref).strip()
+            if ref in by_block:
+                chunk, block = by_block[ref]
+                # Location fields come from the parsed block, never from the model.
+                page, location = None, location_of(block)
+            elif ref in by_page:
+                chunk = by_page[ref]
+                page, location = chunk["page"], None
+            else:
                 raise ProviderFailure(
-                    "Model cited a page that was not in the request",
+                    "Model cited a position that was not in the request",
                     code="invalid_provider_output",
                     usage=list(usages),
                 )
@@ -196,8 +225,9 @@ class HTTPExtractor:
                     source=Source(
                         document_id=chunk["document_id"],
                         chunk_id=chunk["id"],
-                        page=item.page,
                         quote=item.quote,
+                        page=page,
+                        location=location,
                     ),
                     condition=item.condition.model_dump() if item.condition else {},
                 )

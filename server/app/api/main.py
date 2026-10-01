@@ -952,7 +952,8 @@ def create_app(
         identity.require("task:read")
         document = await require_document(session, document_id)
         return result(
-            "document get", serial(document, ("id", "name", "task_id", "status", "page_count"))
+            "document get",
+            serial(document, ("id", "name", "task_id", "status", "page_count", "citation_mode")),
         )
 
     @app.get(
@@ -1093,13 +1094,25 @@ def create_app(
         await require_document(session, document_id)
         chunks = (
             await session.scalars(
-                select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.page)
+                select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.seq)
             )
         ).all()
         return result(
             "chunk list",
             items=[
-                serial(row, ("id", "document_id", "page", "text", "ocr", "citation_verified"))
+                serial(
+                    row,
+                    (
+                        "id",
+                        "document_id",
+                        "seq",
+                        "page",
+                        "text",
+                        "ocr",
+                        "citation_verified",
+                        "blocks",
+                    ),
+                )
                 for row in chunks
             ],
         )
@@ -1110,15 +1123,35 @@ def create_app(
         identity.require("task:read")
         if await session.get(Task, task_id) is None:
             raise not_found()
-        rows = (
-            await session.scalars(
-                select(Requirement).where(Requirement.task_id == task_id).order_by(Requirement.page)
+        pairs = (
+            await session.execute(
+                select(Requirement, Chunk)
+                .join(
+                    Chunk, (Chunk.org_id == Requirement.org_id) & (Chunk.id == Requirement.chunk_id)
+                )
+                .where(Requirement.task_id == task_id)
             )
         ).all()
+
+        def reading_order(pair):
+            # Source order: chunk sequence, then the cited block's position inside the chunk.
+            requirement, chunk = pair
+            block_ids = [block["block_id"] for block in chunk.blocks or []]
+            block_id = (requirement.location or {}).get("block_id")
+            position = block_ids.index(block_id) if block_id in block_ids else 0
+            return (
+                str(requirement.document_id),
+                chunk.seq,
+                position,
+                requirement.created_at,
+                str(requirement.id),
+            )
+
+        rows = [requirement for requirement, _ in sorted(pairs, key=reading_order)]
         items = [
             {
                 **serial(row, ("id", "text", "category", "starred", "condition")),
-                "source": serial(row, ("document_id", "chunk_id", "page", "quote")),
+                "source": serial(row, ("document_id", "chunk_id", "page", "location", "quote")),
             }
             for row in rows
         ]

@@ -2,26 +2,48 @@ import hashlib
 import re
 
 from app.core.errors import ServiceError
-from app.schemas.contracts import Category, ExtractedRequirement, Extraction, Source
+from app.schemas.contracts import Category, ExtractedRequirement, Extraction, Location, Source
 
-PROMPT_VERSION = "req-v1"
+PROMPT_VERSION = "req-v2"
 
 
 def normalize(text: str) -> str:
     return re.sub(r"\s+", "", text)
 
 
+def location_of(block: dict) -> Location:
+    return Location.model_validate({key: block.get(key) for key in Location.model_fields})
+
+
+def block_of(chunk: dict, block_id: str) -> dict | None:
+    return next((b for b in chunk.get("blocks") or [] if b["block_id"] == block_id), None)
+
+
+def cited(item: ExtractedRequirement, chunk: dict | None) -> bool:
+    source = item.source
+    if not chunk or str(source.document_id) != str(chunk["document_id"]):
+        return False
+    if not chunk["citation_verified"]:
+        return False
+    if source.location is not None:
+        block = block_of(chunk, source.location.block_id)
+        # The whole location must match the parsed block, and the quote must sit inside it.
+        return (
+            block is not None
+            and source.location == location_of(block)
+            and normalize(source.quote) in normalize(block["text"])
+        )
+    return (
+        not chunk.get("blocks")
+        and source.page == chunk["page"]
+        and normalize(source.quote) in normalize(chunk["text"])
+    )
+
+
 def validate_extraction(extraction: Extraction, chunks: list[dict]) -> None:
     available = {str(chunk["id"]): chunk for chunk in chunks}
     for item in extraction.items:
-        chunk = available.get(str(item.source.chunk_id))
-        if (
-            not chunk
-            or str(item.source.document_id) != str(chunk["document_id"])
-            or item.source.page != chunk["page"]
-            or not chunk["citation_verified"]
-            or normalize(item.source.quote) not in normalize(chunk["text"])
-        ):
+        if not cited(item, available.get(str(item.source.chunk_id))):
             raise ServiceError(
                 "invalid_citation",
                 "Provider returned an unverified source citation; no requirements were saved",
@@ -33,22 +55,40 @@ def validate_extraction(extraction: Extraction, chunks: list[dict]) -> None:
 def merge_starred(extraction: Extraction, chunks: list[dict]) -> Extraction:
     items = list(extraction.items)
     for chunk in chunks:
-        for line in chunk["text"].splitlines():
-            quote = line.strip()
-            if not quote or not re.search(r"[★☆]|实质性要求|否决投标|废标", quote):
-                continue
-            matching = next(
-                (
-                    item
-                    for item in items
-                    if item.source.chunk_id == chunk["id"]
-                    and normalize(quote) in normalize(item.source.quote)
-                ),
-                None,
-            )
-            if matching:
-                matching.starred = True
-            else:
+        units = (
+            [(block["text"], block) for block in chunk["blocks"]]
+            if chunk.get("blocks")
+            else [(chunk["text"], None)]
+        )
+        for text, block in units:
+            for line in text.splitlines():
+                quote = line.strip()
+                if not quote or not re.search(r"[★☆]|实质性要求|否决投标|废标", quote):
+                    continue
+                matching = next(
+                    (
+                        item
+                        for item in items
+                        if item.source.chunk_id == chunk["id"]
+                        and (
+                            block is None
+                            or (
+                                item.source.location is not None
+                                and item.source.location.block_id == block["block_id"]
+                            )
+                        )
+                        # Same requirement when either quote contains the other.
+                        and (
+                            normalize(quote) in normalize(item.source.quote)
+                            or normalize(item.source.quote) in normalize(quote)
+                        )
+                    ),
+                    None,
+                )
+                if matching:
+                    matching.starred = True
+                    continue
+                location = location_of(block) if block else None
                 items.append(
                     ExtractedRequirement(
                         category=Category.substantive,
@@ -57,8 +97,9 @@ def merge_starred(extraction: Extraction, chunks: list[dict]) -> Extraction:
                         source=Source(
                             document_id=chunk["document_id"],
                             chunk_id=chunk["id"],
-                            page=chunk["page"],
                             quote=quote,
+                            page=None if block else chunk["page"],
+                            location=location,
                         ),
                     )
                 )

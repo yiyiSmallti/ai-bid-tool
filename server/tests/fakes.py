@@ -7,6 +7,25 @@ from app.schemas.contracts import (
     ProviderUsage,
     Source,
 )
+from app.services.extraction import location_of
+
+
+def source_for(chunk) -> Source:
+    # Word chunks cite their last block; PDF chunks cite their page.
+    if chunk.get("blocks"):
+        block = chunk["blocks"][-1]
+        return Source(
+            document_id=chunk["document_id"],
+            chunk_id=chunk["id"],
+            location=location_of(block),
+            quote=block["text"].splitlines()[-1],
+        )
+    return Source(
+        document_id=chunk["document_id"],
+        chunk_id=chunk["id"],
+        page=chunk["page"],
+        quote=chunk["text"].splitlines()[-1],
+    )
 
 
 class FakeLLM:
@@ -26,12 +45,7 @@ class FakeLLM:
                     ExtractedRequirement(
                         category=Category.technical,
                         text="Synthetic fixture requirement",
-                        source=Source(
-                            document_id=chunk["document_id"],
-                            chunk_id=chunk["id"],
-                            page=chunk["page"],
-                            quote=chunk["text"].splitlines()[-1],
-                        ),
+                        source=source_for(chunk),
                     )
                     for chunk in chunks
                 ]
