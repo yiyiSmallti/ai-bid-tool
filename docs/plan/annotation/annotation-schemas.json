@@ -1,0 +1,716 @@
+{
+  "status": "review_only_pending_human_approval",
+  "runtime_registered": false,
+  "command": "evidence source annotate",
+  "arguments": {
+    "id": "UUID",
+    "input": "bounded plan JSON path",
+    "output": "new PNG path"
+  },
+  "output": {
+    "contract_version": "1.0",
+    "data": "SourceAnnotationReceipt",
+    "items": []
+  },
+  "schemas": {
+    "PixelRect": {
+      "additionalProperties": false,
+      "properties": {
+        "x": {
+          "maximum": 8191,
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "maximum": 8191,
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        },
+        "width": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "PixelRect",
+      "type": "object"
+    },
+    "SourceAnnotationPlan": {
+      "$defs": {
+        "PixelRect": {
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "X",
+              "type": "integer"
+            },
+            "y": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "Y",
+              "type": "integer"
+            },
+            "width": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Width",
+              "type": "integer"
+            },
+            "height": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Height",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "title": "PixelRect",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "crop": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PixelRect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "boxes": {
+          "items": {
+            "$ref": "#/$defs/PixelRect"
+          },
+          "maxItems": 20,
+          "title": "Boxes",
+          "type": "array"
+        }
+      },
+      "title": "SourceAnnotationPlan",
+      "type": "object"
+    },
+    "SourceAnnotationMapping": {
+      "$defs": {
+        "PixelRect": {
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "X",
+              "type": "integer"
+            },
+            "y": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "Y",
+              "type": "integer"
+            },
+            "width": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Width",
+              "type": "integer"
+            },
+            "height": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Height",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "title": "PixelRect",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "original_crop": {
+          "$ref": "#/$defs/PixelRect"
+        },
+        "content_offset_x": {
+          "maximum": 8192,
+          "minimum": 0,
+          "title": "Content Offset X",
+          "type": "integer"
+        },
+        "content_offset_y": {
+          "const": 0,
+          "default": 0,
+          "title": "Content Offset Y",
+          "type": "integer"
+        },
+        "footer_height_px": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Footer Height Px",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "original_crop",
+        "content_offset_x",
+        "footer_height_px"
+      ],
+      "title": "SourceAnnotationMapping",
+      "type": "object"
+    },
+    "SourceAnnotationRendering": {
+      "$defs": {
+        "EvidenceSourcePreview": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            },
+            "size_bytes": {
+              "exclusiveMinimum": 0,
+              "maximum": 41943040,
+              "title": "Size Bytes",
+              "type": "integer"
+            },
+            "media_type": {
+              "const": "image/png",
+              "default": "image/png",
+              "title": "Media Type",
+              "type": "string"
+            },
+            "width_px": {
+              "exclusiveMinimum": 0,
+              "maximum": 8192,
+              "title": "Width Px",
+              "type": "integer"
+            },
+            "height_px": {
+              "exclusiveMinimum": 0,
+              "maximum": 8192,
+              "title": "Height Px",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "sha256",
+            "size_bytes",
+            "width_px",
+            "height_px"
+          ],
+          "title": "EvidenceSourcePreview",
+          "type": "object"
+        },
+        "PixelRect": {
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "X",
+              "type": "integer"
+            },
+            "y": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "Y",
+              "type": "integer"
+            },
+            "width": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Width",
+              "type": "integer"
+            },
+            "height": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Height",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "title": "PixelRect",
+          "type": "object"
+        },
+        "SourceAnnotationMapping": {
+          "additionalProperties": false,
+          "properties": {
+            "original_crop": {
+              "$ref": "#/$defs/PixelRect"
+            },
+            "content_offset_x": {
+              "maximum": 8192,
+              "minimum": 0,
+              "title": "Content Offset X",
+              "type": "integer"
+            },
+            "content_offset_y": {
+              "const": 0,
+              "default": 0,
+              "title": "Content Offset Y",
+              "type": "integer"
+            },
+            "footer_height_px": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Footer Height Px",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "original_crop",
+            "content_offset_x",
+            "footer_height_px"
+          ],
+          "title": "SourceAnnotationMapping",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "annotation_profile": {
+          "const": "source-markup-v1",
+          "default": "source-markup-v1",
+          "title": "Annotation Profile",
+          "type": "string"
+        },
+        "plan_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Sha256",
+          "type": "string"
+        },
+        "file": {
+          "$ref": "#/$defs/EvidenceSourcePreview"
+        },
+        "mapping": {
+          "$ref": "#/$defs/SourceAnnotationMapping"
+        }
+      },
+      "required": [
+        "plan_sha256",
+        "file",
+        "mapping"
+      ],
+      "title": "SourceAnnotationRendering",
+      "type": "object"
+    },
+    "SourceAnnotationReceipt": {
+      "$defs": {
+        "CertificateScanFile": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            },
+            "size_bytes": {
+              "exclusiveMinimum": 0,
+              "maximum": 41943040,
+              "title": "Size Bytes",
+              "type": "integer"
+            },
+            "media_type": {
+              "const": "application/pdf",
+              "default": "application/pdf",
+              "title": "Media Type",
+              "type": "string"
+            },
+            "page_count": {
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page Count",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "sha256",
+            "size_bytes",
+            "page_count"
+          ],
+          "title": "CertificateScanFile",
+          "type": "object"
+        },
+        "EvidenceSourceArchive": {
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "format": "uuid",
+              "title": "Id",
+              "type": "string"
+            },
+            "org_id": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            },
+            "task_id": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            },
+            "task_certificate_id": {
+              "format": "uuid",
+              "title": "Task Certificate Id",
+              "type": "string"
+            },
+            "certificate_id": {
+              "format": "uuid",
+              "title": "Certificate Id",
+              "type": "string"
+            },
+            "certificate_revision_id": {
+              "format": "uuid",
+              "title": "Certificate Revision Id",
+              "type": "string"
+            },
+            "certificate_file_id": {
+              "format": "uuid",
+              "title": "Certificate File Id",
+              "type": "string"
+            },
+            "source_kind": {
+              "const": "user_supplied_certificate_pdf",
+              "default": "user_supplied_certificate_pdf",
+              "title": "Source Kind",
+              "type": "string"
+            },
+            "original": {
+              "$ref": "#/$defs/CertificateScanFile"
+            },
+            "page": {
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            },
+            "render_profile": {
+              "const": "pdf-page-preview-v1",
+              "default": "pdf-page-preview-v1",
+              "title": "Render Profile",
+              "type": "string"
+            },
+            "dpi": {
+              "const": 150,
+              "default": 150,
+              "title": "Dpi",
+              "type": "integer"
+            },
+            "preview": {
+              "$ref": "#/$defs/EvidenceSourcePreview"
+            },
+            "rendered_at": {
+              "format": "date-time",
+              "title": "Rendered At",
+              "type": "string"
+            },
+            "created_by": {
+              "format": "uuid",
+              "title": "Created By",
+              "type": "string"
+            },
+            "active_selection": {
+              "title": "Active Selection",
+              "type": "boolean"
+            },
+            "status": {
+              "const": "unconfirmed_source",
+              "default": "unconfirmed_source",
+              "title": "Status",
+              "type": "string"
+            },
+            "confirmed_by": {
+              "const": null,
+              "default": null,
+              "title": "Confirmed By",
+              "type": "null"
+            },
+            "eligible_for_draft_export": {
+              "const": false,
+              "default": false,
+              "title": "Eligible For Draft Export",
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "org_id",
+            "task_id",
+            "task_certificate_id",
+            "certificate_id",
+            "certificate_revision_id",
+            "certificate_file_id",
+            "original",
+            "page",
+            "preview",
+            "rendered_at",
+            "created_by",
+            "active_selection"
+          ],
+          "title": "EvidenceSourceArchive",
+          "type": "object"
+        },
+        "EvidenceSourcePreview": {
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Name",
+              "type": "string"
+            },
+            "sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Sha256",
+              "type": "string"
+            },
+            "size_bytes": {
+              "exclusiveMinimum": 0,
+              "maximum": 41943040,
+              "title": "Size Bytes",
+              "type": "integer"
+            },
+            "media_type": {
+              "const": "image/png",
+              "default": "image/png",
+              "title": "Media Type",
+              "type": "string"
+            },
+            "width_px": {
+              "exclusiveMinimum": 0,
+              "maximum": 8192,
+              "title": "Width Px",
+              "type": "integer"
+            },
+            "height_px": {
+              "exclusiveMinimum": 0,
+              "maximum": 8192,
+              "title": "Height Px",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "name",
+            "sha256",
+            "size_bytes",
+            "width_px",
+            "height_px"
+          ],
+          "title": "EvidenceSourcePreview",
+          "type": "object"
+        },
+        "PixelRect": {
+          "additionalProperties": false,
+          "properties": {
+            "x": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "X",
+              "type": "integer"
+            },
+            "y": {
+              "maximum": 8191,
+              "minimum": 0,
+              "title": "Y",
+              "type": "integer"
+            },
+            "width": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Width",
+              "type": "integer"
+            },
+            "height": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Height",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "x",
+            "y",
+            "width",
+            "height"
+          ],
+          "title": "PixelRect",
+          "type": "object"
+        },
+        "SourceAnnotationMapping": {
+          "additionalProperties": false,
+          "properties": {
+            "original_crop": {
+              "$ref": "#/$defs/PixelRect"
+            },
+            "content_offset_x": {
+              "maximum": 8192,
+              "minimum": 0,
+              "title": "Content Offset X",
+              "type": "integer"
+            },
+            "content_offset_y": {
+              "const": 0,
+              "default": 0,
+              "title": "Content Offset Y",
+              "type": "integer"
+            },
+            "footer_height_px": {
+              "maximum": 8192,
+              "minimum": 1,
+              "title": "Footer Height Px",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "original_crop",
+            "content_offset_x",
+            "footer_height_px"
+          ],
+          "title": "SourceAnnotationMapping",
+          "type": "object"
+        },
+        "SourceAnnotationPlan": {
+          "additionalProperties": false,
+          "properties": {
+            "crop": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/PixelRect"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "boxes": {
+              "items": {
+                "$ref": "#/$defs/PixelRect"
+              },
+              "maxItems": 20,
+              "title": "Boxes",
+              "type": "array"
+            }
+          },
+          "title": "SourceAnnotationPlan",
+          "type": "object"
+        }
+      },
+      "additionalProperties": false,
+      "properties": {
+        "annotation_profile": {
+          "const": "source-markup-v1",
+          "default": "source-markup-v1",
+          "title": "Annotation Profile",
+          "type": "string"
+        },
+        "plan_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Sha256",
+          "type": "string"
+        },
+        "file": {
+          "$ref": "#/$defs/EvidenceSourcePreview"
+        },
+        "mapping": {
+          "$ref": "#/$defs/SourceAnnotationMapping"
+        },
+        "source": {
+          "$ref": "#/$defs/EvidenceSourceArchive"
+        },
+        "plan": {
+          "$ref": "#/$defs/SourceAnnotationPlan"
+        },
+        "annotated_at": {
+          "format": "date-time",
+          "title": "Annotated At",
+          "type": "string"
+        },
+        "output_path": {
+          "minLength": 1,
+          "title": "Output Path",
+          "type": "string"
+        },
+        "status": {
+          "const": "unconfirmed_source",
+          "default": "unconfirmed_source",
+          "title": "Status",
+          "type": "string"
+        },
+        "confirmed_by": {
+          "const": null,
+          "default": null,
+          "title": "Confirmed By",
+          "type": "null"
+        },
+        "eligible_for_draft_export": {
+          "const": false,
+          "default": false,
+          "title": "Eligible For Draft Export",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "plan_sha256",
+        "file",
+        "mapping",
+        "source",
+        "plan",
+        "annotated_at",
+        "output_path"
+      ],
+      "title": "SourceAnnotationReceipt",
+      "type": "object"
+    }
+  }
+}

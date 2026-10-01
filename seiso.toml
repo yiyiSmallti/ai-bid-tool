@@ -1,0 +1,21 @@
+# Documentation kinds for the Seiso Convention 0.2.0: https://seiso.fog.moe/0.2.0/convention
+include = ["**/*.md"]
+exclude = [".venv/**", "dist/**", ".pytest_cache/**"]
+
+# The convention's `agents` kind is not supported by seiso 0.3.0; switch these
+# two mappings to "agents" once the checker accepts it.
+[[kinds]]
+path = "agent.md"
+kind = "reference"
+
+[[kinds]]
+path = "AGENTS.md"
+kind = "reference"
+
+[[kinds]]
+path = "docs/AI 标书工具设计文档.md"
+kind = "plan"
+
+[[kinds]]
+path = "docs/notes/**"
+kind = "reference"
