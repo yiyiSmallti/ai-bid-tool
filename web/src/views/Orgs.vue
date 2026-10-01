@@ -4,7 +4,7 @@ import { count, money, request } from "../api.js";
 
 const orgs = ref([]);
 const usage = ref({});
-const totals = ref({ calls: 0, tokens: 0, charge_usd: 0 });
+const totals = ref({ calls: 0, tokens: 0, charge: 0 });
 const error = ref("");
 const creating = ref(false);
 const form = ref({ name: "", admin_email: "" });
@@ -23,9 +23,9 @@ async function load() {
     totals.value = month.data.totals;
     const byOrg = {};
     for (const row of month.items) {
-      const entry = (byOrg[row.org_id] ??= { tokens: 0, charge_usd: 0 });
+      const entry = (byOrg[row.org_id] ??= { tokens: 0, charge: 0 });
       entry.tokens += row.tokens;
-      entry.charge_usd += row.charge_usd;
+      entry.charge += row.charge;
     }
     usage.value = byOrg;
   } catch (exc) {
@@ -75,7 +75,7 @@ onMounted(load);
   <div class="cards">
     <div class="card"><div class="label">启用中单位</div><div class="value">{{ activeCount }}</div></div>
     <div class="card"><div class="label">本月 token</div><div class="value">{{ count(totals.tokens) }}</div></div>
-    <div class="card"><div class="label">本月应收</div><div class="value">{{ money(totals.charge_usd) }}</div></div>
+    <div class="card"><div class="label">本月应收</div><div class="value">{{ money(totals.charge) }}</div></div>
   </div>
   <p v-if="error" class="error" role="alert">{{ error }}</p>
   <form v-if="creating" class="panel" @submit.prevent="create">
@@ -103,7 +103,7 @@ onMounted(load);
         <td class="num">{{ org.member_count }}</td>
         <td>{{ org.admin_emails.join("，") || "—" }}</td>
         <td class="num">{{ count(usage[org.id]?.tokens) }}</td>
-        <td class="num">{{ money(usage[org.id]?.charge_usd ?? 0) }}</td>
+        <td class="num">{{ money(usage[org.id]?.charge ?? 0) }}</td>
         <td class="num">
           <button v-if="org.active" @click="setActive(org, false)">停用</button>
           <button v-else @click="setActive(org, true)">启用</button>

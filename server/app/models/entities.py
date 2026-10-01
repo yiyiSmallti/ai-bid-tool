@@ -167,7 +167,7 @@ class UsageRecord(Tenant, Base):
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     platform_model_id: Mapped[str | None] = mapped_column(String(40))
-    charge_usd: Mapped[float | None] = mapped_column(Numeric(16, 8))
+    charge: Mapped[float | None] = mapped_column(Numeric(16, 8))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
@@ -800,8 +800,8 @@ class PlatformModel(Base):
     credential: Mapped[str] = mapped_column(String(40))
     vendor_input_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
     vendor_output_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
-    sale_input_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
-    sale_output_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
+    sale_input_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
+    sale_output_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     revision: Mapped[int] = mapped_column(Integer, default=1)
@@ -821,3 +821,51 @@ class PlatformAuditLog(Base):
     object_id: Mapped[str | None] = mapped_column(String(100))
     outcome: Mapped[str] = mapped_column(String(20))
     details: Mapped[dict[str, Any]] = mapped_column(JSONB)
+
+
+class OrgBalance(Base):
+    __tablename__ = "org_balances"
+    org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id"), primary_key=True)
+    currency: Mapped[str] = mapped_column(String(3))
+    balance: Mapped[float] = mapped_column(Numeric(18, 8), default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class BalanceEntry(Tenant, Base):
+    """Append-only ledger; the sum of amounts per org equals org_balances.balance."""
+
+    __tablename__ = "balance_entries"
+    kind: Mapped[str] = mapped_column(String(10))
+    currency: Mapped[str] = mapped_column(String(3))
+    amount: Mapped[float] = mapped_column(Numeric(18, 8))
+    balance_after: Mapped[float] = mapped_column(Numeric(18, 8))
+    card_id: Mapped[UUID | None] = mapped_column()
+    usage_record_id: Mapped[UUID | None] = mapped_column()
+    actor: Mapped[str] = mapped_column(String(254))
+    reason: Mapped[str | None] = mapped_column(String(500))
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        ForeignKeyConstraint(
+            ["org_id", "usage_record_id"], ["usage_records.org_id", "usage_records.id"]
+        ),
+    )
+
+
+class PlatformCard(Base):
+    """Global recharge card; only the code hash and last four characters are stored."""
+
+    __tablename__ = "platform_cards"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    last4: Mapped[str] = mapped_column(String(4))
+    face_value: Mapped[float] = mapped_column(Numeric(18, 8))
+    currency: Mapped[str] = mapped_column(String(3))
+    batch_id: Mapped[UUID] = mapped_column()
+    note: Mapped[str | None] = mapped_column(String(200))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(10), default="active")
+    created_by: Mapped[str] = mapped_column(String(254))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    redeemed_org_id: Mapped[UUID | None] = mapped_column()
+    redeemed_by: Mapped[UUID | None] = mapped_column()
+    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

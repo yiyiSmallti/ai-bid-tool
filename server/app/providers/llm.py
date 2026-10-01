@@ -214,7 +214,7 @@ class HTTPExtractor:
             output_tokens=sum(u.output_tokens for u in usages),
             usd=None if any(u.usd is None for u in usages) else sum(u.usd or 0 for u in usages),
             platform_model_id=self.platform_model_id,
-            charge_usd=None if self.sale is None else sum(u.charge_usd or 0 for u in usages),
+            charge=None if self.sale is None else sum(u.charge or 0 for u in usages),
         )
 
     def usage(self, started: float, model: str, input_tokens: int, output_tokens: int):
@@ -239,7 +239,7 @@ class HTTPExtractor:
             output_tokens=output_tokens,
             usd=usd,
             platform_model_id=self.platform_model_id,
-            charge_usd=charge,
+            charge=charge,
         )
 
     async def post(self, client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> dict:
@@ -437,8 +437,8 @@ def platform_llm(settings: Settings, entry: PlatformModel, transport=None):
         transport,
         platform_model_id=entry.id,
         sale_usd_per_mtok=(
-            float(entry.sale_input_usd_per_mtok),
-            float(entry.sale_output_usd_per_mtok),
+            float(entry.sale_input_per_mtok),
+            float(entry.sale_output_per_mtok),
         ),
     )
     # Editing the catalog entry changes the job cache key.

@@ -11,8 +11,8 @@ const blank = () => ({
   credential: "",
   vendor_input_usd_per_mtok: 0,
   vendor_output_usd_per_mtok: 0,
-  sale_input_usd_per_mtok: 0,
-  sale_output_usd_per_mtok: 0,
+  sale_input_per_mtok: 0,
+  sale_output_per_mtok: 0,
   default: false,
   enabled: true,
   expected_revision: null,
@@ -84,8 +84,8 @@ onMounted(load);
       <span></span>
       <label>成本价 输入（$/百万 token）<input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></label>
       <label>成本价 输出<input v-model="form.vendor_output_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-output" /></label>
-      <label>售价 输入<input v-model="form.sale_input_usd_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></label>
-      <label>售价 输出<input v-model="form.sale_output_usd_per_mtok" type="number" min="0" step="0.01" name="sale-output" /></label>
+      <label>售价 输入<input v-model="form.sale_input_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></label>
+      <label>售价 输出<input v-model="form.sale_output_per_mtok" type="number" min="0" step="0.01" name="sale-output" /></label>
       <label class="inline"><input v-model="form.enabled" type="checkbox" name="enabled" />启用</label>
       <label class="inline"><input v-model="form.default" type="checkbox" name="default" />设为默认</label>
     </div>
@@ -104,7 +104,7 @@ onMounted(load);
           <span :class="['badge', model.credential_configured ? 'ok' : 'bad']">{{ model.credential_configured ? "已配置" : "未配置" }}</span>
         </td>
         <td class="num">{{ model.vendor_input_usd_per_mtok }} / {{ model.vendor_output_usd_per_mtok }}</td>
-        <td class="num">{{ model.sale_input_usd_per_mtok }} / {{ model.sale_output_usd_per_mtok }}</td>
+        <td class="num">{{ model.sale_input_per_mtok }} / {{ model.sale_output_per_mtok }}</td>
         <td>
           <span v-if="model.default" class="badge ok">默认</span>
           <span v-if="!model.enabled" class="badge">已停用</span>
@@ -115,7 +115,7 @@ onMounted(load);
           <div v-if="tests[model.id]" class="hint" data-testid="test-result">
             <template v-if="tests[model.id].running">测试中…</template>
             <template v-else-if="tests[model.id].passed">
-              通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge_usd) }}
+              通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge) }}
             </template>
             <template v-else>未通过：{{ tests[model.id].error.code }}</template>
           </div>

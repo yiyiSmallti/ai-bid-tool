@@ -52,8 +52,8 @@ class PlatformModelSet(Contract):
     credential: str = Field(pattern=r"^[a-z0-9_]{1,40}$")
     vendor_input_usd_per_mtok: float = Field(ge=0)
     vendor_output_usd_per_mtok: float = Field(ge=0)
-    sale_input_usd_per_mtok: float = Field(ge=0)
-    sale_output_usd_per_mtok: float = Field(ge=0)
+    sale_input_per_mtok: float = Field(ge=0)
+    sale_output_per_mtok: float = Field(ge=0)
     default: bool = False
     enabled: bool = True
     expected_revision: int | None = Field(default=None, ge=1)

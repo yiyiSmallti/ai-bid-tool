@@ -251,8 +251,8 @@ PLATFORM_MODEL = {
     "credential": "main",
     "vendor_input_usd_per_mtok": 4.0,
     "vendor_output_usd_per_mtok": 20.0,
-    "sale_input_usd_per_mtok": 6.0,
-    "sale_output_usd_per_mtok": 30.0,
+    "sale_input_per_mtok": 6.0,
+    "sale_output_per_mtok": 30.0,
     "enabled": True,
     "revision": 1,
     "updated_by": "ops@example.test",
@@ -274,7 +274,7 @@ PLATFORM_USAGE = {
     "ocr_pages": 0,
     "vendor_usd": 0.1,
     "unpriced_calls": 0,
-    "charge_usd": 0.15,
+    "charge": 0.15,
 }
 PLATFORM_AUDIT = {
     "id": IDENTIFIER,
@@ -324,7 +324,7 @@ async def fake_request(self, method, path, **kwargs):
         data = {
             "from": "2026-10",
             "to": "2026-10",
-            "totals": {"calls": 1, "tokens": 10, "vendor_usd": 0.1, "charge_usd": 0.15},
+            "totals": {"calls": 1, "tokens": 10, "vendor_usd": 0.1, "charge": 0.15},
         }
         items = [PLATFORM_USAGE]
     elif path == "/platform/audit":

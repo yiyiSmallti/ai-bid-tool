@@ -16,6 +16,9 @@ FUNCTIONS = {
     "platform_usage_summary",
     "platform_create_org",
     "platform_set_org_active",
+    "platform_adjust_balance",
+    "redeem_card",
+    "user_org_memberships",
 }
 
 
@@ -44,6 +47,7 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
         ).all()
         assert [tuple(p) for p in policies] == [
             ("memberships", "SELECT"),
+            ("org_balances", "SELECT"),
             ("orgs", "SELECT"),
             ("usage_records", "SELECT"),
         ]
@@ -52,7 +56,8 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
                 "SELECT p.proname, pg_get_userbyid(p.proowner), p.prosecdef, "
                 "has_function_privilege('bid_app', p.oid, 'EXECUTE'), "
                 "has_function_privilege('public', p.oid, 'EXECUTE') "
-                "FROM pg_proc p WHERE p.proname LIKE 'platform_%'"
+                "FROM pg_proc p WHERE p.proname LIKE 'platform_%' AND p.proname <> 'platform_cards_final_status' "
+                "OR p.proname IN ('redeem_card', 'user_org_memberships')"
             )
         ).all()
         assert {f[0] for f in functions} == FUNCTIONS
@@ -91,7 +96,7 @@ def seed_usage(admin_engine, tenants):
                     input_tokens=800,
                     output_tokens=200,
                     usd=usd,
-                    charge_usd=charge,
+                    charge=charge,
                     platform_model_id=model_id,
                     test_only=test_only,
                     created_at=created,
@@ -109,7 +114,7 @@ async def test_usage_summary_aggregates_without_business_columns(runtime, admin_
         assert list(result.keys()) == [
             "org_id", "month", "billing", "provider", "model", "calls", "tokens",
             "input_tokens", "output_tokens", "ocr_pages", "vendor_usd", "unpriced_calls",
-            "charge_usd",
+            "charge",
         ]  # fmt: skip
         rows = sorted((tuple(r) for r in result.all()), key=lambda r: r[2])
         org_a = tenants["orgs"][0]
@@ -134,7 +139,7 @@ async def test_org_summaries_and_status_changes(runtime, tenants):
             (await session.execute(text("SELECT * FROM platform_org_summaries()"))).mappings().all()
         )
         assert [set(r) for r in rows][0] == {
-            "id", "name", "active", "created_at", "member_count", "admin_emails"
+            "id", "name", "active", "created_at", "member_count", "admin_emails", "currency", "balance"
         }  # fmt: skip
         # Both fixture orgs share a creation timestamp, so compare without order.
         assert {(r["id"], r["member_count"], tuple(r["admin_emails"])) for r in rows} == {

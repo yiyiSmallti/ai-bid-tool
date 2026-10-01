@@ -218,7 +218,7 @@ async def set_org_active(
 MODEL_FIELDS = (
     "id", "capability", "provider", "model", "base_url", "credential",
     "vendor_input_usd_per_mtok", "vendor_output_usd_per_mtok",
-    "sale_input_usd_per_mtok", "sale_output_usd_per_mtok",
+    "sale_input_per_mtok", "sale_output_per_mtok",
     "enabled", "revision", "updated_by", "updated_at",
 )  # fmt: skip
 
@@ -368,7 +368,7 @@ async def usage(
         "calls": sum(item["calls"] for item in items),
         "tokens": sum(item["tokens"] for item in items),
         "vendor_usd": round(sum(item["vendor_usd"] for item in items), 8),
-        "charge_usd": round(sum(item["charge_usd"] for item in items), 8),
+        "charge": round(sum(item["charge"] for item in items), 8),
     }
     return {"from": first.isoformat()[:7], "to": last.isoformat()[:7], "totals": totals}, items
 

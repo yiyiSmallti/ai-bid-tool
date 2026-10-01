@@ -22,7 +22,7 @@ async function load() {
 
 const columns = [
   "month", "org_name", "org_id", "billing", "provider", "model", "calls", "tokens",
-  "input_tokens", "output_tokens", "ocr_pages", "vendor_usd", "unpriced_calls", "charge_usd",
+  "input_tokens", "output_tokens", "ocr_pages", "vendor_usd", "unpriced_calls", "charge",
 ];
 
 function exportCsv() {
@@ -53,7 +53,7 @@ onMounted(load);
   <div v-if="totals" class="cards">
     <div class="card"><div class="label">调用次数</div><div class="value">{{ count(totals.calls) }}</div></div>
     <div class="card"><div class="label">服务商成本</div><div class="value">{{ money(totals.vendor_usd) }}</div></div>
-    <div class="card"><div class="label">应收</div><div class="value">{{ money(totals.charge_usd) }}</div></div>
+    <div class="card"><div class="label">应收</div><div class="value">{{ money(totals.charge) }}</div></div>
   </div>
   <table>
     <thead>
@@ -68,7 +68,7 @@ onMounted(load);
         <td class="num">{{ count(row.calls) }}</td>
         <td class="num">{{ count(row.tokens) }}</td>
         <td class="num">{{ money(row.vendor_usd) }}<div v-if="row.unpriced_calls" class="hint">{{ row.unpriced_calls }} 次未定价</div></td>
-        <td class="num">{{ money(row.charge_usd) }}</td>
+        <td class="num">{{ money(row.charge) }}</td>
       </tr>
       <tr v-if="!rows.length"><td colspan="8" class="hint">所选月份没有用量。</td></tr>
     </tbody>

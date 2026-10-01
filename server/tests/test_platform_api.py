@@ -22,8 +22,8 @@ MODEL = {
     "credential": "main",
     "vendor_input_usd_per_mtok": 4.0,
     "vendor_output_usd_per_mtok": 20.0,
-    "sale_input_usd_per_mtok": 6.0,
-    "sale_output_usd_per_mtok": 30.0,
+    "sale_input_per_mtok": 6.0,
+    "sale_output_per_mtok": 30.0,
     "default": True,
     "enabled": True,
 }
@@ -110,7 +110,16 @@ async def test_provisioned_admin_sets_password_and_signs_in(console, tenants):
     assert reused["user_created"] is False and reused["setup_url"] is None
 
     orgs = (await console.get("/platform/orgs", headers=console.ops)).json()["items"]
-    assert set(orgs[0]) == {"id", "name", "active", "created_at", "member_count", "admin_emails"}
+    assert set(orgs[0]) == {
+        "id",
+        "name",
+        "active",
+        "created_at",
+        "member_count",
+        "admin_emails",
+        "currency",
+        "balance",
+    }
     assert {o["name"]: o["admin_emails"] for o in orgs}["New org"] == ["boss@example.test"]
     audit = (await console.get("/platform/audit", headers=console.ops)).json()["items"]
     assert audit[0]["action"] == "platform.org.create"
@@ -165,7 +174,7 @@ async def test_model_catalog_revisions_and_single_default(console, monkeypatch):
     updated = await console.post(
         "/platform/models",
         headers=console.ops,
-        json={**MODEL, "sale_input_usd_per_mtok": 7.0, "expected_revision": 1},
+        json={**MODEL, "sale_input_per_mtok": 7.0, "expected_revision": 1},
     )
     assert updated.json()["data"]["revision"] == 2
     invalid = await console.post(
@@ -200,12 +209,12 @@ async def test_default_platform_model_drives_extraction_and_charges(console, ten
         "opus-standard",
     )
     assert float(record.usd) == pytest.approx(0.0108)
-    assert float(record.charge_usd) == pytest.approx(0.0162)
+    assert float(record.charge) == pytest.approx(0.0162)
 
     summary = (await console.get("/platform/usage", headers=console.ops)).json()
     [row] = [item for item in summary["items"] if item["billing"] == "platform"]
-    assert row["org_name"] == "Synthetic tenant A" and row["charge_usd"] == pytest.approx(0.0162)
-    assert summary["data"]["totals"]["charge_usd"] == pytest.approx(0.0162)
+    assert row["org_name"] == "Synthetic tenant A" and row["charge"] == pytest.approx(0.0162)
+    assert summary["data"]["totals"]["charge"] == pytest.approx(0.0162)
 
 
 async def test_missing_platform_credential_fails_extraction_explicitly(
@@ -230,7 +239,7 @@ async def test_model_test_button_reports_success_and_failure(console):
     passed = (
         await console.post("/platform/models/opus-standard/test", headers=console.ops)
     ).json()["data"]
-    assert passed["passed"] is True and passed["usage"]["charge_usd"] == pytest.approx(0.0162)
+    assert passed["passed"] is True and passed["usage"]["charge"] == pytest.approx(0.0162)
     failed = (
         await console.post("/platform/models/opus-standard/test", headers=console.ops)
     ).json()["data"]

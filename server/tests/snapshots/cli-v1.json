@@ -302,8 +302,8 @@
         "model": "claude-opus-5-5",
         "provider": "anthropic",
         "revision": 1,
-        "sale_input_usd_per_mtok": 6.0,
-        "sale_output_usd_per_mtok": 30.0,
+        "sale_input_per_mtok": 6.0,
+        "sale_output_per_mtok": 30.0,
         "updated_at": "2026-10-01T00:00:00+00:00",
         "updated_by": "ops@example.test",
         "vendor_input_usd_per_mtok": 4.0,
@@ -331,8 +331,8 @@
       "model": "claude-opus-5-5",
       "provider": "anthropic",
       "revision": 1,
-      "sale_input_usd_per_mtok": 6.0,
-      "sale_output_usd_per_mtok": 30.0,
+      "sale_input_per_mtok": 6.0,
+      "sale_output_per_mtok": 30.0,
       "updated_at": "2026-10-01T00:00:00+00:00",
       "updated_by": "ops@example.test",
       "vendor_input_usd_per_mtok": 4.0,
@@ -435,7 +435,7 @@
       "to": "2026-10",
       "totals": {
         "calls": 1,
-        "charge_usd": 0.15,
+        "charge": 0.15,
         "tokens": 10,
         "vendor_usd": 0.1
       }
@@ -445,7 +445,7 @@
       {
         "billing": "platform",
         "calls": 1,
-        "charge_usd": 0.15,
+        "charge": 0.15,
         "input_tokens": 8,
         "model": "claude-opus-5-5",
         "month": "2026-10-01",
@@ -1617,14 +1617,14 @@
                 "title": "Provider",
                 "type": "string"
               },
-              "sale_input_usd_per_mtok": {
+              "sale_input_per_mtok": {
                 "minimum": 0,
-                "title": "Sale Input Usd Per Mtok",
+                "title": "Sale Input Per Mtok",
                 "type": "number"
               },
-              "sale_output_usd_per_mtok": {
+              "sale_output_per_mtok": {
                 "minimum": 0,
-                "title": "Sale Output Usd Per Mtok",
+                "title": "Sale Output Per Mtok",
                 "type": "number"
               },
               "vendor_input_usd_per_mtok": {
@@ -1646,8 +1646,8 @@
               "credential",
               "vendor_input_usd_per_mtok",
               "vendor_output_usd_per_mtok",
-              "sale_input_usd_per_mtok",
-              "sale_output_usd_per_mtok"
+              "sale_input_per_mtok",
+              "sale_output_per_mtok"
             ],
             "title": "PlatformModelSet",
             "type": "object"

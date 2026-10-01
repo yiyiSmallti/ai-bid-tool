@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from pydantic import SecretStr, field_validator, model_validator
@@ -36,6 +37,8 @@ class Settings(BaseSettings):
     platform_admin_emails: str | None = None
     platform_totp_secrets: SecretStr | None = None
     platform_session_seconds: int = 1800
+    # Sale prices, charges, balances and card values are all in this ISO 4217 currency.
+    billing_currency: str = "USD"
     # Built console from web/dist; served under /app when set.
     web_dir: Path | None = None
 
@@ -63,6 +66,14 @@ class Settings(BaseSettings):
     def llm_backend(cls, value: str) -> str:
         if value not in {"disabled", "anthropic", "openai"}:
             raise ValueError("llm_provider must be disabled, anthropic or openai")
+        return value
+
+    @field_validator("billing_currency")
+    @classmethod
+    def currency_code(cls, value: str) -> str:
+        value = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", value):
+            raise ValueError("billing_currency must be a three-letter ISO 4217 code")
         return value
 
     @field_validator("llm_json_mode")

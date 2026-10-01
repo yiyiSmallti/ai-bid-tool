@@ -105,7 +105,7 @@ class ProviderUsage(Contract):
     output_tokens: int = Field(default=0, ge=0)
     # Set only for calls billed to the org through a platform catalog model.
     platform_model_id: str | None = None
-    charge_usd: float | None = Field(default=None, ge=0)
+    charge: float | None = Field(default=None, ge=0)
 
 
 class PageText(Contract):
