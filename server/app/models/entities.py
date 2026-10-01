@@ -38,6 +38,7 @@ class Org(Identity, Base):
     __tablename__ = "orgs"
     org_id: Mapped[UUID] = mapped_column(nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(200))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (CheckConstraint("id = org_id", name="org_self_scope"),)
 
 
@@ -163,6 +164,10 @@ class UsageRecord(Tenant, Base):
     ocr_pages: Mapped[int] = mapped_column(Integer, default=0)
     usd: Mapped[float | None] = mapped_column(Numeric(16, 8))
     test_only: Mapped[bool] = mapped_column(Boolean, default=False)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    platform_model_id: Mapped[str | None] = mapped_column(String(40))
+    charge_usd: Mapped[float | None] = mapped_column(Numeric(16, 8))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
@@ -781,3 +786,38 @@ class EvidenceSource(Tenant, Base):
             name="source_preview_binding",
         ),
     )
+
+
+class PlatformModel(Base):
+    """Global catalog of platform-paid models; an approved exception to org scoping."""
+
+    __tablename__ = "platform_models"
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    capability: Mapped[str] = mapped_column(String(40))
+    provider: Mapped[str] = mapped_column(String(20))
+    model: Mapped[str] = mapped_column(String(100))
+    base_url: Mapped[str | None] = mapped_column(String(300))
+    credential: Mapped[str] = mapped_column(String(40))
+    vendor_input_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
+    vendor_output_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
+    sale_input_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
+    sale_output_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_by: Mapped[str] = mapped_column(String(254))
+
+
+class PlatformAuditLog(Base):
+    """Append-only record of platform operator actions; global like platform_models."""
+
+    __tablename__ = "platform_audit_logs"
+    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    actor_email: Mapped[str] = mapped_column(String(254))
+    action: Mapped[str] = mapped_column(String(60))
+    object_id: Mapped[str | None] = mapped_column(String(100))
+    outcome: Mapped[str] = mapped_column(String(20))
+    details: Mapped[dict[str, Any]] = mapped_column(JSONB)
