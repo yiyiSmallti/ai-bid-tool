@@ -8,6 +8,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, text, update
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -15,10 +16,14 @@ from app.core.db import Database
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets, hash_password, verify_password
 from app.core.totp import matching_counter
-from app.models.entities import PlatformAuditLog, PlatformModel, User
+from app.models.entities import PlatformAuditLog, PlatformCard, PlatformModel, User
 from app.providers.base import ProviderFailure
 from app.providers.llm import credential_value, platform_llm
-from app.schemas.platform_contracts import PlatformModelSet
+from app.schemas.platform_contracts import (
+    PlatformBalanceAdjust,
+    PlatformCardCreate,
+    PlatformModelSet,
+)
 
 LOGIN_ACTION = "platform.login"
 MAX_FAILURES = 5
@@ -413,3 +418,137 @@ async def user_orgs(db: Database, email: str, password: str) -> list[dict]:
             }
             for row in rows
         ]
+
+
+def card_view(row: PlatformCard) -> dict:
+    return {
+        "id": str(row.id),
+        "last4": row.last4,
+        "face_value": float(row.face_value),
+        "currency": row.currency,
+        "batch_id": str(row.batch_id),
+        "note": row.note,
+        "expires_at": row.expires_at.isoformat() if row.expires_at else None,
+        "status": row.status,
+        "expired": bool(row.expires_at and row.expires_at <= datetime.now(UTC)),
+        "created_by": row.created_by,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "redeemed_org_id": str(row.redeemed_org_id) if row.redeemed_org_id else None,
+        "redeemed_at": row.redeemed_at.isoformat() if row.redeemed_at else None,
+    }
+
+
+async def create_cards(
+    session: AsyncSession, actor: PlatformIdentity, body: PlatformCardCreate, currency: str
+) -> dict:
+    from app.services.billing import code_hash, generate_code
+
+    batch = uuid4()
+    cards = []
+    for _ in range(body.count):
+        code = generate_code()
+        row = PlatformCard(
+            id=uuid4(),
+            code_hash=code_hash(code),
+            last4=code[-4:],
+            face_value=body.face_value,
+            currency=currency,
+            batch_id=batch,
+            note=body.note,
+            expires_at=body.expires_at,
+            created_by=actor.email,
+        )
+        session.add(row)
+        cards.append({"id": str(row.id), "code": code, "last4": row.last4})
+    await session.flush()
+    audit(
+        session,
+        actor.email,
+        "platform.card.create",
+        "success",
+        str(batch),
+        {"count": body.count, "face_value": body.face_value, "currency": currency},
+    )
+    # The only time codes leave the server; the database keeps hashes.
+    return {
+        "batch_id": str(batch),
+        "count": body.count,
+        "face_value": body.face_value,
+        "currency": currency,
+        "expires_at": body.expires_at.isoformat() if body.expires_at else None,
+        "note": body.note,
+        "cards": cards,
+    }
+
+
+async def list_cards(
+    session: AsyncSession, batch_id: UUID | None, status: str | None, limit: int
+) -> list[dict]:
+    query = select(PlatformCard).order_by(PlatformCard.created_at.desc(), PlatformCard.id)
+    if batch_id is not None:
+        query = query.where(PlatformCard.batch_id == batch_id)
+    if status is not None:
+        query = query.where(PlatformCard.status == status)
+    return [card_view(row) for row in await session.scalars(query.limit(limit))]
+
+
+async def void_card(session: AsyncSession, actor: PlatformIdentity, card_id: UUID) -> dict:
+    row = await session.scalar(
+        select(PlatformCard).where(PlatformCard.id == card_id).with_for_update()
+    )
+    if row is None:
+        raise not_found()
+    if row.status != "active":
+        raise ServiceError("card_not_active", "Only an unused card can be voided", 409, 2)
+    row.status = "void"
+    await session.flush()
+    audit(session, actor.email, "platform.card.void", "success", str(card_id), {})
+    return card_view(row)
+
+
+async def adjust_balance(
+    session: AsyncSession,
+    actor: PlatformIdentity,
+    org_id: UUID,
+    body: PlatformBalanceAdjust,
+    currency: str,
+) -> dict:
+    try:
+        async with session.begin_nested():
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT * FROM platform_adjust_balance(:org, :mode, CAST(:amount AS numeric), :reason, :actor, :currency)"
+                    ),
+                    {
+                        "org": org_id,
+                        "mode": body.mode,
+                        "amount": body.amount,
+                        "reason": body.reason,
+                        "actor": actor.email,
+                        "currency": currency,
+                    },
+                )
+            ).first()
+    except DBAPIError:
+        raise ServiceError(
+            "currency_mismatch", "The org balance uses another currency", 409, 4
+        ) from None
+    if row is None:
+        raise not_found()
+    data = {
+        "org_id": str(org_id),
+        "mode": body.mode,
+        "delta": float(row.delta),
+        "balance": float(row.balance),
+        "currency": currency,
+    }
+    audit(
+        session,
+        actor.email,
+        "platform.org.balance",
+        "success",
+        str(org_id),
+        {**data, "reason": body.reason, "amount": body.amount},
+    )
+    return data
