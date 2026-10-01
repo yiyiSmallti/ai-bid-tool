@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     platform_admin_emails: str | None = None
     platform_totp_secrets: SecretStr | None = None
     platform_session_seconds: int = 1800
+    # Built console from web/dist; served under /app when set.
+    web_dir: Path | None = None
 
     @classmethod
     def load(cls):

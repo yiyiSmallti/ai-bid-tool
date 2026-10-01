@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, File, Form, Header, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import ValidationError
 from sqlalchemy import select
@@ -82,6 +82,34 @@ def result(command: str, data=None, items=None, warnings=None) -> dict:
     return Result(
         ok=True, command=command, data=data or {}, items=items or [], warnings=warnings or []
     ).model_dump(mode="json")
+
+
+CONSOLE_HEADERS = {
+    "Content-Security-Policy": (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; "
+        "connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+    ),
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+def mount_console(app: FastAPI, web_dir: Path) -> None:
+    root = web_dir.resolve()
+    if not (root / "index.html").is_file():
+        raise RuntimeError("BID_WEB_DIR must contain a built index.html")
+
+    @app.get("/app", include_in_schema=False)
+    @app.get("/app/{path:path}", include_in_schema=False)
+    async def console(path: str = ""):
+        target = (root / path).resolve()
+        # Unknown paths are client-side routes; nothing outside the build is served.
+        if not target.is_relative_to(root) or not target.is_file():
+            target = root / "index.html"
+        headers = dict(CONSOLE_HEADERS)
+        if target.name == "index.html":
+            headers["Cache-Control"] = "no-store"
+        return FileResponse(target, headers=headers)
 
 
 def create_app(
@@ -212,6 +240,8 @@ def create_app(
         )
 
     app.include_router(create_platform_router(settings, db, crypto, llm_transport))
+    if settings.web_dir is not None:
+        mount_console(app, settings.web_dir)
 
     bearer = HTTPBearer(auto_error=False)
 
