@@ -33,7 +33,9 @@ async function submit() {
 <template>
   <div class="center">
     <h2>设置密码</h2>
-    <p v-if="done" class="notice" role="status">密码已设置。<RouterLink to="/org/login">登录单位</RouterLink></p>
+    <p v-if="done" class="notice" role="status">
+      密码已设置。单位用户请<RouterLink to="/org/login">登录单位</RouterLink>；平台管理员请进入<RouterLink to="/platform/login">平台后台</RouterLink>。
+    </p>
     <form v-else @submit.prevent="submit">
       <label>新密码<input v-model="password" type="password" autocomplete="new-password" name="new-password" /></label>
       <label>再次输入<input v-model="confirm" type="password" autocomplete="new-password" name="confirm-password" /></label>

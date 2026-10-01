@@ -39,11 +39,37 @@ function edit(model) {
     : blank();
 }
 
+// Mirrors PlatformModelSet so mistakes are explained before the request is sent.
+function problems(body) {
+  const issues = [];
+  if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(body.id)) issues.push("标识只能用小写字母、数字、- 和 _，以字母或数字开头，最多 40 个字符");
+  if (!body.model) issues.push("请填写模型名称");
+  if (!/^[a-z0-9_]{1,40}$/.test(body.credential)) issues.push("凭据名只能用小写字母、数字和 _，例如 main");
+  if (body.base_url && !/^https:\/\/[^\s/]+(\/\S*)?$/.test(body.base_url)) issues.push("Base URL 必须以 https:// 开头");
+  if (body.provider === "openai" && !body.base_url) issues.push("OpenAI 兼容服务需要填写 Base URL");
+  for (const key of ["vendor_input_usd_per_mtok", "vendor_output_usd_per_mtok", "sale_input_per_mtok", "sale_output_per_mtok"]) {
+    if (!Number.isFinite(body[key]) || body[key] < 0) issues.push("价格必须是不小于 0 的数字");
+  }
+  if (body.default && !body.enabled) issues.push("默认模型必须启用");
+  return [...new Set(issues)];
+}
+
 async function save() {
   error.value = "";
-  const body = { ...form.value, base_url: form.value.base_url || null };
+  const body = {
+    ...form.value,
+    id: form.value.id.trim().toLowerCase(),
+    model: form.value.model.trim(),
+    credential: form.value.credential.trim().toLowerCase(),
+    base_url: form.value.base_url.trim() || null,
+  };
   for (const key of Object.keys(body)) if (key.endsWith("_per_mtok")) body[key] = Number(body[key]);
   for (const key of ["revision", "updated_by", "updated_at", "credential_configured"]) delete body[key];
+  const issues = problems(body);
+  if (issues.length) {
+    error.value = issues.join("；");
+    return;
+  }
   try {
     await request("POST", "/platform/models", body);
     form.value = null;
@@ -84,7 +110,7 @@ onMounted(load);
       <label>模型<input v-model="form.model" name="model" /></label>
       <label>Base URL（可选，https）<input v-model="form.base_url" name="base-url" /></label>
       <label>凭据名<input v-model="form.credential" name="credential" placeholder="main" /></label>
-      <span></span>
+      <span class="hint">凭据名 main 对应环境变量 BID_PLATFORM_CREDENTIAL_MAIN；标识和凭据名只用小写字母、数字、_（标识还可用 -）。</span>
       <label>成本价 输入（USD/百万 token）<input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></label>
       <label>成本价 输出<input v-model="form.vendor_output_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-output" /></label>
       <label>售价 输入（{{ currency }}/百万 token）<input v-model="form.sale_input_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></label>

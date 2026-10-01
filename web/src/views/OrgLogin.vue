@@ -9,9 +9,11 @@ const password = ref("");
 const orgs = ref(null);
 const error = ref("");
 const busy = ref(false);
+const noOrg = ref(false);
 
 async function lookup() {
   error.value = "";
+  noOrg.value = false;
   if (!email.value || !password.value) {
     error.value = "填写邮箱和密码";
     return;
@@ -20,7 +22,7 @@ async function lookup() {
   try {
     const found = (await request("POST", "/auth/orgs", { email: email.value, password: password.value })).items;
     const usable = found.filter((org) => org.active);
-    if (!found.length) error.value = "这个账号还没有加入任何单位";
+    if (!found.length) noOrg.value = true;
     else if (usable.length === 1 && found.length === 1) await enter(usable[0]);
     else orgs.value = found;
   } catch (exc) {
@@ -50,10 +52,14 @@ async function enter(org) {
 <template>
   <div class="center">
     <h2>单位登录</h2>
+    <p class="hint">平台管理员请使用<RouterLink to="/platform/login">平台后台登录</RouterLink>。</p>
     <form v-if="!orgs" @submit.prevent="lookup">
       <label>邮箱<input v-model="email" type="email" autocomplete="username" name="email" /></label>
       <label>密码<input v-model="password" type="password" autocomplete="current-password" name="password" /></label>
       <p v-if="error" class="error" role="alert">{{ error }}</p>
+      <p v-if="noOrg" class="notice" role="alert">
+        这个账号还没有加入任何单位。平台管理员请从<RouterLink to="/platform/login">平台后台</RouterLink>登录。
+      </p>
       <button class="primary" type="submit" :disabled="busy">登录</button>
     </form>
     <div v-else class="choices">

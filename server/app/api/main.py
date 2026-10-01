@@ -220,9 +220,18 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
-        return error_response(
-            request, ServiceError("invalid_input", "Invalid or missing request parameters", 422, 2)
+        # Name the offending fields but never echo submitted values.
+        fields = sorted(
+            {
+                ".".join(str(part) for part in item["loc"][1:]) or str(item["loc"][0])
+                for item in error.errors()
+                if item.get("loc")
+            }
         )
+        message = "Invalid or missing request parameters"
+        if fields:
+            message += ": " + ", ".join(fields[:10])
+        return error_response(request, ServiceError("invalid_input", message, 422, 2))
 
     @app.exception_handler(IntegrityError)
     async def integrity_error(request: Request, error: IntegrityError):
