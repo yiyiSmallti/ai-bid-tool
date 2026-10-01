@@ -30,7 +30,7 @@ API tokens, so the two kinds never cross.
 
 Migration `0010` adds `orgs.active`, the global `platform_models` and
 `platform_audit_logs` tables, usage columns for input and output tokens,
-`platform_model_id` and `charge_usd`, and the role `bid_platform_fn` that owns
+`platform_model_id` and `charge`, and the role `bid_platform_fn` that owns
 `platform_org_summaries`, `platform_usage_summary`, `platform_create_org` and
 `platform_set_org_active`. `membership()` in
 [auth.py](../../server/app/services/auth.py) rejects a disabled org, so login,
@@ -46,8 +46,9 @@ column update this needs.
 When the catalog has an enabled default model for `llm_extract`, `resolve_llm`
 in [llm.py](../../server/app/providers/llm.py) builds the adapter from it with
 the key in `BID_PLATFORM_CREDENTIAL_<NAME>`, for both job submission and
-processing. Usage then stores vendor cost in `usd` and the sale-price amount in
-`charge_usd`. Without a default, the `BID_LLM_*` fallback is used and its usage
+processing. Usage then stores vendor cost in `usd` and the sale-price amount, in
+`BID_BILLING_CURRENCY`, in `charge`; the charge is deducted from the prepaid
+balance described in [prepaid-billing.md](prepaid-billing.md). Without a default, the `BID_LLM_*` fallback is used and its usage
 counts as `unbilled`. A default whose credential is missing fails extraction
 with `provider_unavailable` instead of falling back.
 

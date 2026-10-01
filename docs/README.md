@@ -25,6 +25,7 @@ kind: readme
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
 - [llm-providers.md](notes/llm-providers.md)：抽取模型调用、批次、错误与计费。
 - [platform-console.md](notes/platform-console.md)：平台运营后台、TOTP、单位启停、模型目录计费。
+- [prepaid-billing.md](notes/prepaid-billing.md)：预付余额、充值卡密、扣费与拦截。
 - [versioned-resources.md](notes/versioned-resources.md)：产品修订与任务快照。
 - [versioned-features.md](notes/versioned-features.md)：软件功能声明。
 - [versioned-certificates.md](notes/versioned-certificates.md)：证书声明与日期检查。
@@ -36,6 +37,7 @@ kind: readme
 ## 决策记录
 
 - [0001 平台运营后台的跨单位访问](adr/0001-platform-console-access.md)（adr）
+- [0002 预付余额与充值卡密](adr/0002-prepaid-billing.md)（adr）
 
 ## 计划与记录
 

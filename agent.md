@@ -12,7 +12,7 @@ AI 标书工具：帮投标单位解析招标文件、抽取要求、查证技�
 1. **单位隔离**
    - 所有业务表必须有 `org_id`（NOT NULL）并启用 PostgreSQL 行级安全策略（RLS）。新建表时，同一次改动里必须带上 RLS 策略和隔离测试。
    - `User` 是全局身份表，是单位 `org_id` 与 RLS 要求的唯一例外，仅保存登录身份与认证信息；一个全局账号可以加入多个单位。单位归属、角色和权限保存在 `Membership` 中，`Membership` 及其余单位业务表仍必须有 `org_id`（NOT NULL）并启用 RLS。
-   - 平台运营后台另有三处经批准的例外：全局表 `platform_models`（平台模型目录）和 `platform_audit_logs`（只能新增、不能改删），以及 `NOLOGIN`、无 `BYPASSRLS` 的角色 `bid_platform_fn`。该角色只在 `orgs`、`memberships`、`usage_records` 上有只读跨单位策略，只作为固定汇总函数的属主；函数不得返回任何单位业务内容。决定与理由见 `docs/adr/0001-platform-console-access.md`。
+   - 平台运营后台另有经批准的例外：全局表 `platform_models`（平台模型目录）、`platform_audit_logs`（只能新增、不能改删）和 `platform_cards`（充值卡密，只存哈希与末 4 位），以及 `NOLOGIN`、无 `BYPASSRLS` 的角色 `bid_platform_fn`。该角色只在 `orgs`、`memberships`、`usage_records`、`org_balances` 上有只读跨单位策略，只作为固定函数的属主；函数不得返回任何单位业务内容，入账只能经 `redeem_card` 和 `platform_adjust_balance`。决定与理由见 `docs/adr/0001-platform-console-access.md` 和 `docs/adr/0002-prepaid-billing.md`。
    - 登录成功不代表可以访问任意单位；切换或访问单位前必须校验有效的 `Membership`，再设置该请求的单位上下文。
    - 数据库会话通过 `SET app.current_org = ...` 设置单位上下文；应用代码不得使用绕过 RLS 的数据库角色。
    - 对象存储路径一律以 `org/{org_id}/` 开头；下载只发放带签名的短期链接。

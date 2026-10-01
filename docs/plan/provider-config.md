@@ -60,9 +60,9 @@ class ProviderConfigView(Contract):
 
 ## 用量与计费归属
 
-`input_tokens`、`output_tokens`、`platform_model_id`、`charge_usd` 已由迁移 `0010` 加入，
+`input_tokens`、`output_tokens`、`platform_model_id`、`charge` 已由迁移 `0010` 加入，
 `usd` 即服务商成本。本草案只再新增一列 `provider_config_id`（使用的单位配置修订，未配置时为
-null），并把单位自带模型的 `charge_usd` 记为 0，汇总中归为 `org` 计费类别。
+null），并把单位自带模型的 `charge` 记为 0，汇总中归为 `org` 计费类别。
 
 ## 权限
 

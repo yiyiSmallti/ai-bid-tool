@@ -256,3 +256,45 @@ password in `BID_PASSWORD`:
 bid --mode remote --server https://YOUR_SERVER auth setup-password --json
 ```
 
+## Recharge and billing
+
+Balances, charges and card values are in the deployment's billing currency.
+Platform-billed extraction needs a positive balance; otherwise `req extract`
+fails with `insufficient_balance` and exit 4.
+
+Operators issue and void cards and correct balances:
+
+```sh
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform card create --count 20 --face-value 100 --output NEW_CARDS.csv --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform card list --status active --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform card void --id CARD_ID --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform org balance --id ORG_ID --add 50 --reason REASON --json
+```
+
+1. `card create` writes the codes only to the new CSV file (mode 0600); the
+   JSON output and later listings show the last four characters. Codes cannot
+   be recovered, so keep the file safe.
+2. `card void` works only on unused cards.
+3. `org balance` takes exactly one of `--add` (negative to deduct) or `--set`,
+   plus a reason, and records a ledger entry.
+
+Org admins check the balance and redeem a card. The code comes from
+`BID_CARD_CODE` so it never appears in argv; spaces, lowercase and missing
+dashes are accepted.
+
+```sh
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE billing balance --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE billing redeem --json
+```
+
+A failed redemption returns `invalid_card` whatever the reason; ten failures
+in an hour lock redemption for the org. API tokens can read the balance with
+`billing:read` but can never redeem.
+
+To find the org ID for `bid login`, list the orgs of an account; the password
+comes from `BID_PASSWORD`:
+
+```sh
+bid --mode remote --server https://YOUR_SERVER auth orgs --email YOUR_EMAIL --json
+```
+

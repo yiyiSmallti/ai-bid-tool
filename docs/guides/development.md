@@ -144,6 +144,11 @@ usage totals, never org business data.
    open `http://127.0.0.1:8000/app/`. For live editing, run `npm run dev` in
    `web/` with `BID_API_URL` pointing at the API.
 
+Set `BID_BILLING_CURRENCY` (an ISO 4217 code, default `USD`) before any org has
+a balance; catalog sale prices, charges, balances and card values all use it,
+and startup refuses balances stored in another currency. Org admins use
+`http://127.0.0.1:8000/app/org/login` to see their balance and redeem cards.
+
 The end-to-end check drives a real browser through sign-in, provisioning,
 models, usage, CSV export, disabling and password setup against a running API
 that serves the build. It needs an operator account with a known password and
@@ -155,8 +160,9 @@ cd web && E2E_BASE_URL=http://127.0.0.1:8000 E2E_EMAIL=OPERATOR_EMAIL E2E_PASSWO
 ```
 
 The check expects an org named 计费演示单位 with platform-billed usage in the
-current month and creates an org and a model named `e2e-model`, so run it
-against a disposable database.
+current month and creates an org, a model named `e2e-model` and recharge cards,
+so run it against a disposable database. `E2E_OUTPUT` must be a real directory,
+not under a symlink such as macOS `/tmp`, only if you also save CLI output there.
 
 ## Run with Docker Compose
 
