@@ -8,9 +8,10 @@ from docx import Document as WordDocument
 
 from app.core.errors import ServiceError
 from app.providers.base import OCRProvider
-from app.schemas.contracts import PageText, ProviderUsage
+from app.schemas.contracts import PageText, ProviderUsage, SectionText
+from app.services.docx_blocks import parse_docx
 
-PARSER_VERSION = "parse-v1"
+PARSER_VERSION = "parse-v2"
 
 
 def validate_document(content: bytes, suffix: str, max_pages: int) -> None:
@@ -37,28 +38,12 @@ def validate_document(content: bytes, suffix: str, max_pages: int) -> None:
 
 async def parse_document(
     content: bytes, suffix: str, ocr: OCRProvider, max_pages: int
-) -> tuple[list[PageText], list[ProviderUsage], list[str]]:
+) -> tuple[list[PageText] | list[SectionText], list[ProviderUsage], list[str]]:
     await asyncio.to_thread(validate_document, content, suffix, max_pages)
     if suffix == ".docx":
-
-        def read_word():
-            document = WordDocument(io.BytesIO(content))
-            lines = [paragraph.text for paragraph in document.paragraphs]
-            lines.extend(
-                " | ".join(cell.text for cell in row.cells)
-                for table in document.tables
-                for row in table.rows
-            )
-            return "\n".join(lines)
-
-        text = await asyncio.to_thread(read_word)
-        return (
-            [PageText(page=1, text=text, citation_verified=False)],
-            [],
-            [
-                "DOCX page layout is unverified. Convert to PDF before extracting cited requirements."
-            ],
-        )
+        # Word has no reliable pages; blocks are cited by section and paragraph or cell.
+        sections, warnings = await asyncio.to_thread(parse_docx, content)
+        return sections, [], warnings
 
     def read_pdf():
         pages = []

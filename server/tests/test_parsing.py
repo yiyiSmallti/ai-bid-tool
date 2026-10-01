@@ -28,17 +28,20 @@ def test_rejects_invalid_uploads(content, suffix):
         validate_document(content, suffix, 20)
 
 
-async def test_word_does_not_invent_page_citations():
+async def test_word_is_cited_by_location_never_by_page():
     import io
 
+    from app.schemas.contracts import SectionText
     from docx import Document
 
     document = Document()
     document.add_paragraph("Synthetic Word content")
     output = io.BytesIO()
     document.save(output)
-    pages, _, warnings = await parse_document(output.getvalue(), ".docx", FakeOCR(), 20)
-    assert not pages[0].citation_verified and warnings
+    sections, usages, _ = await parse_document(output.getvalue(), ".docx", FakeOCR(), 20)
+    assert usages == []
+    assert isinstance(sections[0], SectionText)
+    assert sections[0].blocks[0].block_id == "p1" and sections[0].blocks[0].label == "第 1 段"
 
 
 async def test_scanned_pdf_uses_provider_and_records_usage():
