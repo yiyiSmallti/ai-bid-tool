@@ -1,11 +1,11 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CONTRACT_VERSION = "1.0"
+CONTRACT_VERSION = "1.1"
 
 
 class Contract(BaseModel):
@@ -73,11 +73,32 @@ class Category(StrEnum):
     substantive = "substantive"
 
 
+class Location(Contract):
+    """Where a quote sits in a Word document: a paragraph or a table cell."""
+
+    block_id: str = Field(min_length=2, max_length=200)
+    kind: Literal["paragraph", "cell"]
+    section_path: list[str] = Field(default_factory=list)
+    paragraph: int | None = Field(default=None, ge=1)
+    table: int | None = Field(default=None, ge=1)
+    row: int | None = Field(default=None, ge=1)
+    column: int | None = Field(default=None, ge=1)
+    label: str = Field(min_length=1)
+
+
 class Source(Contract):
     document_id: UUID
     chunk_id: UUID
-    page: int = Field(ge=1)
+    # PDF sources cite a page; Word sources cite a structural location. Never both.
+    page: int | None = Field(default=None, ge=1)
+    location: Location | None = None
     quote: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def one_position(self):
+        if (self.page is None) == (self.location is None):
+            raise ValueError("a source needs exactly one of page or location")
+        return self
 
 
 class ExtractedRequirement(Contract):
@@ -112,8 +133,21 @@ class PageText(Contract):
     page: int = Field(ge=1)
     text: str
     ocr: bool = False
-    # Word pagination depends on layout. Unverified page numbers never become citations.
     citation_verified: bool = True
+
+
+class Block(Location):
+    """One Word paragraph or table cell, addressed by Location fields."""
+
+    text: str = Field(min_length=1)
+
+
+class SectionText(Contract):
+    """A run of Word blocks parsed into one chunk; cited by block, never by page."""
+
+    seq: int = Field(ge=1)
+    text: str
+    blocks: list[Block] = Field(min_length=1)
 
 
 class OCRText(Contract):

@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import Settings
@@ -12,7 +12,7 @@ from app.core.errors import ServiceError
 from app.models.entities import Chunk, Document, Job, Requirement, UsageRecord
 from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
 from app.providers.storage import Storage
-from app.schemas.contracts import Extraction, ProviderUsage
+from app.schemas.contracts import Extraction, ProviderUsage, SectionText
 from app.services import billing
 from app.services.extraction import fingerprint, merge_starred, validate_extraction
 from app.services.parsing import parse_document
@@ -77,10 +77,11 @@ class Processor:
                     page=row.page,
                     text=row.text,
                     citation_verified=row.citation_verified,
+                    blocks=row.blocks,
                 )
                 for row in (
                     await session.scalars(
-                        select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.page)
+                        select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.seq)
                     )
                 ).all()
             ]
@@ -149,23 +150,41 @@ class Processor:
                 if document is None:
                     raise ServiceError("missing_document", "Resource not found", 404, 4)
                 if requirements is None:
+                    word = bool(pages) and isinstance(pages[0], SectionText)
+                    if word:
+                        # Earlier parser versions stored one unverified page-less chunk;
+                        # nothing can cite it, so it is replaced by located sections.
+                        await session.execute(
+                            delete(Chunk).where(
+                                Chunk.document_id == document_id,
+                                Chunk.blocks.is_(None),
+                                Chunk.citation_verified.is_(False),
+                            )
+                        )
                     for page in pages:
+                        values = (
+                            {
+                                "seq": page.seq,
+                                "page": None,
+                                "text": page.text,
+                                "blocks": [block.model_dump() for block in page.blocks],
+                            }
+                            if isinstance(page, SectionText)
+                            else {**page.model_dump(), "seq": page.page}
+                        )
                         await session.execute(
                             insert(Chunk)
                             .values(
-                                org_id=org_id,
-                                task_id=task_id,
-                                document_id=document_id,
-                                **page.model_dump(),
+                                org_id=org_id, task_id=task_id, document_id=document_id, **values
                             )
-                            .on_conflict_do_nothing(
-                                index_elements=["org_id", "document_id", "page"]
-                            )
+                            .on_conflict_do_nothing(index_elements=["org_id", "document_id", "seq"])
                         )
                     document.status = "parsed"
-                    document.page_count = len(pages)
+                    document.citation_mode = "block" if word else "page"
+                    document.page_count = None if word else len(pages)
                     result = {
-                        "pages": len(pages),
+                        "pages": 0 if word else len(pages),
+                        "sections": len(pages) if word else 0,
                         "document_id": str(document_id),
                         "warnings": warnings,
                     }
@@ -178,6 +197,9 @@ class Processor:
                             document_id=document_id,
                             chunk_id=item.source.chunk_id,
                             page=item.source.page,
+                            location=item.source.location.model_dump()
+                            if item.source.location
+                            else None,
                             quote=item.source.quote,
                             text=item.text,
                             category=item.category.value,

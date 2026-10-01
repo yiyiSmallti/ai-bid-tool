@@ -66,6 +66,7 @@ def merge_starred(extraction: Extraction, chunks: list[dict]) -> Extraction:
 
 
 def fingerprint(item: ExtractedRequirement) -> str:
+    position = item.source.location.block_id if item.source.location else item.source.page
     return hashlib.sha256(
-        f"{item.source.document_id}:{item.source.page}:{normalize(item.source.quote)}".encode()
+        f"{item.source.document_id}:{position}:{normalize(item.source.quote)}".encode()
     ).hexdigest()

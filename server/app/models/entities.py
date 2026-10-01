@@ -108,6 +108,7 @@ class Document(Tenant, Base):
     media_type: Mapped[str] = mapped_column(String(100))
     page_count: Mapped[int | None] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(20), default="uploaded")
+    citation_mode: Mapped[str | None] = mapped_column(String(10))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "task_id", "sha256"),
@@ -119,13 +120,19 @@ class Chunk(Tenant, Base):
     __tablename__ = "chunks"
     task_id: Mapped[UUID] = mapped_column()
     document_id: Mapped[UUID] = mapped_column()
-    page: Mapped[int] = mapped_column(Integer)
+    page: Mapped[int | None] = mapped_column(Integer)
+    # PDF chunks are ordered by page unless a sequence is given explicitly.
+    seq: Mapped[int] = mapped_column(
+        Integer, default=lambda context: context.get_current_parameters()["page"]
+    )
     text: Mapped[str] = mapped_column(Text)
     ocr: Mapped[bool] = mapped_column(Boolean, default=False)
     citation_verified: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Word chunks: list of Block dicts; PDF chunks: null.
+    blocks: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "document_id", "page"),
+        UniqueConstraint("org_id", "document_id", "seq"),
         ForeignKeyConstraint(["org_id", "document_id"], ["documents.org_id", "documents.id"]),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
         CheckConstraint("page > 0", name="chunk_page_positive"),
@@ -137,7 +144,8 @@ class Requirement(Tenant, Base):
     task_id: Mapped[UUID] = mapped_column()
     document_id: Mapped[UUID] = mapped_column()
     chunk_id: Mapped[UUID] = mapped_column()
-    page: Mapped[int] = mapped_column(Integer)
+    page: Mapped[int | None] = mapped_column(Integer)
+    location: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     quote: Mapped[str] = mapped_column(Text)
     text: Mapped[str] = mapped_column(Text)
     category: Mapped[str] = mapped_column(String(20))
@@ -150,7 +158,7 @@ class Requirement(Tenant, Base):
         ForeignKeyConstraint(["org_id", "document_id"], ["documents.org_id", "documents.id"]),
         ForeignKeyConstraint(["org_id", "chunk_id"], ["chunks.org_id", "chunks.id"]),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
-        CheckConstraint("page > 0 AND length(quote) > 0", name="requirement_citation"),
+        CheckConstraint("length(quote) > 0", name="requirement_citation"),
     )
 
 
