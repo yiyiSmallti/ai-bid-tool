@@ -46,3 +46,10 @@ label.inline { flex-direction: row; align-items: center; gap: 6px; }
 .center form { display: flex; flex-direction: column; gap: 12px; }
 .toolbar > div { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 td button + button { margin-left: 6px; }
+.topbar { display: flex; gap: 12px; align-items: center; padding: 12px 28px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.topbar button { margin-left: auto; }
+main.narrow { max-width: 820px; margin: 0 auto; }
+.balance { font-size: 32px; font-weight: 600; margin: 4px 0 0; }
+.choices { display: flex; flex-direction: column; gap: 8px; }
+.choices button { text-align: left; }
+code.card-code { font-size: 15px; letter-spacing: 1px; }

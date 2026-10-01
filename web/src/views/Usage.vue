@@ -7,6 +7,7 @@ const from = ref(thisMonth);
 const to = ref(thisMonth);
 const rows = ref([]);
 const totals = ref(null);
+const currency = ref("");
 const error = ref("");
 
 async function load() {
@@ -15,6 +16,7 @@ async function load() {
     const result = await request("GET", `/platform/usage?from=${from.value}&to=${to.value}`);
     rows.value = result.items;
     totals.value = result.data.totals;
+    currency.value = result.data.currency;
   } catch (exc) {
     error.value = exc.message;
   }
@@ -52,8 +54,8 @@ onMounted(load);
   <p v-if="error" class="error" role="alert">{{ error }}</p>
   <div v-if="totals" class="cards">
     <div class="card"><div class="label">调用次数</div><div class="value">{{ count(totals.calls) }}</div></div>
-    <div class="card"><div class="label">服务商成本</div><div class="value">{{ money(totals.vendor_usd) }}</div></div>
-    <div class="card"><div class="label">应收</div><div class="value">{{ money(totals.charge) }}</div></div>
+    <div class="card"><div class="label">服务商成本</div><div class="value">{{ money(totals.vendor_usd, "USD") }}</div></div>
+    <div class="card"><div class="label">应收</div><div class="value">{{ money(totals.charge, currency) }}</div></div>
   </div>
   <table>
     <thead>
@@ -67,8 +69,8 @@ onMounted(load);
         <td>{{ row.provider }}<div class="hint">{{ row.model }}</div></td>
         <td class="num">{{ count(row.calls) }}</td>
         <td class="num">{{ count(row.tokens) }}</td>
-        <td class="num">{{ money(row.vendor_usd) }}<div v-if="row.unpriced_calls" class="hint">{{ row.unpriced_calls }} 次未定价</div></td>
-        <td class="num">{{ money(row.charge) }}</td>
+        <td class="num">{{ money(row.vendor_usd, "USD") }}<div v-if="row.unpriced_calls" class="hint">{{ row.unpriced_calls }} 次未定价</div></td>
+        <td class="num">{{ money(row.charge, currency) }}</td>
       </tr>
       <tr v-if="!rows.length"><td colspan="8" class="hint">所选月份没有用量。</td></tr>
     </tbody>

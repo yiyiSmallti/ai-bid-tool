@@ -10,6 +10,10 @@ const labels = {
   "platform.org.active": "启用/停用单位",
   "platform.model.set": "修改模型",
   "platform.model.test": "测试模型",
+  "platform.card.create": "生成卡密",
+  "platform.card.void": "作废卡密",
+  "platform.org.balance": "调整余额",
+  "billing.redeem": "卡密兑换",
 };
 
 onMounted(async () => {

@@ -35,7 +35,7 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
     steps.push(name);
   };
 
-  const first = await page.goto("/app/");
+  const first = await page.goto("/app/platform/orgs");
   expect(first.headers()["content-security-policy"]).toContain("default-src 'self'");
   await expect(page).toHaveURL(/\/app\/platform\/login$/);
 
@@ -78,10 +78,36 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await expect(row.getByTestId("test-result")).toHaveText("未通过：provider_unavailable");
   await shot("models");
 
+  await page.click("nav >> text=卡密");
+  await page.fill("input[name=card-count]", "2");
+  await page.fill("input[name=card-face]", "30");
+  await page.fill("input[name=card-note]", "端到端批次");
+  await page.click("form.panel button[type=submit]");
+  await expect(page.getByTestId("card-code")).toHaveCount(2);
+  const codes = (await page.getByTestId("card-code").allTextContents()).map((code) => code.trim());
+  const [cardDownload] = await Promise.all([page.waitForEvent("download"), page.click("text=下载 CSV")]);
+  const cardsPath = join(output, "issued-cards.csv");
+  await cardDownload.saveAs(cardsPath);
+  const cardsCsv = readFileSync(cardsPath, "utf8");
+  expect(codes.every((code) => cardsCsv.includes(code))).toBe(true);
+  const voidRow = page.getByRole("row", { name: new RegExp(`…${codes[1].slice(-4)}`) });
+  await voidRow.getByRole("button", { name: "作废" }).click();
+  await expect(voidRow).toContainText("已作废");
+  await shot("cards");
+
+  await page.click("nav >> text=单位");
+  const demo = page.getByRole("row", { name: /计费演示单位/ });
+  await demo.getByRole("button", { name: "调整余额" }).click();
+  await page.fill("input[name=adjust-amount]", "5");
+  await page.fill("input[name=adjust-reason]", "端到端充值");
+  await page.click("[data-testid=adjust-panel] button[type=submit]");
+  await expect(demo).toContainText("5.00 USD");
+  await shot("balance-adjusted");
+
   await page.click("nav >> text=用量与账单");
   const usageRow = page.getByRole("row", { name: /计费演示单位/ });
   await expect(usageRow).toContainText("平台计费");
-  await expect(usageRow).toContainText("$0.0162");
+  await expect(usageRow).toContainText("0.0162 USD");
   const [download] = await Promise.all([page.waitForEvent("download"), page.click("text=导出 CSV")]);
   const csvPath = join(output, download.suggestedFilename());
   await download.saveAs(csvPath);
@@ -92,14 +118,9 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await expect(page.getByRole("heading", { name: "用量与账单" })).toBeVisible();
   await shot("usage");
 
-  await page.click("nav >> text=单位");
-  const created = page.getByRole("row", { name: /端到端测试单位/ });
-  await created.getByRole("button", { name: "停用" }).click();
-  await expect(created).toContainText("已停用");
-  await shot("org-disabled");
 
   await page.click("nav >> text=审计");
-  for (const label of ["登录", "开通单位", "修改模型", "测试模型", "启用/停用单位"]) {
+  for (const label of ["登录", "开通单位", "修改模型", "测试模型", "生成卡密", "作废卡密", "调整余额"]) {
     await expect(page.getByRole("cell", { name: label, exact: true }).first()).toBeVisible();
   }
   await shot("audit");
@@ -111,8 +132,24 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await anonymous.fill("input[name=confirm-password]", "e2e-admin-password-1");
   await anonymous.click("button[type=submit]");
   await expect(anonymous.getByRole("status")).toContainText("密码已设置");
-  await anonymous.screenshot({ path: join(output, "08-setup-password.png") });
-  await anonymous.close();
+  await anonymous.screenshot({ path: join(output, "org-1-setup-password.png") });
+
+  // The new org admin signs in and recharges with an issued card.
+  await anonymous.getByRole("link", { name: "登录单位" }).click();
+  await anonymous.fill("input[name=email]", "e2e-admin@example.test");
+  await anonymous.fill("input[name=password]", "e2e-admin-password-1");
+  await anonymous.click("button[type=submit]");
+  await expect(anonymous).toHaveURL(/\/app\/org\/billing$/);
+  await expect(anonymous.getByTestId("balance")).toHaveText("0.00 USD");
+  await anonymous.fill("input[name=card-code]", codes[1]);
+  await anonymous.click("form.panel button[type=submit]");
+  await expect(anonymous.getByRole("alert")).toContainText("卡密无效、已使用、已作废或已过期");
+  await anonymous.fill("input[name=card-code]", codes[0].toLowerCase());
+  await anonymous.click("form.panel button[type=submit]");
+  await expect(anonymous.getByRole("status")).toContainText("充值成功");
+  await expect(anonymous.getByTestId("balance")).toHaveText("30.00 USD");
+  await expect(anonymous.getByRole("row", { name: /卡密充值/ })).toBeVisible();
+  await anonymous.screenshot({ path: join(output, "org-2-billing.png"), fullPage: true });
   // Opening the same link again in a fresh tab must not allow a second password change.
   const reuse = await browser.newPage();
   await reuse.goto(link);
@@ -120,8 +157,18 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await reuse.fill("input[name=confirm-password]", "e2e-admin-password-2");
   await reuse.click("button[type=submit]");
   await expect(reuse.getByRole("alert")).toContainText("链接已失效或已使用");
-  await reuse.screenshot({ path: join(output, "09-setup-link-reused.png") });
+  await reuse.screenshot({ path: join(output, "org-3-setup-link-reused.png") });
   await reuse.close();
+
+  await page.click("nav >> text=单位");
+  const created = page.getByRole("row", { name: /端到端测试单位/ });
+  await expect(created).toContainText("30.00 USD");
+  await created.getByRole("button", { name: "停用" }).click();
+  await expect(created).toContainText("已停用");
+  await shot("org-disabled");
+  await anonymous.reload();
+  await expect(anonymous.getByRole("alert")).toHaveText("该单位已停用，请联系平台管理员");
+  await anonymous.close();
 
   await page.click("text=退出登录");
   await expect(page).toHaveURL(/\/app\/platform\/login$/);
@@ -131,6 +178,6 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   expect(consoleErrors.filter((text) => !text.includes("401"))).toEqual([]);
   writeFileSync(
     join(output, "result.json"),
-    JSON.stringify({ passed: true, steps: [...steps, "setup-password", "link-reuse-rejected", "signed-out"], csv: download.suggestedFilename() }, null, 2),
+    JSON.stringify({ passed: true, steps: [...steps, "setup-password", "org-redeem", "link-reuse-rejected", "disabled-org-blocked", "signed-out"], csv: download.suggestedFilename() }, null, 2),
   );
 });

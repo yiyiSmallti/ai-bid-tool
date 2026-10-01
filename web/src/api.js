@@ -1,11 +1,18 @@
-// Platform sessions live in sessionStorage: they expire after 30 minutes anyway,
-// and closing the tab signs the operator out.
-const KEY = "bid.platform.session";
+// Sessions live in sessionStorage: they expire on the server anyway, and closing
+// the tab signs the user out. Platform and org sessions are kept apart.
+const PLATFORM_KEY = "bid.platform.session";
+const ORG_KEY = "bid.org.session";
 
 export const session = {
-  get: () => sessionStorage.getItem(KEY),
-  set: (value) => sessionStorage.setItem(KEY, value),
-  clear: () => sessionStorage.removeItem(KEY),
+  get: () => sessionStorage.getItem(PLATFORM_KEY),
+  set: (value) => sessionStorage.setItem(PLATFORM_KEY, value),
+  clear: () => sessionStorage.removeItem(PLATFORM_KEY),
+};
+
+export const orgSession = {
+  get: () => JSON.parse(sessionStorage.getItem(ORG_KEY) ?? "null"),
+  set: (value) => sessionStorage.setItem(ORG_KEY, JSON.stringify(value)),
+  clear: () => sessionStorage.removeItem(ORG_KEY),
 };
 
 export class ApiError extends Error {
@@ -16,10 +23,20 @@ export class ApiError extends Error {
   }
 }
 
-export async function request(method, path, body) {
+const PUBLIC = new Set(["/platform/auth/login", "/auth/login", "/auth/orgs", "/auth/setup-password"]);
+
+export async function request(method, path, body, { org = false } = {}) {
   const headers = { "Content-Type": "application/json" };
-  const token = session.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
+  if (org) {
+    const current = orgSession.get();
+    if (current) {
+      headers.Authorization = `Bearer ${current.session}`;
+      headers["X-Org-Id"] = current.orgId;
+    }
+  } else {
+    const token = session.get();
+    if (token && path.startsWith("/platform/")) headers.Authorization = `Bearer ${token}`;
+  }
   const response = await fetch(path, {
     method,
     headers,
@@ -33,15 +50,18 @@ export async function request(method, path, body) {
   }
   if (!response.ok || !payload.ok) {
     const error = payload?.data?.error ?? {};
-    if (response.status === 401 && path.startsWith("/platform/") && path !== "/platform/auth/login") {
-      session.clear();
-      window.dispatchEvent(new Event("bid:signed-out"));
+    if (response.status === 401 && !PUBLIC.has(path)) {
+      (org ? orgSession : session).clear();
+      window.dispatchEvent(new CustomEvent("bid:signed-out", { detail: org ? "org" : "platform" }));
     }
     throw new ApiError(response.status, error.code ?? "request_failed", error.message ?? "请求失败");
   }
   return payload;
 }
 
-export const money = (value) =>
-  value === null || value === undefined ? "—" : `$${Number(value).toFixed(4)}`;
+export const money = (value, currency = "") => {
+  if (value === null || value === undefined) return "—";
+  const amount = Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return currency ? `${amount} ${currency}` : amount;
+};
 export const count = (value) => Number(value ?? 0).toLocaleString("zh-CN");

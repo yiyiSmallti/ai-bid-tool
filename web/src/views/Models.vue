@@ -18,13 +18,16 @@ const blank = () => ({
   expected_revision: null,
 });
 const models = ref([]);
+const currency = ref("");
 const form = ref(null);
 const error = ref("");
 const tests = ref({});
 
 async function load() {
   try {
-    models.value = (await request("GET", "/platform/models")).items;
+    const result = await request("GET", "/platform/models");
+    models.value = result.items;
+    currency.value = result.data.currency;
   } catch (exc) {
     error.value = exc.message;
   }
@@ -82,10 +85,10 @@ onMounted(load);
       <label>Base URL（可选，https）<input v-model="form.base_url" name="base-url" /></label>
       <label>凭据名<input v-model="form.credential" name="credential" placeholder="main" /></label>
       <span></span>
-      <label>成本价 输入（$/百万 token）<input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></label>
+      <label>成本价 输入（USD/百万 token）<input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></label>
       <label>成本价 输出<input v-model="form.vendor_output_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-output" /></label>
-      <label>售价 输入<input v-model="form.sale_input_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></label>
-      <label>售价 输出<input v-model="form.sale_output_per_mtok" type="number" min="0" step="0.01" name="sale-output" /></label>
+      <label>售价 输入（{{ currency }}/百万 token）<input v-model="form.sale_input_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></label>
+      <label>售价 输出（{{ currency }}）<input v-model="form.sale_output_per_mtok" type="number" min="0" step="0.01" name="sale-output" /></label>
       <label class="inline"><input v-model="form.enabled" type="checkbox" name="enabled" />启用</label>
       <label class="inline"><input v-model="form.default" type="checkbox" name="default" />设为默认</label>
     </div>
@@ -93,7 +96,7 @@ onMounted(load);
   </form>
   <table>
     <thead>
-      <tr><th>标识</th><th>服务商 / 模型</th><th>凭据</th><th class="num">成本价 入/出</th><th class="num">售价 入/出</th><th>状态</th><th></th></tr>
+      <tr><th>标识</th><th>服务商 / 模型</th><th>凭据</th><th class="num">成本价 入/出（USD）</th><th class="num">售价 入/出（{{ currency }}）</th><th>状态</th><th></th></tr>
     </thead>
     <tbody>
       <tr v-for="model in models" :key="model.id">
@@ -115,7 +118,7 @@ onMounted(load);
           <div v-if="tests[model.id]" class="hint" data-testid="test-result">
             <template v-if="tests[model.id].running">测试中…</template>
             <template v-else-if="tests[model.id].passed">
-              通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge) }}
+              通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge, currency) }}
             </template>
             <template v-else>未通过：{{ tests[model.id].error.code }}</template>
           </div>
