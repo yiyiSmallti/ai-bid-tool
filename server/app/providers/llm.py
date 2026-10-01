@@ -1,13 +1,17 @@
 """Requirement extraction through vendor HTTP APIs, called with httpx only."""
 
 import json
+import os
 import time
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.models.entities import PlatformModel
 from app.providers.base import ProviderFailure
 from app.providers.disabled import DisabledLLM
 from app.schemas.contracts import (
@@ -136,12 +140,21 @@ class HTTPExtractor:
     version = ADAPTER_VERSION
     test_only = False
 
-    def __init__(self, settings: Settings, transport: httpx.AsyncBaseTransport | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        transport: httpx.AsyncBaseTransport | None = None,
+        *,
+        platform_model_id: str | None = None,
+        sale_usd_per_mtok: tuple[float, float] | None = None,
+    ):
         if not settings.llm_model:
             raise ValueError("BID_LLM_MODEL is required")
         self.settings = settings
         self.model = settings.llm_model
         self.transport = transport
+        self.platform_model_id = platform_model_id
+        self.sale = sale_usd_per_mtok
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         usages: list[ProviderUsage] = []
@@ -197,7 +210,11 @@ class HTTPExtractor:
             version=self.version,
             duration_ms=sum(u.duration_ms for u in usages),
             tokens=sum(u.tokens for u in usages),
+            input_tokens=sum(u.input_tokens for u in usages),
+            output_tokens=sum(u.output_tokens for u in usages),
             usd=None if any(u.usd is None for u in usages) else sum(u.usd or 0 for u in usages),
+            platform_model_id=self.platform_model_id,
+            charge_usd=None if self.sale is None else sum(u.charge_usd or 0 for u in usages),
         )
 
     def usage(self, started: float, model: str, input_tokens: int, output_tokens: int):
@@ -207,13 +224,22 @@ class HTTPExtractor:
             if prices[0] is None or prices[1] is None
             else (input_tokens * prices[0] + output_tokens * prices[1]) / 1_000_000
         )
+        charge = (
+            None
+            if self.sale is None
+            else (input_tokens * self.sale[0] + output_tokens * self.sale[1]) / 1_000_000
+        )
         return ProviderUsage(
             provider=self.name,
             model=model,
             version=self.version,
             duration_ms=int((time.monotonic() - started) * 1000),
             tokens=input_tokens + output_tokens,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
             usd=usd,
+            platform_model_id=self.platform_model_id,
+            charge_usd=charge,
         )
 
     async def post(self, client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> dict:
@@ -374,3 +400,59 @@ def create_llm(settings: Settings):
     if settings.llm_provider == "openai":
         return OpenAICompatibleExtractor(settings)
     return DisabledLLM()
+
+
+class UnavailablePlatformModel(DisabledLLM):
+    """The catalog default exists but its credential is missing from the deployment."""
+
+    def __init__(self, entry: PlatformModel):
+        self.name, self.model = entry.provider, entry.model
+        self.version = f"{ADAPTER_VERSION}:{entry.id}:{entry.revision}"
+
+    async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
+        raise ProviderFailure("The platform model's credential is not configured")
+
+
+def credential_value(name: str) -> str | None:
+    return os.environ.get(f"BID_PLATFORM_CREDENTIAL_{name.upper()}") or None
+
+
+def platform_llm(settings: Settings, entry: PlatformModel, transport=None):
+    key = credential_value(entry.credential)
+    if key is None and (entry.provider == "anthropic" or not entry.base_url):
+        return UnavailablePlatformModel(entry)
+    configured = settings.model_copy(
+        update={
+            "llm_provider": entry.provider,
+            "llm_model": entry.model,
+            "llm_api_key": SecretStr(key) if key else None,
+            "llm_base_url": entry.base_url,
+            "llm_input_usd_per_mtok": float(entry.vendor_input_usd_per_mtok),
+            "llm_output_usd_per_mtok": float(entry.vendor_output_usd_per_mtok),
+        }
+    )
+    extractor = AnthropicExtractor if entry.provider == "anthropic" else OpenAICompatibleExtractor
+    llm = extractor(
+        configured,
+        transport,
+        platform_model_id=entry.id,
+        sale_usd_per_mtok=(
+            float(entry.sale_input_usd_per_mtok),
+            float(entry.sale_output_usd_per_mtok),
+        ),
+    )
+    # Editing the catalog entry changes the job cache key.
+    llm.version = f"{ADAPTER_VERSION}:{entry.id}:{entry.revision}"
+    return llm
+
+
+async def resolve_llm(session: AsyncSession, settings: Settings, fallback, transport=None):
+    """Use the platform default model when one is set, else the BID_LLM_* fallback."""
+    entry = await session.scalar(
+        select(PlatformModel).where(
+            PlatformModel.capability == "llm_extract",
+            PlatformModel.is_default.is_(True),
+            PlatformModel.enabled.is_(True),
+        )
+    )
+    return fallback if entry is None else platform_llm(settings, entry, transport)

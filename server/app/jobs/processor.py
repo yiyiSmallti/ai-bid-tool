@@ -19,9 +19,17 @@ from app.services.parsing import parse_document
 
 class Processor:
     def __init__(
-        self, settings: Settings, db: Database, storage: Storage, llm: LLMProvider, ocr: OCRProvider
+        self,
+        settings: Settings,
+        db: Database,
+        storage: Storage,
+        llm: LLMProvider,
+        ocr: OCRProvider,
+        resolve=None,
     ):
         self.settings, self.db, self.storage, self.llm, self.ocr = settings, db, storage, llm, ocr
+        # Optional coroutine (session) -> LLMProvider choosing the platform default model.
+        self.resolve = resolve
 
     async def record_usage(self, org_id: UUID, task_id: UUID, usages: list[ProviderUsage]):
         async with self.db.transaction(org_id) as session:
@@ -49,6 +57,7 @@ class Processor:
             if document is None:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, document.id
+            llm = await self.resolve(session) if self.resolve else self.llm
             key, suffix, expected_hash = (
                 document.storage_key,
                 Path(document.name).suffix.lower(),
@@ -100,7 +109,7 @@ class Processor:
                         400,
                         2,
                     )
-                output = await self.llm.extract(chunks, Extraction.model_json_schema())
+                output = await llm.extract(chunks, Extraction.model_json_schema())
                 usages = [output.usage]
                 # Usage is recorded even when output is invalid or the job is cancelled.
                 await self.record_usage(org_id, task_id, usages)

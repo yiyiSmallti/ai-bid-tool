@@ -3,9 +3,11 @@ import hashlib
 import json
 import secrets
 import time
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Any
 from urllib.parse import quote
 from uuid import UUID, uuid4
 
@@ -17,6 +19,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
 from app.api.platform import create_router as create_platform_router
@@ -27,7 +30,7 @@ from app.core.security import Secrets, token_digest
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task
-from app.providers.llm import create_llm
+from app.providers.llm import create_llm, resolve_llm
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
 from app.schemas.certificate_contracts import (
@@ -81,14 +84,25 @@ def result(command: str, data=None, items=None, warnings=None) -> dict:
     ).model_dump(mode="json")
 
 
-def create_app(settings: Settings | None = None, *, llm=None, ocr=None, queue=None) -> FastAPI:
+def create_app(
+    settings: Settings | None = None, *, llm=None, ocr=None, queue=None, llm_transport=None
+) -> FastAPI:
     settings = settings or Settings.load()
     db, crypto = Database(settings), Secrets(settings.encryption_key.get_secret_value())
     storage = create_storage(settings)
-    llm = llm or create_llm(settings)
+    # An injected provider is used as is; otherwise the platform default model, when set,
+    # takes precedence over the BID_LLM_* fallback for every job.
+    resolve: Callable[[AsyncSession], Awaitable[Any]] | None = None
+    if llm is None:
+        fallback = create_llm(settings)
+
+        async def resolve_default(session):
+            return await resolve_llm(session, settings, fallback, llm_transport)
+
+        resolve, llm = resolve_default, fallback
     ocr = ocr or LocalOCR(settings.ocr_language, settings.ocr_data_dir)
     queue = queue or Queue(settings)
-    processor = Processor(settings, db, storage, llm, ocr)
+    processor = Processor(settings, db, storage, llm, ocr, resolve)
     queue.processor = processor
 
     @asynccontextmanager
@@ -197,7 +211,7 @@ def create_app(settings: Settings | None = None, *, llm=None, ocr=None, queue=No
             ),
         )
 
-    app.include_router(create_platform_router(settings, db, crypto))
+    app.include_router(create_platform_router(settings, db, crypto, llm_transport))
 
     bearer = HTTPBearer(auto_error=False)
 
@@ -215,7 +229,11 @@ def create_app(settings: Settings | None = None, *, llm=None, ocr=None, queue=No
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
-        configured = not llm.test_only and llm.name != "unconfigured"
+        active = llm
+        if resolve is not None:
+            async with db.transaction() as session:
+                active = await resolve(session)
+        configured = not active.test_only and active.name != "unconfigured"
         return result(
             "health",
             {"status": "ok", "version": CONTRACT_VERSION, "real_llm_configured": configured},
@@ -956,10 +974,11 @@ def create_app(settings: Settings | None = None, *, llm=None, ocr=None, queue=No
             )
         if kind == "extract" and document.status != "parsed":
             raise ServiceError("not_parsed", "Parse the document before extraction", 400, 2)
+        model = await resolve(session) if resolve is not None else llm
         version = (
             f"{PARSER_VERSION}:{ocr.name}:{ocr.version}:{settings.ocr_language}"
             if kind == "parse"
-            else f"{PROMPT_VERSION}:{llm.name}:{llm.model}:{llm.version}"
+            else f"{PROMPT_VERSION}:{model.name}:{model.model}:{model.version}"
         )
         cache_key = hashlib.sha256(
             f"{document_id}:{document.sha256}:{kind}:{version}".encode()

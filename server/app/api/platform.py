@@ -1,26 +1,23 @@
 """Platform operator routes; no org context and no access to org business data."""
 
-from fastapi import APIRouter, Depends
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import Field
 
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
 from app.core.security import Secrets
-from app.schemas.contracts import Contract, Result
+from app.schemas.contracts import Result
+from app.schemas.platform_contracts import (
+    PasswordSetup,
+    PlatformLogin,
+    PlatformModelSet,
+    PlatformOrgActive,
+    PlatformOrgCreate,
+)
 from app.services import platform
-
-
-class PlatformLogin(Contract):
-    email: str = Field(min_length=3, max_length=254)
-    password: str = Field(min_length=1, max_length=1024)
-    totp: str = Field(min_length=6, max_length=6)
-
-
-class PasswordSetup(Contract):
-    token: str = Field(min_length=1, max_length=4096)
-    password: str = Field(min_length=1, max_length=1024)
 
 
 def result(command: str, data=None, items=None) -> dict:
@@ -29,7 +26,7 @@ def result(command: str, data=None, items=None) -> dict:
     )
 
 
-def create_router(settings: Settings, db: Database, crypto: Secrets) -> APIRouter:
+def create_router(settings: Settings, db: Database, crypto: Secrets, transport=None) -> APIRouter:
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False)
 
@@ -47,5 +44,58 @@ def create_router(settings: Settings, db: Database, crypto: Secrets) -> APIRoute
     async def setup_password(body: PasswordSetup):
         await platform.setup_password(db, crypto, body.token, body.password)
         return result("auth setup-password", {"password_set": True})
+
+    @router.get("/platform/orgs", name="platform_org_list", response_model=Result)
+    async def org_list(actor=Depends(operator)):
+        async with db.transaction() as session:
+            return result("platform org list", items=await platform.list_orgs(session))
+
+    @router.post("/platform/orgs", name="platform_org_create", response_model=Result)
+    async def org_create(body: PlatformOrgCreate, actor=Depends(operator)):
+        async with db.transaction() as session:
+            data = await platform.create_org(session, crypto, actor, body.name, body.admin_email)
+        return result("platform org create", data)
+
+    @router.post(
+        "/platform/orgs/{org_id}/active", name="platform_org_set_active", response_model=Result
+    )
+    async def org_set_active(org_id: UUID, body: PlatformOrgActive, actor=Depends(operator)):
+        async with db.transaction() as session:
+            data = await platform.set_org_active(session, actor, org_id, body.active)
+        return result("platform org set-active", data)
+
+    @router.get("/platform/models", name="platform_model_list", response_model=Result)
+    async def model_list(actor=Depends(operator)):
+        async with db.transaction() as session:
+            return result("platform model list", items=await platform.list_models(session))
+
+    @router.post("/platform/models", name="platform_model_set", response_model=Result)
+    async def model_set(body: PlatformModelSet, actor=Depends(operator)):
+        async with db.transaction() as session:
+            data = await platform.set_model(session, actor, body)
+        return result("platform model set", data)
+
+    @router.post(
+        "/platform/models/{model_id}/test", name="platform_model_test", response_model=Result
+    )
+    async def model_test(model_id: str, actor=Depends(operator)):
+        async with db.transaction() as session:
+            data = await platform.test_model(session, settings, actor, model_id, transport)
+        return result("platform model test", data)
+
+    @router.get("/platform/usage", name="platform_usage", response_model=Result)
+    async def usage(
+        start: str | None = Query(default=None, alias="from"),
+        end: str | None = Query(default=None, alias="to"),
+        actor=Depends(operator),
+    ):
+        async with db.transaction() as session:
+            data, items = await platform.usage(session, start, end)
+        return result("platform usage", data, items)
+
+    @router.get("/platform/audit", name="platform_audit", response_model=Result)
+    async def audit(limit: int = Query(default=100, ge=1, le=500), actor=Depends(operator)):
+        async with db.transaction() as session:
+            return result("platform audit", items=await platform.audit_entries(session, limit))
 
     return router

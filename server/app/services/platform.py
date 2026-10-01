@@ -3,18 +3,22 @@
 import asyncio
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.db import Database
-from app.core.errors import ServiceError
+from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets, hash_password, verify_password
 from app.core.totp import matching_counter
-from app.models.entities import PlatformAuditLog, User
+from app.models.entities import PlatformAuditLog, PlatformModel, User
+from app.providers.base import ProviderFailure
+from app.providers.llm import credential_value, platform_llm
+from app.schemas.platform_contracts import PlatformModelSet
 
 LOGIN_ACTION = "platform.login"
 MAX_FAILURES = 5
@@ -144,3 +148,244 @@ async def setup_password(db: Database, crypto: Secrets, token: str, password: st
         if user is None or not user.active or fingerprint(user.password_hash) != payload.get("fp"):
             raise invalid
         user.password_hash = await asyncio.to_thread(hash_password, password)
+
+
+def plain(value):
+    """JSON-ready values for aggregate rows (Decimal, dates, UUIDs)."""
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    if isinstance(value, UUID):
+        return str(value)
+    return value
+
+
+async def list_orgs(session: AsyncSession) -> list[dict]:
+    rows = (await session.execute(text("SELECT * FROM platform_org_summaries()"))).mappings()
+    return [{key: plain(value) for key, value in row.items()} for row in rows]
+
+
+async def create_org(
+    session: AsyncSession, crypto: Secrets, actor: PlatformIdentity, name: str, admin_email: str
+) -> dict:
+    created = (
+        await session.execute(
+            text("SELECT * FROM platform_create_org(:name, :email, :hash)"),
+            {"name": name, "email": admin_email, "hash": UNUSABLE_PASSWORD},
+        )
+    ).one()
+    user = await session.get(User, created.admin_user_id)
+    assert user is not None
+    # A link is issued whenever the admin has never set a password, including reused accounts.
+    link = None
+    if user.password_hash == UNUSABLE_PASSWORD:
+        link = "/app/setup-password#token=" + setup_token(crypto, user.id, user.password_hash)
+    audit(
+        session,
+        actor.email,
+        "platform.org.create",
+        "success",
+        str(created.new_org_id),
+        {
+            "admin_email": admin_email,
+            "user_created": created.user_created,
+            "setup_link": link is not None,
+        },
+    )
+    return {
+        "org_id": str(created.new_org_id),
+        "admin_user_id": str(created.admin_user_id),
+        "admin_email": admin_email,
+        "user_created": created.user_created,
+        "setup_url": link,
+        "setup_expires_in": SETUP_SECONDS if link else None,
+    }
+
+
+async def set_org_active(
+    session: AsyncSession, actor: PlatformIdentity, org_id: UUID, active: bool
+) -> dict:
+    changed = await session.scalar(
+        text("SELECT platform_set_org_active(:org, :active)"), {"org": org_id, "active": active}
+    )
+    if not changed:
+        raise not_found()
+    audit(session, actor.email, "platform.org.active", "success", str(org_id), {"active": active})
+    return {"org_id": str(org_id), "active": active}
+
+
+MODEL_FIELDS = (
+    "id", "capability", "provider", "model", "base_url", "credential",
+    "vendor_input_usd_per_mtok", "vendor_output_usd_per_mtok",
+    "sale_input_usd_per_mtok", "sale_output_usd_per_mtok",
+    "enabled", "revision", "updated_by", "updated_at",
+)  # fmt: skip
+
+
+def model_view(row: PlatformModel) -> dict:
+    view = {field: plain(getattr(row, field)) for field in MODEL_FIELDS}
+    view["default"] = row.is_default
+    # Only whether the deployment holds the key; the key itself never leaves the environment.
+    view["credential_configured"] = credential_value(row.credential) is not None
+    return view
+
+
+async def list_models(session: AsyncSession) -> list[dict]:
+    rows = await session.scalars(select(PlatformModel).order_by(PlatformModel.id))
+    return [model_view(row) for row in rows]
+
+
+async def set_model(session: AsyncSession, actor: PlatformIdentity, body: PlatformModelSet) -> dict:
+    row = await session.scalar(
+        select(PlatformModel).where(PlatformModel.id == body.id).with_for_update()
+    )
+    values = body.model_dump(exclude={"id", "default", "expected_revision"})
+    if row is None:
+        if body.expected_revision is not None:
+            raise not_found()
+        row = PlatformModel(id=body.id, revision=1, updated_by=actor.email, **values)
+        session.add(row)
+    else:
+        if body.expected_revision != row.revision:
+            raise ServiceError(
+                "revision_conflict",
+                "Model changed; read the current revision before updating",
+                409,
+                2,
+            )
+        for key, value in values.items():
+            setattr(row, key, value)
+        row.revision += 1
+        row.updated_by = actor.email
+        row.updated_at = datetime.now(UTC)
+    if body.default:
+        # Only one default per capability; the partial unique index enforces it too.
+        await session.execute(
+            update(PlatformModel)
+            .where(PlatformModel.capability == body.capability, PlatformModel.id != body.id)
+            .values(is_default=False)
+        )
+    row.is_default = body.default
+    await session.flush()
+    audit(
+        session,
+        actor.email,
+        "platform.model.set",
+        "success",
+        body.id,
+        {"revision": row.revision, "default": body.default, "enabled": body.enabled},
+    )
+    return model_view(row)
+
+
+TEST_PAGE = "合成测试页面：投标人须具备有效的营业执照。"
+
+
+async def test_model(
+    session: AsyncSession,
+    settings: Settings,
+    actor: PlatformIdentity,
+    model_id: str,
+    transport=None,
+) -> dict:
+    row = await session.get(PlatformModel, model_id)
+    if row is None:
+        raise not_found()
+    llm = platform_llm(settings, row, transport)
+    chunk = {
+        "id": uuid4(),
+        "document_id": uuid4(),
+        "page": 1,
+        "text": TEST_PAGE,
+        "citation_verified": True,
+    }
+    try:
+        output = await llm.extract([chunk], {})
+    except ProviderFailure as exc:
+        usage = exc.usage[-1].model_dump() if exc.usage else None
+        audit(
+            session,
+            actor.email,
+            "platform.model.test",
+            "failed",
+            model_id,
+            {"code": exc.code, "usage": usage},
+        )
+        return {
+            "model_id": model_id,
+            "passed": False,
+            "error": {"code": exc.code, "message": str(exc)},
+            "usage": usage,
+        }
+    usage = output.usage.model_dump()
+    audit(
+        session,
+        actor.email,
+        "platform.model.test",
+        "success",
+        model_id,
+        {"items": len(output.extraction.items), "usage": usage},
+    )
+    return {
+        "model_id": model_id,
+        "passed": True,
+        "items": len(output.extraction.items),
+        "usage": usage,
+    }
+
+
+def parse_month(value: str) -> date:
+    try:
+        year, month = (int(part) for part in value.split("-"))
+        return date(year, month, 1)
+    except ValueError:
+        raise ServiceError("invalid_month", "Months use the YYYY-MM format", 400, 2) from None
+
+
+async def usage(
+    session: AsyncSession, start: str | None, end: str | None
+) -> tuple[dict, list[dict]]:
+    today = datetime.now(UTC).date()
+    first = parse_month(start) if start else today.replace(day=1)
+    last = parse_month(end) if end else first
+    if last < first or (last.year - first.year) * 12 + last.month - first.month > 36:
+        raise ServiceError("invalid_month", "Choose a range of at most 36 months", 400, 2)
+    names = {row["id"]: row["name"] for row in await list_orgs(session)}
+    rows = (
+        await session.execute(
+            text("SELECT * FROM platform_usage_summary(:a, :b)"), {"a": first, "b": last}
+        )
+    ).mappings()
+    items = [
+        {
+            **{key: plain(value) for key, value in row.items()},
+            "org_name": names.get(str(row["org_id"])),
+        }
+        for row in rows
+    ]
+    totals = {
+        "calls": sum(item["calls"] for item in items),
+        "tokens": sum(item["tokens"] for item in items),
+        "vendor_usd": round(sum(item["vendor_usd"] for item in items), 8),
+        "charge_usd": round(sum(item["charge_usd"] for item in items), 8),
+    }
+    return {"from": first.isoformat()[:7], "to": last.isoformat()[:7], "totals": totals}, items
+
+
+async def audit_entries(session: AsyncSession, limit: int) -> list[dict]:
+    rows = await session.scalars(
+        select(PlatformAuditLog).order_by(PlatformAuditLog.created_at.desc()).limit(limit)
+    )
+    return [
+        {
+            "id": str(row.id),
+            "created_at": row.created_at.isoformat(),
+            "actor_email": row.actor_email,
+            "action": row.action,
+            "object_id": row.object_id,
+            "outcome": row.outcome,
+            "details": row.details,
+        }
+        for row in rows
+    ]

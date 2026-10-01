@@ -8,31 +8,18 @@ import httpx
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from app.core.security import hash_password
-from app.core.totp import STEP_SECONDS, code_at, generate_secret
+from app.core.totp import STEP_SECONDS, code_at
 from app.models.entities import PlatformAuditLog, User
 from app.services import platform
-from conftest import PASSWORD, FakeQueue
+from conftest import OPERATOR, OPERATOR_PASSWORD, PASSWORD, FakeQueue
+from conftest import OPERATOR_SECRET as SECRET
 from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-OPERATOR = "ops@example.test"
-OPERATOR_PASSWORD = "synthetic-operator-password"
-SECRET = generate_secret()
-
 
 def now_counter() -> int:
     return int(time.time() // STEP_SECONDS)
-
-
-@pytest.fixture
-def operator(tenants, admin_engine):
-    with Session(admin_engine) as session, session.begin():
-        session.add(
-            User(id=uuid4(), email=OPERATOR, password_hash=hash_password(OPERATOR_PASSWORD))
-        )
-    return OPERATOR
 
 
 def platform_settings(tmp_path, admins=OPERATOR):

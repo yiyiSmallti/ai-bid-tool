@@ -8,6 +8,7 @@ from alembic.config import Config
 from app.api.main import create_app
 from app.core.config import Settings
 from app.core.security import hash_password
+from app.core.totp import generate_secret
 from app.models.entities import Membership, Org, User
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
@@ -15,6 +16,9 @@ from sqlalchemy.orm import Session
 
 PASSWORD = "synthetic-test-password-only"
 PASSWORD_HASH = hash_password(PASSWORD)
+OPERATOR = "ops@example.test"
+OPERATOR_PASSWORD = "synthetic-operator-password"
+OPERATOR_SECRET = generate_secret()
 
 
 @pytest.fixture(scope="session")
@@ -136,3 +140,13 @@ def docx_bytes():
     buffer = BytesIO()
     document.save(buffer)
     return buffer.getvalue()
+
+
+@pytest.fixture
+def operator(tenants, admin_engine):
+    """A platform operator identity; settings must list OPERATOR with OPERATOR_SECRET."""
+    with Session(admin_engine) as session, session.begin():
+        session.add(
+            User(id=uuid4(), email=OPERATOR, password_hash=hash_password(OPERATOR_PASSWORD))
+        )
+    return OPERATOR
