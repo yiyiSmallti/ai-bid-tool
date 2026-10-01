@@ -517,9 +517,33 @@ async def fake_request(self, method, path, **kwargs):
                     "document_id": IDENTIFIER,
                     "chunk_id": IDENTIFIER,
                     "page": 1,
+                    "location": None,
                     "quote": "Synthetic source",
                 },
-            }
+            },
+            {
+                "id": IDENTIFIER,
+                "text": "Synthetic Word requirement",
+                "category": "technical",
+                "starred": True,
+                "condition": {},
+                "source": {
+                    "document_id": IDENTIFIER,
+                    "chunk_id": IDENTIFIER,
+                    "page": None,
+                    "location": {
+                        "block_id": "t1r2c2",
+                        "kind": "cell",
+                        "section_path": ["第一章 总则"],
+                        "paragraph": None,
+                        "table": 1,
+                        "row": 2,
+                        "column": 2,
+                        "label": "第一章 总则 > 表 1 第 2 行第 2 列",
+                    },
+                    "quote": "★ 核心数不少于 32 核",
+                },
+            },
         ]
     elif path == "/tokens":
         data = {

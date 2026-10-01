@@ -656,10 +656,36 @@
         "source": {
           "chunk_id": "00000000-0000-0000-0000-000000000001",
           "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
           "page": 1,
           "quote": "Synthetic source"
         },
         "text": "Synthetic requirement"
+      },
+      {
+        "category": "technical",
+        "condition": {},
+        "id": "00000000-0000-0000-0000-000000000001",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": {
+            "block_id": "t1r2c2",
+            "column": 2,
+            "kind": "cell",
+            "label": "第一章 总则 > 表 1 第 2 行第 2 列",
+            "paragraph": null,
+            "row": 2,
+            "section_path": [
+              "第一章 总则"
+            ],
+            "table": 1
+          },
+          "page": null,
+          "quote": "★ 核心数不少于 32 核"
+        },
+        "starred": true,
+        "text": "Synthetic Word requirement"
       }
     ],
     "ok": true,
