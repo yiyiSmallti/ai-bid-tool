@@ -43,8 +43,9 @@ guessed from local files.
 bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE task create --name TASK_NAME --tender TENDER.pdf --deadline 2027-01-31T17:00:00+08:00 --json
 bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE tender parse --document DOCUMENT_ID --wait --timeout 120 --json
 bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req extract --document DOCUMENT_ID --dry-run --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req extract --document DOCUMENT_ID --wait --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req extract --document DOCUMENT_ID --reasoning high --wait --json
 bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req list --task TASK_ID --json
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req history --task TASK_ID --json
 ```
 
 1. `task create --tender` creates the task, uploads the file, and starts
@@ -52,20 +53,33 @@ bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req list --t
 2. `tender parse --wait` blocks until the job finishes or the timeout expires.
    A timeout exits 3 and does not cancel the server job; continue with
    `job wait JOB_ID` or `job status JOB_ID`.
-3. `req extract --dry-run` reports whether the document is parsed without
-   calling a model or creating a job. Cost estimates are `null` when unknown.
+3. `req extract --dry-run` reports whether the document is parsed and lists
+   the model's reasoning levels (`reasoning_levels`, with the default marked)
+   without calling a model or creating a job. Cost estimates are `null` when
+   unknown.
 4. `req extract` requires a parsed PDF or Word document with verified
    citations and a configured model ([development.md](development.md#configure-the-extraction-model)).
    Without one it fails with `provider_unavailable` and exit 4. Items whose
    quote is not found at the cited position are not saved; the job still
    succeeds, lists them in `result.rejected`, and adds a warning. If no item
    passes, the job fails with `invalid_citation` and saves nothing.
-5. `job cancel JOB_ID` stops a queued or running job; a cancelled attempt can
+5. `--reasoning LEVEL` picks one of the model's official reasoning levels;
+   without it the vendor's default level is used. Higher levels find more
+   requirements and take much longer. Each level is its own job: repeating a
+   level returns the same job, another level runs a new one. A level the model
+   does not offer fails with `unsupported_reasoning` and exit 2; a model
+   without levels runs anyway and warns.
+6. `job cancel JOB_ID` stops a queued or running job; a cancelled attempt can
    no longer save results. To run a failed, cancelled, or expired job again,
    repeat the parse or extract command with `--retry`. Repeating it without
    `--retry` returns the existing job.
 
-Requirements are listed in reading order. A PDF source cites `page`; a Word
+`req list` shows, for each document, the requirements of its latest
+succeeded extraction; pass `--job JOB_ID` to see another one. `req history`
+lists every extraction of the task (optionally `--document DOCUMENT_ID`) with
+its level, model, status, saved and rejected counts, and tokens; `latest`
+marks the ones `req list` shows. Each requirement carries its `job_id` and
+`reasoning`. Requirements are listed in reading order. A PDF source cites `page`; a Word
 source has `page: null` and a `location` with the block ID, the heading path,
 and a `label` such as `第五章 采购需求 > 表 5 第 3 行第 2 列`. Text boxes, headers,
 and footers in Word files are not parsed; the parse result lists them under
@@ -248,7 +262,11 @@ bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform usa
    [platform_contracts.py](../../server/app/schemas/platform_contracts.py).
    Send `expected_revision` when updating. Setting `default: true` makes the
    model the one used and billed for extraction.
-5. `platform model test --id MODEL_ID` makes one real vendor call.
+5. `platform model test --id MODEL_ID` makes one real vendor call per
+   registered reasoning level and reports each under `levels`. Register levels
+   in `reasoning` with the vendor's official names and mark the official
+   default in `default_reasoning`; see
+   [reasoning-levels.md](../notes/reasoning-levels.md).
 6. `platform org list`, `platform model list`, and `platform audit` read the
    current state.
 

@@ -6,6 +6,18 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-02：按官方档位选择推理强度与抽取历史
+
+- 平台模型目录登记服务商公布的推理强度档位（如智谱 GLM-5.3 的 low、high、max），每档带请求参数、
+  批次大小和 Anthropic effort，并标出官方默认档；运营后台可编辑档位并逐档测试。
+- `bid req extract --reasoning LEVEL` 选择档位，不选时用官方默认档；未登记的档位以
+  `unsupported_reasoning` 失败，未分档的模型忽略并警告。`--dry-run` 列出可用档位。
+- 每次抽取的要求独立保存：`req list` 默认显示每个文档最近一次成功的抽取，`--job` 查看指定一次，
+  `req history` 列出全部抽取；要求带 `job_id` 与 `reasoning`。Result 契约升为 1.2。
+- 迁移 `0014`。决定见 [ADR 0004](adr/0004-extractions-per-reasoning-level.md)，机制见
+  [reasoning-levels.md](notes/reasoning-levels.md)。
+- 当时的完整回归：568 项通过；Playwright 端到端检查通过。
+
 ## 2026-10-02：服务商额度用完的提示
 
 - 服务商返回额度用完、欠费或套餐失效（HTTP 402、`insufficient_quota`、`billing_error`、

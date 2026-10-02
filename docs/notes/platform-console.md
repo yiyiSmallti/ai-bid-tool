@@ -50,7 +50,9 @@ processing. Usage then stores vendor cost in `usd` and the sale-price amount, in
 `BID_BILLING_CURRENCY`, in `charge`; the charge is deducted from the prepaid
 balance described in [prepaid-billing.md](prepaid-billing.md). Without a default, the `BID_LLM_*` fallback is used and its usage
 counts as `unbilled`. A default whose credential is missing fails extraction
-with `provider_unavailable` instead of falling back.
+with `provider_unavailable` instead of falling back. Catalog models may list
+the vendor's official reasoning levels; see
+[reasoning-levels.md](reasoning-levels.md).
 
 The API serves the built console from `BID_WEB_DIR` under `/app`, returning
 `index.html` for client routes and never a file outside the build, with a

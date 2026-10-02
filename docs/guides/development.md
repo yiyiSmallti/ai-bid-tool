@@ -106,7 +106,8 @@ env file or your secret manager.
    `BID_LLM_TIMEOUT_SECONDS` (total deadline per request, default 600), and
    `BID_LLM_REQUEST_OPTIONS`, a JSON object added to every request body, for
    example `{"thinking": {"type": "disabled"}}` for models that otherwise
-   think until the output limit.
+   think until the output limit. Catalog models with reasoning levels use each
+   level's own options and batch size instead.
 4. Restart the API and the worker. `GET /health` reports
    `real_llm_configured: true`. A selected provider with a missing key or
    model stops startup instead of falling back to disabled.
