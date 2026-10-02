@@ -161,6 +161,8 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await anonymous.fill("input[name=email]", "e2e-admin@example.test");
   await anonymous.fill("input[name=password]", "e2e-admin-password-1");
   await anonymous.click("button[type=submit]");
+  await expect(anonymous).toHaveURL(/\/app\/org\/tasks$/);
+  await anonymous.getByRole("link", { name: "余额与充值" }).click();
   await expect(anonymous).toHaveURL(/\/app\/org\/billing$/);
   await expect(anonymous.getByTestId("balance")).toHaveText("0.00 USD");
   await anonymous.fill("input[name=card-code]", codes[1]);
