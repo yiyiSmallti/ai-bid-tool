@@ -16,6 +16,8 @@ kind: changelog
   `req history` 列出全部抽取；要求带 `job_id` 与 `reasoning`。Result 契约升为 1.2。
 - 迁移 `0014`。决定见 [ADR 0004](adr/0004-extractions-per-reasoning-level.md)，机制见
   [reasoning-levels.md](notes/reasoning-levels.md)。
+- 样例 Word 招标文件、GLM-5.3-Flash 实测：`low` 141 秒保存 484 条、15 万 token；`max`（4,000 字一批）
+  51 分钟保存 914 条、95 万 token；两档引用不通过各 1、2 条，★ 条款均 23/23 覆盖。
 - 模型返回空引用或空要求文字的条目按单条拒绝（`empty_quote`、`empty_text`）；抽取中的意外错误也会
   保留已发生调用的用量，日志只记录异常类型与调用栈。
 - 网络中断、超时、限流等临时错误先在批次内重试两次（10 秒、30 秒后），不再让整个作业从头重排；
