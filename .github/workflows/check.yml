@@ -1,0 +1,55 @@
+name: check
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: bid_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-ci-test-only
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d bid_test" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      BID_TEST_ADMIN_URL: postgresql+psycopg://postgres:synthetic-ci-test-only@127.0.0.1:5432/bid_test
+      BID_DATABASE_URL: postgresql+psycopg://bid_app:synthetic-ci-test-only@127.0.0.1:5432/bid_test
+      BID_DATABASE_PASSWORD: synthetic-ci-test-only
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.7"
+      - run: uv sync --frozen --extra dev --python 3.12
+      - name: Create ephemeral test encryption configuration
+        run: |
+          uv run python - <<'PY'
+          import os
+          from cryptography.fernet import Fernet
+          with open(os.environ["GITHUB_ENV"], "a") as handle:
+              handle.write("BID_ENCRYPTION_KEY=" + Fernet.generate_key().decode() + "\n")
+              handle.write("BID_CLI_KEY=" + Fernet.generate_key().decode() + "\n")
+          PY
+      - run: uv run ruff check server cli scripts evals
+      - run: uv run ruff format --check server cli scripts evals
+      - run: uv run pyright
+      - run: uv run pytest -q
+      - run: uv build
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run build
+

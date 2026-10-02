@@ -1,0 +1,94 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16@sha256:ccc6e83d6e35e931dc7c5def2022729d5a6c370318d099181995567ff1fb4d6b
+    environment:
+      POSTGRES_DB: bid
+      POSTGRES_USER: bid_owner
+      POSTGRES_PASSWORD: ${BID_OWNER_PASSWORD:?Set BID_OWNER_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bid_owner -d bid"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  minio:
+    # Developer test dependency, built from pinned official community source.
+    # A maintained production object store remains an explicit deployment choice.
+    image: bid-tool-minio-dev:7aac2a2c5b7c
+    build:
+      context: ..
+      dockerfile: deploy/minio.Dockerfile
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${BID_S3_ACCESS_KEY:?Set BID_S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${BID_S3_SECRET_KEY:?Set BID_S3_SECRET_KEY}
+    ports:
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+    volumes:
+      - objects:/data
+  migrate:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: python -m app.admin init-db
+    environment:
+      BID_MIGRATION_DATABASE_URL: ${BID_MIGRATION_DATABASE_URL:?Set migration URL for bid_owner at postgres/bid}
+      BID_DATABASE_PASSWORD: ${BID_DATABASE_PASSWORD:?Set BID_DATABASE_PASSWORD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: uvicorn app.api.main:create_app --factory --host 0.0.0.0 --port 8000 --no-access-log
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment: &runtime
+      BID_DATABASE_URL: ${BID_DATABASE_URL:?Set runtime URL for bid_app at postgres/bid}
+      BID_ENCRYPTION_KEY: ${BID_ENCRYPTION_KEY:?Set encryption key}
+      BID_STORAGE: ${BID_STORAGE:-local}
+      BID_DATA_DIR: /app/data
+      BID_S3_ENDPOINT: ${BID_S3_CONTAINER_ENDPOINT:-http://minio:9000}
+      BID_S3_BUCKET: ${BID_S3_BUCKET:-bid}
+      BID_S3_ACCESS_KEY: ${BID_S3_ACCESS_KEY}
+      BID_S3_SECRET_KEY: ${BID_S3_SECRET_KEY}
+      BID_OCR_DATA_DIR: /usr/share/tesseract-ocr/5/tessdata
+      BID_OCR_LANGUAGE: ${BID_OCR_LANGUAGE:-chi_sim+eng}
+      BID_LLM_PROVIDER: ${BID_LLM_PROVIDER:-disabled}
+      BID_LLM_MODEL: ${BID_LLM_MODEL:-}
+      BID_LLM_API_KEY: ${BID_LLM_API_KEY:-}
+      BID_LLM_BASE_URL: ${BID_LLM_BASE_URL:-}
+      BID_LLM_EFFORT: ${BID_LLM_EFFORT:-high}
+      BID_LLM_ANTHROPIC_FALLBACK: ${BID_LLM_ANTHROPIC_FALLBACK:-true}
+      BID_LLM_JSON_MODE: ${BID_LLM_JSON_MODE:-json_schema}
+      BID_LLM_BATCH_CHARS: ${BID_LLM_BATCH_CHARS:-30000}
+      BID_LLM_MAX_OUTPUT_TOKENS: ${BID_LLM_MAX_OUTPUT_TOKENS:-16000}
+      BID_LLM_INPUT_USD_PER_MTOK: ${BID_LLM_INPUT_USD_PER_MTOK:-}
+      BID_LLM_OUTPUT_USD_PER_MTOK: ${BID_LLM_OUTPUT_USD_PER_MTOK:-}
+      BID_PLATFORM_ADMIN_EMAILS: ${BID_PLATFORM_ADMIN_EMAILS:-}
+      BID_PLATFORM_TOTP_SECRETS: ${BID_PLATFORM_TOTP_SECRETS:-}
+      BID_PLATFORM_CREDENTIAL_MAIN: ${BID_PLATFORM_CREDENTIAL_MAIN:-}
+      BID_BILLING_CURRENCY: ${BID_BILLING_CURRENCY:-USD}
+    volumes:
+      - files:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    command: python -m app.jobs.worker
+    environment: *runtime
+    volumes:
+      - files:/app/data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+volumes:
+  postgres:
+  objects:
+  files:

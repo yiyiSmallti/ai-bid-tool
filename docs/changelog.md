@@ -1,0 +1,234 @@
+---
+kind: changelog
+---
+
+# 变更记录
+
+按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
+
+## 2026-10-02：调用预留、引用边界与星号判定修复
+
+- 抽取、起草的两种 HTTP adapter 共用输出上限选项校验，运营模型目录禁止保存这些字段及别名；
+  预留与起草预估统一取实际请求中最大的输出上限，避免较小别名造成少预留。接入缓存版本更新。
+- 新增迁移 `0019`，让人工确认与组表使用和 Python 相同的原文区间、规范化及分段边界判定，
+  修复 `3.5mm/5mm`、`内存/扩展内存` 的内部匹配误判；保留逐字引用要求，不改写历史数据。
+- 结算连接池超时、不可恢复的数据库或记账错误先停止后续准入；写入未知状态再失败也保留停止状态
+  和原预留，已发送调用继续结算，明确可恢复的 DBAPI 错误仍有限重试。
+- 星号合并按引用在完整原文中的区间判断归属，不再用子串标星或遮蔽缺失星号段；后处理缓存版本更新。
+- 增加 MockTransport 驱动的 API 与作业回归场景，覆盖目录校验、调用计费、引用修复到人工确认及组表、
+  星号补入和 SQL/Python 一致性。机制见 [LLM 接入层](notes/llm-providers.md)、
+  [预付计费](notes/prepaid-billing.md)、[Word 引用](notes/docx-citations.md)及
+  [响应卡片](notes/response-cards.md)。
+
+- 由 Codex 按第二轮挑战式复审实现，在真实数据库上验证并修正一处测试字段名；当时的完整回归：819 项通过。
+## 2026-10-02：模型响应起草与外发遮挡
+
+- 新增 `bid card generate`、对应 API 和后台作业：按指定抽取作业及要求生成 model/worker 草稿，
+  提出处置建议、响应、偏离与候选引用；受保护卡片跳过，落盘复核版本，模型不能弱化已记录负偏离。
+- 提交固定并加密保存输入正文；清单限定为已选要求原文/位置、任务固定资源可引用字段及证书来源页
+  本地文本，公开预检只返回标识、哈希、遮挡状态、版本与命中数。默认遮挡金额、联系人/电话、
+  身份证号、银行账号，仅单位人类 admin 能关闭；每次厂商调用前重新检查权限和设置修订。
+- Anthropic 与 OpenAI 兼容 adapter 增加结构化起草，共用默认模型、官方 reasoning、逐次准入、
+  用量结算和预付扣费；起草分批、截断/格式错误拆分及瞬时重试均计费，首轮计划参与调用上限。
+  有效部分结果保留并返回退出码 5，未完成项和引用拒绝只报告标识及原因，不记录原始收发文本。
+- 模型局部引用同时核验实际发送文本和固定原文；无有效引用仍为需补材料的 evidence 草稿，
+  不自动转承诺。承诺多余引用丢弃并警示；候选证据和文字始终需要人工审阅确认。
+- 迁移 `0018` 扩大起草记录的 adapter 目录标识字段，并补充模型输入依赖在人工确认、旧稿失效和
+  组表时的数据库关口；不新增业务表，不改写历史。组表规则更新为 `response-draft-v3`。
+- 注册命令与 CLI JSON 快照，Result 七键及版本保持 `1.2`。原批准契约转换为
+  [ADR 0005](adr/0005-human-confirmed-responses.md)，机制见
+  [响应卡片](notes/response-cards.md)、[模型外发与遮挡](notes/model-drafting-redaction.md)和
+  [LLM 接入层](notes/llm-providers.md)，操作见 [CLI 指南](guides/cli.md#generate-model-response-proposals)。
+- 凭据未配置的平台模型不再先检查余额，抽取与起草直接以 `provider_unavailable` 说明原因。
+  由 Codex 实现，在真实数据库上验证并修正；当时的完整回归：768 项通过。
+
+## 2026-10-02：要求引用精确原文与受控修复
+
+- 抽取引用先按 NFKC、弯直引号和空白规范化定位，再保存唯一命中的原文连续片段；模型原始引文另存
+  `model_quote`。无匹配、重复匹配和未知位置按条拒绝，其余已核验结果继续保存。
+- 参数补漏不再把覆盖多个参数的整段引文当成逐项覆盖；★ 规则按分号和换行分段，只标记明确带星号的
+  分段并补入缺失项。`gap_fill.remaining` 报告最终保存及规则补入后仍未覆盖的参数数。
+- 抽取提示词保持 `req-v3`；新增后处理缓存版本 `exact-spans-v1`，HTTP adapter 更新为 v4，使所有服务商
+  在引用语义变化后重新抽取。Result 契约版本保持 `1.2`。
+- 新增仅单位人类 admin 可用的 `bid req repair-citations`：默认只读预览，执行需提交预览哈希和原因；
+  范围、来源或当前卡片变化时报 `repair_preview_changed`，不能唯一定位的历史要求保持不变。审计只记
+  要求、任务、作业、卡片标识及新旧引用、模型引文和操作原因的哈希，不记录这些原始文本。
+- 迁移 `0017` 增加可空的 `requirements.model_quote` 与卡片修订引用哈希，不改写既有修订历史。
+  修复后引用哈希变化的卡片派生 `needs_reconfirmation`，仅遵守项需重新人工处置；
+  `response-draft-v2` 组表将其列为缺口，读取旧初稿时重新计算有效性并保留原快照。机制见
+  [LLM 抽取](notes/llm-providers.md)、[Word 引用](notes/docx-citations.md)和
+  [响应卡片](notes/response-cards.md)，操作见[CLI 指南](guides/cli.md#repair-legacy-requirement-citations)。
+- 同一位置出现多处规范化匹配时，选择两侧以文本边界、空白或列表标点分隔的那一处，避免 `5mm插孔`
+  与 `3.5mm插孔`、`内存` 与 `扩展内存` 互相误判。由 Codex 实现，在真实数据库上验证并修正；
+  当时的完整回归：727 项通过。
+
+## 2026-10-02：模型调用预算、即时记账与作业租约
+
+- 新增共享作业执行上下文；提取的首轮、拆分、补漏和重试均在调用前检查 attempt 归属、
+  取消状态、累计调用上限和平台费用上限，按单位事务预占调用费用，避免并发重复使用余额。
+- 迁移 `0016` 增加强制单位隔离的调用记录和 usage 幂等关联。收到有效用量后立即将记录、
+  扣款、账目和累计费用同事务提交；记账重试不重复扣款，旧 attempt 的迟到费用仍保留。
+  超限的提取作业失败且不保存半份要求，已有用量不丢弃。
+- 作业按 `run_id` 续租，长请求期间继续心跳；取消、租约失效或接管阻止旧 attempt 继续调用。
+  普通取消等待已发出的调用记账，未知结果的预占留待对账。
+- 增加基于 API、processor 与 `httpx.MockTransport` 的预算、并发、取消、记账重试、心跳、
+  接管及租户隔离场景。费用上界与恢复限制见[预付费机制](notes/prepaid-billing.md)，
+  参数见[开发指南](guides/development.md#configure-job-guards)。
+- 每个作业的调用次数上限随首轮批次数增长（`BID_JOB_VENDOR_CALLS_PER_BATCH`，默认每批 4 次，不低于
+  `BID_JOB_MAX_VENDOR_CALLS`），大型招标文件不会在首轮中途被截停。由 Codex 实现，在真实数据库上验证；
+  当时的完整回归：717 项通过。
+## 2026-10-02：统一密码登录限速与 TOTP 原子消费
+
+- 单位列表查询、单位登录和平台登录共用归一化账号的失败计数；复用现有审计表及
+  PostgreSQL 事务锁，补充来源限制，未知、停用及未设置密码账号沿用统一失败响应。
+- 密码校验使用独立线程池、有限等待队列和跨 API 进程的计算槽位；饱和或等待超时
+  返回可重试错误，取消请求后仍保留执行中的容量并完成失败记账。
+- 平台 TOTP 在同一账号锁及事务内读取并消费计数，提交成功记录后才签发会话，
+  防止并发请求复用验证码。不新增迁移或依赖。
+- 规则和边界见 [平台认证机制](notes/platform-console.md#password-admission-and-totp-consumption)，
+  重试步骤见 [开发指南](guides/development.md#run-the-platform-console)。
+
+## 2026-10-02：人工响应卡片与偏离表初稿第一阶段
+
+- 新增卡片创建、编辑、分类、提交、确认、驳回、补材料、撤回和重开，以及同抽取作业的
+  原子批量处置。按技术/商务职责逐项人工决策，令牌、agent、worker 不能确认或处置。
+- 迁移 `0015` 增加响应修订、真实材料 Evidence 与链接、起草运行记录和三表快照；
+  新表强制单位隔离，数据库检查人工身份、状态迁移、不可变历史、关联完整性和全集覆盖。
+  任务遮挡设置默认开启，仅人类 admin 可修改；预留第二阶段模型起草与固定输入字段。
+- `bid draft` 后台确定性组表，复制确认内容，分别输出实质性、商务、技术表、须遵守清单和
+  缺口，保留负偏离；材料替换或卡片修订后读取旧稿标记失效。组表不调用模型、不产生模型费用。
+- API、本地/远程 CLI 和 `bid schema` 新增对应命令；保留 Result 七键及版本 `1.2`，
+  有缺口的组表及其作业查询/等待使用部分成功退出码。机制见
+  [response-cards.md](notes/response-cards.md)，操作见 [CLI 指南](guides/cli.md#review-responses-and-assemble-a-draft)。
+- 第一阶段预留模型起草与实际外发遮挡，未提供起草命令或导出；后续决策归档于
+  [ADR 0005](adr/0005-human-confirmed-responses.md)。
+- 样例招标文件开发环境冒烟：1,056 条要求全部列为无卡片缺口，其中 9 条为仅规范化匹配的 `invalid_citation`，
+  组表以部分成功退出。当时的完整回归：680 项通过。
+
+## 2026-10-02：参数清单逐项抽取
+
+- 抽取提示词要求硬件、软件参数逐项输出，各自引用原文，保留数值、单位和限定条件，不得用“等”省略；
+  跳过只有标题的条目，★ 规则也不再补入“★3.合同的终止：”一类空标题。提示词缓存版本更新。
+- 首轮抽取后扫描分号、换行分隔的参数片段，只把有效引用尚未覆盖的片段补发给模型，保留原块标识或页码；
+  补抽沿用分批、重试、引用校验和去重，仅执行一轮。
+- 抽取作业结果新增 `gap_fill`，报告待补片段、补抽调用和实际新增要求数量。每次已计费调用分别记录用量，
+  包括补抽失败、截断和格式错误的调用；原有 CLI/API 字段、Result 契约版本和数据库结构保持不变。
+- 机制、调用次数上界与额外成本见 [llm-providers.md](notes/llm-providers.md)。
+- 样例 Word 招标文件、`low` 档实测：保存 1,056 条（原 484 条），补抽 1 次调用新增 37 条，335 秒、22 万 token；
+  参数密集的技术参数块覆盖 144/161 个参数（原 `low` 73、原 `max` 123）。
+- 当时的完整回归：584 项通过。
+
+## 2026-10-02：按官方档位选择推理强度与抽取历史
+
+- 平台模型目录登记服务商公布的推理强度档位（如智谱 GLM-5.3 的 low、high、max），每档带请求参数、
+  批次大小和 Anthropic effort，并标出官方默认档；运营后台可编辑档位并逐档测试。
+- `bid req extract --reasoning LEVEL` 选择档位，不选时用官方默认档；未登记的档位以
+  `unsupported_reasoning` 失败，未分档的模型忽略并警告。`--dry-run` 列出可用档位。
+- 每次抽取的要求独立保存：`req list` 默认显示每个文档最近一次成功的抽取，`--job` 查看指定一次，
+  `req history` 列出全部抽取；要求带 `job_id` 与 `reasoning`。Result 契约升为 1.2。
+- 迁移 `0014`。决定见 [ADR 0004](adr/0004-extractions-per-reasoning-level.md)，机制见
+  [reasoning-levels.md](notes/reasoning-levels.md)。
+- 样例 Word 招标文件、GLM-5.3-Flash 实测：`low` 141 秒保存 484 条、15 万 token；`max`（4,000 字一批）
+  51 分钟保存 914 条、95 万 token；两档引用不通过各 1、2 条，★ 条款均 23/23 覆盖。
+- 模型返回空引用或空要求文字的条目按单条拒绝（`empty_quote`、`empty_text`）；抽取中的意外错误也会
+  保留已发生调用的用量，日志只记录异常类型与调用栈。
+- 网络中断、超时、限流等临时错误先在批次内重试两次（10 秒、30 秒后），不再让整个作业从头重排；
+  长时间请求中被断开的 TLS 连接（httpx 抛出的原始 `ssl.SSLError`）也按网络中断处理。
+- 当时的完整回归：572 项通过；Playwright 端到端检查通过。
+
+## 2026-10-02：服务商额度用完的提示
+
+- 服务商返回额度用完、欠费或套餐失效（HTTP 402、`insufficient_quota`、`billing_error`、
+  智谱 1113、1308–1321 中的额度与套餐类错误码）时，作业以 `provider_quota_exhausted` 失败，
+  不再重试三次；报错写明重置时间（服务商给出时）并提示联系系统管理员。智谱 1302、1305
+  限流仍按可重试处理。机制见 [llm-providers.md](notes/llm-providers.md)。
+
+## 2026-10-01：Word 招标文件按文档位置引用
+
+- Word 直接解析为段落块和表格单元格块，按标题样式或编号识别章节；合并单元格、嵌套表格、
+  内容控件都有稳定位置，页眉页脚、文本框等跳过的内容列在解析警告里。
+- Word 来源的要求引用章节路径加段落或单元格，`page` 为 `null`，新增 `location`；
+  Result 契约升为 1.1。引用原文必须落在所指的那一个块里。硬性规则 6 相应修改，
+  决定见 [ADR 0003](adr/0003-word-structural-citations.md)，机制见
+  [docx-citations.md](notes/docx-citations.md)。
+- 引用比对忽略全角半角与弯直引号差异；要求按原文顺序列出。
+- 模型输出被截断或不符合格式时自动把批次对半拆开重发：先按章节，再按块，长页面或长单元格再按行；
+  只有单行仍超限才失败。
+- 抽取批次并发发送（`BID_LLM_CONCURRENCY`），默认批次 8,000 字、输出上限 32,000 token，
+  每次调用有总时限；`BID_LLM_REQUEST_OPTIONS` 可向请求附加服务商参数。
+- [evals/extract_tender.py](../evals/extract_tender.py) 支持 Word，报告引用通过数与 ★ 召回。
+- 迁移 `0013`。
+- 样例招标文件（WPS，2,117 块）实测：GLM 关闭思考 135 秒抽出 449 条，446 条引用通过，
+  ★ 条款 23/23 覆盖（含规则补抽）。
+- 引用不通过改为逐条拒绝：其余条目照常保存，被拒条目的位置、原文与原因写入作业结果
+  `rejected` 并给出警告；全部不通过时仍以 `invalid_citation` 失败。
+- 当时的完整回归：556 项通过。
+
+## 2026-10-01：预付余额与充值卡密
+
+- 单位预付余额与只能新增的流水；平台计费调用按售价扣除，余额必须大于 0 才能提交平台计费作业，
+  不设透支额度。
+- 平台管理员批量生成、作废卡密，直接增减或设定单位余额；单位管理员在 `/app/org/billing`
+  或 `bid billing redeem` 兑换卡密。
+- 计费币种由 `BID_BILLING_CURRENCY` 配置；售价与应收字段去掉 `usd` 后缀。
+- 单位登录页按账号列出所属单位（`/auth/orgs`）。
+- 迁移 `0012`。决定见 [ADR 0002](adr/0002-prepaid-billing.md)，机制见
+  [prepaid-billing.md](notes/prepaid-billing.md)。
+- 当时的完整回归：540 项通过；Playwright 端到端检查通过。
+
+## 2026-10-01：平台运营后台
+
+- 平台管理员由部署配置指定，登录需密码与 TOTP，验证码只能用一次，15 分钟内失败 5 次锁定；
+  平台会话 30 分钟，与单位会话和 API 令牌互不通用。
+- 运营后台（`/app`）与 `bid platform` 命令：开通、停用、启用单位，一次性设置密码链接，
+  平台模型目录与测试，按月用量与应收（可导出 CSV），平台审计。
+- 停用单位后，其登录、会话和令牌立即失效。
+- 设为默认的目录模型用于所有单位的要求抽取，用量按成本价与售价分别记录。
+- 迁移 `0010`、`0011`。跨单位访问的决定见 [ADR 0001](adr/0001-platform-console-access.md)，
+  机制见 [platform-console.md](notes/platform-console.md)。
+- 当时的完整回归：514 项通过；Playwright 端到端检查通过。
+
+## 2026-10-01：真实 LLM 抽取
+
+- 新增 Anthropic 与 OpenAI 兼容两个 httpx adapter，按 `BID_LLM_*` 配置平台模型；
+  机制见 [llm-providers.md](notes/llm-providers.md)。
+- 失败调用之前已完成批次的用量照常记录；新增错误码 `provider_refused`、`invalid_provider_output`。
+- 空环境变量按未设置处理。
+- 新增 [evals/extract_tender.py](../evals/extract_tender.py) 用于真实服务验收。
+- 当时的完整回归：483 项通过；尚未调用真实服务。
+
+## 2026-10-01：代码审查修复
+
+- 所有路由的数据库事务改为在返回响应之前提交（`Depends(context, scope="function")`），
+  提交失败不再表现为成功响应。
+- 登录的 PBKDF2 校验移入线程，不再阻塞事件循环。
+- 作业遇到退出码 3 的暂时性错误（如对象存储不可用）时重新排队，不再直接失败。
+- 当时的完整回归：467 项通过。
+
+## 2026-10-01：八轮独立范围
+
+以下各轮均在实施前获得契约确认。真实 LLM 接入由用户决定暂缓，生产抽取明确报错。
+第八轮结束时的本机回归为 467 项通过，远程 CI 未运行。
+
+1. **基础链路**：全局 User 与 Membership、范围令牌、任务、加密文件存储、PDF 分页解析与本地 OCR、
+   抽取契约与引用校验、Procrastinate 后台作业、远程与本地两种 CLI 模式。
+   迁移 `0001`、`0002`。笔记：[tenant-isolation.md](notes/tenant-isolation.md)、
+   [background-jobs.md](notes/background-jobs.md)。
+2. **产品元数据**：不可变修订、乐观并发、任务固定选择与显式替换、审计。
+   迁移 `0003`。笔记：[versioned-resources.md](notes/versioned-resources.md)。
+3. **软件功能声明**：产品关联、声明状态、修订与任务固定。
+   迁移 `0004`。笔记：[versioned-features.md](notes/versioned-features.md)。
+4. **证书声明**：资格/人员类型、可未知日期、显式日期检查、独立权限范围。
+   迁移 `0005`。笔记：[versioned-certificates.md](notes/versioned-certificates.md)。
+5. **单位资料声明**：可未知文本字段、独立权限范围。
+   迁移 `0006`。笔记：[versioned-profiles.md](notes/versioned-profiles.md)。
+6. **单位私有 DOCX 模板**：原文件加密修订、任务固定、受权下载。
+   迁移 `0007`。笔记：[versioned-templates.md](notes/versioned-templates.md)。
+7. **证书 PDF 原件**：原件与声明形成新修订，旧修订不可回填、不继承。
+   迁移 `0008`。笔记：[versioned-certificate-files.md](notes/versioned-certificate-files.md)。
+8. **未确认 PDF 页来源**：固定原件指定页的 150 dpi PNG 归档，恒未确认、不能进入 draft/export。
+   迁移 `0009`。笔记：[unconfirmed-evidence-sources.md](notes/unconfirmed-evidence-sources.md)。
+
+## 2026-09-30：设计文档
+
+- 初始化仓库，提交 [AI 标书工具设计文档](AI%20标书工具设计文档.md) v0.2 草稿。
