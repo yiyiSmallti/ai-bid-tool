@@ -3,12 +3,13 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
+from app.core.password_attempts import PasswordAttempts
 from app.core.security import Secrets
 from app.schemas.contracts import Result
 from app.schemas.platform_contracts import (
@@ -30,7 +31,9 @@ def result(command: str, data=None, items=None) -> dict:
     )
 
 
-def create_router(settings: Settings, db: Database, crypto: Secrets, transport=None) -> APIRouter:
+def create_router(
+    settings: Settings, db: Database, crypto: Secrets, attempts: PasswordAttempts, transport=None
+) -> APIRouter:
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False)
 
@@ -40,8 +43,16 @@ def create_router(settings: Settings, db: Database, crypto: Secrets, transport=N
         return platform.identify(settings, crypto, credentials.credentials)
 
     @router.post("/platform/auth/login", name="platform_login", response_model=Result)
-    async def platform_login(body: PlatformLogin):
-        data = await platform.login(db, settings, crypto, body.email, body.password, body.totp)
+    async def platform_login(body: PlatformLogin, request: Request):
+        data = await platform.login(
+            attempts,
+            settings,
+            crypto,
+            body.email,
+            body.password,
+            body.totp,
+            request.client.host if request.client else None,
+        )
         return result("platform login", data)
 
     @router.post("/auth/setup-password", name="auth_setup_password", response_model=Result)
@@ -50,8 +61,13 @@ def create_router(settings: Settings, db: Database, crypto: Secrets, transport=N
         return result("auth setup-password", {"password_set": True})
 
     @router.post("/auth/orgs", name="auth_orgs", response_model=Result)
-    async def auth_orgs(body: OrgLookup):
-        return result("auth orgs", items=await platform.user_orgs(db, body.email, body.password))
+    async def auth_orgs(body: OrgLookup, request: Request):
+        return result(
+            "auth orgs",
+            items=await platform.user_orgs(
+                attempts, body.email, body.password, request.client.host if request.client else None
+            ),
+        )
 
     @router.get("/platform/orgs", name="platform_org_list", response_model=Result)
     async def org_list(actor=Depends(operator)):

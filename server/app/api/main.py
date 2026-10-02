@@ -27,6 +27,7 @@ from app.api.response_cards import create_router as create_response_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
+from app.core.password_attempts import PasswordAttempts
 from app.core.security import Secrets, token_digest
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
@@ -120,6 +121,7 @@ def create_app(
 ) -> FastAPI:
     settings = settings or Settings.load()
     db, crypto = Database(settings), Secrets(settings.encryption_key.get_secret_value())
+    password_attempts = PasswordAttempts(db)
     storage = create_storage(settings)
     # An injected provider is used as is; otherwise the platform default model, when set,
     # takes precedence over the BID_LLM_* fallback for every job.
@@ -143,6 +145,7 @@ def create_app(
         try:
             yield
         finally:
+            await password_attempts.close()
             await db.engine.dispose()
 
     app = FastAPI(
@@ -158,6 +161,7 @@ def create_app(
         queue,
     )
     app.state.crypto = crypto
+    app.state.password_attempts = password_attempts
 
     @app.middleware("http")
     async def bound_source_input(request: Request, call_next):
@@ -213,7 +217,12 @@ def create_app(
                 }
             },
         )
-        return JSONResponse(status_code=error.status, content=body.model_dump(mode="json"))
+        retry = {"auth_busy": "1", "too_many_attempts": "900"}.get(error.code)
+        return JSONResponse(
+            status_code=error.status,
+            content=body.model_dump(mode="json"),
+            headers={"Retry-After": retry} if retry is not None else None,
+        )
 
     @app.exception_handler(ServiceError)
     async def service_error(request: Request, error: ServiceError):
@@ -252,7 +261,9 @@ def create_app(
             ),
         )
 
-    app.include_router(create_platform_router(settings, db, crypto, llm_transport))
+    app.include_router(
+        create_platform_router(settings, db, crypto, password_attempts, llm_transport)
+    )
     if settings.web_dir is not None:
         mount_console(app, settings.web_dir)
 
@@ -286,20 +297,23 @@ def create_app(
         )
 
     @app.post("/auth/login", name="login", response_model=Result)
-    async def auth_login(body: Login):
-        async with db.transaction(body.org_id) as session:
-            user = await login(session, body.email, body.password, body.org_id)
-            token = crypto.issue(
-                {"kind": "session", "user_id": str(user.id)}, settings.session_seconds
-            )
-            return result(
-                "login",
-                {
-                    "session": token,
-                    "org_id": str(body.org_id),
-                    "expires_in": settings.session_seconds,
-                },
-            )
+    async def auth_login(body: Login, request: Request):
+        user = await login(
+            password_attempts,
+            body.email,
+            body.password,
+            body.org_id,
+            request.client.host if request.client else None,
+        )
+        token = crypto.issue({"kind": "session", "user_id": str(user.id)}, settings.session_seconds)
+        return result(
+            "login",
+            {
+                "session": token,
+                "org_id": str(body.org_id),
+                "expires_in": settings.session_seconds,
+            },
+        )
 
     @app.get("/org/current", name="org_use", response_model=Result)
     async def org_use(ctx=Depends(context, scope="function")):

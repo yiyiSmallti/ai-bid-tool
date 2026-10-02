@@ -1,4 +1,3 @@
-import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
@@ -7,7 +6,8 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
-from app.core.security import Secrets, token_digest, verify_password
+from app.core.password_attempts import PasswordAttempts
+from app.core.security import Secrets, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
@@ -181,22 +181,12 @@ async def membership(session: AsyncSession, user_id: UUID, org_id: UUID) -> Memb
     return member
 
 
-async def login(session: AsyncSession, email: str, password: str, org_id: UUID) -> User:
-    user = await session.scalar(
-        select(User).where(User.email == email.lower().strip(), User.active.is_(True))
-    )
-    if user is None:
-        # The same expensive password check runs for unknown users as known users.
-        await asyncio.to_thread(
-            verify_password,
-            password,
-            "pbkdf2$600000$MDAwMDAwMDAwMDAwMDAwMA==$MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=",
-        )
-        raise ServiceError("invalid_login", "Invalid credentials", 401, 4)
-    # PBKDF2 is CPU-bound; running it inline would stall every request on the event loop.
-    if not await asyncio.to_thread(verify_password, password, user.password_hash):
-        raise ServiceError("invalid_login", "Invalid credentials", 401, 4)
-    await membership(session, user.id, org_id)
+async def login(
+    attempts: PasswordAttempts, email: str, password: str, org_id: UUID, source: str | None
+) -> User:
+    user = await attempts.authenticate(email, password, source)
+    async with attempts.db.transaction(org_id) as session:
+        await membership(session, user.id, org_id)
     return user
 
 

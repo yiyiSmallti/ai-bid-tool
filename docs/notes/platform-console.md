@@ -21,12 +21,54 @@ cross-org access is shaped this way is recorded in
 Operators are the emails in `BID_PLATFORM_ADMIN_EMAILS`; each needs an entry in
 `BID_PLATFORM_TOTP_SECRETS`, or startup fails. `python -m app.admin platform-totp`
 prints a new secret and its provisioning URI. Sign-in checks the password and
-an RFC 6238 code with one step of drift. The audit table supplies both the last
-accepted time step, so a code works once, and the failure count, so five
-failures in 15 minutes lock the email. A platform session is a Fernet token of
+an RFC 6238 code with one step of drift. The shared password admission and
+atomic TOTP consumption rules are described below. A platform session is a Fernet token of
 kind `platform`, valid for 30 minutes and re-checked against the configured
 list on every request. Org routes accept only `session` tokens and `bid_`
 API tokens, so the two kinds never cross.
+
+### Password admission and TOTP consumption
+
+`/auth/orgs`, `/auth/login` and `/platform/auth/login` use `PasswordAttempts`
+in [password_attempts.py](../../server/app/core/password_attempts.py). The
+account key is the email after trimming whitespace and lowercasing. Five
+failed attempts in a rolling 15-minute window block every entry point,
+regardless of source or org. The existing `platform.login` failures count
+alongside `auth.password` failures; a successful password check does not clear
+either. A platform attempt with invalid or replayed TOTP also counts.
+
+When the ASGI request provides a client address, 30 failures from that source
+in the same window additionally block attempts across accounts. Source failure
+records use a SHA-256-derived actor key and the `auth.source` action, so both
+dimensions use the existing audit actor/action/time index. The routes use
+`request.client.host`, never parse `X-Forwarded-For` themselves, and keep the
+account limit when a client address is unavailable. Missing, inactive and
+setup-only accounts follow the same failure and dummy PBKDF2 path. Invalid
+credentials return the same `401 invalid_login`; limits return the same
+`429 too_many_attempts`, without an identity-existence check.
+
+PostgreSQL transaction advisory locks are taken in source-then-account order
+before counting failures. The authentication transaction explicitly uses
+`READ COMMITTED`, so a waiter sees the preceding attempt's committed writes.
+Password verification, TOTP verification and audit
+inserts run under those locks. Failures commit before the API raises the
+credential error. For TOTP, `login.consume_totp` in
+[platform.py](../../server/app/services/platform.py) re-reads the last accepted
+counter inside that transaction and rejects a counter no greater than it.
+The success row commits before session issuance, so concurrent API workers
+cannot issue two sessions for the same counter. No schema change is needed.
+
+Each API application admits at most four active attempts and eight queued
+attempts. Waiting for local admission or a database advisory lock has a
+one-second timeout. Four additional transaction advisory slots limit password
+verification across all API processes using the same database; acquiring a
+slot never waits. PBKDF2 runs in a dedicated four-thread executor, not the
+shared asyncio executor. Full queues, expired waits and unavailable database
+slots return `503 auth_busy` with `Retry-After: 1` and CLI exit code 3. A lockout
+returns exit code 3 and a conservative `Retry-After: 900`. Neither rejection
+performs PBKDF2 or appends another failure. Cancelled HTTP requests retain
+their admission until their authentication task finishes and commits; shutdown
+drains those tasks before disposing of the database and executor.
 
 Migration `0010` adds `orgs.active`, the global `platform_models` and
 `platform_audit_logs` tables, usage columns for input and output tokens,
@@ -70,12 +112,23 @@ strict Content-Security-Policy and `Referrer-Policy: no-referrer`.
   worker use the new model under the old cache key.
 - The model test button makes a real vendor call inside a database
   transaction and is billed by the vendor; it records cost in the audit log only.
-- Repeated wrong passwords for an operator email lock that email for 15 minutes.
+- The limits above also affect ordinary org users. Accounts recover when fewer
+  than five failures remain in the rolling window; locked requests do not
+  extend it. Users behind one NAT or proxy share the source budget. Configure
+  the ASGI server's trusted proxies correctly; untrusted forwarding headers
+  must not determine its client address.
+- All API workers must run the shared authentication implementation; old
+  workers do not acquire its advisory locks. The local queue bound applies
+  per application, while the PBKDF2 slot bound applies per database.
+- Authentication failures add append-only audit rows, including source
+  counters. Retention must preserve the active failure window and the last
+  accepted TOTP counter; deleting those rows resets that protection.
 
 ## Code
 
 - [0010_platform_admin.py](../../server/migrations/versions/0010_platform_admin.py), [0011_password_setup.py](../../server/migrations/versions/0011_password_setup.py)
 - [server/app/services/platform.py](../../server/app/services/platform.py), [server/app/api/platform.py](../../server/app/api/platform.py), [server/app/core/totp.py](../../server/app/core/totp.py)
+- [server/app/core/password_attempts.py](../../server/app/core/password_attempts.py), [server/app/services/auth.py](../../server/app/services/auth.py)
 - [server/app/schemas/platform_contracts.py](../../server/app/schemas/platform_contracts.py), `mount_console` in [server/app/api/main.py](../../server/app/api/main.py)
 - [web/src/](../../web/src/main.js) and [web/e2e/platform.spec.js](../../web/e2e/platform.spec.js)
-- Tests: [test_platform_db.py](../../server/tests/test_platform_db.py), [test_platform_auth.py](../../server/tests/test_platform_auth.py), [test_platform_api.py](../../server/tests/test_platform_api.py), [test_console.py](../../server/tests/test_console.py)
+- Tests: [test_platform_db.py](../../server/tests/test_platform_db.py), [test_platform_auth.py](../../server/tests/test_platform_auth.py), [test_auth_limits.py](../../server/tests/test_auth_limits.py), [test_platform_api.py](../../server/tests/test_platform_api.py), [test_console.py](../../server/tests/test_console.py)

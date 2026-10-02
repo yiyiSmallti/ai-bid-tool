@@ -8,6 +8,7 @@ import httpx
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
+from app.core.password_attempts import MAX_FAILURES
 from app.core.totp import STEP_SECONDS, code_at
 from app.models.entities import PlatformAuditLog, User
 from app.services import platform
@@ -96,7 +97,7 @@ async def test_next_time_step_is_accepted_after_a_success(client):
 
 
 async def test_repeated_failures_lock_sign_in(client):
-    for _ in range(platform.MAX_FAILURES):
+    for _ in range(MAX_FAILURES):
         assert (await sign_in(client, password="wrong-password")).status_code == 401
     locked = await sign_in(client)
     assert locked.status_code == 429

@@ -3,7 +3,7 @@
 import asyncio
 import hashlib
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -14,7 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
-from app.core.security import Secrets, hash_password, verify_password
+from app.core.password_attempts import PasswordAttempts, invalid_login
+from app.core.security import Secrets, hash_password
 from app.core.totp import matching_counter
 from app.models.entities import PlatformAuditLog, PlatformCard, PlatformModel, User
 from app.providers.base import ProviderFailure
@@ -26,11 +27,8 @@ from app.schemas.platform_contracts import (
 )
 
 LOGIN_ACTION = "platform.login"
-MAX_FAILURES = 5
-FAILURE_WINDOW = timedelta(minutes=15)
 SETUP_SECONDS = 24 * 3600
 UNUSABLE_PASSWORD = "!setup"
-DUMMY_HASH = "pbkdf2$600000$MDAwMDAwMDAwMDAwMDAwMA==$MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 
 
 @dataclass
@@ -58,33 +56,24 @@ def audit(
     )
 
 
-async def record_failure(db: Database, email: str, reason: str) -> None:
-    # Failures are committed separately because the request transaction rolls back.
-    async with db.transaction() as session:
-        audit(session, email, LOGIN_ACTION, "denied", details={"reason": reason})
-
-
 async def login(
-    db: Database, settings: Settings, crypto: Secrets, email: str, password: str, code: str
+    attempts: PasswordAttempts,
+    settings: Settings,
+    crypto: Secrets,
+    email: str,
+    password: str,
+    code: str,
+    source: str | None,
 ) -> dict:
     email = email.strip().lower()
-    since = datetime.now(UTC) - FAILURE_WINDOW
-    async with db.transaction() as session:
-        failures = await session.scalar(
-            select(func.count())
-            .select_from(PlatformAuditLog)
-            .where(
-                PlatformAuditLog.actor_email == email[:254],
-                PlatformAuditLog.action == LOGIN_ACTION,
-                PlatformAuditLog.outcome != "success",
-                PlatformAuditLog.created_at >= since,
-            )
-        )
-        if (failures or 0) >= MAX_FAILURES:
-            raise ServiceError(
-                "too_many_attempts", "Too many failed sign-ins; try again later", 429, 3
-            )
-        user = await session.scalar(select(User).where(User.email == email, User.active.is_(True)))
+
+    async def consume_totp(session: AsyncSession, _user: User) -> dict:
+        secret = settings.platform_totp().get(email)
+        counter = matching_counter(secret, code) if secret else None
+        if email not in settings.platform_admins() or counter is None:
+            raise invalid_login()
+        # PasswordAttempts holds the account lock until the successful audit row
+        # commits. Re-read and consume under that same lock, across API workers.
         last_counter = await session.scalar(
             select(func.max(PlatformAuditLog.details["totp_counter"].as_integer())).where(
                 PlatformAuditLog.actor_email == email,
@@ -92,20 +81,11 @@ async def login(
                 PlatformAuditLog.outcome == "success",
             )
         )
-    secret = settings.platform_totp().get(email)
-    password_ok = await asyncio.to_thread(
-        verify_password, password, user.password_hash if user else DUMMY_HASH
-    )
-    counter = matching_counter(secret, code) if secret else None
-    # One generic answer for every failure, so the response reveals nothing about which check failed.
-    if email not in settings.platform_admins() or user is None or not password_ok:
-        await record_failure(db, email, "credentials")
-        raise ServiceError("invalid_login", "Invalid credentials", 401, 4)
-    if counter is None or (last_counter is not None and counter <= last_counter):
-        await record_failure(db, email, "totp")
-        raise ServiceError("invalid_login", "Invalid credentials", 401, 4)
-    async with db.transaction() as session:
-        audit(session, email, LOGIN_ACTION, "success", details={"totp_counter": counter})
+        if last_counter is not None and counter <= last_counter:
+            raise invalid_login()
+        return {"totp_counter": counter}
+
+    await attempts.authenticate(email, password, source, consume_totp)
     return {
         "session": crypto.issue(
             {"kind": "platform", "email": email}, settings.platform_session_seconds
@@ -429,18 +409,12 @@ async def audit_entries(session: AsyncSession, limit: int) -> list[dict]:
     ]
 
 
-async def user_orgs(db: Database, email: str, password: str) -> list[dict]:
+async def user_orgs(
+    attempts: PasswordAttempts, email: str, password: str, source: str | None
+) -> list[dict]:
     """Orgs a signed-in user can enter; same password check and timing as login."""
-    async with db.transaction() as session:
-        user = await session.scalar(
-            select(User).where(User.email == email.strip().lower(), User.active.is_(True))
-        )
-    valid = await asyncio.to_thread(
-        verify_password, password, user.password_hash if user else DUMMY_HASH
-    )
-    if user is None or not valid:
-        raise ServiceError("invalid_login", "Invalid credentials", 401, 4)
-    async with db.transaction() as session:
+    user = await attempts.authenticate(email, password, source)
+    async with attempts.db.transaction() as session:
         rows = await session.execute(text("SELECT * FROM user_org_memberships(:u)"), {"u": user.id})
         return [
             {

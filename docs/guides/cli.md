@@ -350,8 +350,9 @@ bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform usa
 ```
 
 1. `platform login` reads the password from `BID_PASSWORD` and takes the
-   current authenticator code. A code works once; five failures in 15 minutes
-   lock the email. The session lasts 30 minutes.
+   current authenticator code. Follow the [sign-in retry instructions](development.md#run-the-platform-console)
+   for `too_many_attempts` or `auth_busy`; org lookup, org login and platform
+   login share the [authentication limits](../notes/platform-console.md#password-admission-and-totp-consumption).
 2. `platform org create` returns `setup_url` when the admin has never set a
    password. Give the full link to the admin; it works once within 24 hours.
 3. `platform org set-active --inactive` blocks every login, session and token
@@ -417,4 +418,3 @@ comes from `BID_PASSWORD`:
 ```sh
 bid --mode remote --server https://YOUR_SERVER auth orgs --email YOUR_EMAIL --json
 ```
-
