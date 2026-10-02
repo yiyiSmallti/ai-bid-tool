@@ -17,7 +17,8 @@ from test_api import create_document, run_job
 class InvalidCitation(FakeLLM):
     async def extract(self, chunks, schema):
         result = await super().extract(chunks, schema)
-        result.extraction.items[0].source.quote = "Fabricated citation"
+        for item in result.extraction.items:
+            item.source.quote = "Fabricated citation"
         return result
 
 

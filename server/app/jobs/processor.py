@@ -14,7 +14,7 @@ from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
 from app.providers.storage import Storage
 from app.schemas.contracts import Extraction, ProviderUsage, SectionText
 from app.services import billing
-from app.services.extraction import fingerprint, merge_starred, validate_extraction
+from app.services.extraction import fingerprint, merge_starred, split_cited, validate_extraction
 from app.services.parsing import parse_document
 
 
@@ -126,14 +126,20 @@ class Processor:
                 await self.record_usage(org_id, task_id, usages)
                 charged.extend(usages)
                 usages = []
-                validate_extraction(output.extraction, chunks)
-                requirements = merge_starred(output.extraction, chunks)
+                kept, rejected = split_cited(output.extraction, chunks)
+                requirements = merge_starred(kept, chunks)
+                # Rule-added items quote the source themselves; a failure here is a bug.
                 validate_extraction(requirements, chunks)
                 warnings = (
                     ["TEST PROVIDER: results are synthetic and not real AI output."]
                     if output.usage.test_only
                     else []
                 )
+                if rejected:
+                    warnings.append(
+                        f"{len(rejected)} extracted requirements were not saved because their "
+                        "quotes were not found at the cited position; see result.rejected."
+                    )
                 pages = []
             else:
                 raise ServiceError("invalid_job", "Unsupported job kind", 400, 2)
@@ -219,6 +225,7 @@ class Processor:
                     result = {
                         "created": saved,
                         "starred": sum(item.starred for item in requirements.items),
+                        "rejected": rejected,
                         "warnings": warnings,
                     }
                 result["cost"] = {

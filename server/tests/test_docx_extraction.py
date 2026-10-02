@@ -124,7 +124,8 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_
 @pytest.mark.parametrize(
     "items,code",
     [
-        # Quote from another block in the same chunk, so chunk-level checks cannot pass it.
+        # Every item fails, so nothing is saved. The first quote comes from another block in
+        # the same chunk, so chunk-level checks cannot pass it.
         ([item("p4", "核心数不少于 32 核")], "invalid_citation"),
         ([item("p4", "服务器内存不低于 64GB。参数")], "invalid_citation"),  # spans two blocks
         (
@@ -182,3 +183,35 @@ async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
             "t1r2c2",
             "p5",
         ]  # source order
+
+
+async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(tenants, tmp_path):
+    vendor = Vendor(
+        anthropic_reply(
+            [
+                item("p2", "投标人须具备有效的营业执照。", "qualification"),
+                item("p4", "核心数不少于 32 核"),  # quote belongs to the table cell
+            ]
+        )
+    )
+    settings = settings_for(tmp_path, "anthropic")
+    app = create_app(
+        settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        task, document = await upload_word(api, header)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        assert status["status"] == "succeeded", status
+        rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
+
+    # The ★ cell the model mis-cited is still added from the source by the rule.
+    assert [r["source"]["location"]["block_id"] for r in rows] == ["p2", "t1r2c2"]
+    assert status["result"]["rejected"] == [
+        {
+            "position": "第一章 总则 > 一、技术参数 > 第 1 段",
+            "quote": "核心数不少于 32 核",
+            "reason": "quote_not_at_position",
+        }
+    ]
+    assert any("1 extracted requirements were not saved" in w for w in status["result"]["warnings"])

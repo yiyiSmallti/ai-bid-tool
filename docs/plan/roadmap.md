@@ -71,7 +71,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | ID | 现状 | 缺口 | 依赖 |
 | --- | --- | --- | --- |
 | B01 tender parse | PDF 按页文本、扫描页本地 OCR；Word 按段落与表格单元格解析，按文档位置引用 | PDF 段落/表格/坐标结构、OCR 坐标入库；Word 文本框与页眉页脚 | 新大型依赖先说明 |
-| B02 req extract | Anthropic 与 OpenAI 兼容 adapter、并发批次、引用逐条核验、★ 规则并集、缓存；样例 Word 招标文件实测 446/449 条引用通过 | 要求确认入口；整批拒绝改为逐条拒绝并报告（实测 3 条错误会丢弃整次结果，待决定） | 待决定 |
+| B02 req extract | Anthropic 与 OpenAI 兼容 adapter、并发批次、引用逐条核验、★ 规则并集、缓存、引用不通过逐条拒绝并报告；样例 Word 招标文件实测 446/449 条引用通过 | 要求确认入口；被拒条目的人工补录 | 新契约 |
 | B03 参数判定 | `condition` 为自由 dict | 类型化 param/op/value/unit、单位换算、模糊表达转人工 | 新契约 |
 | B04 evidence fetch | 固定证书 PDF 整页候选来源，恒未确认 | 完整 Evidence/Card、网页/白皮书来源、区域截图、满足判定 | 搜索/视觉依赖 API |
 | B05 evidence stamp | 未实施 | Rust 裁剪、框选、溯源水印、哈希；草案见 [annotation.md](annotation.md) | 待批准 |

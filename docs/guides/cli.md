@@ -56,9 +56,10 @@ bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req list --t
    calling a model or creating a job. Cost estimates are `null` when unknown.
 4. `req extract` requires a parsed PDF or Word document with verified
    citations and a configured model ([development.md](development.md#configure-the-extraction-model)).
-   Without one it fails with `provider_unavailable` and exit 4. If any quote
-   is not verbatim source text, the job fails with `invalid_citation` and
-   saves nothing.
+   Without one it fails with `provider_unavailable` and exit 4. Items whose
+   quote is not found at the cited position are not saved; the job still
+   succeeds, lists them in `result.rejected`, and adds a warning. If no item
+   passes, the job fails with `invalid_citation` and saves nothing.
 5. `job cancel JOB_ID` stops a queued or running job; a cancelled attempt can
    no longer save results. To run a failed, cancelled, or expired job again,
    repeat the parse or extract command with `--retry`. Repeating it without

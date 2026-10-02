@@ -63,9 +63,8 @@ straight quotes, and removing whitespace. The ★ rule (`★`, 实质性要求, 
   warning is the only signal.
 - Measured on the reference tender (WPS, 181 pages, 2,117 blocks): 446 of 449
   quotes verified with thinking disabled. The three failures were a quote
-  joined with an ellipsis and two citations of the wrong paragraph. Whole-result
-  rejection still discards such a run; see
-  [roadmap.md](../plan/roadmap.md) B02.
+  joined with an ellipsis and two citations of the wrong paragraph. Such items
+  are dropped and listed in `result.rejected`.
 
 ## Code
 

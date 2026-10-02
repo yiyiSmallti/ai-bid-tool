@@ -38,7 +38,8 @@ prompt). The adapter maps each `ref` back to its chunk ID and document ID, so th
 model never reproduces UUIDs. `condition` is typed as
 `param/op/value/unit` or null, because structured outputs require closed
 objects. The processor then checks every quote against the stored page or
-block text and rejects the whole result if any quote fails.
+block text, saves the items that pass, and lists the others in
+`result.rejected` with their position, quote, and a warning.
 
 On Anthropic, effort comes from `BID_LLM_EFFORT`, and a safety decline is
 retried server-side on another model (`fallbacks: "default"`) unless
@@ -51,7 +52,8 @@ actually answered.
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
 | Truncated output, malformed JSON, schema mismatch, `ref` outside the batch | Failed, `invalid_provider_output` |
-| A quote that is not verbatim | Failed, `invalid_citation`; nothing saved |
+| Some quotes not found at the cited position | Succeeded; those items are listed in `result.rejected` and not saved |
+| No quote found at its cited position | Failed, `invalid_citation`; nothing saved |
 
 Each completed call produces one `ProviderUsage`. When a later batch fails,
 `ProviderFailure.usage` carries the earlier calls and the processor records
@@ -66,9 +68,9 @@ per-million-token prices, or `null` when either price is missing.
   its key or model stops startup.
 - The configured prices apply to whichever model answered. After a refusal
   fallback, the recorded cost is an estimate at the primary model's prices.
-- Whole-result rejection means one altered quote discards a paid extraction.
-  `evals/extract_tender.py` reports verified citations and ★ recall per run so
-  the policy can be judged on real tenders.
+- A rejected item is lost, not repaired. If it was a ★ clause, the ★ rule
+  still adds it from the source. `evals/extract_tender.py` reports verified
+  citations and ★ recall per run.
 - Reasoning models can spend the whole output budget thinking. On GLM, a
   section took about 11 times longer with thinking on and was cut off at
   32,000 output tokens on long batches; disable it with

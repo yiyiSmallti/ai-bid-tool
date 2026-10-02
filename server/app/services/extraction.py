@@ -48,6 +48,38 @@ def cited(item: ExtractedRequirement, chunk: dict | None) -> bool:
     )
 
 
+def position_label(item: ExtractedRequirement) -> str:
+    location = item.source.location
+    return location.label if location else f"第 {item.source.page} 页"
+
+
+def split_cited(
+    extraction: Extraction, chunks: list[dict]
+) -> tuple[Extraction, list[dict[str, str]]]:
+    """Keep items whose quote sits at the cited position; report the rest instead of saving them."""
+    available = {str(chunk["id"]): chunk for chunk in chunks}
+    kept, rejected = [], []
+    for item in extraction.items:
+        if cited(item, available.get(str(item.source.chunk_id))):
+            kept.append(item)
+        else:
+            rejected.append(
+                {
+                    "position": position_label(item),
+                    "quote": item.source.quote[:200],
+                    "reason": "quote_not_at_position",
+                }
+            )
+    if extraction.items and not kept:
+        raise ServiceError(
+            "invalid_citation",
+            "No extracted requirement cited its source verbatim; nothing was saved",
+            400,
+            4,
+        )
+    return Extraction(items=kept), rejected
+
+
 def validate_extraction(extraction: Extraction, chunks: list[dict]) -> None:
     available = {str(chunk["id"]): chunk for chunk in chunks}
     for item in extraction.items:
