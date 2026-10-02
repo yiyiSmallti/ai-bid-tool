@@ -194,6 +194,35 @@ FAILURES = {
         0,
     ),
     "refused": (anthropic_reply([], stop="refusal"), "failed", "provider_refused", 4, 1),
+    # Zhipu rate limits stay retryable; its quota and plan codes do not recover in time.
+    "zhipu_rate_limited": (
+        httpx.Response(429, json={"error": {"code": "1302", "message": "rate limited"}}),
+        "queued",
+        "provider_unavailable",
+        3,
+        0,
+    ),
+    "zhipu_quota_used_up": (
+        httpx.Response(429, json={"error": {"code": "1308", "message": "limit reached"}}),
+        "failed",
+        "provider_quota_exhausted",
+        4,
+        0,
+    ),
+    "openai_insufficient_quota": (
+        httpx.Response(429, json={"error": {"type": "insufficient_quota"}}),
+        "failed",
+        "provider_quota_exhausted",
+        4,
+        0,
+    ),
+    "payment_required": (
+        httpx.Response(402, json={"error": {"message": "Insufficient Balance"}}),
+        "failed",
+        "provider_quota_exhausted",
+        4,
+        0,
+    ),
     "not_json": (
         httpx.Response(
             200,
@@ -408,3 +437,22 @@ async def test_truncation_down_to_a_single_page_fails_and_bills_each_call(
         json.loads(r.content)["messages"][0]["content"].count("<page ") for r in vendor.requests
     ]
     assert pages == [2, 1]
+
+
+async def test_quota_message_names_the_reset_time_but_no_other_vendor_text(
+    tenants, tmp_path, pdf_bytes
+):
+    vendor_message = "已达到 5 小时的使用上限。您的限额将在 2026-10-02 14:01:58 重置。PRIVATE-ECHO"
+    reply = httpx.Response(429, json={"error": {"code": "1308", "message": vendor_message}})
+    settings = settings_for(tmp_path, "openai", llm_base_url="https://llm.example.test/v1")
+    llm = OpenAICompatibleExtractor(settings, transport=Vendor(reply).transport())
+    app = create_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+    assert status["status"] == "failed" and status["attempts"] == 1
+    message = status["error"]["message"]
+    assert "resets at 2026-10-02 14:01:58" in message
+    assert "Contact your system administrator" in message
+    assert "PRIVATE-ECHO" not in message and "使用上限" not in message

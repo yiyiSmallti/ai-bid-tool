@@ -52,6 +52,7 @@ actually answered.
 | Vendor result | Job outcome |
 | --- | --- |
 | Timeout, connection error, HTTP 408/409/429/5xx/529 | Requeued; error exit code 3; at most three attempts |
+| Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; the message names the reset time when the vendor gives one and asks the user to contact the system administrator |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
 | Truncated output on a single page or block, malformed JSON, schema mismatch, `ref` outside the batch | Failed, `invalid_provider_output` |

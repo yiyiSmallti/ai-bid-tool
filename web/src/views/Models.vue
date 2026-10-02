@@ -146,6 +146,9 @@ onMounted(load);
             <template v-else-if="tests[model.id].passed">
               通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge, currency) }}
             </template>
+            <template v-else-if="tests[model.id].error.code === 'provider_quota_exhausted'">
+              未通过：服务商额度已用完或套餐不可用（{{ tests[model.id].error.message }}）
+            </template>
             <template v-else>未通过：{{ tests[model.id].error.code }}（{{ tests[model.id].error.message }}）</template>
           </div>
         </td>

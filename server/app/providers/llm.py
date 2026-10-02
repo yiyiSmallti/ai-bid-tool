@@ -3,6 +3,7 @@
 import asyncio
 import json
 import os
+import re
 import time
 from typing import Any
 
@@ -27,6 +28,14 @@ from app.services.extraction import location_of
 
 ADAPTER_VERSION = "http-extract-v2"
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
+# Exhausted quota, unpaid accounts and expired plans do not recover within the retry
+# window. Zhipu reports them as HTTP 429 with these codes; 1302 and 1305 are plain
+# rate limits and stay retryable.
+QUOTA_CODES = {"1113", "1308", "1309", "1310", "1311", "1313", "1314", "1315"} | {
+    str(code) for code in range(1316, 1322)
+}
+QUOTA_TYPES = {"insufficient_quota", "billing_error"}
+RESET_TIME = re.compile(r"\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?")
 
 SYSTEM_PROMPT = """你是招标文件分析助手。从用户给出的招标文件内容中，抽取投标人必须响应的全部要求：
 - qualification：资格要求（资质、业绩、人员、财务、信誉等）
@@ -337,10 +346,22 @@ class HTTPExtractor:
         if response.status_code != 200:
             try:
                 error = response.json().get("error") or {}
-                # OpenAI and Anthropic send a type; Zhipu and others send a vendor code.
-                kind = str(error.get("type") or error.get("code") or "unknown")[:40]
+                if not isinstance(error, dict):
+                    error = {}
             except ValueError:
-                kind = "unknown"
+                error = {}
+            # OpenAI and Anthropic send a type; Zhipu and others send a vendor code.
+            kind = str(error.get("type") or error.get("code") or "unknown")[:40]
+            codes = {str(error.get("type")), str(error.get("code"))}
+            if response.status_code == 402 or codes & (QUOTA_CODES | QUOTA_TYPES):
+                # Only a reset timestamp is taken from the vendor message.
+                reset = RESET_TIME.search(str(error.get("message") or ""))
+                raise ProviderFailure(
+                    f"Model quota is used up or the plan is unavailable ({kind})"
+                    + (f"; it resets at {reset.group()}" if reset else "")
+                    + ". Contact your system administrator.",
+                    code="provider_quota_exhausted",
+                )
             # Only the status and vendor error type are kept; bodies may echo input.
             raise ProviderFailure(
                 f"LLM request failed with HTTP {response.status_code} ({kind})",
