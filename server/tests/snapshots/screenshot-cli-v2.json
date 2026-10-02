@@ -1,0 +1,237 @@
+{
+  "screenshot add": {
+    "command": "screenshot add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "POST",
+      "path": "/tasks/11111111-1111-4111-8111-111111111111/screenshots"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot analyze": {
+    "command": "screenshot analyze",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "dry_run": true,
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot annotate": {
+    "command": "screenshot annotate",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "dry_run": true,
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot list": {
+    "command": "screenshot list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "GET",
+      "path": "/tasks/11111111-1111-4111-8111-111111111111/screenshots"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot prepare": {
+    "command": "screenshot prepare",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "output_path": "<screenshot-output>",
+      "prepared": {
+        "image": {
+          "height_px": 3,
+          "media_type": "image/png",
+          "sha256": "94f5df577edad6fe39f9267ac06e1d517eede25261c5a13eaff290ac0e9feb16",
+          "size_bytes": 71,
+          "width_px": 4
+        },
+        "mapping": {
+          "content_height": 3,
+          "content_offset_x": 0,
+          "content_offset_y": 0,
+          "content_width": 4,
+          "crop": {
+            "height": 3,
+            "width": 4,
+            "x": 0,
+            "y": 0
+          },
+          "footer_height": 0
+        },
+        "plan": {
+          "boxes": [],
+          "crop": null,
+          "redact": []
+        },
+        "plan_sha256": "42fa695eb607508e7875c327874c84b2952b9745e712191668111835d20099ed",
+        "preparation_profile": "screenshot-privacy-v1",
+        "prepared_at": "2026-10-02T00:00:00Z",
+        "source": {
+          "captured_at": "2026-10-02T00:00:00Z",
+          "environment": "test",
+          "image_kind": "screenshot",
+          "kind": "upload",
+          "prototype_run_id": null,
+          "software_version": "test-1",
+          "source_label": "Synthetic reviewed screenshot",
+          "task_feature_id": "11111111-1111-4111-8111-111111111111"
+        },
+        "source_height": 3,
+        "source_sha256": "94f5df577edad6fe39f9267ac06e1d517eede25261c5a13eaff290ac0e9feb16",
+        "source_width": 4
+      },
+      "receipt_path": "<screenshot-receipt>"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot preview": {
+    "command": "screenshot preview",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "output_path": "<screenshot-output>",
+      "rendition_id": "11111111-1111-4111-8111-111111111111"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot prototype-decisions apply": {
+    "command": "screenshot prototype-decisions apply",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "POST",
+      "path": "/tasks/11111111-1111-4111-8111-111111111111/prototype-decisions"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot prototype-decisions list": {
+    "command": "screenshot prototype-decisions list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "GET",
+      "path": "/tasks/11111111-1111-4111-8111-111111111111/prototype-decisions"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot prototype-decisions preview": {
+    "command": "screenshot prototype-decisions preview",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "POST",
+      "path": "/tasks/11111111-1111-4111-8111-111111111111/prototype-decisions/preview"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot show": {
+    "command": "screenshot show",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "GET",
+      "path": "/screenshots/11111111-1111-4111-8111-111111111111"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot suggestions": {
+    "command": "screenshot suggestions",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "GET",
+      "path": "/screenshot-analyses/11111111-1111-4111-8111-111111111111/suggestions"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "screenshot withdraw": {
+    "command": "screenshot withdraw",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "method": "POST",
+      "path": "/screenshots/11111111-1111-4111-8111-111111111111/withdrawals"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

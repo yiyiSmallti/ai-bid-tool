@@ -52,6 +52,7 @@ from app.schemas.response_card_contracts import (
     EvidenceView,
     TaskRedactionSet,
 )
+from app.schemas.screenshot_contracts import ImageEvidenceInput
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_actor_context
 from app.services.evidence_sources import joined_sources, require_source, source_data
 from app.services.evidence_sources import require_access as require_source_access
@@ -332,9 +333,25 @@ def page_text(content: bytes, page: int) -> str:
 
 
 async def resolve_material(
-    session: AsyncSession, actor: Identity, task_id: UUID, item, storage: Storage
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    item,
+    storage: Storage | None = None,
+    *,
+    extraction_job_id: UUID | None = None,
 ):
+    if isinstance(item, ImageEvidenceInput):
+        from app.services.screenshots import resolve_image_material
+
+        if extraction_job_id is None:
+            fail("invalid_extraction_job", "Image evidence requires its extraction job")
+        return await resolve_image_material(
+            session, actor, task_id, extraction_job_id, item, storage=storage
+        )
     if item.kind == "certificate_pdf_page":
+        if storage is None:
+            fail("source_storage_required", "Certificate evidence requires source storage", 500, 4)
         archived, selected, original = await require_source(session, actor, item.evidence_source_id)
         if archived.task_id != task_id:
             raise not_found()
@@ -389,6 +406,26 @@ async def resolve_material(
 
 
 async def evidence_view(session: AsyncSession, actor: Identity, row: Evidence) -> dict:
+    if row.kind == "image_region":
+        from app.services.screenshots import image_evidence_view
+
+        view = await image_evidence_view(session, actor, row)
+        archive = None
+        if row.evidence_source_id is not None:
+            archived, selected, original = await require_source(
+                session, actor, row.evidence_source_id
+            )
+            archive = source_data(archived, selected, original)
+        view |= {
+            "source_archive": archive,
+            "screenshot_asset_id": row.screenshot_asset_id,
+            "screenshot_rendition_id": row.screenshot_rendition_id,
+            "image_sha256": row.image_sha256,
+            "region": row.region,
+            "claim_scope": row.claim_scope,
+            "visual_observation": row.visual_observation,
+        }
+        return EvidenceView.model_validate(view).model_dump(mode="json")
     archive = None
     if row.kind == "certificate_pdf_page":
         if row.evidence_source_id is None:
@@ -451,11 +488,17 @@ async def card_view(
     card: ResponseCard,
     revision: ResponseCardRevision,
     requirement: Requirement,
+    storage: Storage | None = None,
 ) -> dict:
-    evidence = [
-        await evidence_view(session, actor, row)
-        for row in await linked_evidence(session, revision.id)
-    ]
+    material_rows = await linked_evidence(session, revision.id)
+    evidence = [await evidence_view(session, actor, row) for row in material_rows]
+    invalid_image = False
+    image_warnings: set[str] = set()
+    for row in material_rows:
+        if row.kind == "image_region":
+            warnings, invalid = await image_state(session, actor, row, storage)
+            image_warnings.update(warnings)
+            invalid_image |= invalid
     generation_stale = await generation_materials_stale(session, actor, revision)
     return card_view_data(
         card,
@@ -464,7 +507,29 @@ async def card_view(
         evidence,
         generation_stale,
         await citation_valid(session, requirement),
+        invalid_image,
+        image_warnings,
     )
+
+
+async def image_state(
+    session: AsyncSession, actor: Identity, row: Evidence, storage: Storage | None
+) -> tuple[list[str], bool]:
+    """Lineage warnings and whether fixed image evidence no longer resolves."""
+    from app.services.screenshots import (
+        INVALID_IMAGE_CODES,
+        review_warnings,
+        validate_image_evidence,
+    )
+
+    warnings = await review_warnings(session, row)
+    try:
+        await validate_image_evidence(session, actor, row, storage=storage)
+    except ServiceError as error:
+        if error.code not in INVALID_IMAGE_CODES:
+            raise
+        return warnings, True
+    return warnings, False
 
 
 def card_view_data(
@@ -474,6 +539,8 @@ def card_view_data(
     evidence: list[dict],
     generation_stale: bool,
     valid_citation: bool,
+    invalid_image: bool = False,
+    image_warnings: set[str] | None = None,
 ) -> dict:
     """One projection/eligibility rule for both single-card and batched reads."""
     if not valid_citation:
@@ -482,7 +549,7 @@ def card_view_data(
         eligibility = "needs_reconfirmation"
     elif revision.disposition == "comply_only":
         eligibility = "comply_only"
-    elif generation_stale or any(not row["active_selection"] for row in evidence):
+    elif generation_stale or invalid_image or any(not row["active_selection"] for row in evidence):
         eligibility = "stale_material"
     elif revision.review_domain is None:
         eligibility = "unclassified"
@@ -517,7 +584,7 @@ def card_view_data(
             evidence=evidence,
             confirmed_by=revision.confirmed_by,
             confirmed_at=revision.confirmed_at,
-            warning_codes=warnings_for(requirement),
+            warning_codes=sorted(set(warnings_for(requirement)) | (image_warnings or set())),
             reason=revision.reason,
             reviewed_warning_codes=revision.reviewed_warning_codes,
             eligibility=eligibility,
@@ -574,6 +641,9 @@ class CardReadBatch:
     sources: dict[UUID, tuple[EvidenceSource, TaskCertificate, CertificateFile]]
     generation_manifests: dict[UUID, dict]
     by_requirement: dict[UUID, ResponseCard]
+    # Image evidence needs async lineage and byte checks, so it is resolved at load;
+    # a failure is kept and raised only when that evidence is consumed.
+    images: dict[UUID, tuple[dict, list[str], bool] | ServiceError] = field(default_factory=dict)
     _citations: dict[UUID, bool] = field(default_factory=dict)
     _evidence: dict[UUID, dict] = field(default_factory=dict)
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
@@ -588,6 +658,7 @@ class CardReadBatch:
         *,
         historical_card_ids: set[UUID],
         historical_revision_ids: set[UUID],
+        storage: Storage | None = None,
     ) -> "CardReadBatch":
         required = {row.id: row for row in requirements}
         chunks = {
@@ -655,6 +726,8 @@ class CardReadBatch:
         selection_ids: dict[str, set[UUID]] = {kind: set() for kind in MATERIALS}
         source_ids: set[UUID] = set()
         for row in evidence.values():
+            if row.kind == "image_region":
+                continue
             if row.kind == "certificate_pdf_page":
                 if row.evidence_source_id is not None:
                     source_ids.add(row.evidence_source_id)
@@ -681,6 +754,15 @@ class CardReadBatch:
                 joined_sources().where(EvidenceSource.id.in_(source_ids))
             )
         }
+        images: dict[UUID, tuple[dict, list[str], bool] | ServiceError] = {}
+        for row in evidence.values():
+            if row.kind != "image_region":
+                continue
+            try:
+                view = await evidence_view(session, actor, row)
+                images[row.id] = (view, *await image_state(session, actor, row, storage))
+            except ServiceError as error:
+                images[row.id] = error
         return cls(
             actor=actor,
             requirements=required,
@@ -693,6 +775,7 @@ class CardReadBatch:
             sources=sources,
             generation_manifests=generation_manifests,
             by_requirement={row.requirement_id: row for row in loaded_cards.values()},
+            images=images,
         )
 
     def citation_valid(self, requirement: Requirement) -> bool:
@@ -716,7 +799,17 @@ class CardReadBatch:
             raise not_found()
         return source
 
+    def image(self, row: Evidence) -> tuple[dict, list[str], bool]:
+        state = self.images.get(row.id)
+        if state is None:
+            raise not_found()
+        if isinstance(state, ServiceError):
+            raise state
+        return state
+
     def evidence_view(self, row: Evidence) -> dict:
+        if row.kind == "image_region":
+            return self.image(row)[0]
         if row.id not in self._evidence:
             archive = None
             if row.kind == "certificate_pdf_page":
@@ -767,7 +860,9 @@ class CardReadBatch:
         self, card: ResponseCard, revision: ResponseCardRevision, requirement: Requirement
     ) -> dict:
         if revision.id not in self._views:
-            evidence = [self.evidence_view(row) for row in self.links.get(revision.id, [])]
+            rows = self.links.get(revision.id, [])
+            evidence = [self.evidence_view(row) for row in rows]
+            images = [self.image(row) for row in rows if row.kind == "image_region"]
             self._views[revision.id] = card_view_data(
                 card,
                 revision,
@@ -775,6 +870,8 @@ class CardReadBatch:
                 evidence,
                 self.generation_materials_stale(revision),
                 self.citation_valid(requirement),
+                any(invalid for _, _, invalid in images),
+                {code for _, warnings, _ in images for code in warnings},
             )
         return self._views[revision.id]
 
@@ -874,14 +971,31 @@ async def build_evidence(
 ):
     rows = []
     for item in content.evidence:
-        fixed = await resolve_material(session, actor, card.task_id, item, storage)
+        fixed = await resolve_material(
+            session,
+            actor,
+            card.task_id,
+            item,
+            storage,
+            extraction_job_id=card.extraction_job_id,
+        )
+        quote = getattr(item, "quote", None)
+        if isinstance(item, ImageEvidenceInput):
+            fixed |= {
+                "screenshot_asset_id": item.asset_id,
+                "screenshot_rendition_id": item.rendition_id,
+                "image_sha256": item.expected_image_sha256,
+                "region": item.region.model_dump(mode="json"),
+                "claim_scope": item.claim_scope,
+                "visual_observation": item.visual_observation,
+            }
+        fixed.setdefault("quote", quote)
         row = Evidence(
             id=uuid4(),
             org_id=actor.org_id,
             task_id=card.task_id,
             card_id=card.id,
             kind=item.kind,
-            quote=item.quote,
             **fixed,
         )
         session.add(row)
@@ -1063,16 +1177,30 @@ async def card_action(
             fail("warning_review_required", "Review every warning and record a handling reason")
         now = datetime.now(UTC)
         for row, evidence in zip(materials, view["evidence"], strict=True):
-            from pydantic import TypeAdapter
+            if row.kind == "image_region":
+                from app.services.screenshots import validate_image_evidence
 
-            from app.schemas.response_card_contracts import EvidenceInput
+                await validate_image_evidence(session, actor, row, storage=storage)
+            else:
+                from pydantic import TypeAdapter
 
-            item = TypeAdapter(EvidenceInput).validate_python(evidence["input"])
-            await resolve_material(session, actor, card.task_id, item, storage)
+                from app.schemas.response_card_contracts import EvidenceInput
+
+                item = TypeAdapter(EvidenceInput).validate_python(evidence["input"])
+                await resolve_material(
+                    session,
+                    actor,
+                    card.task_id,
+                    item,
+                    storage,
+                    extraction_job_id=card.extraction_job_id,
+                )
             if row.confirmed_by is None:
                 row.confirmed_by, row.confirmed_at = actor.user_id, now
                 if row.kind == "certificate_pdf_page":
                     row.quote_check = "human_page_review"
+                elif row.kind == "image_region":
+                    row.quote_check = "human_image_review"
         values |= {
             "confirmed_by": actor.user_id,
             "confirmed_at": now,

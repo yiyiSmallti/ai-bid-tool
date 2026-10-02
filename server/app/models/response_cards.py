@@ -111,11 +111,17 @@ class Evidence(Tenant, Base):
     profile_revision_id: Mapped[UUID | None] = mapped_column()
     evidence_source_id: Mapped[UUID | None] = mapped_column()
     field_path: Mapped[str | None] = mapped_column(String(200))
-    quote: Mapped[str] = mapped_column(Text)
+    quote: Mapped[str | None] = mapped_column(Text)
     material_kind: Mapped[str] = mapped_column(String(40))
     quote_check: Mapped[str] = mapped_column(String(40))
     source_sha256: Mapped[str | None] = mapped_column(String(64))
     page: Mapped[int | None] = mapped_column(Integer)
+    screenshot_asset_id: Mapped[UUID | None] = mapped_column()
+    screenshot_rendition_id: Mapped[UUID | None] = mapped_column()
+    image_sha256: Mapped[str | None] = mapped_column(String(64))
+    region: Mapped[dict[str, int] | None] = mapped_column(JSONB)
+    claim_scope: Mapped[str | None] = mapped_column(String(40))
+    visual_observation: Mapped[str | None] = mapped_column(Text)
     confirmed_by: Mapped[UUID | None] = mapped_column()
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
@@ -135,6 +141,19 @@ class Evidence(Tenant, Base):
         tenant_fk("task_org_profile_id", "task_org_profiles"),
         tenant_fk("profile_revision_id", "org_profile_revisions"),
         tenant_fk("evidence_source_id", "evidence_sources"),
+        ForeignKeyConstraint(
+            ["org_id", "task_id", "screenshot_asset_id"],
+            ["screenshot_assets.org_id", "screenshot_assets.task_id", "screenshot_assets.id"],
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "screenshot_asset_id", "screenshot_rendition_id", "image_sha256"],
+            [
+                "screenshot_renditions.org_id",
+                "screenshot_renditions.asset_id",
+                "screenshot_renditions.id",
+                "screenshot_renditions.image_sha256",
+            ],
+        ),
     )
 
 

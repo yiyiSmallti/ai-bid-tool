@@ -7,3 +7,4 @@ from app.models import exports as exports
 from app.models import provider_configs as provider_configs
 from app.models import response_cards as response_cards
 from app.models import sandbox as sandbox
+from app.models import screenshots as screenshots

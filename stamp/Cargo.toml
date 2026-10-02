@@ -1,0 +1,18 @@
+[package]
+name = "bid-screenshot-renderer"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+fontdue = "=0.9.3"
+image = { version = "=0.25.8", default-features = false, features = ["jpeg", "png"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+sha2 = "=0.10.9"
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+panic = "abort"
+strip = true

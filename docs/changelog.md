@@ -6,6 +6,27 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-02：单位模型、人工导出、单位后台、沙箱与截图证据
+
+- 单位模型配置：单位自带模型与平台目录模型选择，独立密钥加密、不可变修订和
+  `bid provider set/list/history/test`；抽取与卡片起草共用解析，自带密钥零平台扣费，仍逐次准入并
+  记录用量，支持厂商额度提示与余额查询。迁移 `0020`，机制见
+  [provider-config.md](notes/provider-config.md)。
+- 人工导出：人类 bidder 按单位固定模板修订预检、prepare、release 和下载 Word 响应章节；正式件拒绝缺口，
+  审阅件逐页标注不得提交；证书页附件保留原始字节，存储加密、签名下载、审计与限额。迁移 `0021`，
+  机制见 [human-section-exports.md](notes/human-section-exports.md)。
+- 单位后台：`web/` 新增招标任务、解析、官方推理档位抽取、千条响应卡审阅与按职责处置、起草费用预览
+  和三表初稿页面；初稿读取改为批量加载。付费起草按钮等待预览绑定契约。机制见
+  [org-console.md](notes/org-console.md)。
+- 沙箱：HTML 原型离线渲染、精确允许名单的厂家网页与 PDF 采集、一次性容器与独立验证、资源预算、
+  清理对账、加密产物与来源回执；原型不加可见标记，真实隔离运行时默认关闭。迁移 `0022`，机制见
+  [sandbox-execution.md](notes/sandbox-execution.md)、[sandbox-fetch.md](notes/sandbox-fetch.md)，
+  部署步骤见[沙箱运行时指南](guides/sandbox-runtime.md)。
+- 截图证据 Phase A：本机 Rust 像素脱敏、裁剪与区域标注，人工按精确哈希放行入库，`image_region`
+  响应证据进入卡片与初稿依赖，原型逐项保留或替换决定，经准入计费的多模态匹配、区域建议与读字。
+  CLI 契约升为 `2.0`，保留旧 Evidence 输入分支。迁移 `0023`，机制见
+  [screenshot-evidence.md](notes/screenshot-evidence.md)。
+
 ## 2026-10-02：调用预留、引用边界与星号判定修复
 
 - 抽取、起草的两种 HTTP adapter 共用输出上限选项校验，运营模型目录禁止保存这些字段及别名；

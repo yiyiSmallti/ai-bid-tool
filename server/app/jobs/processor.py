@@ -109,7 +109,15 @@ class Processor:
             )
             chunks = (
                 []
-                if kind in {"draft", "card_generate", "provider_test", "export_render"}
+                if kind
+                in {
+                    "draft",
+                    "card_generate",
+                    "provider_test",
+                    "export_render",
+                    "screenshot_render",
+                    "screenshot_analyze",
+                }
                 else [
                     dict(
                         id=row.id,
@@ -145,7 +153,12 @@ class Processor:
 
             try:
                 llm = self.llm
-                if self.resolve and kind in {"extract", "card_generate", "provider_test"}:
+                if self.resolve and kind in {
+                    "extract",
+                    "card_generate",
+                    "provider_test",
+                    "screenshot_analyze",
+                }:
                     async with self.db.transaction(org_id) as session:
                         llm = await self.resolve(session, current)
                 if kind == "provider_test":
@@ -164,6 +177,15 @@ class Processor:
                         raise ServiceError(
                             "export_render_timeout", "Export job deadline exceeded", 503, 3
                         ) from exc
+                    return
+                if kind in {"screenshot_render", "screenshot_analyze"}:
+                    from app.services.screenshot_jobs import process_analysis, process_render
+
+                    incremental = True
+                    if kind == "screenshot_render":
+                        await process_render(execution, self.storage)
+                    else:
+                        await process_analysis(execution, self.storage, llm)
                     return
                 assert task_id is not None and document_id is not None
                 if kind == "card_generate":

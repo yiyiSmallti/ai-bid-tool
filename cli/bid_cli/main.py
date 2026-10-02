@@ -57,6 +57,7 @@ from bid_cli.export import app as export_app
 from bid_cli.providers import app as provider_app
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
 from bid_cli.schema import command_schema
+from bid_cli.screenshots import register as register_screenshot_commands
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 app.add_typer(provider_app, name="provider")
@@ -1493,6 +1494,9 @@ def main(args: list[str] | None = None):
         )
     except KeyboardInterrupt:
         raise SystemExit(3) from None
+
+
+register_screenshot_commands(app)
 
 
 if __name__ == "__main__":

@@ -49,7 +49,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | F04 账号与角色 | 全局 User、Membership、四种角色；平台管理员（配置名单、TOTP、运营后台） | 单位成员管理入口、任务成员、评论权限、OIDC、全局记忆维护 | 新契约；SSO 需授权 |
 | F05 ApiToken | 签发、范围、期限；DB 禁止确认/导出范围 | 吊销入口、令牌列表、签发与吊销审计 | 新接口确认 |
 | F06 Org/Task | 任务名称、编号、截止、预算字段 | 套餐与月度预算、任务成员与归档、预算执行、一次性组合创建 | 计费规则待定 |
-| F07 后台作业 | parse/extract/card_generate/draft 持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
+| F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/sandbox/截图作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
 | F08 AuditLog | 资源、卡片人工决策、模型起草、遮挡设置与组表审计 | 登录、令牌、导出、其他配置及 agent 调用审计与查询 | 新契约 |
 | F09 UsageRecord | OCR、抽取和模型起草的逐次用量记录；平台计费调用按售价从预付余额扣除，充值卡密 | 存储计量、任务预算预检、低余额通知、在线支付 | 新契约 |
 | F10 部署与质量 | 本机迁移、Compose、锁定依赖、工作流文件 | 远程 CI、生产对象存储、TLS、备份与密钥轮换、私有化包装 | 推送与生产需授权 |
@@ -73,14 +73,14 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B01 tender parse | PDF 按页文本、扫描页本地 OCR；Word 按段落与表格单元格解析，按文档位置引用 | PDF 段落/表格/坐标结构、OCR 坐标入库；Word 文本框与页眉页脚 | 新大型依赖先说明 |
 | B02 req extract | Anthropic 与 OpenAI 兼容 adapter、并发批次、引用逐条核验、★ 规则并集、缓存、引用不通过逐条拒绝并报告、按官方档位选择推理强度与抽取历史；样例 Word 招标文件实测 446/449 条引用通过 | 要求确认入口；被拒条目的人工补录；单位后台的抽取页面 | 新契约 |
 | B03 参数判定 | `condition` 为自由 dict | 类型化 param/op/value/unit、单位换算、模糊表达转人工 | 新契约 |
-| B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认 | 网页/白皮书来源、区域截图（契约见 [screenshots.md](screenshots.md)）、自动满足判定 | 搜索/视觉依赖 API |
-| B05 evidence stamp | 未实施 | Rust 裁剪、框选、溯源水印、哈希；草案见 [annotation.md](annotation.md) | 待批准 |
-| B06 ui mock | 未实施 | 真实截图优先、模型生成原型（导出前人工决定保留或替换）、软件响应表；契约见 [screenshots.md](screenshots.md) | 已批准 |
+| B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认；人工截图入库与 `image_region` 证据；沙箱按允许名单采集厂家网页/PDF 原始产物 | 厂家采集与搜索候选接入截图链（[screenshots.md](screenshots.md) Phase B）、自动满足判定 | 搜索依赖 API |
+| B05 evidence stamp | 截图链的 Rust 遮挡、裁剪、区域框与哈希已实施，不加水印 | 证书页等其他材料的标注；草案见 [annotation.md](annotation.md) | 待批准 |
+| B06 ui mock | 原型逐项保留/替换决定；沙箱可离线渲染给定 HTML | LLM 生成 HTML 原型并经沙箱截图、正式导出门禁接线；契约见 [screenshots.md](screenshots.md) | 已批准 |
 | B07 人工确认 | 卡片与 Evidence 按职责人工确认、不可变修订、原子处置、模型提议与消费关口；决定见 [ADR 0005](../adr/0005-human-confirmed-responses.md) | 会签、任务成员与看板交互 | 新契约 |
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
 | B09 check | 未实施 | 标书与要求对照、废标/扣分风险、误报处理 | 语义校验依赖 LLM |
 | B10 score | 未实施 | 逐项预估分、失分原因、引用 | 语义评估依赖 LLM |
-| B11 export | 未实施 | 仅人工导出、模板适配、证据附件、审计；契约见 [export.md](export.md) | 已批准 |
+| B11 export | 人工 Word 响应章节导出、正式件/审阅件、证书页附件、审计；机制见 [human-section-exports.md](../notes/human-section-exports.md) | 图片证据附件、原型决定门禁、Word/WPS 视觉分页验收；契约见 [export.md](export.md) | 已批准 |
 
 ## 覆盖矩阵：Provider、记忆、看板、agent 与 CLI
 
@@ -88,13 +88,13 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | --- | --- | --- | --- |
 | P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身 | check/score/agent 所需的通用结构化调用 | 新契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
-| P03 Vision/Search/Embedding/Browser | 未实施 | 四个协议与实现；Browser 的隔离执行见 [sandbox.md](sandbox.md) | 本地 Browser 可独立 |
-| P04 ProviderConfig | 平台模型目录、平台默认模型及按售价计费 | 单位自带模型、单位自选平台模型、`provider set/test`；草案见 [provider-config.md](provider-config.md) | 待批准 |
+| P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与允许名单采集 | Search、Embedding、本机浏览器采集；沙箱真实隔离验收 | 搜索依赖 API |
+| P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；机制见 [provider-config.md](../notes/provider-config.md) | 视觉、搜索等其他能力的单位配置 | 新契约 |
 | P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草部分成功 | 跨能力限流与统一进度 | 新契约 |
 | M01 记忆存储 | 未实施 | 四层记忆 CRUD、候选审批、失效 | 全局来源待定 |
 | M02 记忆检索 | 未实施 | 强制 `org_id` 与作用域过滤、优先级 | 向量依赖 Embedding |
 | M03 自动候选 | 未实施 | 驳回/修改生成 candidate、评测样本 | 依赖 B07 |
-| U01 看板 | 未实施 | Vue 3 看板、资源/配置/记忆管理页；招标与审阅页面契约见 [org-console.md](org-console.md) | 已批准 |
+| U01 看板 | 单位后台招标任务、解析抽取、响应卡审阅、起草预览与初稿页面；机制见 [org-console.md](../notes/org-console.md) | 付费起草绑定、资源/配置/记忆管理页 | 起草绑定契约 |
 | U02 卡片/SSE | API/CLI 卡片修订与状态迁移 | 看板交互、SSE | 界面契约 |
 | A01 内置 agent | 未实施 | CLI 工具映射、无确认/导出权限、状态恢复、预算询问；执行环境边界见 [sandbox.md](sandbox.md) | 编排依赖 API |
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记、可选 `mcp serve` | 新接口确认 |
@@ -124,10 +124,8 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | 决定 | 何时需要 |
 | --- | --- |
 | 平台模型的服务商、模型与单价 | 在运营后台配置默认模型时 |
-| 单位自带模型与平台付费模型的契约（[provider-config.md](provider-config.md)） | 实现 P04 之前 |
 | 平台默认 Vision/Embedding/Search/OCR，及费用与数据政策 | Provider 配置之前 |
 | 模板公共共享 | 扩大模板读取边界之前 |
-| Word 导出的模板适配策略 | export 契约时 |
 | 计费方式、全局记忆来源与审核人、数据驻留 | 对应范围契约时 |
 | 看板卡片交互与进度展示 | U02 之前；服务状态机见 [response-cards.md](../notes/response-cards.md) |
 | 远程 CI 运行与生产对象存储维护方 | 推送代码、生产部署时 |

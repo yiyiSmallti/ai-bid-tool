@@ -848,7 +848,8 @@ async def test_material_selection_cannot_claim_another_revision(gate_db, seeded)
             values = {c.name: getattr(original, c.name) for c in Evidence.__table__.columns}
             values.update(id=uuid4(), product_revision_id=revision.id)
             session.add(Evidence(**values))
-    assert error.value.orig.sqlstate == "23503"
+    # A foreign key or the rewritten evidence checks (0023) may reject it first.
+    assert error.value.orig.sqlstate in {"23503", "23514"}
 
 
 async def test_requirement_cannot_rebind_after_card_creation(gate_db, seeded):

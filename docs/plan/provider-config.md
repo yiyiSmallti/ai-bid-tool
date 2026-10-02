@@ -4,7 +4,7 @@ kind: plan
 
 # 单位自带模型与平台模型选择契约
 
-状态：**后端与 CLI 已实施；PostgreSQL 验收待维护者运行。** 单位后台界面属于
+状态：**后端与 CLI 已实施。** 单位后台界面属于
 [单位后台契约](org-console.md)。实现机制见
 [provider-config.md](../notes/provider-config.md)，本页记录范围、已解决决定和验收要求。
 

@@ -28,7 +28,39 @@ def digest(value: dict) -> str:
     ).hexdigest()
 
 
-async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id: UUID):
+def evidence_dependency(row: dict) -> dict:
+    fixed = {
+        "id": row["id"],
+        "active": row["active_selection"],
+        "confirmed_by": row["confirmed_by"],
+    }
+    if row["input"]["kind"] == "image_region":
+        fixed |= {
+            "asset_id": row["screenshot_asset_id"],
+            "rendition_id": row["screenshot_rendition_id"],
+            "image_sha256": row["image_sha256"],
+            "region": row["region"],
+            "claim_scope": row["claim_scope"],
+            "visual_observation_sha256": hashlib.sha256(
+                row["visual_observation"].encode()
+            ).hexdigest(),
+            "material_kind": row["material_kind"],
+            "quote_check": row["quote_check"],
+            "image_plan_sha256": row["image_rendition"]["plan_sha256"],
+            "image_mapping": row["image_rendition"]["mapping"],
+            "image_profile": row["image_rendition"]["profile"],
+            "privacy_review_id": row["image_rendition"]["privacy_review_id"],
+        }
+    return fixed
+
+
+async def assemble(
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    job_id: UUID,
+    storage: Storage | None = None,
+):
     job, requirements = await cards.extraction_scope(session, task_id, job_id)
     items, manifest, negatives = [], [], 0
     for requirement in requirements:
@@ -40,7 +72,7 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
             revision = await session.get(ResponseCardRevision, card.current_revision_id)
             if revision is None:
                 raise not_found()
-            view = await cards.card_view(session, actor, card, revision, requirement)
+            view = await cards.card_view(session, actor, card, revision, requirement, storage)
         valid_citation = await cards.citation_valid(session, requirement)
         entry = {
             "requirement_id": str(requirement.id),
@@ -83,8 +115,10 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
                     )
                 if view["review_domain"] is None:
                     reasons.append("unclassified")
-                if await cards.generation_materials_stale(session, actor, revision) or any(
-                    not material["active_selection"] for material in view["evidence"]
+                if (
+                    eligibility == "stale_material"
+                    or await cards.generation_materials_stale(session, actor, revision)
+                    or any(not material["active_selection"] for material in view["evidence"])
                 ):
                     reasons.append("stale_material")
                 if eligibility == "needs_reconfirmation":
@@ -102,16 +136,7 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
                 "starred": requirement.starred,
                 "kind": entry["kind"],
                 "eligibility": eligibility,
-                "evidence": [
-                    {
-                        "id": row["id"],
-                        "active": row["active_selection"],
-                        "confirmed_by": row["confirmed_by"],
-                    }
-                    for row in view["evidence"]
-                ]
-                if view
-                else [],
+                "evidence": [evidence_dependency(row) for row in view["evidence"]] if view else [],
             }
         )
     fixed = {
@@ -125,7 +150,12 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
 
 
 async def validate_materials(
-    session: AsyncSession, actor: Identity, task_id: UUID, items: list[dict], storage: Storage
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    extraction_job_id: UUID,
+    items: list[dict],
+    storage: Storage,
 ):
     from pydantic import TypeAdapter
 
@@ -135,9 +165,19 @@ async def validate_materials(
     for item in items:
         if item["kind"] == "row":
             for evidence in await cards.linked_evidence(session, UUID(item["card_revision_id"])):
+                if evidence.kind == "image_region":
+                    from app.services.screenshots import validate_image_evidence
+
+                    await validate_image_evidence(session, actor, evidence, storage=storage)
+                    continue
                 view = await cards.evidence_view(session, actor, evidence)
                 await cards.resolve_material(
-                    session, actor, task_id, adapter.validate_python(view["input"]), storage
+                    session,
+                    actor,
+                    task_id,
+                    adapter.validate_python(view["input"]),
+                    storage,
+                    extraction_job_id=extraction_job_id,
                 )
 
 
@@ -148,9 +188,9 @@ async def submit_draft(
     actor.require("card:read")
     await cards.task_lock(session, task_id)
     extraction, items, manifest, input_hash, negatives = await assemble(
-        session, actor, task_id, body.extraction_job_id
+        session, actor, task_id, body.extraction_job_id, storage
     )
-    await validate_materials(session, actor, task_id, items, storage)
+    await validate_materials(session, actor, task_id, body.extraction_job_id, items, storage)
     if body.dry_run:
         counts = {
             kind: sum(item["kind"] == kind for item in items)
@@ -249,13 +289,13 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
     await cards.task_lock(session, job.task_id)
     extraction_id = UUID(submitted["extraction_job_id"])
     _, items, manifest, input_hash, negatives = await assemble(
-        session, actor, job.task_id, extraction_id
+        session, actor, job.task_id, extraction_id, storage
     )
     if input_hash != submitted["input_hash"] or manifest != submitted["input_manifest"]:
         cards.fail(
             "draft_input_changed", "Inputs changed; read current inputs and submit again", 409, 3
         )
-    await validate_materials(session, actor, job.task_id, items, storage)
+    await validate_materials(session, actor, job.task_id, extraction_id, items, storage)
     completion = "partial" if any(item["kind"] == "gap" for item in items) else "complete"
     run = DraftRun(
         id=uuid4(),
@@ -352,22 +392,17 @@ def current_draft_inputs(requirements: list[Requirement], batch: cards.CardReadB
             "starred": requirement.starred,
             "kind": kind,
             "eligibility": eligibility,
-            "evidence": [
-                {
-                    "id": row["id"],
-                    "active": row["active_selection"],
-                    "confirmed_by": row["confirmed_by"],
-                }
-                for row in view["evidence"]
-            ]
-            if view
-            else [],
+            "evidence": [evidence_dependency(row) for row in view["evidence"]] if view else [],
         }
     return current
 
 
 async def load_draft_reads(
-    session: AsyncSession, actor: Identity, runs: list[DraftRun], requirements: list[Requirement]
+    session: AsyncSession,
+    actor: Identity,
+    runs: list[DraftRun],
+    requirements: list[Requirement],
+    storage: Storage | None = None,
 ):
     rows = list(
         (
@@ -384,6 +419,7 @@ async def load_draft_reads(
         historical_revision_ids={
             row.card_revision_id for row in rows if row.card_revision_id is not None
         },
+        storage=storage,
     )
     grouped: dict[UUID, list[ResponseItem]] = {run.id: [] for run in runs}
     for row in rows:
@@ -443,14 +479,15 @@ def draft_view(
         if item.kind == "row":
             if item.card_revision_id is None or item.table is None:
                 cards.fail("invalid_draft", "Draft row is incomplete", 500, 4)
+            material_rows = batch.links.get(item.card_revision_id, [])
+            if any(batch.image(row)[2] for row in material_rows if row.kind == "image_region"):
+                invalidated.append(str(item.requirement_id))
             entry |= {
                 "category": item.category,
                 "starred": item.starred,
                 "table": item.table,
                 **{key: getattr(item, key) for key in cards.CONTENT_FIELDS},
-                "evidence": [
-                    batch.evidence_view(row) for row in batch.links.get(item.card_revision_id, [])
-                ],
+                "evidence": [batch.evidence_view(row) for row in material_rows],
             }
             tables[item.table].append(entry)
         elif item.kind == "comply_only":
@@ -477,17 +514,27 @@ def draft_view(
     ).model_dump(mode="json")
 
 
-async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
+async def show_draft(
+    session: AsyncSession, actor: Identity, draft_id: UUID, storage: Storage | None = None
+):
     actor = await cards.access(session, actor, "draft:read")
     run = await session.get(DraftRun, draft_id)
     if run is None:
         raise not_found()
     _, requirements = await cards.extraction_scope(session, run.task_id, run.extraction_job_id)
-    batch, grouped, current_inputs = await load_draft_reads(session, actor, [run], requirements)
+    batch, grouped, current_inputs = await load_draft_reads(
+        session, actor, [run], requirements, storage
+    )
     return draft_view(run, grouped[run.id], batch, current_inputs)
 
 
-async def list_drafts(session: AsyncSession, actor: Identity, task_id: UUID, job_id: UUID):
+async def list_drafts(
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    job_id: UUID,
+    storage: Storage | None = None,
+):
     actor = await cards.access(session, actor, "draft:read")
     _, requirements = await cards.extraction_scope(session, task_id, job_id)
     runs = (
@@ -500,7 +547,7 @@ async def list_drafts(session: AsyncSession, actor: Identity, task_id: UUID, job
     if not runs:
         return {"task_id": str(task_id), "extraction_job_id": str(job_id)}, []
     batch, grouped, current_inputs = await load_draft_reads(
-        session, actor, list(runs), requirements
+        session, actor, list(runs), requirements, storage
     )
     items = []
     for run in runs:

@@ -219,7 +219,7 @@ async def test_database_rejects_forbidden_token_scope(seeded):
     org = seeded["orgs"][0]
     db = Database(Settings())
     try:
-        for scope in ("export", "evidence:confirm", "provider:write"):
+        for scope in ("export", "evidence:confirm", "provider:write", "screenshot:ingest"):
             with pytest.raises(DBAPIError) as error:
                 async with db.transaction(org) as session:
                     session.add(

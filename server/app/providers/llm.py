@@ -658,6 +658,8 @@ class HTTPExtractor:
         body: dict,
         *,
         safe_metadata: bool = False,
+        reserved_charge: Decimal | None = None,
+        image_usage: tuple[int, str, str] | None = None,
     ) -> tuple[dict, ProviderUsage]:
         async def request():
             started = time.monotonic()
@@ -699,13 +701,18 @@ class HTTPExtractor:
                 if safe_metadata or echoed_key
                 else payload
             )
-            return (response, payload, trusted_model, echoed_key), self.response_usage(
-                metadata, started
-            )
+            usage = self.response_usage(metadata, started)
+            if image_usage is not None:
+                usage.image_count, usage.image_price_revision, usage.image_input_sha256 = (
+                    image_usage
+                )
+            return (response, payload, trusted_model, echoed_key), usage
 
         try:
             (response, payload, trusted_model, echoed_key), usage = await accounted_call(
-                self.reservation(body), self.platform_model_id is not None, request
+                self.reservation(body) if reserved_charge is None else reserved_charge,
+                self.platform_model_id is not None,
+                request,
             )
             # Account error envelopes that include usage before applying their error/retry policy.
             self.check_status(response, [usage])
