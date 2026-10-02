@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
@@ -13,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.core.errors import ServiceError
+from app.core.errors import ServiceError, log_unexpected
 from app.models.entities import PlatformModel
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.disabled import DisabledLLM
@@ -28,6 +29,7 @@ from app.schemas.contracts import (
 from app.services.extraction import location_of
 
 ADAPTER_VERSION = "http-extract-v2"
+logger = logging.getLogger(__name__)
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 # Exhausted quota, unpaid accounts and expired plans do not recover within the retry
 # window. Zhipu reports them as HTTP 429 with these codes; 1302 and 1305 are plain
@@ -301,24 +303,37 @@ class HTTPExtractor:
         ) as client:
             try:
                 answered = await gather(client, batches(chunks, self.settings.llm_batch_chars))
+                items: list[ExtractedRequirement] = []
+                rejected: list[dict[str, str]] = []
+                for batch, wire in answered:
+                    kept, dropped = self.attach(wire, batch, usages)
+                    items.extend(kept)
+                    rejected.extend(dropped)
             except ProviderFailure as exc:
                 exc.usage = usages
                 raise
-        items: list[ExtractedRequirement] = []
-        for batch, wire in answered:
-            items.extend(self.attach(wire, batch, usages))
-        return LLMResult(extraction=Extraction(items=items), usage=self.total(usages))
+            except Exception as exc:
+                # The vendor billed every finished call, so a bug here must not lose them.
+                log_unexpected(logger, "Extraction", exc)
+                raise ProviderFailure(
+                    "Extraction failed unexpectedly; the calls made so far were recorded",
+                    code="processing_failed",
+                    usage=usages,
+                ) from exc
+        return LLMResult(
+            extraction=Extraction(items=items), usage=self.total(usages), rejected=rejected
+        )
 
     def attach(
         self, wire: WireOutput, batch: list[dict], usages: list[ProviderUsage]
-    ) -> list[ExtractedRequirement]:
+    ) -> tuple[list[ExtractedRequirement], list[dict[str, str]]]:
         by_page = {str(chunk["page"]): chunk for chunk in batch if chunk.get("page")}
         by_block = {
             block["block_id"]: (chunk, block)
             for chunk in batch
             for block in chunk.get("blocks") or []
         }
-        output = []
+        output, rejected = [], []
         for item in wire.items:
             ref = str(item.ref).strip()
             if ref in by_block:
@@ -334,6 +349,16 @@ class HTTPExtractor:
                     code="invalid_provider_output",
                     usage=list(usages),
                 )
+            if not item.text.strip() or not item.quote.strip():
+                # Nothing to save or verify; reported like an uncited item.
+                rejected.append(
+                    {
+                        "position": location.label if location else f"第 {page} 页",
+                        "quote": item.quote[:200],
+                        "reason": "empty_quote" if not item.quote.strip() else "empty_text",
+                    }
+                )
+                continue
             output.append(
                 ExtractedRequirement(
                     category=item.category,
@@ -349,7 +374,7 @@ class HTTPExtractor:
                     condition=item.condition.model_dump() if item.condition else {},
                 )
             )
-        return output
+        return output, rejected
 
     def total(self, usages: list[ProviderUsage]) -> ProviderUsage:
         return ProviderUsage(

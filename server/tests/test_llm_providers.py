@@ -499,3 +499,44 @@ async def test_malformed_output_is_retried_in_smaller_parts(recovers, tenants, t
                 "invalid_provider_output",
             )
             assert await requirement_rows(app, tenants) == []
+
+
+async def test_items_with_an_empty_quote_are_rejected_not_fatal(tenants, tmp_path, pdf_bytes):
+    reply = anthropic_reply([GOOD_ITEMS[0], GOOD_ITEMS[1] | {"quote": "  "}])
+    settings = settings_for(tmp_path, "anthropic")
+    llm = AnthropicExtractor(settings, transport=Vendor(reply).transport())
+    app = create_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        assert status["status"] == "succeeded", status
+        assert [r.quote for r in await requirement_rows(app, tenants)] == [GOOD_ITEMS[0]["quote"]]
+    assert status["result"]["rejected"] == [
+        {"position": "第 2 页", "quote": "  ", "reason": "empty_quote"}
+    ]
+    assert any("quote was empty" in warning for warning in status["result"]["warnings"])
+
+
+async def test_unexpected_failure_keeps_billed_usage_and_logs_no_message(
+    tenants, tmp_path, pdf_bytes, monkeypatch, caplog
+):
+    secret = "SECRET-" + "TENDER-TEXT"  # built at runtime so the source line does not hold it
+
+    def broken(self, wire, batch, usages):
+        raise RuntimeError(secret)
+
+    monkeypatch.setattr(AnthropicExtractor, "attach", broken)
+    settings = settings_for(tmp_path, "anthropic")
+    llm = AnthropicExtractor(settings, transport=Vendor(anthropic_reply(GOOD_ITEMS)).transport())
+    app = create_app(settings, llm=llm, queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        assert (status["status"], status["error"]["code"]) == ("failed", "processing_failed")
+        # The vendor call was billed and is recorded although nothing was saved.
+        assert len(await usage_rows(app, tenants)) == 1
+        assert await requirement_rows(app, tenants) == []
+    assert "RuntimeError" in caplog.text and "SECRET-TENDER-TEXT" not in caplog.text
+    assert "SECRET-TENDER-TEXT" not in json.dumps(status)

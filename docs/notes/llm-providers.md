@@ -59,8 +59,9 @@ actually answered.
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
 | Truncated or malformed output on a single line, `ref` outside the batch | Failed, `invalid_provider_output` |
-| Some quotes not found at the cited position | Succeeded; those items are listed in `result.rejected` and not saved |
-| No quote found at its cited position | Failed, `invalid_citation`; nothing saved |
+| Some items with an empty quote or text, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved |
+| No item passes | Failed, `invalid_citation`; nothing saved |
+| An unexpected error while assembling results | Failed, `processing_failed`; every finished call is still recorded, and the log holds the exception type and stack without its message |
 
 Each completed call produces one `ProviderUsage`. When a later batch fails,
 `ProviderFailure.usage` carries the earlier calls and the processor records

@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -8,7 +9,7 @@ from sqlalchemy.dialects.postgresql import insert
 
 from app.core.config import Settings
 from app.core.db import Database
-from app.core.errors import ServiceError
+from app.core.errors import ServiceError, log_unexpected
 from app.models.entities import Chunk, Document, Job, Requirement, UsageRecord
 from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
 from app.providers.llm import with_reasoning
@@ -17,6 +18,8 @@ from app.schemas.contracts import Extraction, ProviderUsage, SectionText
 from app.services import billing
 from app.services.extraction import fingerprint, merge_starred, split_cited, validate_extraction
 from app.services.parsing import parse_document
+
+logger = logging.getLogger(__name__)
 
 
 class Processor:
@@ -131,6 +134,14 @@ class Processor:
                 charged.extend(usages)
                 usages = []
                 kept, rejected = split_cited(output.extraction, chunks)
+                rejected = [*output.rejected, *rejected]
+                if rejected and not kept.items:
+                    raise ServiceError(
+                        "invalid_citation",
+                        "No extracted requirement cited its source verbatim; nothing was saved",
+                        400,
+                        4,
+                    )
                 requirements = merge_starred(kept, chunks)
                 # Rule-added items quote the source themselves; a failure here is a bug.
                 validate_extraction(requirements, chunks)
@@ -142,7 +153,7 @@ class Processor:
                 if rejected:
                     warnings.append(
                         f"{len(rejected)} extracted requirements were not saved because their "
-                        "quotes were not found at the cited position; see result.rejected."
+                        "quote was empty or not found at the cited position; see result.rejected."
                     )
                 pages = []
             else:
@@ -259,6 +270,7 @@ class Processor:
                 if exc.usage:
                     await self.record_usage(org_id, task_id, exc.usage)
             else:
+                log_unexpected(logger, f"Job {job_id}", exc)
                 error = {
                     "code": "processing_failed",
                     "message": "Processing failed; no unverified results were saved",

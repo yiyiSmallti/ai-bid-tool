@@ -161,3 +161,5 @@ class OCRText(Contract):
 class LLMResult(Contract):
     extraction: Extraction
     usage: ProviderUsage
+    # Items dropped before citation checks, such as ones with an empty quote.
+    rejected: list[dict[str, str]] = Field(default_factory=list)
