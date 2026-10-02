@@ -163,15 +163,28 @@ async def test_usage_deducts_and_empty_balance_blocks_new_jobs(
     }
     assert billing_app.vendor.requests == []
 
-    # A tiny positive balance admits one job, which may finish below zero.
+    # Submission accepts a positive balance; per-call admission requires the full bound.
     await adjust(billing_app, org, "set", 0.001)
-    billing_app.vendor.responses.append(anthropic_reply(GOOD_ITEMS))
     _, status = await run_job(billing_app, billing_app.app, header, document, "extract")
+    assert status["status"] == "failed"
+    assert status["error"]["code"] == "insufficient_balance"
+    assert billing_app.vendor.requests == []
+    assert (await billing_app.get("/billing", headers=header)).json()["data"]["balance"] == 0.001
+
+    await adjust(billing_app, org, "add", 2)
+    billing_app.vendor.responses.append(anthropic_reply(GOOD_ITEMS))
+    retried = await billing_app.post(
+        f"/documents/{document}/extract", headers=header, json={"retry": True}
+    )
+    job = retried.json()["data"]["job_id"]
+    await billing_app.app.state.processor(str(org), job)
+    status = (await billing_app.get(f"/jobs/{job}", headers=header)).json()["data"]
     assert status["status"] == "succeeded", status
     overview = (await billing_app.get("/billing", headers=header)).json()
-    assert overview["data"]["balance"] == pytest.approx(0.001 - 0.0162)
-    assert [e["kind"] for e in overview["items"]] == ["usage", "adjust"]
+    assert overview["data"]["balance"] == pytest.approx(2.001 - 0.0162)
+    assert [e["kind"] for e in overview["items"]] == ["usage", "adjust", "adjust"]
     assert sum(e["amount"] for e in overview["items"]) == pytest.approx(overview["data"]["balance"])
+    await adjust(billing_app, org, "set", 0)
     retry = await billing_app.post(
         f"/documents/{document}/extract", headers=header, json={"retry": True}
     )

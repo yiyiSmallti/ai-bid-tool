@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import Database
 from app.core.errors import ServiceError
-from app.models.entities import AuditLog, BalanceEntry, OrgBalance, UsageRecord, User
+from app.models.entities import AuditLog, BalanceEntry, OrgBalance, UsageRecord, User, VendorCall
 from app.services import platform
 from app.services.auth import Identity
 
@@ -46,8 +46,14 @@ async def current(session: AsyncSession, currency: str) -> Decimal:
 
 
 async def require_funds(session: AsyncSession, currency: str) -> None:
-    # No overdraft allowance: platform-billed work needs a positive balance to start.
-    if await current(session, currency) <= 0:
+    # Submission is advisory; JobExecution serializes the priced admission itself.
+    held = await session.scalar(
+        select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
+            VendorCall.state != "completed"
+        )
+    )
+    assert held is not None
+    if await current(session, currency) - held <= 0:
         raise ServiceError(
             "insufficient_balance", "Balance is used up; redeem a recharge card first", 402, 4
         )
@@ -66,7 +72,8 @@ async def charge_usage(
     )
     balance = await session.scalar(select(OrgBalance).with_for_update())
     assert balance is not None
-    # A running job may finish below zero; the next job is refused until a recharge.
+    # JobExecution reserved this call before sending it; settlement retains the full
+    # reported amount even if a vendor violates the requested token bound.
     balance.balance = Decimal(balance.balance) - amount
     balance.updated_at = datetime.now(UTC)
     session.add(

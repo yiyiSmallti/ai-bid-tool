@@ -189,9 +189,46 @@ class UsageRecord(Tenant, Base):
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     platform_model_id: Mapped[str | None] = mapped_column(String(40))
     charge: Mapped[float | None] = mapped_column(Numeric(16, 8))
+    job_id: Mapped[UUID | None] = mapped_column()
+    run_id: Mapped[UUID | None] = mapped_column()
+    call_id: Mapped[UUID | None] = mapped_column()
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "job_id", "run_id", "call_id"),
+        CheckConstraint("call_id IS NULL OR (job_id IS NOT NULL AND run_id IS NOT NULL)"),
+        Index("usage_records_job", "org_id", "job_id"),
+        ForeignKeyConstraint(["org_id", "job_id"], ["jobs.org_id", "jobs.id"]),
+        ForeignKeyConstraint(
+            ["org_id", "job_id", "run_id", "call_id"],
+            [
+                "vendor_calls.org_id",
+                "vendor_calls.job_id",
+                "vendor_calls.run_id",
+                "vendor_calls.id",
+            ],
+        ),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
+    )
+
+
+class VendorCall(Tenant, Base):
+    """Durable admission, including unresolved requests whose reservation must survive a crash."""
+
+    __tablename__ = "vendor_calls"
+    job_id: Mapped[UUID] = mapped_column()
+    run_id: Mapped[UUID] = mapped_column()
+    reserved_charge: Mapped[Decimal] = mapped_column(Numeric(18, 8))
+    charge: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
+    state: Mapped[str] = mapped_column(String(20), default="pending")
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "job_id", "run_id", "id"),
+        ForeignKeyConstraint(["org_id", "job_id"], ["jobs.org_id", "jobs.id"]),
+        CheckConstraint("reserved_charge >= 0 AND (charge IS NULL OR charge >= 0)"),
+        CheckConstraint("state IN ('pending', 'completed', 'unknown')"),
+        CheckConstraint("(state = 'completed') = (charge IS NOT NULL)"),
+        Index("vendor_calls_job", "org_id", "job_id"),
+        Index("vendor_calls_unsettled", "org_id", "state"),
     )
 
 

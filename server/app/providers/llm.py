@@ -7,6 +7,7 @@ import os
 import re
 import ssl
 import time
+from decimal import ROUND_CEILING, Decimal
 from typing import Any
 
 import httpx
@@ -18,6 +19,7 @@ from app.core.config import Settings
 from app.core.errors import ServiceError, log_unexpected
 from app.models.entities import PlatformModel
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
+from app.providers.calls import accounted_call, plan_calls
 from app.providers.disabled import DisabledLLM
 from app.schemas.contracts import (
     Category,
@@ -30,7 +32,7 @@ from app.schemas.contracts import (
 )
 from app.services.extraction import cited, fingerprint, location_of, normalize
 
-ADAPTER_VERSION = "http-extract-v2"
+ADAPTER_VERSION = "http-extract-v3"
 logger = logging.getLogger(__name__)
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 # Exhausted quota, unpaid accounts and expired plans do not recover within the retry
@@ -281,6 +283,7 @@ class HTTPExtractor:
     name = "http"
     version = ADAPTER_VERSION
     test_only = False
+    records_calls = True
     # Official reasoning levels of a catalog model, by name, and the level this copy runs at.
     reasoning_levels: dict[str, dict] = {}
     default_reasoning: str | None = None
@@ -392,7 +395,9 @@ class HTTPExtractor:
             follow_redirects=False,
         ) as client:
             try:
-                answered = await gather(client, batches(chunks, self.settings.llm_batch_chars))
+                groups = batches(chunks, self.settings.llm_batch_chars)
+                plan_calls(len(groups))
+                answered = await gather(client, groups)
                 items: list[ExtractedRequirement] = []
                 rejected: list[dict[str, str]] = []
                 for batch, wire in answered:
@@ -528,7 +533,89 @@ class HTTPExtractor:
             charge=charge,
         )
 
-    async def post(self, client: httpx.AsyncClient, url: str, headers: dict, body: dict) -> dict:
+    def reservation(self, body: dict) -> Decimal:
+        if self.platform_model_id is None:
+            return Decimal(0)
+        if self.sale is None or any(not Decimal(str(p)).is_finite() or p < 0 for p in self.sale):
+            raise ProviderFailure(
+                "Platform model prices are unavailable", code="billing_price_unavailable"
+            )
+        # Byte-level tokenizers cannot emit more content tokens than UTF-8 bytes.
+        # Count the entire request (including schema) plus conservative framing space.
+        input_bound = len(json.dumps(body, ensure_ascii=False).encode("utf-8")) + 4096
+        output_bound = body.get("max_completion_tokens", body["max_tokens"])
+        copies = body.get("n", 1)
+        if (
+            type(output_bound) is not int
+            or output_bound < 1
+            or type(copies) is not int
+            or copies < 1
+        ):
+            raise ProviderFailure("Model output limit is invalid", code="billing_bound_unavailable")
+        return (
+            (
+                input_bound * Decimal(str(self.sale[0]))
+                + output_bound * copies * Decimal(str(self.sale[1]))
+            )
+            / 1_000_000
+        ).quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
+
+    def response_usage(self, payload: dict, started: float) -> ProviderUsage:
+        tokens = payload.get("usage")
+        if not isinstance(tokens, dict):
+            raise ProviderFailure("Vendor response has no usage", code="invalid_provider_usage")
+
+        def count(name: str, *, optional: bool = False) -> int:
+            value = tokens.get(name, 0) if optional else tokens.get(name)
+            if type(value) is not int or value < 0:
+                raise ProviderFailure(
+                    "Vendor token usage is invalid", code="invalid_provider_usage"
+                )
+            return value
+
+        if self.name == "anthropic":
+            inputs = (
+                count("input_tokens")
+                + count("cache_creation_input_tokens", optional=True)
+                + count("cache_read_input_tokens", optional=True)
+            )
+            outputs = count("output_tokens")
+        else:
+            inputs, outputs = count("prompt_tokens"), count("completion_tokens")
+        return self.usage(started, payload.get("model") or self.model, inputs, outputs)
+
+    async def post(
+        self, client: httpx.AsyncClient, url: str, headers: dict, body: dict
+    ) -> tuple[dict, ProviderUsage]:
+        async def request():
+            started = time.monotonic()
+            response = await self.send(client, url, headers, body)
+            try:
+                payload = response.json()
+            except ValueError:
+                if response.status_code != 200:
+                    self.check_status(response)
+                raise ProviderFailure(
+                    "LLM service returned a non-JSON response", code="invalid_provider_output"
+                ) from None
+            if not isinstance(payload, dict):
+                raise ProviderFailure(
+                    "LLM response is not an object", code="invalid_provider_output"
+                )
+            if response.status_code != 200 and "usage" not in payload:
+                self.check_status(response)
+            return (response, payload), self.response_usage(payload, started)
+
+        (response, payload), usage = await accounted_call(
+            self.reservation(body), self.platform_model_id is not None, request
+        )
+        # Account error envelopes that include usage before applying their error/retry policy.
+        self.check_status(response, [usage])
+        return payload, usage
+
+    async def send(
+        self, client: httpx.AsyncClient, url: str, headers: dict, body: dict
+    ) -> httpx.Response:
         try:
             # httpx timeouts restart on every received byte; vendors under load keep the
             # connection alive with blank lines, so a total deadline is enforced here.
@@ -539,6 +626,10 @@ class HTTPExtractor:
             raise ProviderFailure(
                 "LLM service is unreachable or timed out", retryable=True
             ) from None
+        return response
+
+    @staticmethod
+    def check_status(response: httpx.Response, usages: list[ProviderUsage] | None = None) -> None:
         if response.status_code != 200:
             try:
                 error = response.json().get("error") or {}
@@ -557,18 +648,14 @@ class HTTPExtractor:
                     + (f"; it resets at {reset.group()}" if reset else "")
                     + ". Contact your system administrator.",
                     code="provider_quota_exhausted",
+                    usage=usages,
                 )
             # Only the status and vendor error type are kept; bodies may echo input.
             raise ProviderFailure(
                 f"LLM request failed with HTTP {response.status_code} ({kind})",
                 retryable=response.status_code in RETRYABLE_STATUS,
+                usage=usages,
             )
-        try:
-            return response.json()
-        except ValueError:
-            raise ProviderFailure(
-                "LLM service returned a non-JSON response", code="invalid_provider_output"
-            ) from None
 
     @staticmethod
     def parse(text: str, usage: ProviderUsage) -> WireOutput:
@@ -606,17 +693,9 @@ class AnthropicExtractor(HTTPExtractor):
             # A safety decline is retried server-side on the model Anthropic recommends.
             headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
             body["fallbacks"] = "default"
-        started = time.monotonic()
         base = (settings.llm_base_url or "https://api.anthropic.com").rstrip("/")
         body = {**self.settings.request_options(), **body}
-        payload = await self.post(client, f"{base}/v1/messages", headers, body)
-        tokens = payload.get("usage") or {}
-        usage = self.usage(
-            started,
-            payload.get("model") or self.model,
-            int(tokens.get("input_tokens") or 0),
-            int(tokens.get("output_tokens") or 0),
-        )
+        payload, usage = await self.post(client, f"{base}/v1/messages", headers, body)
         stop = payload.get("stop_reason")
         if stop == "refusal":
             raise ProviderFailure(
@@ -661,17 +740,9 @@ class OpenAICompatibleExtractor(HTTPExtractor):
             ],
             "response_format": response_format,
         }
-        started = time.monotonic()
         base = (settings.llm_base_url or "https://api.openai.com/v1").rstrip("/")
         body = {**self.settings.request_options(), **body}
-        payload = await self.post(client, f"{base}/chat/completions", headers, body)
-        tokens = payload.get("usage") or {}
-        usage = self.usage(
-            started,
-            payload.get("model") or self.model,
-            int(tokens.get("prompt_tokens") or 0),
-            int(tokens.get("completion_tokens") or 0),
-        )
+        payload, usage = await self.post(client, f"{base}/chat/completions", headers, body)
         choices = payload.get("choices") or []
         if not choices:
             raise ProviderFailure(

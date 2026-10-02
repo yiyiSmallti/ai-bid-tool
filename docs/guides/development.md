@@ -125,6 +125,41 @@ next `req extract` runs again instead of returning the cached job. How
 batching, errors, and costs work is described in
 [llm-providers.md](../notes/llm-providers.md).
 
+## Configure job guards
+
+1. Set these values consistently on the API and all workers before starting
+   model jobs:
+
+   | Setting | Default | Meaning |
+   | --- | --- | --- |
+   | `BID_JOB_MAX_CHARGE` | `10` | Positive platform charge ceiling for one job, in `BID_BILLING_CURRENCY`, across all attempts |
+   | `BID_JOB_MAX_VENDOR_CALLS` | `64` | Minimum vendor-request ceiling per job, including retries and unresolved requests |
+   | `BID_JOB_VENDOR_CALLS_PER_BATCH` | `4` | Requests allowed per first-pass batch; the per-job ceiling is the larger of this times the batches and `BID_JOB_MAX_VENDOR_CALLS`, so large documents can finish while runaway halving still stops |
+   | `BID_JOB_LEASE_SECONDS` | `900` | Lease duration in seconds; at least 3 |
+   | `BID_JOB_HEARTBEAT_SECONDS` | `30` | Positive renewal interval; at most one third of the lease duration |
+
+2. Apply [0016_vendor_call_guards.py](../../server/migrations/versions/0016_vendor_call_guards.py)
+   with the migration owner before running the new workers. Quiesce old
+   workers during rollout: an older binary does not participate in admission.
+   Do not mix guarded and unguarded workers when relying on the spending bound.
+3. Ensure configured endpoint prices and token limits satisfy the
+   [reservation contract](../notes/prepaid-billing.md#admission-and-the-spending-bound).
+   A positive balance can still be insufficient for a whole request's reserved
+   bound. Set ceilings to the intended workload; retrying the same job keeps
+   its previous call count, charges and unresolved reservations.
+4. Run the API/processor guard scenarios against the disposable PostgreSQL
+   runtime from [Run the checks](#run-the-checks):
+
+   ```sh
+   uv run pytest -q server/tests/test_vendor_call_guards.py server/tests/test_llm_providers.py server/tests/test_billing.py server/tests/test_job_boundaries.py --basetemp=/private/tmp/bid-call-guards --junitxml=artifacts/vendor-call-guards.xml
+   ```
+
+   Vendors use `httpx.MockTransport`. The guard scenarios write synthetic
+   accounting snapshots beneath `--basetemp`; JUnit records passes, failures
+   and skips. A missing or sandbox-inaccessible PostgreSQL instance does not
+   validate reservations, row locks, migrations or tenant isolation. Keep
+   evidence outside `docs/`.
+
 ## Run the platform console
 
 The console at `/app` is for platform operators; it shows org accounts and
@@ -156,6 +191,15 @@ Set `BID_BILLING_CURRENCY` (an ISO 4217 code, default `USD`) before any org has
 a balance; catalog sale prices, charges, balances and card values all use it,
 and startup refuses balances stored in another currency. Org admins use
 `http://127.0.0.1:8000/app/org/login` to see their balance and redeem cards.
+
+If sign-in or org lookup returns `too_many_attempts` (HTTP 429), stop retrying
+and wait for `Retry-After` before retrying; switching pages or orgs does not
+reset the account's limit. For `auth_busy` (HTTP 503), wait for `Retry-After`
+and retry with the current authenticator code. Both errors use CLI exit code 3.
+After a successful platform sign-in, wait for a new authenticator code before
+signing in again. The shared account/source limits, proxy requirements and
+concurrency bounds are defined in
+[Password admission and TOTP consumption](../notes/platform-console.md#password-admission-and-totp-consumption).
 
 The end-to-end check drives a real browser through sign-in, provisioning,
 models, usage, CSV export, disabling and password setup against a running API

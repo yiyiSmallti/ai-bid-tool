@@ -32,19 +32,88 @@ requires a reason, and writes an `adjust` entry. Both restore the caller's
 `app.current_org`. A trigger makes `redeemed` and `void` final, and the
 runtime role has no column grant that could mark a card redeemed.
 
-`Processor.record_usage` inserts each usage record and, for platform-billed
-calls, deducts `charge` and writes a `usage` entry in the same transaction.
-`require_funds` refuses platform-billed extraction with 402
-`insufficient_balance` when the balance is not positive, at submission in
-[main.py](../../server/app/api/main.py) and again before the vendor call in
-[processor.py](../../server/app/jobs/processor.py). Failed redemptions are
-recorded in the org audit log, committed separately, and ten within an hour
-lock redemption for that org. Startup compares every stored balance currency
-with `BID_BILLING_CURRENCY` and refuses to run on a mismatch.
+`require_funds` checks positive available funds at submission in
+[main.py](../../server/app/api/main.py). This check is advisory: every model
+request must also pass `JobExecution.admit` in
+[execution.py](../../server/app/jobs/execution.py), including split batches,
+gap filling and transient retries. The execution context is shared by model
+capabilities; future card generation must use the same context and
+`accounted_call` in [calls.py](../../server/app/providers/calls.py).
+
+### Admission and the spending bound
+
+For a platform call, `HTTPExtractor.reservation` in
+[llm.py](../../server/app/providers/llm.py) computes an upper charge `R` at the
+catalog sale prices: input allowance is the UTF-8 byte length of the whole JSON
+request plus 4,096 framing tokens; output allowance is the request's output
+token limit, multiplied by `n` when present. The amount is rounded upward to
+eight decimal places. Unknown or invalid sale prices fail with
+`billing_price_unavailable`, rather than authorizing an unpriced call.
+
+Admission locks the job and then its org balance. It checks attempt ownership,
+the job's cumulative call count, its settled charges plus outstanding
+reservations, and the org's balance minus **all** outstanding reservations.
+It commits a `vendor_calls` row before sending anything. Job ceilings apply
+across automatic and explicit retries; `--retry` cannot erase them. The call
+ceiling scales with the first pass: the adapter reports its planned batches,
+and the ceiling is the larger of the fixed minimum and the batches times the
+per-batch allowance, so a long tender can finish while halving loops stop. Settings
+and defaults are in [development.md](../guides/development.md#configure-job-guards).
+Exhaustion fails with `job_call_limit_exceeded`, `job_charge_limit_exceeded`,
+or `insufficient_balance`; no new call is sent. Even calls with unknown usage
+consume the call ceiling and retain their monetary reservation.
+
+The concurrent overdraft bound is **zero** when each call's actual charge
+`C <= R`: org admission serializes against the balance row, and settlement
+replaces a reservation with the actual deduction in one transaction. The
+number of workers, jobs and batch slots does not change that bound. Reducing
+a balance through an operator adjustment is an independent authorized write,
+not a model admission.
+
+This bound requires a text endpoint with byte-level tokenization, framing
+within the allowance, and enforcement of the requested output limit. A vendor
+report exceeding `R` is still recorded and fully charged, and fails the
+attempt with `call_charge_bound_exceeded`. For an incompatible vendor, the
+possible overdraft is bounded by the sum of `max(0, C - R)` for already
+admitted calls; no provider-independent fixed monetary guarantee is claimed
+for a service that ignores its token limits. Verify that contract when adding
+an endpoint; token counts and per-call reservations make violations observable.
+
+### Immediate, idempotent settlement
+
+The adapter settles a response immediately after reading its token usage,
+before output parsing or citation checks. Refused, truncated and malformed
+answers, and error envelopes carrying usage, follow the same path. One
+transaction inserts `UsageRecord`, deducts `charge`, writes its balance entry,
+settles `vendor_calls`, and updates `jobs.result.cost` from all usage for that
+job. Later failure, cancellation or takeover cannot erase those charges.
+Vendor USD cost remains distinct from the platform charge in billing currency.
+
+Migration [0016_vendor_call_guards.py](../../server/migrations/versions/0016_vendor_call_guards.py)
+adds tenant-scoped reservations and the unique `(org_id, job_id, run_id,
+call_id)` usage key, with a composite foreign key to the admitted call. A
+balance entry also has a unique usage reference. A transient accounting write
+is retried at most three times with the same identifiers; an ambiguous commit
+cannot deduct twice. Other database failures stop further calls explicitly.
+Legacy usage is left intact; the job attribution and ceilings cover calls
+admitted through this mechanism.
+
+Failed redemptions are recorded in the org audit log, committed separately,
+and ten within an hour lock redemption for that org. Startup compares every
+stored balance currency with `BID_BILLING_CURRENCY` and refuses a mismatch.
 
 ## Pitfalls
 
-- A running job can leave the balance negative; only the next job is refused.
+- Reservations reduce available funds without manufacturing a ledger charge.
+  Timeouts, missing/invalid usage, and requests interrupted by process death
+  remain `pending` or `unknown`; neither lease expiry nor retry releases them.
+  Reconcile against vendor records before settling an unresolved call. There
+  is no automatic reconciliation command. A crash after the vendor responds
+  but before the settlement commits can leave this unresolved state: local
+  storage cannot atomically commit a third-party HTTP request.
+- Graceful cancellation drains already admitted requests through accounting,
+  within the vendor timeout. It cannot protect against SIGKILL or permanent
+  database failure; durable reservations prevent spending that money again.
 - Changing `BID_BILLING_CURRENCY` with balances in place stops startup. Settle
   or adjust balances to zero in the old currency first, then clear them with
   an operator-owned migration; nothing converts amounts.
@@ -58,6 +127,8 @@ with `BID_BILLING_CURRENCY` and refuses to run on a mismatch.
 ## Code
 
 - [0012_prepaid_billing.py](../../server/migrations/versions/0012_prepaid_billing.py)
+- [execution.py](../../server/app/jobs/execution.py): `JobExecution`, `job_cost`;
+  [calls.py](../../server/app/providers/calls.py): `accounted_call`.
 - [server/app/services/billing.py](../../server/app/services/billing.py); `create_cards`, `void_card`, `adjust_balance` in [server/app/services/platform.py](../../server/app/services/platform.py)
 - [web/src/views/Cards.vue](../../web/src/views/Cards.vue), [web/src/views/OrgBilling.vue](../../web/src/views/OrgBilling.vue), [web/src/views/OrgLogin.vue](../../web/src/views/OrgLogin.vue)
-- Tests: [test_billing_db.py](../../server/tests/test_billing_db.py), [test_billing.py](../../server/tests/test_billing.py), card and balance cases in [test_platform_api.py](../../server/tests/test_platform_api.py), [web/e2e/platform.spec.js](../../web/e2e/platform.spec.js)
+- Tests: [test_vendor_call_guards.py](../../server/tests/test_vendor_call_guards.py), [test_billing_db.py](../../server/tests/test_billing_db.py), [test_billing.py](../../server/tests/test_billing.py), card and balance cases in [test_platform_api.py](../../server/tests/test_platform_api.py), [web/e2e/platform.spec.js](../../web/e2e/platform.spec.js)

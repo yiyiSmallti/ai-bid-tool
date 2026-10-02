@@ -599,8 +599,9 @@ schema/adapter 版本、遮挡开关/规则版本；全部进入单位内缓存�
 成本；本次 dry-run 实际 cost 为零，预估在 data 内，耗时不可估时为 null。
 
 起草复用 [UsageRecord 与预付扣费](../notes/prepaid-billing.md#how-it-works)：平台计费
-提交及调用前执行 require_funds，余额不足以 insufficient_balance 阻止生成；dry-run
-报告相同拦截但不调用。沿用现有余额检查，不声称已实现预算预占或实际费用硬上限。
+提交执行 require_funds，实际调用复用 JobExecution 与 accounted_call 的逐次准入、
+预占、跨 attempt 预算和租约归属检查；余额不足以 insufficient_balance 阻止生成。
+dry-run 报告余额拦截但不调用；费用上界与未知调用处理以预付费机制笔记为准。
 每次实际调用，包括重试、截断、拒绝及后续作业失败，按已有逐次记账机制记录服务商、
 实际模型、档位、耗时、tokens、成本与平台售价 charge；UsageRecord 与余额扣减同事务，
 幂等落账，未知服务商成本不伪造为零。usage 和审计不保存发送正文。

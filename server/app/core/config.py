@@ -1,8 +1,9 @@
 import json
 import re
+from decimal import Decimal
 from pathlib import Path
 
-from pydantic import SecretStr, field_validator, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -43,6 +44,14 @@ class Settings(BaseSettings):
     platform_session_seconds: int = 1800
     # Sale prices, charges, balances and card values are all in this ISO 4217 currency.
     billing_currency: str = "USD"
+    # Shared model-job guards; retries of the same job consume the same budget.
+    job_max_charge: Decimal = Field(default=Decimal("10"), gt=0, allow_inf_nan=False)
+    job_max_vendor_calls: int = Field(default=64, ge=1)
+    # Per first-pass batch; the call ceiling is the larger of this times the batches and the
+    # fixed ceiling above.
+    job_vendor_calls_per_batch: float = Field(default=4, ge=1)
+    job_lease_seconds: int = Field(default=900, ge=3)
+    job_heartbeat_seconds: float = Field(default=30, gt=0, allow_inf_nan=False)
     # Built console from web/dist; served under /app when set.
     web_dir: Path | None = None
 
@@ -89,6 +98,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def llm_complete(self):
+        if self.job_heartbeat_seconds * 3 > self.job_lease_seconds:
+            raise ValueError("Job heartbeat must be at most one third of the lease duration")
         # A selected provider with missing settings must stop startup, not degrade.
         if self.llm_provider == "anthropic":
             self.llm_model = self.llm_model or "claude-opus-5-5"

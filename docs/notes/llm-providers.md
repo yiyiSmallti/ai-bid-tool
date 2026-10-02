@@ -79,6 +79,12 @@ batch attempts before reaching individual segments; including the two transient
 retries per batch, the upper bound is `3*(2*S-B)` vendor calls per extraction
 attempt. A requeued job starts a new attempt and can incur those costs again.
 These are bounds on calls, not a fixed token or price cap.
+The shared job execution layer additionally enforces a cumulative vendor-call
+ceiling and, for platform-billed requests, a charge ceiling and per-call
+reservation. All recursive and gap-fill requests, including transient retries,
+pass the same admission point immediately before HTTP dispatch. The spending
+bound, unknown outcomes and accounting keys are defined in
+[prepaid-billing.md](prepaid-billing.md#admission-and-the-spending-bound).
 
 On Anthropic, effort comes from `BID_LLM_EFFORT`, and a safety decline is
 retried server-side on another model (`fallbacks: "default"`) unless
@@ -95,14 +101,20 @@ actually answered.
 | Some items with an empty quote or text, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved |
 | No item passes | Failed, `invalid_citation`; nothing saved |
 | An unexpected error while assembling results | Failed, `processing_failed`; every finished call is still recorded, and the log holds the exception type and stack without its message |
+| No funds for the next call, or a job ceiling reached | Failed, `insufficient_balance`, `job_charge_limit_exceeded`, or `job_call_limit_exceeded`; no partial extraction is saved, prior usage remains |
+| Attempt cancelled, superseded or expired | `job_attempt_stopped` fences further calls; it cannot overwrite a newer attempt or cancellation |
+| Usage cannot be persisted, or exceeds its reserved bound | Failed, `usage_accounting_failed` or `call_charge_bound_exceeded`; no further calls from the attempt |
+| Missing or invalid vendor token counts | Failed, `invalid_provider_usage`; keep the reservation for reconciliation instead of inventing zero usage |
 
-Each completed call produces one `ProviderUsage`, saved as its own usage record
-on success as well as failure; the adapter also returns aggregate usage for
-existing consumers. Gap-fill calls use this same accounting path, including
-truncated, malformed and refused responses. When a later batch fails,
-`ProviderFailure.usage` carries the earlier calls and the processor records
-them, because the vendor billed them. USD is computed from the configured
-per-million-token prices, or `null` when either price is missing.
+Each response with valid usage produces one `ProviderUsage`. Inside a job,
+`HTTPExtractor.post` awaits immediate durable settlement through
+`accounted_call` before interpreting model output. Aggregate adapter usage and
+`ProviderFailure.usage` remain available to standalone consumers, but the job
+processor does not insert these records again. Job costs are computed from
+persisted usage across all attempts, including failed and cancelled calls.
+USD is computed from configured per-million-token prices, or `null` when
+either price is missing. Anthropic cached input tokens are included in input
+usage at those configured prices.
 
 ## Pitfalls
 
@@ -129,6 +141,11 @@ per-million-token prices, or `null` when either price is missing.
 - The cache key includes the provider, model, adapter version, and
   `PROMPT_VERSION`; bump `PROMPT_VERSION` for extraction prompt changes and
   `ADAPTER_VERSION` for adapter or wire schema compatibility changes.
+- Budget exhaustion is an atomic extraction failure: already verified
+  intermediate items are not saved as a partial requirement list. The future
+  card-generation contract may keep verified partial results, but must reuse
+  call accounting and attempt guards. Lease and cancellation behavior are in
+  [background-jobs.md](background-jobs.md).
 
 ## Code
 
