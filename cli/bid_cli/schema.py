@@ -4,6 +4,7 @@ from app.schemas.certificate_contracts import (
     TaskCertificateSelection,
 )
 from app.schemas.certificate_file_contracts import CertificateFileCreate
+from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import (
     CONTRACT_VERSION,
     JobAction,
@@ -102,6 +103,7 @@ COMMANDS = {
     "req extract": JobAction,
     "req list": None,
     "req history": None,
+    "req repair-citations": CitationRepairRequest,
     "job status": None,
     "job wait": None,
     "job cancel": None,

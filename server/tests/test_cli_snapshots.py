@@ -721,11 +721,49 @@ async def fake_request(self, method, path, **kwargs):
             "error": None,
             "attempts": 1,
         }
+    elif path.endswith("/requirements/repair"):
+        execute = method == "POST"
+        if execute:
+            assert kwargs["json"] == {
+                "extraction_job_id": IDENTIFIER,
+                "expected_preview": "a" * 64,
+                "reason": "Reviewed synthetic citation repair",
+            }
+        else:
+            assert kwargs["params"] == {"job": IDENTIFIER}
+        data = {
+            "task_id": IDENTIFIER,
+            "extraction_job_id": IDENTIFIER,
+            "preview_hash": "a" * 64,
+            "execute": execute,
+            "changed": 1 if execute else 0,
+            "repairable": 1,
+            "unlocatable": 0,
+            "unchanged": 0,
+        }
+        items = [
+            {
+                "requirement_id": IDENTIFIER,
+                "source": {
+                    "document_id": IDENTIFIER,
+                    "chunk_id": IDENTIFIER,
+                    "page": 1,
+                    "location": None,
+                    "quote": "Synthetic source",
+                },
+                "model_quote": None,
+                "proposed_quote": "Synthetic  source",
+                "status": "repairable",
+                "reason": None,
+                "quote_changed": True,
+            }
+        ]
     elif path.endswith("/requirements"):
         items = [
             {
                 "id": IDENTIFIER,
                 "text": "Synthetic requirement",
+                "model_quote": "Synthetic source",
                 "job_id": IDENTIFIER,
                 "reasoning": None,
                 "source": {
@@ -739,6 +777,7 @@ async def fake_request(self, method, path, **kwargs):
             {
                 "id": IDENTIFIER,
                 "text": "Synthetic Word requirement",
+                "model_quote": "★ 核心数不少于 32 核",
                 "category": "technical",
                 "starred": True,
                 "condition": {},
@@ -1094,6 +1133,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "req extract": ["req", "extract", "--document", IDENTIFIER, "--reasoning", "high"],
         "req list": ["req", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
         "req history": ["req", "history", "--task", IDENTIFIER],
+        "req repair-citations": ["req", "repair-citations", "--task", IDENTIFIER, "--job", IDENTIFIER],
+        "req repair-citations execute": ["req", "repair-citations", "--task", IDENTIFIER, "--job", IDENTIFIER, "--execute", "--expected-preview", "a" * 64, "--reason", "Reviewed synthetic citation repair"],
         "job status": ["job", "status", IDENTIFIER],
         "job wait": ["job", "wait", IDENTIFIER],
         "job cancel": ["job", "cancel", IDENTIFIER],

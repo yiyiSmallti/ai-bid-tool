@@ -57,6 +57,7 @@ def test_schema_tracks_actual_commands():
         (["tender", "parse"], "tender parse"),
         (["req", "extract"], "req extract"),
         (["req", "list"], "req list"),
+        (["req", "repair-citations"], "req repair-citations"),
         (["job", "status"], "job status"),
         (["job", "wait"], "job wait"),
         (["job", "cancel"], "job cancel"),

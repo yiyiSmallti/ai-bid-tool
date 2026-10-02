@@ -44,6 +44,7 @@ from app.schemas.response_card_contracts import (
 )
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_actor_context
 from app.services.evidence_sources import require_source, source_data
+from app.services.extraction import locate_quote
 from app.services.resources import audit
 
 # Only explicit scalar declaration fields can be cited. URLs and identifiers are not proof.
@@ -229,12 +230,14 @@ async def citation_valid(session: AsyncSession, requirement: Requirement) -> boo
             chunk.page == requirement.page
             and requirement.location is None
             and requirement.quote in chunk.text
+            and locate_quote(chunk.text, requirement.quote)[0] is not None
         )
     if not requirement.location or not chunk.blocks:
         return False
     return any(
         {key: value for key, value in block.items() if key != "text"} == requirement.location
         and requirement.quote in block["text"]
+        and locate_quote(block["text"], requirement.quote)[0] is not None
         for block in chunk.blocks
     )
 
@@ -407,6 +410,18 @@ async def evidence_view(session: AsyncSession, actor: Identity, row: Evidence) -
     ).model_dump(mode="json")
 
 
+def quote_hash(quote: str) -> str:
+    return hashlib.sha256(quote.encode()).hexdigest()
+
+
+def revision_quote_hash(revision: ResponseCardRevision, requirement: Requirement) -> str:
+    # Pre-0017 revisions are immutable. Repair retains their original quote in
+    # model_quote instead of rewriting those historical rows to backfill a hash.
+    return revision.quote_sha256 or quote_hash(
+        requirement.model_quote if requirement.model_quote is not None else requirement.quote
+    )
+
+
 async def card_view(
     session: AsyncSession,
     actor: Identity,
@@ -420,6 +435,8 @@ async def card_view(
     ]
     if not await citation_valid(session, requirement):
         eligibility = "invalid_citation"
+    elif revision_quote_hash(revision, requirement) != quote_hash(requirement.quote):
+        eligibility = "needs_reconfirmation"
     elif revision.disposition == "comply_only":
         eligibility = "comply_only"
     elif any(not row["active_selection"] for row in evidence):
@@ -477,11 +494,20 @@ async def append_revision(
     correlation_id: UUID | None = None,
 ):
     number = previous.revision + 1 if previous else 1
+    requirement = await session.get(Requirement, card.requirement_id)
+    if requirement is None:
+        raise not_found()
+    quote_sha256 = (
+        quote_hash(requirement.quote)
+        if previous is None or action in {"update", "disposition", "reopen", "withdraw"}
+        else revision_quote_hash(previous, requirement)
+    )
     revision = ResponseCardRevision(
         id=uuid4(),
         org_id=actor.org_id,
         card_id=card.id,
         revision=number,
+        quote_sha256=quote_sha256,
         **({key: getattr(previous, key) for key in COPY_FIELDS} | values if previous else values),
         origin="human" if actor.actor_kind == "session" else "agent",
         actor_user_id=actor.user_id,
@@ -720,7 +746,7 @@ async def card_action(
     values = {"state": after, "reason": body.reason}
     correlation_id = uuid4()
     if body.action == "confirm":
-        if view["eligibility"] in {"stale_material", "invalid_citation"}:
+        if view["eligibility"] in {"stale_material", "invalid_citation", "needs_reconfirmation"}:
             fail(view["eligibility"], "Card inputs are no longer valid", 409)
         if not all(getattr(previous, name) for name in CONTENT_FIELDS):
             fail(

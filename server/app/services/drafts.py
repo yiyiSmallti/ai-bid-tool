@@ -18,7 +18,7 @@ from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.resources import audit
 
-RULE_VERSION = "response-draft-v1"
+RULE_VERSION = "response-draft-v2"
 TABLES = ("substantive", "commercial", "technical")
 
 
@@ -85,6 +85,8 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
                     reasons.append("unclassified")
                 if any(not material["active_selection"] for material in view["evidence"]):
                     reasons.append("stale_material")
+                if eligibility == "needs_reconfirmation":
+                    reasons.append("needs_reconfirmation")
             if not valid_citation:
                 reasons.append("invalid_citation")
             entry |= {"kind": "gap", "gap_reasons": reasons}

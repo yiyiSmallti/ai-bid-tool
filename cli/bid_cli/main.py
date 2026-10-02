@@ -17,6 +17,7 @@ from app.schemas.certificate_contracts import (
     TaskCertificateSelection,
 )
 from app.schemas.certificate_file_contracts import CertificateFileCreate
+from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import Contract, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
@@ -1055,6 +1056,36 @@ def req_history(
 ):
     params = {"document": str(document)} if document else None
     emit(call("GET", f"/tasks/{task}/extractions", params=params), "req history", json_output)
+
+
+@req_app.command("repair-citations")
+def req_repair_citations(
+    task: Annotated[UUID, typer.Option()],
+    job: Annotated[UUID, typer.Option()],
+    execute: Annotated[bool, typer.Option(help="Apply an explicitly reviewed preview")] = False,
+    expected_preview: Annotated[
+        str | None, typer.Option(help="Hash from the read-only preview")
+    ] = None,
+    reason: Annotated[str | None, typer.Option()] = None,
+    json_output: JsonOption = False,
+):
+    path = f"/tasks/{task}/requirements/repair"
+    if execute:
+        if expected_preview is None or reason is None:
+            raise ServiceError(
+                "invalid_input", "Execution requires --expected-preview and --reason", 400, 2
+            )
+        body = CitationRepairRequest(
+            extraction_job_id=job, expected_preview=expected_preview, reason=reason
+        )
+        response = call("POST", path, json=body.model_dump(mode="json"))
+    else:
+        if expected_preview is not None or reason is not None:
+            raise ServiceError(
+                "invalid_input", "Use --execute with --expected-preview and --reason", 400, 2
+            )
+        response = call("GET", path, params={"job": str(job)})
+    emit(response, "req repair-citations", json_output)
 
 
 @job_app.command("status")

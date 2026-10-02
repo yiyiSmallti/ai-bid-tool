@@ -30,9 +30,9 @@ from app.schemas.contracts import (
     ProviderUsage,
     Source,
 )
-from app.services.extraction import cited, fingerprint, location_of, normalize
+from app.services.extraction import cited, fingerprint, locate_span, location_of, normalize
 
-ADAPTER_VERSION = "http-extract-v3"
+ADAPTER_VERSION = "http-extract-v4"
 logger = logging.getLogger(__name__)
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 # Exhausted quota, unpaid accounts and expired plans do not recover within the retry
@@ -67,7 +67,8 @@ PARAMETER_UNIT = re.compile(
     r"|%|°c|英寸|毫米|厘米|米|千克|公斤|克|毫秒|秒|分钟|小时|瓦|伏|安培|像素|核|线程|页/分",
     re.IGNORECASE,
 )
-PARAMETER_PREFIX = re.compile(r"^[★☆]*(?:\(\d+\)|\d+(?:[、)]|\.(?!\d)))?[★☆]*")
+# Applied to original text, so full-width forms such as （1） and 1． count as numbering too.
+PARAMETER_PREFIX = re.compile(r"^[★☆\s]*(?:[(（]\d+[)）]|\d+(?:[、)）]|[.．](?!\d)))?[★☆\s]*")
 
 
 def parameter_segments(text: str) -> list[str]:
@@ -94,7 +95,7 @@ def uncovered_parameters(
             continue  # Invalid citations cannot hide gaps; the processor reports them later.
         source = item.source
         position = source.location.block_id if source.location else source.page
-        quotes.setdefault((str(source.chunk_id), position), []).append(normalize(source.quote))
+        quotes.setdefault((str(source.chunk_id), position), []).append(source.quote)
 
     partials, count = [], 0
     for chunk in chunks:
@@ -103,20 +104,45 @@ def uncovered_parameters(
         for unit in chunk.get("blocks") or [chunk]:
             position = unit["block_id"] if chunk.get("blocks") else chunk["page"]
             covered = quotes.get((str(chunk["id"]), position), [])
+            text = unit["text"]
+            segments = parameter_segments(text)
+            # Work in original offsets, locating quotes as extraction saved them, so a
+            # parameter is not covered by another whose name contains its own (5mm, 3.5mm).
+            intervals = []
+            cursor = 0
+            for segment in segments:
+                start = text.index(segment, cursor)
+                cursor = start + len(segment)
+                key = PARAMETER_PREFIX.sub("", segment).rstrip("。. ")
+                key_start = start + segment.index(key)
+                intervals.append((key_start, key_start + len(key)))
+            # A list-sized quote is not evidence of per-parameter extraction. Resend
+            # every segment it spans, even when its summary mentions one parameter.
+            covered_indexes = set()
+            for quote in covered:
+                span, _ = locate_span(text, quote)
+                if span is None:
+                    continue
+                quote_start, quote_end = span
+                matches = [
+                    index
+                    for index, (start, end) in enumerate(intervals)
+                    if quote_start <= start and end <= quote_end
+                ]
+                if len(matches) == 1:
+                    covered_indexes.add(matches[0])
             missing = []
-            for segment in parameter_segments(unit["text"]):
-                # Numbering, stars and sentence-ending punctuation are not parameters.
-                key = PARAMETER_PREFIX.sub("", normalize(segment)).rstrip("。.")
-                if not any(key in quote for quote in covered):
+            for index, segment in enumerate(segments):
+                if index not in covered_indexes:
                     missing.append(segment)
             if not missing:
                 continue
             count += len(missing)
-            text = "\n".join(missing)
+            rendered = "\n".join(missing)
             if chunk.get("blocks"):
-                blocks.append({**unit, "text": text})
+                blocks.append({**unit, "text": rendered})
             else:
-                page_text = text
+                page_text = rendered
         if blocks:
             partials.append(
                 {**chunk, "blocks": blocks, "text": "\n".join(b["text"] for b in blocks)}
@@ -401,7 +427,7 @@ class HTTPExtractor:
                 items: list[ExtractedRequirement] = []
                 rejected: list[dict[str, str]] = []
                 for batch, wire in answered:
-                    kept, dropped = self.attach(wire, batch, usages)
+                    kept, dropped = self.attach(wire, batch)
                     items.extend(kept)
                     rejected.extend(dropped)
                 partials, gap_fill.segments = uncovered_parameters(chunks, items)
@@ -418,7 +444,7 @@ class HTTPExtractor:
                         client, batches(partials, self.settings.llm_batch_chars)
                     )
                     for batch, wire in answered:
-                        kept, dropped = self.attach(wire, batch, usages)
+                        kept, dropped = self.attach(wire, batch)
                         items.extend(kept)
                         rejected.extend(dropped)
                         gap_fill.fingerprints.update(fingerprint(item) for item in kept)
@@ -443,7 +469,7 @@ class HTTPExtractor:
                 ) from exc
 
     def attach(
-        self, wire: WireOutput, batch: list[dict], usages: list[ProviderUsage]
+        self, wire: WireOutput, batch: list[dict]
     ) -> tuple[list[ExtractedRequirement], list[dict[str, str]]]:
         by_page = {str(chunk["page"]): chunk for chunk in batch if chunk.get("page")}
         by_block = {
@@ -462,11 +488,14 @@ class HTTPExtractor:
                 chunk = by_page[ref]
                 page, location = chunk["page"], None
             else:
-                raise ProviderFailure(
-                    "Model cited a position that was not in the request",
-                    code="invalid_provider_output",
-                    usage=list(usages),
+                rejected.append(
+                    {
+                        "position": str(item.ref),
+                        "quote": item.quote[:200],
+                        "reason": "unknown_position",
+                    }
                 )
+                continue
             if not item.text.strip() or not item.quote.strip():
                 # Nothing to save or verify; reported like an uncited item.
                 rejected.append(
@@ -482,6 +511,7 @@ class HTTPExtractor:
                     category=item.category,
                     starred=item.starred,
                     text=item.text,
+                    model_quote=item.quote,
                     source=Source(
                         document_id=chunk["document_id"],
                         chunk_id=chunk["id"],

@@ -61,6 +61,26 @@ late links to historical revisions, incomplete draft coverage, and updates or
 deletes of history. Trusted application authentication supplies the actor context;
 SQL access as the application role is not an alternative authentication API.
 
+Card citation checks require the stored quote to occur as exact text and to have
+one unique normalized match at the recorded page or Word block. Migration `0017`
+adds nullable `requirements.model_quote` and
+`response_card_revisions.quote_sha256`. Creation, editing, withdrawal, reopening,
+and human disposition bind a new revision to the current exact requirement quote;
+other actions inherit the previous baseline. Existing revisions remain immutable: when their hash is null,
+the service derives the historical hash from `model_quote`, or from the current
+quote when no model quote exists. It never backfills or rewrites revision history.
+
+A legacy citation repair may change the requirement's exact quote or populate
+`model_quote`, but it does not silently approve existing review. When the current
+revision's quote hash differs from the repaired source quote, the card reports
+`needs_reconfirmation` and cannot be confirmed. A pending card must be withdrawn,
+and a confirmed card reopened, before it is submitted or edited and reviewed
+again. A `comply_only` requirement needs a fresh human disposition. The repair
+audit event `requirement.repair_citation` contains only object IDs and old/new
+hashes, including separate quote and model-quote changes; it excludes tender
+text and provider text, and retains the operator's reason only as
+`reason_sha256`.
+
 Draft submission fixes an input manifest and hash containing every requirement,
 its card revision or absence, citation hash and material eligibility. The job
 processor rechecks the initiator's current permissions, cancellation/attempt
@@ -72,10 +92,14 @@ creating a job, audit, usage record or draft.
 Assembly copies confirmed content verbatim. Each requirement appears exactly once
 in a substantive, commercial or technical row, the comply-only list, or the gap
 list. Starred/substantive requirements have table priority; otherwise the review
-domain selects the table. Rows preserve the original category and star flag. Reading order follows chunks, located blocks and quote
-positions. Negative deviations remain visible. Gaps contain source locations and
-reason codes, never unconfirmed candidate text. Reading an old draft recalculates
-validity and affected requirements without rewriting its response snapshots.
+domain selects the table. Rows preserve the original category and star flag.
+Reading order follows chunks, located blocks and quote positions. Negative
+deviations remain visible. Gaps contain source locations and reason codes, never
+unconfirmed candidate text. Reading an old draft recalculates validity and
+affected requirements without rewriting its response snapshots. The assembly rule
+(`RULE_VERSION` in [drafts.py](../../server/app/services/drafts.py)) maps repaired cards awaiting review to the
+`needs_reconfirmation` gap reason, so an old draft becomes invalid when its
+current source inputs no longer match its reviewed revision.
 
 Assembly does not call a model or OCR and records zero model cost without creating
 an empty usage record. A job may succeed with `completion=partial`: CLI draft,
@@ -94,6 +118,9 @@ text, response text, material quotes and credentials are not copied into logs.
 - A page without locally extractable text remains available as a source preview,
   but cannot supply an exact page quote to this workflow. There is no implicit OCR,
   vendor call or image upload fallback.
+- Citation repair is not card repair. It leaves unlocatable requirements and all
+  card revisions unchanged; the human review workflow is what renews a response
+  or `comply_only` decision after a source quote changes.
 - The task redaction setting is persisted and protected, but its outbound behavior
   belongs to the model drafting workflow. Changing it does not redact stored tender
   text or rewrite existing responses.
@@ -109,7 +136,9 @@ text, response text, material quotes and credentials are not copied into logs.
 - [response_card_contracts.py](../../server/app/schemas/response_card_contracts.py): shared validation and views.
 - [models/response_cards.py](../../server/app/models/response_cards.py): tenant records and references.
 - [services/response_cards.py](../../server/app/services/response_cards.py): actor checks, material resolution, revisions and human actions.
+- [services/citation_repair.py](../../server/app/services/citation_repair.py): preview-bound tenant-admin citation repair and hash-only audit metadata.
 - [services/drafts.py](../../server/app/services/drafts.py): manifests, complete assembly and historical validity.
+- [server/migrations/versions/0017_exact_citations.py](../../server/migrations/versions/0017_exact_citations.py): quote provenance and immutable revision hashes.
 - [api/response_cards.py](../../server/app/api/response_cards.py): authenticated API entry points.
 - [jobs/processor.py](../../server/app/jobs/processor.py): attempt-safe background publication.
 - [test_response_cards.py](../../server/tests/test_response_cards.py): API-to-worker workflows and repeatable synthetic artifact.

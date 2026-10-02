@@ -96,7 +96,12 @@ async def test_word_parameter_gaps_are_filled_and_each_call_is_recorded(
         usages = await usage_rows(app, tenants)
 
     assert status["status"] == "succeeded", status
-    assert status["result"]["gap_fill"] == {"segments": 4, "calls": 1, "added": 4}
+    assert status["result"]["gap_fill"] == {
+        "segments": 4,
+        "calls": 1,
+        "added": 4,
+        "remaining": 0,
+    }
     assert status["result"]["created"] == 6
     assert {r["source"]["quote"] for r in rows} == set(PARAMETERS)
     assert all(r["source"]["location"]["block_id"] == "t1r1c1" for r in rows)
@@ -136,7 +141,12 @@ async def test_gap_fill_rejects_invented_and_joined_quotes_and_counts_only_new_s
         status, rows = await extract_document(api, app, header, parameter_word(source))
         assert len(await usage_rows(app, tenants)) == 2
     assert status["status"] == "succeeded", status
-    assert status["result"]["gap_fill"] == {"segments": 2, "calls": 1, "added": 1}
+    assert status["result"]["gap_fill"] == {
+        "segments": 2,
+        "calls": 1,
+        "added": 1,
+        "remaining": 1,
+    }
     assert {r["source"]["quote"] for r in rows} == {"内存：≥16 GB", "容量：≥512 GB"}
     assert [r["reason"] for r in status["result"]["rejected"]] == [
         "quote_not_at_position",
@@ -160,7 +170,12 @@ async def test_no_gap_call_when_specs_are_covered_or_no_specs_exist(complete, te
         assert len(await usage_rows(app, tenants)) == 1
     assert status["status"] == "succeeded", status
     assert len(vendor.requests) == 1
-    assert status["result"]["gap_fill"] == {"segments": 0, "calls": 0, "added": 0}
+    assert status["result"]["gap_fill"] == {
+        "segments": 0,
+        "calls": 0,
+        "added": 0,
+        "remaining": 0,
+    }
     assert len(rows) == len(quotes)  # the starred heading must not be added by the rule
 
 
@@ -177,15 +192,30 @@ async def test_uncited_first_pass_does_not_hide_gaps_in_another_block(tenants, t
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         status, rows = await extract_document(api, app, header, parameter_word(source))
     assert status["status"] == "succeeded", status
-    assert status["result"]["gap_fill"] == {"segments": 2, "calls": 1, "added": 2}
+    assert status["result"]["gap_fill"] == {
+        "segments": 2,
+        "calls": 1,
+        "added": 2,
+        "remaining": 0,
+    }
     assert len(rows) == 2 and len(status["result"]["rejected"]) == 1
 
 
-async def test_decimal_parameter_names_are_not_mistaken_for_list_numbers(tenants, tmp_path):
-    source = "3.5mm插孔：≥2个；5mm插孔：≥2个"
+@pytest.mark.parametrize(
+    "first,second",
+    [
+        ("3.5mm插孔：≥2个", "5mm插孔：≥2个"),
+        ("内存：≥16 GB", "扩展内存：≥16 GB"),
+    ],
+)
+async def test_parameter_coverage_uses_the_actual_segment_not_a_name_substring(
+    first, second, tenants, tmp_path
+):
+    # Failure mode: one parameter name is contained in another parameter's name.
+    source = first + "；" + second
     vendor = Vendor(
-        anthropic_reply([item("t1r1c1", "5mm插孔：≥2个")]),
-        anthropic_reply([item("t1r1c1", "3.5mm插孔：≥2个")]),
+        anthropic_reply([item("t1r1c1", second)]),
+        anthropic_reply([item("t1r1c1", first)]),
     )
     settings = settings_for(tmp_path, "anthropic")
     app = create_app(
@@ -194,12 +224,58 @@ async def test_decimal_parameter_names_are_not_mistaken_for_list_numbers(tenants
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         status, rows = await extract_document(api, app, header, parameter_word(source))
     assert status["status"] == "succeeded", status
-    assert status["result"]["gap_fill"] == {"segments": 1, "calls": 1, "added": 1}
+    assert status["result"]["gap_fill"] == {
+        "segments": 1,
+        "calls": 1,
+        "added": 1,
+        "remaining": 0,
+    }
     assert {r["source"]["quote"] for r in rows} == set(source.split("；"))
 
 
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+async def test_a_whole_list_quote_covers_no_segments_but_a_single_segment_does(
+    provider, tenants, tmp_path
+):
+    source = "内存：≥16 GB；容量：≥512 GB；功率：≤100 W"
+    whole_list = item("t1r1c1", source)
+    whole_list["text"] = "内存至少 16 GB"
+    covered = item("t1r1c1", "容量：≥512 GB")
+    vendor = Vendor(
+        vendor_reply(provider, [whole_list, covered]),
+        vendor_reply(
+            provider,
+            [item("t1r1c1", "内存：≥16 GB"), item("t1r1c1", "功率：≤100 W")],
+        ),
+    )
+    settings = settings_for(tmp_path, provider)
+    adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
+    app = create_app(settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        status, rows = await extract_document(api, app, header, parameter_word(source))
+
+    assert status["status"] == "succeeded", status
+    assert status["result"]["gap_fill"] == {
+        "segments": 2,
+        "calls": 1,
+        "added": 2,
+        "remaining": 0,
+    }
+    assert {row["source"]["quote"] for row in rows} == {
+        source,
+        "内存：≥16 GB",
+        "容量：≥512 GB",
+        "功率：≤100 W",
+    }
+    assert len(vendor.requests) == 2
+    assert next(row for row in rows if row["source"]["quote"] == source)["text"] == "内存至少 16 GB"
+    gap = user_content(vendor.requests[1])
+    assert "内存：≥16 GB" in gap and "功率：≤100 W" in gap
+    assert "容量：≥512 GB" not in gap
+
+
 @pytest.mark.parametrize("failure", ["truncated", "malformed", "refused", "bad_ref"])
-async def test_gap_call_failures_keep_all_billed_usage(failure, tenants, tmp_path):
+async def test_gap_call_outcomes_keep_all_billed_usage(failure, tenants, tmp_path):
     source = "内存：≥16 GB；容量：≥512 GB；功率：≤100 W"
     replies = {
         "truncated": anthropic_reply([], stop="max_tokens"),
@@ -232,13 +308,32 @@ async def test_gap_call_failures_keep_all_billed_usage(failure, tenants, tmp_pat
     if recoverable:
         assert status["status"] == "succeeded", status
         assert len(rows) == 3
-        assert status["result"]["gap_fill"] == {"segments": 2, "calls": 3, "added": 2}
+        assert status["result"]["gap_fill"] == {
+            "segments": 2,
+            "calls": 3,
+            "added": 2,
+            "remaining": 0,
+        }
         assert all('<block id="t1r1c1">' in user_content(r) for r in vendor.requests)
+    elif failure == "bad_ref":
+        assert status["status"] == "succeeded", status
+        assert [row["source"]["quote"] for row in rows] == ["内存：≥16 GB"]
+        assert status["result"]["gap_fill"] == {
+            "segments": 2,
+            "calls": 1,
+            "added": 0,
+            "remaining": 2,
+        }
+        assert status["result"]["rejected"] == [
+            {
+                "position": "p999",
+                "quote": "容量：≥512 GB",
+                "reason": "unknown_position",
+            }
+        ]
     else:
         assert status["status"] == "failed", status
-        assert status["error"]["code"] == (
-            "provider_refused" if failure == "refused" else "invalid_provider_output"
-        )
+        assert status["error"]["code"] == "provider_refused"
         assert rows == []
 
 
@@ -260,6 +355,11 @@ async def test_pdf_gaps_keep_page_numbers_and_do_not_borrow_coverage_from_other_
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         status, rows = await extract_document(api, app, header, content, "parameters.pdf")
     assert status["status"] == "succeeded", status
-    assert status["result"]["gap_fill"] == {"segments": 2, "calls": 1, "added": 2}
+    assert status["result"]["gap_fill"] == {
+        "segments": 2,
+        "calls": 1,
+        "added": 2,
+        "remaining": 0,
+    }
     assert sorted(r["source"]["page"] for r in rows) == [1, 1, 2, 2]
     assert re.findall(r'<page number="(\d+)">', user_content(vendor.requests[1])) == ["2"]

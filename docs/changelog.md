@@ -6,6 +6,26 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-02：要求引用精确原文与受控修复
+
+- 抽取引用先按 NFKC、弯直引号和空白规范化定位，再保存唯一命中的原文连续片段；模型原始引文另存
+  `model_quote`。无匹配、重复匹配和未知位置按条拒绝，其余已核验结果继续保存。
+- 参数补漏不再把覆盖多个参数的整段引文当成逐项覆盖；★ 规则按分号和换行分段，只标记明确带星号的
+  分段并补入缺失项。`gap_fill.remaining` 报告最终保存及规则补入后仍未覆盖的参数数。
+- 抽取提示词保持 `req-v3`；新增后处理缓存版本 `exact-spans-v1`，HTTP adapter 更新为 v4，使所有服务商
+  在引用语义变化后重新抽取。Result 契约版本保持 `1.2`。
+- 新增仅单位人类 admin 可用的 `bid req repair-citations`：默认只读预览，执行需提交预览哈希和原因；
+  范围、来源或当前卡片变化时报 `repair_preview_changed`，不能唯一定位的历史要求保持不变。审计只记
+  要求、任务、作业、卡片标识及新旧引用、模型引文和操作原因的哈希，不记录这些原始文本。
+- 迁移 `0017` 增加可空的 `requirements.model_quote` 与卡片修订引用哈希，不改写既有修订历史。
+  修复后引用哈希变化的卡片派生 `needs_reconfirmation`，仅遵守项需重新人工处置；
+  `response-draft-v2` 组表将其列为缺口，读取旧初稿时重新计算有效性并保留原快照。机制见
+  [LLM 抽取](notes/llm-providers.md)、[Word 引用](notes/docx-citations.md)和
+  [响应卡片](notes/response-cards.md)，操作见[CLI 指南](guides/cli.md#repair-legacy-requirement-citations)。
+- 同一位置出现多处规范化匹配时，选择两侧以文本边界、空白或列表标点分隔的那一处，避免 `5mm插孔`
+  与 `3.5mm插孔`、`内存` 与 `扩展内存` 互相误判。由 Codex 实现，在真实数据库上验证并修正；
+  当时的完整回归：727 项通过。
+
 ## 2026-10-02：模型调用预算、即时记账与作业租约
 
 - 新增共享作业执行上下文；提取的首轮、拆分、补漏和重试均在调用前检查 attempt 归属、
@@ -18,7 +38,6 @@ kind: changelog
 - 增加基于 API、processor 与 `httpx.MockTransport` 的预算、并发、取消、记账重试、心跳、
   接管及租户隔离场景。费用上界与恢复限制见[预付费机制](notes/prepaid-billing.md)，
   参数见[开发指南](guides/development.md#configure-job-guards)。
-
 - 每个作业的调用次数上限随首轮批次数增长（`BID_JOB_VENDOR_CALLS_PER_BATCH`，默认每批 4 次，不低于
   `BID_JOB_MAX_VENDOR_CALLS`），大型招标文件不会在首轮中途被截停。由 Codex 实现，在真实数据库上验证；
   当时的完整回归：717 项通过。

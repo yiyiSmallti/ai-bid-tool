@@ -41,6 +41,7 @@ from app.schemas.certificate_contracts import (
     TaskCertificateSelection,
 )
 from app.schemas.certificate_file_contracts import CertificateFileCreate
+from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import (
     CONTRACT_VERSION,
     JobAction,
@@ -63,6 +64,7 @@ from app.services import (
     billing,
     certificate_files,
     certificates,
+    citation_repair,
     evidence_sources,
     features,
     profiles,
@@ -70,7 +72,7 @@ from app.services import (
     templates,
 )
 from app.services.auth import SCOPES, authenticate, login, set_actor_context
-from app.services.extraction import PROMPT_VERSION
+from app.services.extraction import EXTRACTION_VERSION, PROMPT_VERSION
 from app.services.parsing import PARSER_VERSION, validate_document
 from app.services.template_files import MAX_TEMPLATE_BYTES, validate_template
 from app.services.template_files import WARNINGS as TEMPLATE_WARNINGS
@@ -1063,7 +1065,7 @@ def create_app(
         version = (
             f"{PARSER_VERSION}:{ocr.name}:{ocr.version}:{settings.ocr_language}"
             if kind == "parse"
-            else f"{PROMPT_VERSION}:{model.name}:{model.model}:{model.version}"
+            else f"{PROMPT_VERSION}:{EXTRACTION_VERSION}:{model.name}:{model.model}:{model.version}"
         )
         if level is not None:
             # Each level is its own job; repeating the same level returns the same job.
@@ -1225,13 +1227,33 @@ def create_app(
 
         items = [
             {
-                **serial(row, ("id", "text", "category", "starred", "condition", "job_id")),
+                **serial(
+                    row, ("id", "text", "category", "starred", "condition", "job_id", "model_quote")
+                ),
                 "reasoning": reasoning,
                 "source": serial(row, ("document_id", "chunk_id", "page", "location", "quote")),
             }
             for row, _, reasoning in sorted(pairs, key=reading_order)
         ]
         return result("req list", items=items)
+
+    @app.get(
+        "/tasks/{task_id}/requirements/repair", name="req_repair_preview", response_model=Result
+    )
+    async def req_repair_preview(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
+        data, items = await citation_repair.repair_citations(ctx[0], ctx[1], task_id, job)
+        return result("req repair-citations", data=data, items=items)
+
+    @app.post(
+        "/tasks/{task_id}/requirements/repair", name="req_repair_execute", response_model=Result
+    )
+    async def req_repair_execute(
+        task_id: UUID, body: CitationRepairRequest, ctx=Depends(context, scope="function")
+    ):
+        data, items = await citation_repair.repair_citations(
+            ctx[0], ctx[1], task_id, body.extraction_job_id, body
+        )
+        return result("req repair-citations", data=data, items=items)
 
     @app.get("/tasks/{task_id}/extractions", name="req_history", response_model=Result)
     async def req_history(

@@ -40,37 +40,53 @@ number or block ID as `ref` with a verbatim quote. Word citations are covered
 in [docx-citations.md](docx-citations.md). Output is constrained to `WIRE_SCHEMA`:
 Anthropic through `output_config.format`, OpenAI-compatible services through
 `response_format` (`json_schema`, or `json_object` with the schema in the
-prompt). The adapter maps each `ref` back to its chunk ID and document ID, so the
-model never reproduces UUIDs. `condition` is typed as
+prompt). The adapter maps each known `ref` back to its chunk ID and document ID,
+so the model never reproduces UUIDs. An unknown `ref` rejects only that item with
+`unknown_position`; other verified items from the paid response continue through
+the processor. `condition` is typed as
 `param/op/value/unit` or null, because structured outputs require closed
 objects. The processor then checks every quote against the stored page or
-block text, saves the items that pass, and lists the others in
-`result.rejected` with their position, quote, and a warning.
+block text. Normalization is used only to locate a unique contiguous span: the
+exact source characters are saved as `source.quote`, while the model's original
+text is retained separately as top-level `model_quote`. No match is rejected as
+`quote_not_at_position`; more than one normalized match is rejected as
+`ambiguous_quote` unless exactly one is bounded by segment separators, as
+described in [docx-citations.md](docx-citations.md). Gap-fill coverage locates
+quotes with the same rule in original offsets. Rejected items are listed in `result.rejected` with their
+position, model quote, reason, and a warning.
 
 The prompt requires one requirement per hardware or software parameter,
 including nonnumeric parameters, with that parameter's own quote and all its
 source details. Heading-only items are skipped even when starred; `merge_starred`
-also skips a heading ending in a colon without content after it.
+also skips a heading ending in a colon without content after it. Star detection
+splits a block on Chinese or ASCII semicolons and newlines, so only an explicitly
+marked segment becomes starred. Every model item whose exact source quote sits
+inside that segment is marked; a missing marked segment is added from the source.
 
 After the first pass, `HTTPExtractor.extract` performs one parameter gap-fill
 sweep. `uncovered_parameters` splits the full stored block or page text on
 Chinese or ASCII semicolons and newlines. A piece is a candidate when it has a
 comparison (`≥`, `≤`, `>`, `<`, `≯`, `≮`, or phrases such as `不少于`, `不低于`,
 `不超过`), or a `name:value` whose value contains a digit or a recognized unit.
-Coverage uses only items that pass `cited`, at the same chunk and block/page;
-the normalized parameter must occur in a kept quote. Leading list numbers and
-stars and terminal sentence punctuation do not affect coverage.
+Coverage uses only items that pass `cited`, at the same chunk and block/page. A
+quote covers a parameter only when it contains exactly one detected parameter
+segment; a quote spanning a whole list covers none of those segments. Leading
+list numbers, stars, and terminal sentence punctuation do not affect coverage.
 
 Only uncovered pieces are rendered, one per line, under the original block ID
 or page number. They reuse the batch budget, concurrency, transient retries and
 halving above. The processor still validates every returned quote against the
 full stored source, so joining separated pieces or inventing a value is rejected.
-There is no second gap scan. With no gaps, no extra call is made.
+There is no second model sweep. With no gaps, no extra call is made. After model
+items and deterministic starred-source items are finalized, the processor scans
+once more to report what is still uncovered.
 
 `result.gap_fill` adds `segments` (uncovered candidate pieces), `calls` (actual
 gap-fill attempts, including retries), and `added` (new requirements saved from
-gap-fill output after citation checks and deduplication). Existing result fields
-and the `extract(chunks, schema)` provider entry point are unchanged.
+gap-fill output after citation checks and deduplication). `remaining` is the
+number of candidate pieces still uncovered after all saved and rule-added items.
+Existing result fields and the `extract(chunks, schema)` provider entry point are
+unchanged.
 
 Gap filling adds the input and output tokens of its calls, at the selected
 model and reasoning level. For `S` uncovered segments grouped into `B` initial
@@ -97,8 +113,8 @@ actually answered.
 | Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; the message names the reset time when the vendor gives one and asks the user to contact the system administrator |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
-| Truncated or malformed output on a single line, `ref` outside the batch | Failed, `invalid_provider_output` |
-| Some items with an empty quote or text, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved |
+| Truncated or malformed output on a single line | Failed, `invalid_provider_output` |
+| Some items have an empty quote or text, an unknown `ref`, no unique source match, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved |
 | No item passes | Failed, `invalid_citation`; nothing saved |
 | An unexpected error while assembling results | Failed, `processing_failed`; every finished call is still recorded, and the log holds the exception type and stack without its message |
 | No funds for the next call, or a job ceiling reached | Failed, `insufficient_balance`, `job_charge_limit_exceeded`, or `job_call_limit_exceeded`; no partial extraction is saved, prior usage remains |
@@ -130,17 +146,18 @@ usage at those configured prices.
   from the source. `evals/extract_tender.py` reports verified citations and
   ★ recall per run.
 - Gap detection is lexical, not a completeness proof. Nonnumeric parameters
-  without a comparison or recognized unit rely on the first-pass prompt. A
-  whole-list quote can count as coverage even if the requirement text omits
-  details; the prompt instructs the model to quote each parameter separately.
+  without a comparison or recognized unit rely on the first-pass prompt.
+  Whole-list quotes are retained when valid but deliberately cover no individual
+  parameter segment; each parameter still needs its own saved quote.
 - Reasoning models can spend the whole output budget thinking. On GLM, a
   section took about 11 times longer with thinking on, and the full reference
   tender was cut off at 32,000 output tokens before halving existed. Halving
   costs the truncated call plus the retries; disable thinking with
   `BID_LLM_REQUEST_OPTIONS` when most batches overflow.
-- The cache key includes the provider, model, adapter version, and
-  `PROMPT_VERSION`; bump `PROMPT_VERSION` for extraction prompt changes and
-  `ADAPTER_VERSION` for adapter or wire schema compatibility changes.
+- The cache key includes the provider, model, `PROMPT_VERSION`,
+  `EXTRACTION_VERSION`, and `ADAPTER_VERSION`. Bump `PROMPT_VERSION` for prompt changes,
+  `EXTRACTION_VERSION` for post-processing or citation semantics, and
+  `ADAPTER_VERSION` for adapter or wire-schema compatibility changes.
 - Budget exhaustion is an atomic extraction failure: already verified
   intermediate items are not saved as a partial requirement list. The future
   card-generation contract may keep verified partial results, but must reuse
@@ -150,6 +167,7 @@ usage at those configured prices.
 ## Code
 
 - [server/app/providers/llm.py](../../server/app/providers/llm.py): `HTTPExtractor.extract`, `uncovered_parameters`, `parameter_segments`, `AnthropicExtractor`, `OpenAICompatibleExtractor`, `create_llm`, `WIRE_SCHEMA`.
+- [server/app/services/extraction.py](../../server/app/services/extraction.py): exact-span location, citation rejection, starred-source merging, and fingerprints.
 - [server/app/providers/base.py](../../server/app/providers/base.py): `ProviderFailure` with `code` and `usage`.
 - [server/app/jobs/processor.py](../../server/app/jobs/processor.py): usage recording and job states.
 - [server/app/core/config.py](../../server/app/core/config.py): `llm_*` settings and startup validation.

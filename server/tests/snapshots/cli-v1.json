@@ -1681,6 +1681,7 @@
       {
         "id": "00000000-0000-0000-0000-000000000001",
         "job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": "Synthetic source",
         "reasoning": null,
         "source": {
           "chunk_id": "00000000-0000-0000-0000-000000000001",
@@ -1696,6 +1697,7 @@
         "condition": {},
         "id": "00000000-0000-0000-0000-000000000001",
         "job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": "★ 核心数不少于 32 核",
         "reasoning": "high",
         "source": {
           "chunk_id": "00000000-0000-0000-0000-000000000001",
@@ -1717,6 +1719,82 @@
         },
         "starred": true,
         "text": "Synthetic Word requirement"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "req repair-citations": {
+    "command": "req repair-citations",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "changed": 0,
+      "execute": false,
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "repairable": 1,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "unchanged": 0,
+      "unlocatable": 0
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "model_quote": null,
+        "proposed_quote": "Synthetic  source",
+        "quote_changed": true,
+        "reason": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
+          "page": 1,
+          "quote": "Synthetic source"
+        },
+        "status": "repairable"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "req repair-citations execute": {
+    "command": "req repair-citations",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "changed": 1,
+      "execute": true,
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "repairable": 1,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "unchanged": 0,
+      "unlocatable": 0
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "model_quote": null,
+        "proposed_quote": "Synthetic  source",
+        "quote_changed": true,
+        "reason": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
+          "page": 1,
+          "quote": "Synthetic source"
+        },
+        "status": "repairable"
       }
     ],
     "ok": true,
@@ -5145,6 +5223,98 @@
             }
           ],
           "input": null
+        },
+        "req repair-citations": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "execute",
+              "options": [
+                "--execute"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_preview",
+              "options": [
+                "--expected-preview"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_preview": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Preview",
+                "type": "string"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "reason": {
+                "maxLength": 10000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "expected_preview",
+              "reason"
+            ],
+            "title": "CitationRepairRequest",
+            "type": "object"
+          }
         },
         "resource certificate add": {
           "cli_parameters": [

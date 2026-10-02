@@ -132,7 +132,7 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_
         ([item("p4", "服务器内存不低于 64GB。参数")], "invalid_citation"),  # spans two blocks
         (
             [item("p999", "投标人须具备有效的营业执照。")],
-            "invalid_provider_output",
+            "invalid_citation",
         ),  # unknown block
     ],
 )
@@ -151,6 +151,14 @@ async def test_word_citations_must_sit_inside_the_cited_block(items, code, tenan
         _, status = await run_job(api, app, header, document, "extract")
         assert (status["status"], status["error"]["code"]) == ("failed", code)
         assert (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"] == []
+        if items[0]["ref"] == "p999":
+            assert status["result"]["rejected"] == [
+                {
+                    "position": "p999",
+                    "quote": "投标人须具备有效的营业执照。",
+                    "reason": "unknown_position",
+                }
+            ]
 
 
 async def test_reparse_replaces_the_old_unverified_word_chunk(tenants, tmp_path, admin_engine):
@@ -173,8 +181,10 @@ async def test_reparse_replaces_the_old_unverified_word_chunk(tenants, tmp_path,
 
 
 async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
+    model_quote = '投标文件须注明"响应内容"及具体数值。'
+    source_quote = "投标文件须注明“响应内容”及具体数值。"
     vendor = Vendor(
-        anthropic_reply([item("p5", '投标文件须注明"响应内容"及具体数值。')]),
+        anthropic_reply([item("p5", model_quote)]),
         anthropic_reply([]),
     )
     settings = settings_for(tmp_path, "anthropic")
@@ -187,10 +197,109 @@ async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
         _, status = await run_job(api, app, header, document, "extract")
         assert status["status"] == "succeeded", status
         rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
-        assert [r["source"]["location"]["block_id"] for r in rows] == [
+        assert [row["source"]["location"]["block_id"] for row in rows] == [
             "t1r2c2",
             "p5",
         ]  # source order
+        normalized = rows[1]
+        assert normalized["source"]["quote"] == source_quote
+        assert normalized["model_quote"] == model_quote
+        assert rows[0]["model_quote"] is None  # source rule, not model output
+
+
+async def test_unknown_word_ref_is_rejected_without_discarding_a_verified_item(tenants, tmp_path):
+    vendor = Vendor(
+        anthropic_reply(
+            [
+                item("p2", "投标人须具备有效的营业执照。", "qualification"),
+                item("p999", "投标人须具备虚构位置的证明。", "qualification"),
+            ]
+        ),
+        anthropic_reply([]),
+    )
+    settings = settings_for(tmp_path, "anthropic")
+    app = create_app(
+        settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        task, document = await upload_word(api, header)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
+
+    assert status["status"] == "succeeded", status
+    assert [row["source"]["location"]["block_id"] for row in rows] == ["p2", "t1r2c2"]
+    assert status["result"]["rejected"] == [
+        {
+            "position": "p999",
+            "quote": "投标人须具备虚构位置的证明。",
+            "reason": "unknown_position",
+        }
+    ]
+
+
+async def test_star_markers_apply_per_segment_and_rule_add_only_missing_starred_segments(
+    tenants, tmp_path
+):
+    cell_text = (
+        "★内存：≥16 GB，支持 ECC；容量：≥512 GB；★功率：≤100 W\n"
+        "★接口数量：≥2 个；保修期：≥3 年\n"
+        "★3.合同的终止："
+    )
+    document = Document()
+    document.add_heading("技术参数", level=1)
+    document.add_table(rows=1, cols=1).cell(0, 0).text = cell_text
+    output = io.BytesIO()
+    document.save(output)
+    vendor = Vendor(
+        anthropic_reply(
+            [
+                item("t1r1c1", "内存：≥16 GB"),
+                item("t1r1c1", "支持 ECC"),
+                item("t1r1c1", "容量：≥512 GB"),
+                item("t1r1c1", "接口数量：≥2 个"),
+                item("t1r1c1", "保修期：≥3 年"),
+            ]
+        ),
+        # The first starred segment is returned as a whole; the missing power segment
+        # is deliberately left for the deterministic starred-source rule.
+        anthropic_reply([item("t1r1c1", "★内存：≥16 GB，支持 ECC")]),
+    )
+    settings = settings_for(tmp_path, "anthropic")
+    app = create_app(
+        settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        task = (await api.post("/tasks", headers=header, json={"name": "Star segments"})).json()[
+            "data"
+        ]["id"]
+        uploaded = await api.post(
+            f"/tasks/{task}/documents",
+            headers=header,
+            files={"file": ("stars.docx", output.getvalue())},
+        )
+        document_id = uploaded.json()["data"]["id"]
+        await run_job(api, app, header, document_id, "parse")
+        _, status = await run_job(api, app, header, document_id, "extract")
+        rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
+
+    assert status["status"] == "succeeded", status
+    assert status["result"]["gap_fill"] == {
+        "segments": 2,
+        "calls": 1,
+        "added": 1,
+        "remaining": 0,
+    }
+    by_text = {row["text"]: row for row in rows}
+    assert by_text["内存：≥16 GB"]["starred"] is True
+    assert by_text["支持 ECC"]["starred"] is True
+    assert by_text["★内存：≥16 GB，支持 ECC"]["starred"] is True
+    assert by_text["容量：≥512 GB"]["starred"] is False
+    assert by_text["接口数量：≥2 个"]["starred"] is True
+    assert by_text["保修期：≥3 年"]["starred"] is False
+    power = next(row for row in rows if "功率：≤100 W" in row["source"]["quote"])
+    assert power["starred"] is True and power["model_quote"] is None
+    assert all("合同的终止" not in row["text"] for row in rows)
 
 
 async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(tenants, tmp_path):

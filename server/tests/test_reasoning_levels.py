@@ -58,7 +58,9 @@ def two_page_tender() -> bytes:
     with pymupdf.open() as pdf:
         for line in ("Minimum memory is 64 GB.", "A valid certificate must be provided."):
             page = pdf.new_page()
-            page.insert_textbox(pdf[-1].rect + (40, 40, -40, -40), (line + " ") * 40)
+            # Distinct filler: a requirement repeated on its page would be an ambiguous quote.
+            filler = " ".join(f"Filler note {index}." for index in range(70))
+            page.insert_textbox(pdf[-1].rect + (40, 40, -40, -40), f"{line} {filler}")
         return pdf.tobytes()
 
 

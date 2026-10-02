@@ -24,6 +24,8 @@ type GapReason = Literal[
     "unclassified",
     "stale_material",
     "invalid_citation",
+    # The card was confirmed against a quote that citation repair later changed.
+    "needs_reconfirmation",
 ]
 
 RESOURCE_FIELD_PATHS = {
@@ -319,6 +321,7 @@ class CardView(_TimestampContract):
         "unclassified",
         "stale_material",
         "invalid_citation",
+        "needs_reconfirmation",
     ]
 
     @model_validator(mode="after")

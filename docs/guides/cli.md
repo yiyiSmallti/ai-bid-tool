@@ -60,9 +60,12 @@ bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req history 
 4. `req extract` requires a parsed PDF or Word document with verified
    citations and a configured model ([development.md](development.md#configure-the-extraction-model)).
    Without one it fails with `provider_unavailable` and exit 4. Items whose
-   quote is not found at the cited position are not saved; the job still
-   succeeds, lists them in `result.rejected`, and adds a warning. If no item
-   passes, the job fails with `invalid_citation` and saves nothing.
+   quote has no unique normalized match at the cited position, or whose `ref`
+   is unknown, are not saved; the job still succeeds when another item passes,
+   lists each rejection and its reason in `result.rejected`, and adds a warning.
+   If no item passes, the job fails with `invalid_citation` and saves nothing.
+   `result.gap_fill.remaining` reports parameter segments still uncovered after
+   model output and deterministic starred-source additions.
 5. `--reasoning LEVEL` picks one of the model's official reasoning levels;
    without it the vendor's default level is used. Higher levels find more
    requirements and take much longer. Each level is its own job: repeating a
@@ -79,11 +82,49 @@ succeeded extraction; pass `--job JOB_ID` to see another one. `req history`
 lists every extraction of the task (optionally `--document DOCUMENT_ID`) with
 its level, model, status, saved and rejected counts, and tokens; `latest`
 marks the ones `req list` shows. Each requirement carries its `job_id` and
-`reasoning`. Requirements are listed in reading order. A PDF source cites `page`; a Word
-source has `page: null` and a `location` with the block ID, the heading path,
-and a `label` such as `第五章 采购需求 > 表 5 第 3 行第 2 列`. Text boxes, headers,
-and footers in Word files are not parsed; the parse result lists them under
-`warnings`. Details are in [docx-citations.md](../notes/docx-citations.md).
+`reasoning`. `source.quote` is the exact contiguous source span and
+`model_quote` preserves the provider's original quote. Requirements are listed
+in reading order. A PDF source cites `page`; a Word source has `page: null` and
+a `location` with the block ID, the heading path, and a `label` such as
+`第五章 采购需求 > 表 5 第 3 行第 2 列`. Text boxes, headers, and footers in Word
+files are not parsed; the parse result lists them under `warnings`. Details are
+in [docx-citations.md](../notes/docx-citations.md).
+
+## Repair legacy requirement citations
+
+Use a human organization administrator session and name both the task and the
+successful extraction job. The command defaults to a read-only preview:
+
+```sh
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req repair-citations --task TASK_ID --job EXTRACTION_JOB_ID --json
+```
+
+The preview calls
+`GET /tasks/TASK_ID/requirements/repair?job=EXTRACTION_JOB_ID`. It reports a
+hash bound to the task/job scope, current requirement sources, and current card
+state, and shows which normalization-only quotes can be mapped to one exact
+source span. It does not write requirements, cards, drafts, or audits. Rows with
+no match or more than one normalized match remain unlocatable.
+
+Review that output, then execute the same preview with its hash and a human
+reason:
+
+```sh
+bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req repair-citations --task TASK_ID --job EXTRACTION_JOB_ID --execute --expected-preview PREVIEW_SHA256 --reason "REPAIR_REASON" --json
+```
+
+Execution sends `POST /tasks/TASK_ID/requirements/repair` with
+`extraction_job_id`, `expected_preview`, and `reason`. If any bound input changed,
+the server returns `repair_preview_changed` with HTTP 409; run the preview again
+instead of reusing the stale hash. API tokens, agents, and workers cannot preview
+or execute repair. Unlocatable rows are left unchanged.
+
+After a quote changes, affected cards report `needs_reconfirmation` and old
+draft validity is recalculated. Withdraw a pending card or reopen a confirmed
+card, then edit or resubmit it before confirmation. Record a new human
+disposition for affected `comply_only` requirements. The immutable history and
+audit boundary are described in
+[response-cards.md](../notes/response-cards.md).
 
 ## Review responses and assemble a draft
 

@@ -61,6 +61,7 @@ class ResponseCardRevision(Tenant, Base):
     __tablename__ = "response_card_revisions"
     card_id: Mapped[UUID] = mapped_column()
     revision: Mapped[int] = mapped_column(Integer)
+    quote_sha256: Mapped[str | None] = mapped_column(String(64))
     state: Mapped[str] = mapped_column(String(30))
     review_domain: Mapped[str | None] = mapped_column(String(20))
     disposition: Mapped[str | None] = mapped_column(String(20))

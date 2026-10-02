@@ -108,6 +108,7 @@ class ExtractedRequirement(Contract):
     starred: bool = False
     text: str = Field(min_length=1)
     source: Source
+    model_quote: str | None = None
     condition: dict[str, Any] = Field(default_factory=dict)
 
 

@@ -58,6 +58,24 @@ def anthropic_reply(items, stop="end_turn", status=200):
     return httpx.Response(status, json=body)
 
 
+def provider_reply(provider, items):
+    if provider == "anthropic":
+        return anthropic_reply(items)
+    return httpx.Response(
+        200,
+        json={
+            "model": "synthetic-model",
+            "choices": [
+                {
+                    "finish_reason": "stop",
+                    "message": {"content": json.dumps({"items": items}, ensure_ascii=False)},
+                }
+            ],
+            "usage": {"prompt_tokens": 900, "completion_tokens": 100},
+        },
+    )
+
+
 class Vendor:
     """Replays scripted responses and records every request it receives."""
 
@@ -119,6 +137,10 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
             (1, "Minimum memory is 64 GB."),
             (2, "A valid certificate must be provided."),
         ]
+        assert [r.model_quote for r in rows] == [
+            "Minimum memory is 64 GB.",
+            "A valid certificate must be provided.",
+        ]
         assert rows[0].condition == {"param": "memory", "op": ">=", "value": "64", "unit": "GB"}
         assert rows[1].condition == {}
         [usage] = await usage_rows(app, tenants)
@@ -170,6 +192,62 @@ async def test_openai_compatible_extraction_without_prices_records_unknown_cost(
     assert request.headers["authorization"] == f"Bearer {SYNTHETIC_KEY}"
     assert body["response_format"]["type"] == "json_schema"
     assert body["response_format"]["json_schema"]["strict"] is True
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+async def test_pdf_items_keep_exact_source_spans_and_reject_unknown_and_ambiguous_quotes(
+    provider, tenants, tmp_path
+):
+    # A line break survives PDF text extraction; runs of spaces are rebuilt from layout.
+    exact_source = "Response\ntext must be accepted."
+    model_quote = "Response text must be accepted."
+    ambiguous_quote = "Memory capacity is 64GB."
+    unknown_quote = "Unknown position " + "x" * 220
+    with pymupdf.open() as pdf:
+        page = pdf.new_page()
+        page.insert_text(
+            (40, 60),
+            exact_source + "\nMemory capacity is 64 GB.\nMemory  capacity is 64GB.",
+        )
+        pdf.new_page().insert_text((40, 60), "A valid certificate must be provided.")
+        content = pdf.tobytes()
+    items = [
+        GOOD_ITEMS[0] | {"text": "响应文本", "quote": model_quote},
+        GOOD_ITEMS[0] | {"text": "歧义内存要求", "quote": ambiguous_quote},
+        GOOD_ITEMS[0] | {"text": "未知位置", "ref": "999", "quote": unknown_quote},
+        GOOD_ITEMS[1],
+    ]
+    vendor = Vendor(provider_reply(provider, items))
+    settings = settings_for(tmp_path, provider)
+    adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
+    app = create_app(settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue())
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        task, document = await create_document(api, header, content)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
+
+    assert status["status"] == "succeeded", status
+    assert [(row["source"]["page"], row["source"]["quote"]) for row in rows] == [
+        (1, exact_source),
+        (2, "A valid certificate must be provided."),
+    ]
+    assert [row["model_quote"] for row in rows] == [
+        model_quote,
+        "A valid certificate must be provided.",
+    ]
+    assert status["result"]["rejected"] == [
+        {
+            "position": "999",
+            "quote": unknown_quote[:200],
+            "reason": "unknown_position",
+        },
+        {
+            "position": "第 1 页",
+            "quote": ambiguous_quote,
+            "reason": "ambiguous_quote",
+        },
+    ]
 
 
 FAILURES = {
@@ -228,7 +306,7 @@ FAILURES = {
     "unknown_page": (
         anthropic_reply([GOOD_ITEMS[0] | {"ref": "9"}]),
         "failed",
-        "invalid_provider_output",
+        "invalid_citation",
         4,
         1,
     ),
@@ -266,6 +344,14 @@ async def test_vendor_failures_map_to_job_states(case, tenants, tmp_path, pdf_by
         assert SYNTHETIC_KEY not in json.dumps(status)
         assert await requirement_rows(app, tenants) == []
         assert len(await usage_rows(app, tenants)) == billed_calls
+        if case == "unknown_page":
+            assert status["result"]["rejected"] == [
+                {
+                    "position": "9",
+                    "quote": "Minimum memory is 64 GB.",
+                    "reason": "unknown_position",
+                }
+            ]
 
 
 async def test_failure_in_later_batch_keeps_usage_of_finished_batches(tenants, tmp_path):
@@ -516,7 +602,7 @@ async def test_items_with_an_empty_quote_are_rejected_not_fatal(tenants, tmp_pat
     assert status["result"]["rejected"] == [
         {"position": "第 2 页", "quote": "  ", "reason": "empty_quote"}
     ]
-    assert any("quote was empty" in warning for warning in status["result"]["warnings"])
+    assert any("were not saved" in warning for warning in status["result"]["warnings"])
 
 
 async def test_unexpected_failure_keeps_billed_usage_and_logs_no_message(
@@ -524,7 +610,7 @@ async def test_unexpected_failure_keeps_billed_usage_and_logs_no_message(
 ):
     secret = "SECRET-" + "TENDER-TEXT"  # built at runtime so the source line does not hold it
 
-    def broken(self, wire, batch, usages):
+    def broken(self, wire, batch):
         raise RuntimeError(secret)
 
     monkeypatch.setattr(AnthropicExtractor, "attach", broken)

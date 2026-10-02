@@ -13,7 +13,7 @@ from app.core.errors import ServiceError, log_unexpected
 from app.jobs.execution import JobExecution, job_cost
 from app.models.entities import Chunk, Document, Job, Requirement, UsageRecord
 from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
-from app.providers.llm import with_reasoning
+from app.providers.llm import uncovered_parameters, with_reasoning
 from app.providers.storage import Storage
 from app.schemas.contracts import Extraction, ProviderUsage, SectionText
 from app.services import billing
@@ -109,6 +109,7 @@ class Processor:
         async with execution.activate():
             usages: list[ProviderUsage] = []
             incremental = False
+            rejected: list[dict[str, str]] = []
 
             class RecordingOCR:
                 name, version = self.ocr.name, self.ocr.version
@@ -186,7 +187,7 @@ class Processor:
                     if rejected:
                         warnings.append(
                             f"{len(rejected)} extracted requirements were not saved because their "
-                            "quote was empty or not found at the cited position; see result.rejected."
+                            "quote or position was empty, unknown, unmatched or ambiguous; see result.rejected."
                         )
                     pages = []
                 else:
@@ -262,6 +263,7 @@ class Processor:
                                 if item.source.location
                                 else None,
                                 quote=item.source.quote,
+                                model_quote=item.model_quote,
                                 text=item.text,
                                 category=item.category.value,
                                 starred=item.starred,
@@ -294,6 +296,7 @@ class Processor:
                                 "segments": output.gap_fill.segments,
                                 "calls": output.gap_fill.calls,
                                 "added": gap_added,
+                                "remaining": uncovered_parameters(chunks, requirements.items)[1],
                             },
                         }
                     result["cost"] = await job_cost(session, job_id)
@@ -331,6 +334,8 @@ class Processor:
                     current.status = "queued" if should_retry else "failed"
                     current.error = error
                     current.result = {**current.result, "cost": await job_cost(session, job_id)}
+                    if rejected:
+                        current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
                 if should_retry:
                     raise ProviderFailure("Retryable provider failure", retryable=True) from None

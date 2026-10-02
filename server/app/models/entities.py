@@ -157,6 +157,7 @@ class Requirement(Tenant, Base):
     page: Mapped[int | None] = mapped_column(Integer)
     location: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     quote: Mapped[str] = mapped_column(Text)
+    model_quote: Mapped[str | None] = mapped_column(Text)
     text: Mapped[str] = mapped_column(Text)
     category: Mapped[str] = mapped_column(String(20))
     starred: Mapped[bool] = mapped_column(Boolean)
