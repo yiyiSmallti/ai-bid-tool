@@ -47,5 +47,6 @@ kind: readme
 
 - [剩余范围与路线](plan/roadmap.md)（plan）：覆盖矩阵、已知缺陷、待定决定。
 - [Rust 标注契约草案](plan/annotation.md)（plan）：待批准的下一范围。
+- [人工确认与偏离表初稿契约草案](plan/review-and-draft.md)（plan）：B07/B08 的卡片确认、分表初稿与缺口，待批准。
 - [模型配置契约草案](plan/provider-config.md)（plan）：单位自带模型与单位自选平台模型，待批准。
 - [变更记录](changelog.md)（changelog）：已交付范围。

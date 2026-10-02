@@ -76,8 +76,8 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B04 evidence fetch | 固定证书 PDF 整页候选来源，恒未确认 | 完整 Evidence/Card、网页/白皮书来源、区域截图、满足判定 | 搜索/视觉依赖 API |
 | B05 evidence stamp | 未实施 | Rust 裁剪、框选、溯源水印、哈希；草案见 [annotation.md](annotation.md) | 待批准 |
 | B06 ui mock | 未实施 | 真实截图优先、原型强制水印、软件响应表 | 生成依赖 API |
-| B07 人工确认 | 令牌禁确认/导出；来源由 SQL 强制未确认 | 人工确认/驳回、Card/Evidence 状态、消费关口 | 卡片状态图缺失，需先定规则 |
-| B08 draft | 未实施 | 只用已确认证据生成响应表，负偏离如实输出 | 依赖 B07 |
+| B07 人工确认 | 令牌禁确认/导出；来源由 SQL 强制未确认 | 人工确认/驳回、Card/Evidence 状态、消费关口；草案见 [review-and-draft.md](review-and-draft.md) | 待批准 |
+| B08 draft | 未实施 | 只用已确认证据生成响应表，负偏离如实输出；草案见 [review-and-draft.md](review-and-draft.md) | 依赖 B07；待批准 |
 | B09 check | 未实施 | 标书与要求对照、废标/扣分风险、误报处理 | 语义校验依赖 LLM |
 | B10 score | 未实施 | 逐项预估分、失分原因、引用 | 语义评估依赖 LLM |
 | B11 export | 未实施 | 仅人工导出、模板适配、证据附件、审计 | 依赖 R01、B07、B08 |
