@@ -11,6 +11,7 @@ from app.core.db import Database
 from app.core.errors import ServiceError
 from app.models.entities import Chunk, Document, Job, Requirement, UsageRecord
 from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
+from app.providers.llm import with_reasoning
 from app.providers.storage import Storage
 from app.schemas.contracts import Extraction, ProviderUsage, SectionText
 from app.services import billing
@@ -64,6 +65,7 @@ class Processor:
             if document is None:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, document.id
+            reasoning = current.reasoning
             llm = await self.resolve(session) if self.resolve else self.llm
             key, suffix, expected_hash = (
                 document.storage_key,
@@ -117,6 +119,8 @@ class Processor:
                         400,
                         2,
                     )
+                # The level was fixed when the job was created; a removed level fails here.
+                llm, reasoning, _ = with_reasoning(llm, reasoning)
                 if getattr(llm, "platform_model_id", None):
                     async with self.db.transaction(org_id) as session:
                         await billing.require_funds(session, self.settings.billing_currency)
@@ -212,12 +216,13 @@ class Processor:
                             starred=item.starred,
                             condition=item.condition,
                             fingerprint=fingerprint(item),
+                            job_id=job_id,
                         )
                         created = await session.scalar(
                             insert(Requirement)
                             .values(**row)
                             .on_conflict_do_nothing(
-                                index_elements=["org_id", "task_id", "fingerprint"]
+                                index_elements=["org_id", "job_id", "fingerprint"]
                             )
                             .returning(Requirement.id)
                         )
@@ -226,6 +231,8 @@ class Processor:
                         "created": saved,
                         "starred": sum(item.starred for item in requirements.items),
                         "rejected": rejected,
+                        "model": llm.model,
+                        "reasoning": reasoning,
                         "warnings": warnings,
                     }
                 result["cost"] = {

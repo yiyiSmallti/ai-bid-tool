@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CONTRACT_VERSION = "1.1"
+CONTRACT_VERSION = "1.2"
 
 
 class Contract(BaseModel):
@@ -64,6 +64,8 @@ class TokenCreate(Contract):
 class JobAction(Contract):
     dry_run: bool = False
     retry: bool = False
+    # Extraction only: one of the model's official reasoning levels; omitted means its default.
+    reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
 
 
 class Category(StrEnum):

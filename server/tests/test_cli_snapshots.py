@@ -495,8 +495,27 @@ async def fake_request(self, method, path, **kwargs):
             "task_id": IDENTIFIER,
             "duplicate": False,
         }
-    elif path.endswith(("/parse", "/extract")):
+    elif path.endswith("/parse"):
         data = {"job_id": IDENTIFIER, "status": "queued", "cached": False}
+    elif path.endswith("/extract"):
+        data = {"job_id": IDENTIFIER, "status": "queued", "cached": False, "reasoning": "high"}
+    elif path.endswith("/extractions"):
+        items = [
+            {
+                "job_id": IDENTIFIER,
+                "document_id": IDENTIFIER,
+                "reasoning": "high",
+                "model": "synthetic-model",
+                "status": "succeeded",
+                "created_at": "2026-10-01T00:00:00+00:00",
+                "finished_at": "2026-10-01T00:05:00+00:00",
+                "saved": 2,
+                "rejected": 0,
+                "tokens": 1500,
+                "error": None,
+                "latest": True,
+            }
+        ]
     elif path.endswith("/cancel"):
         data = {"id": IDENTIFIER, "status": "cancelled"}
     elif path.startswith("/jobs/"):
@@ -513,6 +532,8 @@ async def fake_request(self, method, path, **kwargs):
             {
                 "id": IDENTIFIER,
                 "text": "Synthetic requirement",
+                "job_id": IDENTIFIER,
+                "reasoning": None,
                 "source": {
                     "document_id": IDENTIFIER,
                     "chunk_id": IDENTIFIER,
@@ -527,6 +548,8 @@ async def fake_request(self, method, path, **kwargs):
                 "category": "technical",
                 "starred": True,
                 "condition": {},
+                "job_id": IDENTIFIER,
+                "reasoning": "high",
                 "source": {
                     "document_id": IDENTIFIER,
                     "chunk_id": IDENTIFIER,
@@ -787,8 +810,9 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         ],
         "tender upload": ["tender", "upload", "--task", IDENTIFIER, "--file", str(source)],
         "tender parse": ["tender", "parse", "--document", IDENTIFIER],
-        "req extract": ["req", "extract", "--document", IDENTIFIER],
-        "req list": ["req", "list", "--task", IDENTIFIER],
+        "req extract": ["req", "extract", "--document", IDENTIFIER, "--reasoning", "high"],
+        "req list": ["req", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
+        "req history": ["req", "history", "--task", IDENTIFIER],
         "job status": ["job", "status", IDENTIFIER],
         "job wait": ["job", "wait", IDENTIFIER],
         "job cancel": ["job", "cancel", IDENTIFIER],

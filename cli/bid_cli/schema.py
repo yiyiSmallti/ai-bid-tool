@@ -76,6 +76,7 @@ COMMANDS = {
     "tender parse": JobAction,
     "req extract": JobAction,
     "req list": None,
+    "req history": None,
     "job status": None,
     "job wait": None,
     "job cancel": None,

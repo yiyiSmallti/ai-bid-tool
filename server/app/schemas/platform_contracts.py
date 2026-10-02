@@ -2,7 +2,7 @@
 
 import re
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
@@ -44,6 +44,18 @@ class PlatformOrgActive(Contract):
     active: bool
 
 
+class ReasoningLevel(Contract):
+    """One of the vendor's official reasoning levels for a catalog model."""
+
+    name: str = Field(pattern=r"^[a-z0-9_-]{1,20}$")
+    label: str | None = Field(default=None, max_length=60)
+    # Merged into the request body; the adapter's own fields win on conflict.
+    request_options: dict[str, Any] = Field(default_factory=dict)
+    # Anthropic only: written to output_config.effort.
+    effort: str | None = Field(default=None, pattern=r"^[a-z]{1,10}$")
+    batch_chars: int = Field(default=8000, ge=1000, le=200000)
+
+
 class PlatformModelSet(Contract):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,39}$")
     capability: Literal["llm_extract"]
@@ -57,6 +69,8 @@ class PlatformModelSet(Contract):
     sale_output_per_mtok: float = Field(ge=0)
     default: bool = False
     enabled: bool = True
+    reasoning: list[ReasoningLevel] = Field(default_factory=list, max_length=8)
+    default_reasoning: str | None = None
     expected_revision: int | None = Field(default=None, ge=1)
 
     @field_validator("base_url")
@@ -70,6 +84,13 @@ class PlatformModelSet(Contract):
     def default_is_enabled(self):
         if self.default and not self.enabled:
             raise ValueError("a default model must be enabled")
+        names = [level.name for level in self.reasoning]
+        if len(names) != len(set(names)):
+            raise ValueError("reasoning level names must be unique")
+        if names and self.default_reasoning not in names:
+            raise ValueError("default_reasoning must name one of the reasoning levels")
+        if not names and self.default_reasoning is not None:
+            raise ValueError("default_reasoning needs reasoning levels")
         return self
 
 

@@ -725,9 +725,13 @@ def process(
     timeout: float,
     as_json: bool,
     retry: bool = False,
+    reasoning: str | None = None,
 ):
     command = "tender parse" if kind == "parse" else "req extract"
-    body = call("POST", f"/documents/{document}/{kind}", json={"dry_run": dry_run, "retry": retry})
+    request: dict = {"dry_run": dry_run, "retry": retry}
+    if reasoning is not None:
+        request["reasoning"] = reasoning
+    body = call("POST", f"/documents/{document}/{kind}", json=request)
     if wait and not dry_run:
         terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
         body["data"].update(terminal["data"]["result"])
@@ -737,8 +741,10 @@ def process(
         if kind == "parse":
             body["items"] = call("GET", f"/documents/{document}/chunks")["items"]
         else:
+            # The requirements of this extraction, not the task's latest of every document.
             task = call("GET", f"/documents/{document}")["data"]["task_id"]
-            body["items"] = call("GET", f"/tasks/{task}/requirements")["items"]
+            job = body["data"]["job_id"]
+            body["items"] = call("GET", f"/tasks/{task}/requirements", params={"job": job})["items"]
     emit(body, command, as_json)
 
 
@@ -761,14 +767,32 @@ def req_extract(
     dry_run: Annotated[bool, typer.Option()] = False,
     retry: Annotated[bool, typer.Option()] = False,
     timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
+    reasoning: Annotated[
+        str | None, typer.Option(help="One of the model's official reasoning levels")
+    ] = None,
     json_output: JsonOption = False,
 ):
-    process(document, "extract", wait, dry_run, timeout, json_output, retry)
+    process(document, "extract", wait, dry_run, timeout, json_output, retry, reasoning)
 
 
 @req_app.command("list")
-def req_list(task: Annotated[UUID, typer.Option()], json_output: JsonOption = False):
-    emit(call("GET", f"/tasks/{task}/requirements"), "req list", json_output)
+def req_list(
+    task: Annotated[UUID, typer.Option()],
+    job: Annotated[UUID | None, typer.Option(help="Show this extraction instead")] = None,
+    json_output: JsonOption = False,
+):
+    params = {"job": str(job)} if job else None
+    emit(call("GET", f"/tasks/{task}/requirements", params=params), "req list", json_output)
+
+
+@req_app.command("history")
+def req_history(
+    task: Annotated[UUID, typer.Option()],
+    document: Annotated[UUID | None, typer.Option()] = None,
+    json_output: JsonOption = False,
+):
+    params = {"document": str(document)} if document else None
+    emit(call("GET", f"/tasks/{task}/extractions", params=params), "req history", json_output)
 
 
 @job_app.command("status")

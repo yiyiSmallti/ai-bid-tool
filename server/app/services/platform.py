@@ -18,7 +18,7 @@ from app.core.security import Secrets, hash_password, verify_password
 from app.core.totp import matching_counter
 from app.models.entities import PlatformAuditLog, PlatformCard, PlatformModel, User
 from app.providers.base import ProviderFailure
-from app.providers.llm import credential_value, platform_llm
+from app.providers.llm import HTTPExtractor, credential_value, platform_llm
 from app.schemas.platform_contracts import (
     PlatformBalanceAdjust,
     PlatformCardCreate,
@@ -224,6 +224,7 @@ MODEL_FIELDS = (
     "id", "capability", "provider", "model", "base_url", "credential",
     "vendor_input_usd_per_mtok", "vendor_output_usd_per_mtok",
     "sale_input_per_mtok", "sale_output_per_mtok",
+    "reasoning", "default_reasoning",
     "enabled", "revision", "updated_by", "updated_at",
 )  # fmt: skip
 
@@ -279,7 +280,13 @@ async def set_model(session: AsyncSession, actor: PlatformIdentity, body: Platfo
         "platform.model.set",
         "success",
         body.id,
-        {"revision": row.revision, "default": body.default, "enabled": body.enabled},
+        {
+            "revision": row.revision,
+            "default": body.default,
+            "enabled": body.enabled,
+            "reasoning": [level.name for level in body.reasoning],
+            "default_reasoning": body.default_reasoning,
+        },
     )
     return model_view(row)
 
@@ -293,11 +300,12 @@ TEST_SECONDS = 60
 async def test_model(
     db: Database, settings: Settings, actor: PlatformIdentity, model_id: str, transport=None
 ) -> dict:
+    """Call the model once per official reasoning level (once if it has none)."""
     async with db.transaction() as session:
         row = await session.get(PlatformModel, model_id)
     if row is None:
         raise not_found()
-    # The vendor call runs outside any transaction and with a short deadline.
+    # The vendor calls run outside any transaction and with a short deadline.
     quick = settings.model_copy(update={"llm_timeout_seconds": TEST_SECONDS})
     llm = platform_llm(quick, row, transport)
     chunk = {
@@ -307,41 +315,65 @@ async def test_model(
         "text": TEST_PAGE,
         "citation_verified": True,
     }
-    try:
-        output = await llm.extract([chunk], {})
-    except ProviderFailure as exc:
-        usage = exc.usage[-1].model_dump() if exc.usage else None
-        async with db.transaction() as session:
-            audit(
-                session,
-                actor.email,
-                "platform.model.test",
-                "failed",
-                model_id,
-                {"code": exc.code, "usage": usage},
-            )
+    names = list(getattr(llm, "reasoning_levels", None) or {}) or [None]
+
+    async def attempt(name: str | None) -> dict:
+        level = llm.at_reasoning(name) if name and isinstance(llm, HTTPExtractor) else llm
+        try:
+            output = await level.extract([chunk], {})
+        except ProviderFailure as exc:
+            return {
+                "reasoning": name,
+                "passed": False,
+                "error": {"code": exc.code, "message": str(exc)},
+                "usage": exc.usage[-1].model_dump() if exc.usage else None,
+            }
         return {
-            "model_id": model_id,
-            "passed": False,
-            "error": {"code": exc.code, "message": str(exc)},
-            "usage": usage,
+            "reasoning": name,
+            "passed": True,
+            "items": len(output.extraction.items),
+            "usage": output.usage.model_dump(),
         }
-    usage = output.usage.model_dump()
+
+    levels = await asyncio.gather(*(attempt(name) for name in names))
+    passed = all(level["passed"] for level in levels)
+    failed = next((level for level in levels if not level["passed"]), None)
     async with db.transaction() as session:
         audit(
             session,
             actor.email,
             "platform.model.test",
-            "success",
+            "success" if passed else "failed",
             model_id,
-            {"items": len(output.extraction.items), "usage": usage},
+            {
+                "levels": [
+                    {
+                        "reasoning": level["reasoning"],
+                        "passed": level["passed"],
+                        "code": (level.get("error") or {}).get("code"),
+                        "usage": level["usage"],
+                    }
+                    for level in levels
+                ]
+            },
         )
-    return {
-        "model_id": model_id,
-        "passed": True,
-        "items": len(output.extraction.items),
-        "usage": usage,
-    }
+    # Top-level fields describe the default level, or the first failure.
+    shown = failed or next(
+        (
+            level
+            for level in levels
+            if level["reasoning"] == getattr(llm, "default_reasoning", None)
+        ),
+        levels[0],
+    )
+    view = {"model_id": model_id, "passed": passed, "usage": shown["usage"]}
+    if failed:
+        view["error"] = failed["error"]
+    else:
+        view["items"] = shown["items"]
+    if names != [None]:
+        view["levels"] = levels
+    return view
 
 
 def parse_month(value: str) -> date:

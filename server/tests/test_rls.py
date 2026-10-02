@@ -52,6 +52,15 @@ def seeded(tenants, admin_engine):
                 text="Synthetic source",
             )
             session.add(chunk)
+            extraction = Job(
+                org_id=org,
+                task_id=task.id,
+                document_id=document.id,
+                kind="extract",
+                cache_key="e" * 64,
+                status="succeeded",
+            )
+            session.add(extraction)
             session.flush()
             session.add_all(
                 [
@@ -67,6 +76,7 @@ def seeded(tenants, admin_engine):
                         starred=False,
                         condition={},
                         fingerprint="b" * 64,
+                        job_id=extraction.id,
                     ),
                     UsageRecord(
                         org_id=org,

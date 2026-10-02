@@ -634,10 +634,39 @@
     "data": {
       "cached": false,
       "job_id": "00000000-0000-0000-0000-000000000001",
+      "reasoning": "high",
       "status": "queued"
     },
     "duration_ms": 0,
     "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "req history": {
+    "command": "req history",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "created_at": "2026-10-01T00:00:00+00:00",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "error": null,
+        "finished_at": "2026-10-01T00:05:00+00:00",
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "latest": true,
+        "model": "synthetic-model",
+        "reasoning": "high",
+        "rejected": 0,
+        "saved": 2,
+        "status": "succeeded",
+        "tokens": 1500
+      }
+    ],
     "ok": true,
     "warnings": []
   },
@@ -653,6 +682,8 @@
     "items": [
       {
         "id": "00000000-0000-0000-0000-000000000001",
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "reasoning": null,
         "source": {
           "chunk_id": "00000000-0000-0000-0000-000000000001",
           "document_id": "00000000-0000-0000-0000-000000000001",
@@ -666,6 +697,8 @@
         "category": "technical",
         "condition": {},
         "id": "00000000-0000-0000-0000-000000000001",
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "reasoning": "high",
         "source": {
           "chunk_id": "00000000-0000-0000-0000-000000000001",
           "document_id": "00000000-0000-0000-0000-000000000001",
@@ -2013,6 +2046,62 @@
             }
           ],
           "input": {
+            "$defs": {
+              "ReasoningLevel": {
+                "additionalProperties": false,
+                "description": "One of the vendor's official reasoning levels for a catalog model.",
+                "properties": {
+                  "batch_chars": {
+                    "default": 8000,
+                    "maximum": 200000,
+                    "minimum": 1000,
+                    "title": "Batch Chars",
+                    "type": "integer"
+                  },
+                  "effort": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z]{1,10}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Effort"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "request_options": {
+                    "additionalProperties": true,
+                    "title": "Request Options",
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "ReasoningLevel",
+                "type": "object"
+              }
+            },
             "additionalProperties": false,
             "properties": {
               "base_url": {
@@ -2042,6 +2131,18 @@
                 "default": false,
                 "title": "Default",
                 "type": "boolean"
+              },
+              "default_reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Default Reasoning"
               },
               "enabled": {
                 "default": true,
@@ -2079,6 +2180,14 @@
                 ],
                 "title": "Provider",
                 "type": "string"
+              },
+              "reasoning": {
+                "items": {
+                  "$ref": "#/$defs/ReasoningLevel"
+                },
+                "maxItems": 8,
+                "title": "Reasoning",
+                "type": "array"
               },
               "sale_input_per_mtok": {
                 "minimum": 0,
@@ -2433,6 +2542,16 @@
               "type": "float range"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "reasoning",
+              "options": [
+                "--reasoning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "json_output",
@@ -2451,6 +2570,19 @@
                 "title": "Dry Run",
                 "type": "boolean"
               },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
               "retry": {
                 "default": false,
                 "title": "Retry",
@@ -2460,6 +2592,41 @@
             "title": "JobAction",
             "type": "object"
           }
+        },
+        "req history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "document",
+              "options": [
+                "--document"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
         },
         "req list": {
           "cli_parameters": [
@@ -2471,6 +2638,16 @@
                 "--task"
               ],
               "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": false,
               "type": "uuid"
             },
             {
@@ -4808,6 +4985,19 @@
                 "title": "Dry Run",
                 "type": "boolean"
               },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
               "retry": {
                 "default": false,
                 "title": "Retry",
@@ -5066,7 +5256,7 @@
         "title": "Result",
         "type": "object"
       },
-      "version": "1.1"
+      "version": "1.2"
     },
     "duration_ms": 0,
     "items": [],

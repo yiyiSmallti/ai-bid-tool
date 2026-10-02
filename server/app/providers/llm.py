@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.core.errors import ServiceError
 from app.models.entities import PlatformModel
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.disabled import DisabledLLM
@@ -209,6 +210,10 @@ class HTTPExtractor:
     name = "http"
     version = ADAPTER_VERSION
     test_only = False
+    # Official reasoning levels of a catalog model, by name, and the level this copy runs at.
+    reasoning_levels: dict[str, dict] = {}
+    default_reasoning: str | None = None
+    reasoning: str | None = None
 
     def __init__(
         self,
@@ -225,6 +230,30 @@ class HTTPExtractor:
         self.transport = transport
         self.platform_model_id = platform_model_id
         self.sale = sale_usd_per_mtok
+
+    def at_reasoning(self, name: str) -> "HTTPExtractor":
+        """A copy that sends this level's vendor options and uses its batch size."""
+        level = self.reasoning_levels[name]
+        settings = self.settings.model_copy(
+            update={
+                "llm_request_options": json.dumps(level.get("request_options") or {}),
+                "llm_batch_chars": level.get("batch_chars") or self.settings.llm_batch_chars,
+                "llm_effort": level.get("effort") or self.settings.llm_effort,
+            }
+        )
+        copy = type(self)(
+            settings,
+            self.transport,
+            platform_model_id=self.platform_model_id,
+            sale_usd_per_mtok=self.sale,
+        )
+        copy.version = self.version
+        copy.reasoning_levels, copy.default_reasoning = (
+            self.reasoning_levels,
+            self.default_reasoning,
+        )
+        copy.reasoning = name
+        return copy
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         limit = asyncio.Semaphore(max(1, self.settings.llm_concurrency))
@@ -569,7 +598,40 @@ def platform_llm(settings: Settings, entry: PlatformModel, transport=None):
     )
     # Editing the catalog entry changes the job cache key.
     llm.version = f"{ADAPTER_VERSION}:{entry.id}:{entry.revision}"
+    llm.reasoning_levels = {level["name"]: level for level in entry.reasoning or []}
+    llm.default_reasoning = entry.default_reasoning
     return llm
+
+
+def with_reasoning(llm, requested: str | None):
+    """Return (provider at the level, level name or None, warnings) for an extraction."""
+    levels = getattr(llm, "reasoning_levels", None) or {}
+    if not levels:
+        warnings = (
+            ["The current model has no reasoning levels configured; the level was ignored."]
+            if requested
+            else []
+        )
+        return llm, None, warnings
+    name = requested or llm.default_reasoning
+    if name not in levels:
+        raise ServiceError(
+            "unsupported_reasoning",
+            f"Reasoning level {name} is not available for this model; "
+            f"choose one of: {', '.join(levels)}",
+            400,
+            2,
+        )
+    return llm.at_reasoning(name), name, []
+
+
+def reasoning_choices(llm) -> list[dict]:
+    """The model's levels as shown to users: name, label, and whether it is the default."""
+    levels = getattr(llm, "reasoning_levels", None) or {}
+    return [
+        {"name": name, "label": level.get("label"), "default": name == llm.default_reasoning}
+        for name, level in levels.items()
+    ]
 
 
 async def resolve_llm(session: AsyncSession, settings: Settings, fallback, transport=None):

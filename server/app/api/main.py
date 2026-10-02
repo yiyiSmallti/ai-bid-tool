@@ -30,7 +30,7 @@ from app.core.security import Secrets, token_digest
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task
-from app.providers.llm import create_llm, resolve_llm
+from app.providers.llm import create_llm, reasoning_choices, resolve_llm, with_reasoning
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
 from app.schemas.certificate_contracts import (
@@ -1002,22 +1002,29 @@ def create_app(
             select(Chunk.id).where(Chunk.document_id == document_id).limit(1)
         )
         command = "tender parse" if kind == "parse" else "req extract"
+        if kind == "parse" and body.reasoning is not None:
+            raise ServiceError("invalid_input", "Reasoning levels apply only to extraction", 400, 2)
+        model = await resolve(session) if resolve is not None else llm
+        level, level_warnings = None, []
+        if kind == "extract":
+            model, level, level_warnings = with_reasoning(model, body.reasoning)
         if body.dry_run:
-            return result(
-                command,
-                {
-                    "dry_run": True,
-                    "document_id": str(document_id),
-                    "parsed": count is not None,
-                    "estimated_cost_usd": None,
-                },
-                warnings=["Cost estimate is unavailable without an approved provider."]
-                if kind == "extract"
-                else [],
-            )
+            data: dict[str, Any] = {
+                "dry_run": True,
+                "document_id": str(document_id),
+                "parsed": count is not None,
+                "estimated_cost_usd": None,
+            }
+            warnings = []
+            if kind == "extract":
+                data |= {"reasoning": level, "reasoning_levels": reasoning_choices(model)}
+                warnings = [
+                    *level_warnings,
+                    "Cost estimate is unavailable without an approved provider.",
+                ]
+            return result(command, data, warnings=warnings)
         if kind == "extract" and document.status != "parsed":
             raise ServiceError("not_parsed", "Parse the document before extraction", 400, 2)
-        model = await resolve(session) if resolve is not None else llm
         if kind == "extract" and getattr(model, "platform_model_id", None):
             await billing.require_funds(session, settings.billing_currency)
         version = (
@@ -1025,6 +1032,9 @@ def create_app(
             if kind == "parse"
             else f"{PROMPT_VERSION}:{model.name}:{model.model}:{model.version}"
         )
+        if level is not None:
+            # Each level is its own job; repeating the same level returns the same job.
+            version += f":reasoning={level}"
         cache_key = hashlib.sha256(
             f"{document_id}:{document.sha256}:{kind}:{version}".encode()
         ).hexdigest()
@@ -1036,6 +1046,7 @@ def create_app(
                 document_id=document_id,
                 kind=kind,
                 cache_key=cache_key,
+                reasoning=level,
             )
             .on_conflict_do_nothing(index_elements=["org_id", "cache_key"])
             .returning(Job.id)
@@ -1050,9 +1061,15 @@ def create_app(
         if job.status in {"failed", "cancelled"}:
             return result(
                 command,
-                {"job_id": str(job.id), "status": job.status, "cached": True},
+                {
+                    "job_id": str(job.id),
+                    "status": job.status,
+                    "cached": True,
+                    "reasoning": job.reasoning,
+                },
                 warnings=[
-                    "This identical job is terminal. Inspect its status; use --retry explicitly to run it again."
+                    *level_warnings,
+                    "This identical job is terminal. Inspect its status; use --retry explicitly to run it again.",
                 ],
             )
         if job.status == "queued" and job.queue_id is None:
@@ -1072,7 +1089,14 @@ def create_app(
                 if saved is not None:
                     saved.queue_id = queue_id
         return result(
-            command, {"job_id": str(job.id), "status": job.status, "cached": identifier is None}
+            command,
+            {
+                "job_id": str(job.id),
+                "status": job.status,
+                "cached": identifier is None,
+                "reasoning": job.reasoning,
+            },
+            warnings=level_warnings,
         )
 
     @app.post("/documents/{document_id}/parse", name="tender_parse", response_model=Result)
@@ -1117,25 +1141,44 @@ def create_app(
             ],
         )
 
+    def latest_extractions(task_id: UUID):
+        # The most recent succeeded extraction of each document in the task.
+        return (
+            select(Job.id)
+            .where(Job.task_id == task_id, Job.kind == "extract", Job.status == "succeeded")
+            .order_by(Job.document_id, Job.finished_at.desc().nulls_last(), Job.created_at.desc())
+            .distinct(Job.document_id)
+        )
+
     @app.get("/tasks/{task_id}/requirements", name="req_list", response_model=Result)
-    async def req_list(task_id: UUID, ctx=Depends(context, scope="function")):
+    async def req_list(
+        task_id: UUID, job: UUID | None = None, ctx=Depends(context, scope="function")
+    ):
         session, identity = ctx
         identity.require("task:read")
         if await session.get(Task, task_id) is None:
             raise not_found()
+        if job is not None:
+            chosen = await session.get(Job, job)
+            if chosen is None or chosen.task_id != task_id or chosen.kind != "extract":
+                raise not_found()
+            jobs = select(Job.id).where(Job.id == job)
+        else:
+            jobs = latest_extractions(task_id)
         pairs = (
             await session.execute(
-                select(Requirement, Chunk)
+                select(Requirement, Chunk, Job.reasoning)
                 .join(
                     Chunk, (Chunk.org_id == Requirement.org_id) & (Chunk.id == Requirement.chunk_id)
                 )
-                .where(Requirement.task_id == task_id)
+                .join(Job, (Job.org_id == Requirement.org_id) & (Job.id == Requirement.job_id))
+                .where(Requirement.task_id == task_id, Requirement.job_id.in_(jobs))
             )
         ).all()
 
         def reading_order(pair):
             # Source order: chunk sequence, then the cited block's position inside the chunk.
-            requirement, chunk = pair
+            requirement, chunk, _ = pair
             block_ids = [block["block_id"] for block in chunk.blocks or []]
             block_id = (requirement.location or {}).get("block_id")
             position = block_ids.index(block_id) if block_id in block_ids else 0
@@ -1147,15 +1190,50 @@ def create_app(
                 str(requirement.id),
             )
 
-        rows = [requirement for requirement, _ in sorted(pairs, key=reading_order)]
         items = [
             {
-                **serial(row, ("id", "text", "category", "starred", "condition")),
+                **serial(row, ("id", "text", "category", "starred", "condition", "job_id")),
+                "reasoning": reasoning,
                 "source": serial(row, ("document_id", "chunk_id", "page", "location", "quote")),
             }
-            for row in rows
+            for row, _, reasoning in sorted(pairs, key=reading_order)
         ]
         return result("req list", items=items)
+
+    @app.get("/tasks/{task_id}/extractions", name="req_history", response_model=Result)
+    async def req_history(
+        task_id: UUID, document: UUID | None = None, ctx=Depends(context, scope="function")
+    ):
+        session, identity = ctx
+        identity.require("task:read")
+        if await session.get(Task, task_id) is None:
+            raise not_found()
+        query = select(Job).where(Job.task_id == task_id, Job.kind == "extract")
+        if document is not None:
+            query = query.where(Job.document_id == document)
+        jobs = (await session.scalars(query.order_by(Job.created_at.desc(), Job.id))).all()
+        latest = set((await session.scalars(latest_extractions(task_id))).all())
+        items = []
+        for job in jobs:
+            outcome = job.result or {}
+            items.append(
+                {
+                    "job_id": str(job.id),
+                    "document_id": str(job.document_id),
+                    "reasoning": job.reasoning,
+                    "model": outcome.get("model"),
+                    "status": job.status,
+                    "created_at": job.created_at.isoformat(),
+                    "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+                    "saved": outcome.get("created"),
+                    "rejected": len(outcome["rejected"]) if "rejected" in outcome else None,
+                    "tokens": (outcome.get("cost") or {}).get("llm_tokens"),
+                    "error": job.error,
+                    # Shown by default in req list.
+                    "latest": job.id in latest,
+                }
+            )
+        return result("req history", items=items)
 
     @app.get("/jobs/{job_id}", name="job_status", response_model=Result)
     async def job_status(job_id: UUID, ctx=Depends(context, scope="function")):
@@ -1165,7 +1243,8 @@ def create_app(
         if job is None:
             raise not_found()
         return result(
-            "job status", serial(job, ("id", "kind", "status", "result", "error", "attempts"))
+            "job status",
+            serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
 
     @app.post("/jobs/{job_id}/cancel", name="job_cancel", response_model=Result)

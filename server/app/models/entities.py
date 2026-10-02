@@ -152,9 +152,11 @@ class Requirement(Tenant, Base):
     starred: Mapped[bool] = mapped_column(Boolean)
     condition: Mapped[dict[str, Any]] = mapped_column(JSONB)
     fingerprint: Mapped[str] = mapped_column(String(64))
+    job_id: Mapped[UUID] = mapped_column()
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "task_id", "fingerprint"),
+        UniqueConstraint("org_id", "job_id", "fingerprint"),
+        ForeignKeyConstraint(["org_id", "job_id"], ["jobs.org_id", "jobs.id"]),
         ForeignKeyConstraint(["org_id", "document_id"], ["documents.org_id", "documents.id"]),
         ForeignKeyConstraint(["org_id", "chunk_id"], ["chunks.org_id", "chunks.id"]),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
@@ -197,6 +199,7 @@ class Job(Tenant, Base):
     result: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     error: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reasoning: Mapped[str | None] = mapped_column(String(20))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "cache_key"),
@@ -813,6 +816,9 @@ class PlatformModel(Base):
     sale_output_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Vendor's official reasoning levels for this model; empty means not levelled.
+    reasoning: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
+    default_reasoning: Mapped[str | None] = mapped_column(String(20))
     revision: Mapped[int] = mapped_column(Integer, default=1)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
