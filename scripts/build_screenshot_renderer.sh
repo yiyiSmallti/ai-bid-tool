@@ -7,8 +7,9 @@ tool_dir="$work_dir/tooling/rust"
 target_dir="$work_dir/build/screenshot-renderer"
 output_dir="$work_dir/bin"
 
-export CARGO_HOME="$tool_dir/cargo-home"
-export RUSTUP_HOME="$tool_dir/rustup-home"
+# CI supplies its own toolchain homes; local builds keep tooling on the work disk.
+export CARGO_HOME="${CARGO_HOME:-$tool_dir/cargo-home}"
+export RUSTUP_HOME="${RUSTUP_HOME:-$tool_dir/rustup-home}"
 export CARGO_TARGET_DIR="$target_dir"
 export PATH="$CARGO_HOME/bin:$PATH"
 

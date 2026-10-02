@@ -52,7 +52,7 @@ from app.schemas.export_contracts import (
     ExportView,
 )
 from app.schemas.response_card_contracts import EvidenceInput
-from app.services import drafts, evidence_sources, templates
+from app.services import drafts, evidence_sources, prototype_decisions, screenshots, templates
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.resources import audit
@@ -124,15 +124,52 @@ def issue(code: str, severity: str, *, requirements=(), evidence=(), revision=No
     ).model_dump(mode="json")
 
 
-async def collect_additional_refusal_issues(
-    session: AsyncSession, actor: Identity, fixed_manifest: dict
-) -> list[dict]:
-    """Single extension point for additional evidence-source refusal gates."""
-    # TODO(docs/plan/screenshots.md): integrate prototype_decision_required,
-    # prototype_replacement_pending and prototype_decision_stale after the
-    # screenshot stream merges. Decisions must affect the fixed input hash;
-    # their internal reasons must never be rendered as visible evidence labels.
-    return []
+async def prototype_gate(session: AsyncSession, actor: Identity, fixed: dict) -> list[dict]:
+    """Fix the keep/replace decisions a final section depends on; return its refusals.
+
+    Review copies never depend on decisions. Decision reasons stay in the internal
+    manifest and issues; the renderer never prints them as evidence labels.
+    """
+    if fixed["mode"] != "final_section":
+        return []
+    requirement_of = {
+        material["id"]: entry["requirement_id"]
+        for entry in fixed["items"]
+        for material in entry["evidence"]
+        if material["input"]["kind"] == "image_region"
+    }
+    report = await prototype_decisions.export_decision_manifest(
+        session, actor, [UUID(value) for value in requirement_of], final=True
+    )
+    current = {
+        view["target"]["evidence_id"]: view
+        for view in report["decisions"]
+        if view["validity"] == "current"
+    }
+    fixed["prototype_decisions"] = {
+        "decisions": [
+            {
+                "evidence_id": evidence_id,
+                "decision_id": view["id"],
+                "decision": view["decision"],
+                "target": view["target"],
+            }
+            for evidence_id, view in sorted(current.items())
+        ],
+        "decision_set_sha256": report["decision_set_sha256"],
+    }
+    return [
+        issue(
+            entry["code"],
+            "block",
+            requirements=[requirement_of[entry["evidence_id"]]],
+            evidence=[entry["evidence_id"]],
+            revision=current[entry["evidence_id"]]["id"]
+            if entry["evidence_id"] in current
+            else None,
+        )
+        for entry in report["issues"]
+    ]
 
 
 async def human_access(
@@ -513,10 +550,51 @@ async def build_manifest(
                         )
                     )
                 if verify_files and material["active_selection"]:
-                    await cards.resolve_material(
-                        session, actor, task_id, adapter.validate_python(material["input"]), storage
+                    if evidence.kind == "image_region":
+                        await screenshots.validate_image_evidence(
+                            session, actor, evidence, storage=storage
+                        )
+                    else:
+                        await cards.resolve_material(
+                            session,
+                            actor,
+                            task_id,
+                            adapter.validate_python(material["input"]),
+                            storage,
+                        )
+                if evidence.kind == "image_region":
+                    image = material["image_rendition"]["image"]
+                    image_key = digest(
+                        {"rendition": material["screenshot_rendition_id"], "png": image["sha256"]}
                     )
-                if evidence.kind == "certificate_pdf_page":
+                    if image["sha256"] != evidence.image_sha256:
+                        raise ServiceError(
+                            "export_evidence_integrity",
+                            "Image evidence hash is inconsistent",
+                            500,
+                            4,
+                        )
+                    if image_key not in pages:
+                        attachment = {
+                            "ordinal": len(attachments) + 1,
+                            "label": f"E{len(attachments) + 1:03d}",
+                            "kind": "image",
+                            "rendition_id": material["screenshot_rendition_id"],
+                            "png_sha256": image["sha256"],
+                            "size_bytes": image["size_bytes"],
+                            "width": image["width_px"],
+                            "height": image["height_px"],
+                            "evidence_ids": [],
+                            "requirement_ids": [],
+                        }
+                        attachments.append(attachment)
+                        pages[image_key] = attachment
+                    attachment = pages[image_key]
+                    attachment["evidence_ids"].append(str(evidence.id))
+                    if str(row.requirement_id) not in attachment["requirement_ids"]:
+                        attachment["requirement_ids"].append(str(row.requirement_id))
+                    material["attachment_ordinal"] = attachment["ordinal"]
+                elif evidence.kind == "certificate_pdf_page":
                     if (
                         evidence.quote_check != "human_page_review"
                         or evidence.evidence_source_id is None
@@ -647,7 +725,7 @@ async def build_manifest(
         "attachments": attachments,
         "issues": issues,
     }
-    fixed["issues"].extend(await collect_additional_refusal_issues(session, actor, fixed))
+    fixed["issues"].extend(await prototype_gate(session, actor, fixed))
     fixed["issues"] = sorted(
         {entry["issue_id"]: entry for entry in fixed["issues"]}.values(),
         key=lambda entry: entry["issue_id"],
@@ -868,6 +946,11 @@ async def submit_export(
     )
     session.add(run)
     await session.flush()
+    kept = {
+        entry["evidence_id"]: UUID(entry["decision_id"])
+        for entry in fixed.get("prototype_decisions", {}).get("decisions", [])
+        if entry["decision"] == "keep"
+    }
     for item in fixed["items"]:
         stored = ExportRunItem(
             id=uuid4(),
@@ -892,6 +975,7 @@ async def submit_export(
                     card_revision_id=stored.card_revision_id,
                     evidence_id=UUID(evidence["id"]),
                     attachment_ordinal=evidence.get("attachment_ordinal"),
+                    prototype_decision_id=kept.get(evidence["id"]),
                 )
             )
     await session.flush()

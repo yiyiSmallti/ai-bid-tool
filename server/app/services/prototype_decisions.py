@@ -50,8 +50,6 @@ async def preview(session, actor, task_id, body: PrototypeDecisionPreviewInput, 
     if actor.actor_kind != "session" or actor.token_id:
         images.fail("forbidden", "Human decision required", 403, 4)
     await cards.extraction_scope(session, task_id, body.extraction_job_id)
-    if len(set(body.task_feature_ids)) != len(body.task_feature_ids):
-        images.fail("duplicate_selection", "Module selections must be unique")
     features = []
     for feature_id in sorted(body.task_feature_ids, key=str):
         feature = await session.get(TaskFeature, feature_id)

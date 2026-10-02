@@ -165,7 +165,9 @@ fn run() -> Result<(), RendererError> {
     let metadata = serde_json::to_vec(&rendering)
         .map_err(|_| RendererError::internal("rendering receipt could not be encoded"))?;
     if metadata.len() > MAX_REQUEST_BYTES {
-        return Err(RendererError::internal("rendering receipt exceeds its limit"));
+        return Err(RendererError::internal(
+            "rendering receipt exceeds its limit",
+        ));
     }
     let mut stdout = io::stdout().lock();
     stdout
@@ -176,10 +178,7 @@ fn run() -> Result<(), RendererError> {
         .map_err(|_| RendererError::internal("rendered output could not be written"))
 }
 
-fn render(
-    content: Vec<u8>,
-    request: RenderRequest,
-) -> Result<(Vec<u8>, Rendering), RendererError> {
+fn render(content: Vec<u8>, request: RenderRequest) -> Result<(Vec<u8>, Rendering), RendererError> {
     validate_profile(&request.profile)?;
     validate_plan_shape(&request.plan)?;
     let mut source = decode_oriented(&content)?;
@@ -198,14 +197,8 @@ fn render(
         width: source_width,
         height: source_height,
     });
-    let mut content_image = imageops::crop_imm(
-        &source,
-        crop.x,
-        crop.y,
-        crop.width,
-        crop.height,
-    )
-    .to_image();
+    let mut content_image =
+        imageops::crop_imm(&source, crop.x, crop.y, crop.width, crop.height).to_image();
     for rectangle in &request.plan.boxes {
         let translated = PixelRect {
             x: rectangle.x - crop.x,
@@ -216,13 +209,12 @@ fn render(
         draw_inner_border(&mut content_image, &translated);
     }
 
-    let (output_image, content_offset_x, footer_height) = if request.profile
-        == "screenshot-markup-v1"
-    {
-        add_markup_footer(content_image, &request.provenance)?
-    } else {
-        (content_image, 0, 0)
-    };
+    let (output_image, content_offset_x, footer_height) =
+        if request.profile == "screenshot-markup-v1" {
+            add_markup_footer(content_image, &request.provenance)?
+        } else {
+            (content_image, 0, 0)
+        };
     validate_dimensions(output_image.width(), output_image.height())?;
     let png = encode_png(&output_image)?;
     if png.len() > MAX_IMAGE_BYTES {
@@ -278,14 +270,18 @@ fn validate_plan_shape(plan: &RenderPlan) -> Result<(), RendererError> {
             || rectangle.y > MAX_DIMENSION
             || rectangle.width > MAX_DIMENSION
             || rectangle.height > MAX_DIMENSION
-            || rectangle.x.checked_add(rectangle.width).unwrap_or(u32::MAX) > MAX_DIMENSION
-            || rectangle.y.checked_add(rectangle.height).unwrap_or(u32::MAX) > MAX_DIMENSION
+            || rectangle.x.saturating_add(rectangle.width) > MAX_DIMENSION
+            || rectangle.y.saturating_add(rectangle.height) > MAX_DIMENSION
         {
             return Err(RendererError::invalid("rectangle is invalid"));
         }
     }
     if let Some(crop) = &plan.crop {
-        if plan.boxes.iter().any(|rectangle| !contains(crop, rectangle)) {
+        if plan
+            .boxes
+            .iter()
+            .any(|rectangle| !contains(crop, rectangle))
+        {
             return Err(RendererError::invalid(
                 "box rectangle is outside the crop rectangle",
             ));
@@ -294,11 +290,7 @@ fn validate_plan_shape(plan: &RenderPlan) -> Result<(), RendererError> {
     Ok(())
 }
 
-fn validate_plan_bounds(
-    plan: &RenderPlan,
-    width: u32,
-    height: u32,
-) -> Result<(), RendererError> {
+fn validate_plan_bounds(plan: &RenderPlan, width: u32, height: u32) -> Result<(), RendererError> {
     let source = PixelRect {
         x: 0,
         y: 0,
@@ -334,9 +326,8 @@ fn validate_provenance(request: &RenderRequest) -> Result<(), RendererError> {
             request.provenance.plan_sha256.as_deref(),
             request.provenance.source_time_kind.as_deref(),
         ] {
-            let value = key.ok_or_else(|| {
-                RendererError::invalid("markup provenance is incomplete")
-            })?;
+            let value =
+                key.ok_or_else(|| RendererError::invalid("markup provenance is incomplete"))?;
             if value.is_empty()
                 || value.len() > 128
                 || value.chars().any(|character| character.is_control())
@@ -470,9 +461,8 @@ fn decode_from<D: ImageDecoder>(mut decoder: D) -> Result<RgbImage, RendererErro
     let rgb = RgbImage::from_fn(rgba.width(), rgba.height(), |x, y| {
         let pixel = rgba.get_pixel(x, y).0;
         let alpha = u16::from(pixel[3]);
-        let blend = |channel: u8| {
-            ((u16::from(channel) * alpha + 255 * (255 - alpha) + 127) / 255) as u8
-        };
+        let blend =
+            |channel: u8| ((u16::from(channel) * alpha + 255 * (255 - alpha) + 127) / 255) as u8;
         Rgb([blend(pixel[0]), blend(pixel[1]), blend(pixel[2])])
     });
     validate_dimensions(rgb.width(), rgb.height())?;
@@ -520,7 +510,9 @@ fn validate_dimensions(width: u32, height: u32) -> Result<(), RendererError> {
         || height > MAX_DIMENSION
         || u64::from(width) * u64::from(height) > MAX_PIXELS
     {
-        return Err(RendererError::image("image dimensions exceed the fixed limit"));
+        return Err(RendererError::image(
+            "image dimensions exceed the fixed limit",
+        ));
     }
     Ok(())
 }
@@ -568,14 +560,8 @@ fn add_markup_footer(
         .source_time_kind
         .as_deref()
         .ok_or_else(|| RendererError::invalid("markup provenance is incomplete"))?;
-    let source_time = provenance
-        .source_time
-        .as_deref()
-        .unwrap_or("UNKNOWN");
-    let source_id = provenance
-        .source_id
-        .as_deref()
-        .unwrap_or("UNAVAILABLE");
+    let source_time = provenance.source_time.as_deref().unwrap_or("UNKNOWN");
+    let source_id = provenance.source_id.as_deref().unwrap_or("UNAVAILABLE");
     let page = provenance
         .page
         .map(|value| format!(" | PAGE={value}"))
@@ -620,7 +606,9 @@ fn wrap_text(font: &Font, text: &str, available_width: u32) -> Result<Vec<String
             line_width = 0.0;
         }
         if advance > available_width as f32 {
-            return Err(RendererError::image("footer glyph exceeds the canvas width"));
+            return Err(RendererError::image(
+                "footer glyph exceeds the canvas width",
+            ));
         }
         lines.last_mut().unwrap().push(character);
         line_width += advance;
@@ -653,18 +641,14 @@ fn draw_text_line(image: &mut RgbImage, font: &Font, text: &str, start_x: u32, y
 
 fn encode_png(image: &RgbImage) -> Result<Vec<u8>, RendererError> {
     let mut output = Vec::new();
-    PngEncoder::new_with_quality(
-        &mut output,
-        CompressionType::Best,
-        FilterType::Adaptive,
-    )
-    .write_image(
-        image.as_raw(),
-        image.width(),
-        image.height(),
-        image::ExtendedColorType::Rgb8,
-    )
-    .map_err(|_| RendererError::image("rendered PNG could not be encoded"))?;
+    PngEncoder::new_with_quality(&mut output, CompressionType::Best, FilterType::Adaptive)
+        .write_image(
+            image.as_raw(),
+            image.width(),
+            image.height(),
+            image::ExtendedColorType::Rgb8,
+        )
+        .map_err(|_| RendererError::image("rendered PNG could not be encoded"))?;
     Ok(output)
 }
 

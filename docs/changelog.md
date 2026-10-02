@@ -6,6 +6,16 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-02：导出图片证据与原型决定门禁
+
+- 人工导出消费已确认的 `image_region` 证据：固定派生 PNG 字节与哈希作为附件嵌入，所有图片统一标为
+  证据图片，文档不显示来源种类或原型性质。
+- 正式件要求每项原型图片有当前有效的保留决定，否则以 `prototype_decision_required`、
+  `prototype_replacement_pending` 或 `prototype_decision_stale` 拒绝；决定集合进入输入哈希，
+  之后改变决定会让已发布导出失效。审阅件不依赖决定。迁移 `0024` 在导出证据行记录保留决定，
+  并在完成关口核对。CI 构建 Rust 截图渲染器，使图片链路测试实际运行。机制见
+  [human-section-exports.md](notes/human-section-exports.md)。
+
 ## 2026-10-02：单位模型、人工导出、单位后台、沙箱与截图证据
 
 - 单位模型配置：单位自带模型与平台目录模型选择，独立密钥加密、不可变修订和
