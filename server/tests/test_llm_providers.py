@@ -224,20 +224,6 @@ FAILURES = {
         4,
         0,
     ),
-    "not_json": (
-        httpx.Response(
-            200,
-            json={
-                "stop_reason": "end_turn",
-                "content": [{"type": "text", "text": "not json"}],
-                "usage": {"input_tokens": 5, "output_tokens": 1},
-            },
-        ),
-        "failed",
-        "invalid_provider_output",
-        4,
-        1,
-    ),
     "unknown_page": (
         anthropic_reply([GOOD_ITEMS[0] | {"ref": "9"}]),
         "failed",
@@ -467,3 +453,49 @@ async def test_quota_message_names_the_reset_time_but_no_other_vendor_text(
     assert "resets at 2026-10-02 14:01:58" in message
     assert "Contact your system administrator" in message
     assert "PRIVATE-ECHO" not in message and "使用上限" not in message
+
+
+def not_json():
+    body = {
+        "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": "not json"}],
+        "usage": {"input_tokens": 5, "output_tokens": 1},
+    }
+    return httpx.Response(200, json=body)
+
+
+@pytest.mark.parametrize("recovers", [True, False])
+async def test_malformed_output_is_retried_in_smaller_parts(recovers, tenants, tmp_path, pdf_bytes):
+    requests: list[str] = []
+
+    def vendor(request: httpx.Request) -> httpx.Response:
+        content = json.loads(request.content)["messages"][0]["content"]
+        requests.append(content)
+        pages = re.findall(r'<page number="(\d+)">', content)
+        if len(pages) > 1 or not recovers:
+            return not_json()
+        return anthropic_reply([GOOD_ITEMS[int(pages[0]) - 1]])
+
+    settings = settings_for(tmp_path, "anthropic", llm_concurrency=1)
+    app = create_app(
+        settings,
+        llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
+        queue=FakeQueue(),
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        # Every call, including the malformed ones, is billed.
+        if recovers:
+            assert status["status"] == "succeeded", status
+            assert len(requests) == 3 and len(await requirement_rows(app, tenants)) == 2
+            # One malformed call (6 tokens) plus two good ones (1,500 each), summed.
+            assert status["result"]["cost"]["llm_tokens"] == 6 + 2 * 1500
+        else:
+            assert len(await usage_rows(app, tenants)) == len(requests)
+            assert (status["status"], status["error"]["code"]) == (
+                "failed",
+                "invalid_provider_output",
+            )
+            assert await requirement_rows(app, tenants) == []

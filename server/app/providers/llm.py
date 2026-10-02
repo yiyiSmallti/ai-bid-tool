@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.models.entities import PlatformModel
-from app.providers.base import ProviderFailure, TruncatedOutput
+from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.disabled import DisabledLLM
 from app.schemas.contracts import (
     Category,
@@ -253,7 +253,9 @@ class HTTPExtractor:
                 except ProviderFailure as exc:
                     usages.extend(exc.usage)
                     exc.usage = []
-                    parts = halve(batch) if isinstance(exc, TruncatedOutput) else None
+                    # Truncated or malformed output is retried in smaller parts.
+                    splittable = isinstance(exc, TruncatedOutput | MalformedOutput)
+                    parts = halve(batch) if splittable else None
                     if parts is None:
                         failed.set()
                         raise
@@ -405,11 +407,7 @@ class HTTPExtractor:
         try:
             return WireOutput.model_validate(json.loads(text))
         except (ValueError, ValidationError):
-            raise ProviderFailure(
-                "Model output did not match the extraction schema",
-                code="invalid_provider_output",
-                usage=[usage],
-            ) from None
+            raise MalformedOutput([usage]) from None
 
     async def call(
         self, client: httpx.AsyncClient, batch: list[dict]

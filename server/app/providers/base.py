@@ -21,6 +21,17 @@ class ProviderFailure(Exception):
         self.usage = usage or []
 
 
+class MalformedOutput(ProviderFailure):
+    """The model answered with text that is not the extraction schema; a smaller batch may parse."""
+
+    def __init__(self, usage: list[ProviderUsage]):
+        super().__init__(
+            "Model output did not match the extraction schema",
+            code="invalid_provider_output",
+            usage=usage,
+        )
+
+
 class TruncatedOutput(ProviderFailure):
     """The model hit its output limit; a smaller batch may still fit."""
 

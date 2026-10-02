@@ -22,7 +22,7 @@ kind: changelog
   决定见 [ADR 0003](adr/0003-word-structural-citations.md)，机制见
   [docx-citations.md](notes/docx-citations.md)。
 - 引用比对忽略全角半角与弯直引号差异；要求按原文顺序列出。
-- 模型输出被截断时自动把批次对半拆开重发：先按章节，再按块，长页面或长单元格再按行；
+- 模型输出被截断或不符合格式时自动把批次对半拆开重发：先按章节，再按块，长页面或长单元格再按行；
   只有单行仍超限才失败。
 - 抽取批次并发发送（`BID_LLM_CONCURRENCY`），默认批次 8,000 字、输出上限 32,000 token，
   每次调用有总时限；`BID_LLM_REQUEST_OPTIONS` 可向请求附加服务商参数。

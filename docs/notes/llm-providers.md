@@ -21,7 +21,8 @@ Both adapters call the vendor over httpx; no vendor SDK is installed. Chunks
 (PDF pages or Word sections) are grouped into batches of at most
 `BID_LLM_BATCH_CHARS` characters (default 8,000), and a chunk larger than the
 budget gets a batch of its own rather than being cut. When the model hits its
-output limit, the batch is halved and both halves are sent again: by chunk
+output limit or answers with text that does not parse as the schema, the
+batch is halved and both halves are sent again: by chunk
 first, then a Word section by blocks, then a long page or block by lines. A
 part keeps its page number or block ID, and its quotes are still checked
 against the whole stored page or block. Only a single line that still
@@ -57,7 +58,7 @@ actually answered.
 | Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; the message names the reset time when the vendor gives one and asks the user to contact the system administrator |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
-| Truncated output on a single line, malformed JSON, schema mismatch, `ref` outside the batch | Failed, `invalid_provider_output` |
+| Truncated or malformed output on a single line, `ref` outside the batch | Failed, `invalid_provider_output` |
 | Some quotes not found at the cited position | Succeeded; those items are listed in `result.rejected` and not saved |
 | No quote found at its cited position | Failed, `invalid_citation`; nothing saved |
 
