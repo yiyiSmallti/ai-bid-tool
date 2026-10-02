@@ -47,6 +47,39 @@ objects. The processor then checks every quote against the stored page or
 block text, saves the items that pass, and lists the others in
 `result.rejected` with their position, quote, and a warning.
 
+The prompt requires one requirement per hardware or software parameter,
+including nonnumeric parameters, with that parameter's own quote and all its
+source details. Heading-only items are skipped even when starred; `merge_starred`
+also skips a heading ending in a colon without content after it.
+
+After the first pass, `HTTPExtractor.extract` performs one parameter gap-fill
+sweep. `uncovered_parameters` splits the full stored block or page text on
+Chinese or ASCII semicolons and newlines. A piece is a candidate when it has a
+comparison (`≥`, `≤`, `>`, `<`, `≯`, `≮`, or phrases such as `不少于`, `不低于`,
+`不超过`), or a `name:value` whose value contains a digit or a recognized unit.
+Coverage uses only items that pass `cited`, at the same chunk and block/page;
+the normalized parameter must occur in a kept quote. Leading list numbers and
+stars and terminal sentence punctuation do not affect coverage.
+
+Only uncovered pieces are rendered, one per line, under the original block ID
+or page number. They reuse the batch budget, concurrency, transient retries and
+halving above. The processor still validates every returned quote against the
+full stored source, so joining separated pieces or inventing a value is rejected.
+There is no second gap scan. With no gaps, no extra call is made.
+
+`result.gap_fill` adds `segments` (uncovered candidate pieces), `calls` (actual
+gap-fill attempts, including retries), and `added` (new requirements saved from
+gap-fill output after citation checks and deduplication). Existing result fields
+and the `extract(chunks, schema)` provider entry point are unchanged.
+
+Gap filling adds the input and output tokens of its calls, at the selected
+model and reasoning level. For `S` uncovered segments grouped into `B` initial
+gap batches, it normally adds `B` calls. Splitting can create at most `2*S-B`
+batch attempts before reaching individual segments; including the two transient
+retries per batch, the upper bound is `3*(2*S-B)` vendor calls per extraction
+attempt. A requeued job starts a new attempt and can incur those costs again.
+These are bounds on calls, not a fixed token or price cap.
+
 On Anthropic, effort comes from `BID_LLM_EFFORT`, and a safety decline is
 retried server-side on another model (`fallbacks: "default"`) unless
 `BID_LLM_ANTHROPIC_FALLBACK=false`. The usage record stores the model that
@@ -63,7 +96,10 @@ actually answered.
 | No item passes | Failed, `invalid_citation`; nothing saved |
 | An unexpected error while assembling results | Failed, `processing_failed`; every finished call is still recorded, and the log holds the exception type and stack without its message |
 
-Each completed call produces one `ProviderUsage`. When a later batch fails,
+Each completed call produces one `ProviderUsage`, saved as its own usage record
+on success as well as failure; the adapter also returns aggregate usage for
+existing consumers. Gap-fill calls use this same accounting path, including
+truncated, malformed and refused responses. When a later batch fails,
 `ProviderFailure.usage` carries the earlier calls and the processor records
 them, because the vendor billed them. USD is computed from the configured
 per-million-token prices, or `null` when either price is missing.
@@ -76,22 +112,30 @@ per-million-token prices, or `null` when either price is missing.
   its key or model stops startup.
 - The configured prices apply to whichever model answered. After a refusal
   fallback, the recorded cost is an estimate at the primary model's prices.
-- A rejected item is lost, not repaired. If it was a ★ clause, the ★ rule
-  still adds it from the source. `evals/extract_tender.py` reports verified
-  citations and ★ recall per run.
+- A rejected first-pass quote does not count as coverage and may therefore
+  trigger gap filling. Rejected gap-fill items are reported without another
+  repair round. If a missing item was a ★ clause, the ★ rule still adds it
+  from the source. `evals/extract_tender.py` reports verified citations and
+  ★ recall per run.
+- Gap detection is lexical, not a completeness proof. Nonnumeric parameters
+  without a comparison or recognized unit rely on the first-pass prompt. A
+  whole-list quote can count as coverage even if the requirement text omits
+  details; the prompt instructs the model to quote each parameter separately.
 - Reasoning models can spend the whole output budget thinking. On GLM, a
   section took about 11 times longer with thinking on, and the full reference
   tender was cut off at 32,000 output tokens before halving existed. Halving
   costs the truncated call plus the retries; disable thinking with
   `BID_LLM_REQUEST_OPTIONS` when most batches overflow.
 - The cache key includes the provider, model, adapter version, and
-  `PROMPT_VERSION`; bump `ADAPTER_VERSION` when the prompt or schema changes.
+  `PROMPT_VERSION`; bump `PROMPT_VERSION` for extraction prompt changes and
+  `ADAPTER_VERSION` for adapter or wire schema compatibility changes.
 
 ## Code
 
-- [server/app/providers/llm.py](../../server/app/providers/llm.py): `AnthropicExtractor`, `OpenAICompatibleExtractor`, `create_llm`, `WIRE_SCHEMA`.
+- [server/app/providers/llm.py](../../server/app/providers/llm.py): `HTTPExtractor.extract`, `uncovered_parameters`, `parameter_segments`, `AnthropicExtractor`, `OpenAICompatibleExtractor`, `create_llm`, `WIRE_SCHEMA`.
 - [server/app/providers/base.py](../../server/app/providers/base.py): `ProviderFailure` with `code` and `usage`.
 - [server/app/jobs/processor.py](../../server/app/jobs/processor.py): usage recording and job states.
 - [server/app/core/config.py](../../server/app/core/config.py): `llm_*` settings and startup validation.
 - [server/tests/test_llm_providers.py](../../server/tests/test_llm_providers.py): end-to-end cases through the API and job processor.
+- [server/tests/test_parameter_extraction.py](../../server/tests/test_parameter_extraction.py): parameter coverage, original positions, rejection, deduplication and per-call accounting through the API and job processor.
 - [evals/extract_tender.py](../../evals/extract_tender.py): real-vendor run on a public tender.

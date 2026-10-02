@@ -137,7 +137,10 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_
     ],
 )
 async def test_word_citations_must_sit_inside_the_cited_block(items, code, tenants, tmp_path):
-    vendor = Vendor(anthropic_reply(items))
+    vendor = Vendor(
+        anthropic_reply(items),
+        *([anthropic_reply([])] if code == "invalid_citation" else []),
+    )
     settings = settings_for(tmp_path, "anthropic")
     app = create_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
@@ -170,7 +173,10 @@ async def test_reparse_replaces_the_old_unverified_word_chunk(tenants, tmp_path,
 
 
 async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
-    vendor = Vendor(anthropic_reply([item("p5", '投标文件须注明"响应内容"及具体数值。')]))
+    vendor = Vendor(
+        anthropic_reply([item("p5", '投标文件须注明"响应内容"及具体数值。')]),
+        anthropic_reply([]),
+    )
     settings = settings_for(tmp_path, "anthropic")
     app = create_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
@@ -194,7 +200,8 @@ async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(t
                 item("p2", "投标人须具备有效的营业执照。", "qualification"),
                 item("p4", "核心数不少于 32 核"),  # quote belongs to the table cell
             ]
-        )
+        ),
+        anthropic_reply([]),
     )
     settings = settings_for(tmp_path, "anthropic")
     app = create_app(
@@ -251,7 +258,9 @@ async def test_truncated_word_batches_are_halved_until_the_output_fits(tenants, 
 
     assert [r["source"]["location"]["block_id"] for r in rows] == ["p2", "p4", "t1r2c2", "p5"]
     # 9 blocks overflow; then the sections (2 and 7), then halves down to two blocks.
-    assert sorted(map(len, seen), reverse=True) == [9, 7, 4, 3, 2, 2, 2, 2, 1]
+    # One final gap batch asks for the uncovered starred cell; the rule still adds it
+    # when the vendor leaves that batch empty.
+    assert sorted(map(len, seen), reverse=True) == [9, 7, 4, 3, 2, 2, 2, 2, 1, 1]
     assert status["result"]["rejected"] == []
 
 

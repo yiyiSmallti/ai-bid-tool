@@ -128,7 +128,7 @@ class Processor:
                     async with self.db.transaction(org_id) as session:
                         await billing.require_funds(session, self.settings.billing_currency)
                 output = await llm.extract(chunks, Extraction.model_json_schema())
-                usages = [output.usage]
+                usages = output.usages if output.usages is not None else [output.usage]
                 # Usage is recorded even when output is invalid or the job is cancelled.
                 await self.record_usage(org_id, task_id, usages)
                 charged.extend(usages)
@@ -211,7 +211,9 @@ class Processor:
                     }
                 else:
                     saved = 0
+                    gap_added = 0
                     for item in requirements.items:
+                        item_fingerprint = fingerprint(item)
                         row = dict(
                             org_id=org_id,
                             task_id=task_id,
@@ -226,7 +228,7 @@ class Processor:
                             category=item.category.value,
                             starred=item.starred,
                             condition=item.condition,
-                            fingerprint=fingerprint(item),
+                            fingerprint=item_fingerprint,
                             job_id=job_id,
                         )
                         created = await session.scalar(
@@ -238,6 +240,8 @@ class Processor:
                             .returning(Requirement.id)
                         )
                         saved += created is not None
+                        if created is not None and item_fingerprint in output.gap_fill.fingerprints:
+                            gap_added += 1
                     result = {
                         "created": saved,
                         "starred": sum(item.starred for item in requirements.items),
@@ -245,6 +249,11 @@ class Processor:
                         "model": llm.model,
                         "reasoning": reasoning,
                         "warnings": warnings,
+                        "gap_fill": {
+                            "segments": output.gap_fill.segments,
+                            "calls": output.gap_fill.calls,
+                            "added": gap_added,
+                        },
                     }
                 result["cost"] = {
                     "llm_tokens": sum(usage.tokens for usage in charged),

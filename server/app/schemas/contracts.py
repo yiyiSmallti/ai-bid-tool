@@ -158,8 +158,20 @@ class OCRText(Contract):
     usage: ProviderUsage
 
 
+class GapFill(Contract):
+    """Internal provenance; the processor reports only newly saved requirements as added."""
+
+    segments: int = Field(default=0, ge=0)
+    calls: int = Field(default=0, ge=0)
+    fingerprints: set[str] = Field(default_factory=set)
+
+
 class LLMResult(Contract):
     extraction: Extraction
     usage: ProviderUsage
+    # HTTP adapters retain each call as well as the aggregate used by existing consumers.
+    # Providers making a single call can keep returning only usage.
+    usages: list[ProviderUsage] | None = None
+    gap_fill: GapFill = Field(default_factory=GapFill)
     # Items dropped before citation checks, such as ones with an empty quote.
     rejected: list[dict[str, str]] = Field(default_factory=list)

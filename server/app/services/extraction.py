@@ -5,7 +5,7 @@ import unicodedata
 from app.core.errors import ServiceError
 from app.schemas.contracts import Category, ExtractedRequirement, Extraction, Location, Source
 
-PROMPT_VERSION = "req-v2"
+PROMPT_VERSION = "req-v3"
 
 
 QUOTES = str.maketrans(
@@ -103,7 +103,13 @@ def merge_starred(extraction: Extraction, chunks: list[dict]) -> Extraction:
         for text, block in units:
             for line in text.splitlines():
                 quote = line.strip()
-                if not quote or not re.search(r"[★☆]|实质性要求|否决投标|废标", quote):
+                if (
+                    not quote
+                    or not re.search(r"[★☆]|实质性要求|否决投标|废标", quote)
+                    # A colon with no following content introduces requirements, but is
+                    # not itself one (for example, ★3.合同的终止：).
+                    or re.fullmatch(r"[^:：；;。！？]+[:：]", quote)
+                ):
                     continue
                 matching = next(
                     (

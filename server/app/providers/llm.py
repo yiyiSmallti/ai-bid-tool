@@ -23,11 +23,12 @@ from app.schemas.contracts import (
     Category,
     ExtractedRequirement,
     Extraction,
+    GapFill,
     LLMResult,
     ProviderUsage,
     Source,
 )
-from app.services.extraction import location_of
+from app.services.extraction import cited, fingerprint, location_of, normalize
 
 ADAPTER_VERSION = "http-extract-v2"
 logger = logging.getLogger(__name__)
@@ -48,13 +49,80 @@ SYSTEM_PROMPT = """你是招标文件分析助手。从用户给出的招标文�
 - substantive：实质性条款，包括带 ★ 的条款、否决投标或废标条款
 
 每条要求：
-- text：用简洁中文复述这条要求。
+- text：用简洁中文复述这条要求，保留全部参数名、数值、比较符、单位、范围及限定条件，不得用“等”、省略号或概括性文字省略原文细节。
 - ref：要求所在位置。内容以 <page number="N"> 给出时填页码 N；以 <block id="…"> 给出时填块标识，如 p37 或 t5r3c2。
 - quote：逐字复制该位置中的原文连续片段，必须完整出现在同一个 page 或 block 内，不得改写、省略、补全或跨块合并。
 - starred：原文带 ★，或属于实质性、否决投标、废标条款时为 true。
 - condition：可量化的技术参数填写 param（参数名）、op（比较方式）、value（数值或文本）、unit（单位，无则为 null）；无法量化时为 null。
 
-只抽取内容中实际写明的要求，不推测、不编造；没有要求的位置不输出。"""
+同一段落、表格单元格或页面内用“；”、";"、换行分隔的硬件或软件参数清单，必须逐个参数输出独立要求，不得把多个参数合并成一条或只选部分参数。
+每个参数的 quote 必须引用该参数自己的原文，不能用整个清单的引用代替逐项引用；非数值参数（如面板类型：IPS 技术）也必须逐项抽取。
+只抽取内容中实际写明的要求，不推测、不编造；没有要求的位置不输出。只有标题而没有要求内容的条目（如“★3.合同的终止：”），即使带 ★ 也不输出。"""
+
+PARAMETER_COMPARISON = re.compile(r"[≥≤><≯≮]|不少于|不低于|不超过|不高于|大于|小于|至少|至多")
+PARAMETER_UNIT = re.compile(
+    r"(?<![a-z])(?:[kmgt]?b|[kmg]?hz|[mun]?m|kg|g|v|w|a|db|dpi|ppm|fps|bit)(?![a-z])"
+    r"|%|°c|英寸|毫米|厘米|米|千克|公斤|克|毫秒|秒|分钟|小时|瓦|伏|安培|像素|核|线程|页/分",
+    re.IGNORECASE,
+)
+PARAMETER_PREFIX = re.compile(r"^[★☆]*(?:\(\d+\)|\d+(?:[、)]|\.(?!\d)))?[★☆]*")
+
+
+def parameter_segments(text: str) -> list[str]:
+    segments = []
+    for part in re.split(r"[；;\r\n]+", text):
+        part = part.strip()
+        normalized = normalize(part)
+        name, colon, value = normalized.partition(":")
+        if PARAMETER_COMPARISON.search(normalized) or (
+            name and colon and value and (re.search(r"\d", value) or PARAMETER_UNIT.search(value))
+        ):
+            segments.append(part)
+    return segments
+
+
+def uncovered_parameters(
+    chunks: list[dict], items: list[ExtractedRequirement]
+) -> tuple[list[dict], int]:
+    """Render only gaps, retaining original positions and leaving stored chunks untouched."""
+    available = {str(chunk["id"]): chunk for chunk in chunks}
+    quotes: dict[tuple[str, str | int | None], list[str]] = {}
+    for item in items:
+        if not cited(item, available.get(str(item.source.chunk_id))):
+            continue  # Invalid citations cannot hide gaps; the processor reports them later.
+        source = item.source
+        position = source.location.block_id if source.location else source.page
+        quotes.setdefault((str(source.chunk_id), position), []).append(normalize(source.quote))
+
+    partials, count = [], 0
+    for chunk in chunks:
+        blocks = []
+        page_text = ""
+        for unit in chunk.get("blocks") or [chunk]:
+            position = unit["block_id"] if chunk.get("blocks") else chunk["page"]
+            covered = quotes.get((str(chunk["id"]), position), [])
+            missing = []
+            for segment in parameter_segments(unit["text"]):
+                # Numbering, stars and sentence-ending punctuation are not parameters.
+                key = PARAMETER_PREFIX.sub("", normalize(segment)).rstrip("。.")
+                if not any(key in quote for quote in covered):
+                    missing.append(segment)
+            if not missing:
+                continue
+            count += len(missing)
+            text = "\n".join(missing)
+            if chunk.get("blocks"):
+                blocks.append({**unit, "text": text})
+            else:
+                page_text = text
+        if blocks:
+            partials.append(
+                {**chunk, "blocks": blocks, "text": "\n".join(b["text"] for b in blocks)}
+            )
+        elif page_text:
+            partials.append({**chunk, "text": page_text})
+    return partials, count
+
 
 CONDITION_SCHEMA: dict[str, Any] = {
     "anyOf": [
@@ -266,6 +334,8 @@ class HTTPExtractor:
         failed = asyncio.Event()
         # Every finished call was billed by the vendor, including truncated ones.
         usages: list[ProviderUsage] = []
+        gap_fill = GapFill()
+        filling = False
 
         async def gather(client, groups) -> list[tuple[list[dict], WireOutput]]:
             results = await asyncio.gather(
@@ -283,6 +353,8 @@ class HTTPExtractor:
             # here so one broken call does not requeue a long job from the start.
             for delay in (*self.retry_delays, None):
                 try:
+                    if filling:
+                        gap_fill.calls += 1
                     return await self.call(client, batch)
                 except ProviderFailure as exc:
                     if not exc.retryable or delay is None or failed.is_set():
@@ -327,6 +399,32 @@ class HTTPExtractor:
                     kept, dropped = self.attach(wire, batch, usages)
                     items.extend(kept)
                     rejected.extend(dropped)
+                partials, gap_fill.segments = uncovered_parameters(chunks, items)
+                if partials:
+                    available = {str(chunk["id"]): chunk for chunk in chunks}
+                    first_pass = {
+                        fingerprint(item)
+                        for item in items
+                        if cited(item, available.get(str(item.source.chunk_id)))
+                    }
+                    filling = True
+                    # A single sweep: retries split these partials, never rescan their output.
+                    answered = await gather(
+                        client, batches(partials, self.settings.llm_batch_chars)
+                    )
+                    for batch, wire in answered:
+                        kept, dropped = self.attach(wire, batch, usages)
+                        items.extend(kept)
+                        rejected.extend(dropped)
+                        gap_fill.fingerprints.update(fingerprint(item) for item in kept)
+                    gap_fill.fingerprints.difference_update(first_pass)
+                return LLMResult(
+                    extraction=Extraction(items=items),
+                    usage=self.total(usages),
+                    usages=usages,
+                    gap_fill=gap_fill,
+                    rejected=rejected,
+                )
             except ProviderFailure as exc:
                 exc.usage = usages
                 raise
@@ -338,9 +436,6 @@ class HTTPExtractor:
                     code="processing_failed",
                     usage=usages,
                 ) from exc
-        return LLMResult(
-            extraction=Extraction(items=items), usage=self.total(usages), rejected=rejected
-        )
 
     def attach(
         self, wire: WireOutput, batch: list[dict], usages: list[ProviderUsage]
