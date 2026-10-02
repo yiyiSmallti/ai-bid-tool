@@ -83,7 +83,11 @@ class Processor:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, document.id
             reasoning = current.reasoning
-            llm = await self.resolve(session) if self.resolve and kind != "draft" else self.llm
+            llm = (
+                await self.resolve(session)
+                if self.resolve and kind not in {"draft", "screenshot_render"}
+                else self.llm
+            )
             key, suffix, expected_hash = (
                 document.storage_key,
                 Path(document.name).suffix.lower(),
@@ -91,7 +95,7 @@ class Processor:
             )
             chunks = (
                 []
-                if kind in {"draft", "card_generate"}
+                if kind in {"draft", "card_generate", "screenshot_render", "screenshot_analyze"}
                 else [
                     dict(
                         id=row.id,
@@ -126,6 +130,15 @@ class Processor:
                     return recognized
 
             try:
+                if kind in {"screenshot_render", "screenshot_analyze"}:
+                    from app.services.screenshot_jobs import process_analysis, process_render
+
+                    incremental = True
+                    if kind == "screenshot_render":
+                        await process_render(execution, self.storage)
+                    else:
+                        await process_analysis(execution, self.storage, llm)
+                    return
                 if kind == "card_generate":
                     from app.services.card_generation import generate
 

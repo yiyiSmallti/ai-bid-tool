@@ -78,7 +78,7 @@ class ApiToken(Tenant, Base):
         UniqueConstraint("org_id", "digest"),
         ForeignKeyConstraint(["org_id", "user_id"], ["memberships.org_id", "memberships.user_id"]),
         CheckConstraint(
-            "NOT (scopes ? 'evidence:confirm') AND NOT (scopes ? 'export')",
+            "NOT (scopes ? 'evidence:confirm') AND NOT (scopes ? 'export') AND NOT (scopes ? 'screenshot:ingest')",
             name="token_forbidden_scopes",
         ),
     )
@@ -177,6 +177,9 @@ class Requirement(Tenant, Base):
 
 class UsageRecord(Tenant, Base):
     __tablename__ = "usage_records"
+    image_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    image_price_revision: Mapped[str | None] = mapped_column(String(100))
+    image_input_sha256: Mapped[str | None] = mapped_column(String(64))
     task_id: Mapped[UUID] = mapped_column()
     provider: Mapped[str] = mapped_column(String(100))
     model: Mapped[str] = mapped_column(String(100))

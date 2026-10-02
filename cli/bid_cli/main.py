@@ -54,6 +54,7 @@ from pydantic import ValidationError
 
 from bid_cli.client import Client, State, new_output_path, save_download
 from bid_cli.schema import command_schema
+from bid_cli.screenshots import register as register_screenshot_commands
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 org_app, task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(6))
@@ -1487,6 +1488,9 @@ def main(args: list[str] | None = None):
         )
     except KeyboardInterrupt:
         raise SystemExit(3) from None
+
+
+register_screenshot_commands(app)
 
 
 if __name__ == "__main__":

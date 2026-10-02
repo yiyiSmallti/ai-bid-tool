@@ -127,7 +127,12 @@ ROLE_SCOPES = {
     },
 }
 
+SCOPES.update({"screenshot:read", "screenshot:write"})
+
 for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.add("screenshot:read")
+    if _role != "viewer":
+        _scopes.update({"screenshot:write", "screenshot:ingest"})
     _scopes.update({"card:read", "draft:read"})
     if _role != "viewer":
         _scopes.update({"card:write", "card:generate", "draft:run", "evidence:confirm"})

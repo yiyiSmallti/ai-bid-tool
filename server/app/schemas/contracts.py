@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CONTRACT_VERSION = "1.2"
+CONTRACT_VERSION = "2.0"
 
 
 class Contract(BaseModel):
@@ -117,6 +117,9 @@ class Extraction(Contract):
 
 
 class ProviderUsage(Contract):
+    image_count: int = Field(default=0, ge=0, le=20)
+    image_price_revision: str | None = None
+    image_input_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     provider: str
     model: str
     version: str

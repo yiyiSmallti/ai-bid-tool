@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import not_found
+from app.core.errors import ServiceError, not_found
 from app.models.entities import Job, Requirement
 from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevision, ResponseItem
 from app.providers.storage import Storage
@@ -28,7 +28,39 @@ def digest(value: dict) -> str:
     ).hexdigest()
 
 
-async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id: UUID):
+def evidence_dependency(row: dict) -> dict:
+    fixed = {
+        "id": row["id"],
+        "active": row["active_selection"],
+        "confirmed_by": row["confirmed_by"],
+    }
+    if row["input"]["kind"] == "image_region":
+        fixed |= {
+            "asset_id": row["screenshot_asset_id"],
+            "rendition_id": row["screenshot_rendition_id"],
+            "image_sha256": row["image_sha256"],
+            "region": row["region"],
+            "claim_scope": row["claim_scope"],
+            "visual_observation_sha256": hashlib.sha256(
+                row["visual_observation"].encode()
+            ).hexdigest(),
+            "material_kind": row["material_kind"],
+            "quote_check": row["quote_check"],
+            "image_plan_sha256": row["image_rendition"]["plan_sha256"],
+            "image_mapping": row["image_rendition"]["mapping"],
+            "image_profile": row["image_rendition"]["profile"],
+            "privacy_review_id": row["image_rendition"]["privacy_review_id"],
+        }
+    return fixed
+
+
+async def assemble(
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    job_id: UUID,
+    storage: Storage | None = None,
+):
     job, requirements = await cards.extraction_scope(session, task_id, job_id)
     items, manifest, negatives = [], [], 0
     for requirement in requirements:
@@ -40,7 +72,7 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
             revision = await session.get(ResponseCardRevision, card.current_revision_id)
             if revision is None:
                 raise not_found()
-            view = await cards.card_view(session, actor, card, revision, requirement)
+            view = await cards.card_view(session, actor, card, revision, requirement, storage)
         valid_citation = await cards.citation_valid(session, requirement)
         entry = {
             "requirement_id": str(requirement.id),
@@ -83,8 +115,10 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
                     )
                 if view["review_domain"] is None:
                     reasons.append("unclassified")
-                if await cards.generation_materials_stale(session, actor, revision) or any(
-                    not material["active_selection"] for material in view["evidence"]
+                if (
+                    eligibility == "stale_material"
+                    or await cards.generation_materials_stale(session, actor, revision)
+                    or any(not material["active_selection"] for material in view["evidence"])
                 ):
                     reasons.append("stale_material")
                 if eligibility == "needs_reconfirmation":
@@ -102,16 +136,7 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
                 "starred": requirement.starred,
                 "kind": entry["kind"],
                 "eligibility": eligibility,
-                "evidence": [
-                    {
-                        "id": row["id"],
-                        "active": row["active_selection"],
-                        "confirmed_by": row["confirmed_by"],
-                    }
-                    for row in view["evidence"]
-                ]
-                if view
-                else [],
+                "evidence": [evidence_dependency(row) for row in view["evidence"]] if view else [],
             }
         )
     fixed = {
@@ -125,7 +150,12 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
 
 
 async def validate_materials(
-    session: AsyncSession, actor: Identity, task_id: UUID, items: list[dict], storage: Storage
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    extraction_job_id: UUID,
+    items: list[dict],
+    storage: Storage,
 ):
     from pydantic import TypeAdapter
 
@@ -135,9 +165,19 @@ async def validate_materials(
     for item in items:
         if item["kind"] == "row":
             for evidence in await cards.linked_evidence(session, UUID(item["card_revision_id"])):
+                if evidence.kind == "image_region":
+                    from app.services.screenshots import validate_image_evidence
+
+                    await validate_image_evidence(session, actor, evidence, storage=storage)
+                    continue
                 view = await cards.evidence_view(session, actor, evidence)
                 await cards.resolve_material(
-                    session, actor, task_id, adapter.validate_python(view["input"]), storage
+                    session,
+                    actor,
+                    task_id,
+                    adapter.validate_python(view["input"]),
+                    storage,
+                    extraction_job_id=extraction_job_id,
                 )
 
 
@@ -148,9 +188,9 @@ async def submit_draft(
     actor.require("card:read")
     await cards.task_lock(session, task_id)
     extraction, items, manifest, input_hash, negatives = await assemble(
-        session, actor, task_id, body.extraction_job_id
+        session, actor, task_id, body.extraction_job_id, storage
     )
-    await validate_materials(session, actor, task_id, items, storage)
+    await validate_materials(session, actor, task_id, body.extraction_job_id, items, storage)
     if body.dry_run:
         counts = {
             kind: sum(item["kind"] == kind for item in items)
@@ -248,13 +288,13 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
     await cards.task_lock(session, job.task_id)
     extraction_id = UUID(submitted["extraction_job_id"])
     _, items, manifest, input_hash, negatives = await assemble(
-        session, actor, job.task_id, extraction_id
+        session, actor, job.task_id, extraction_id, storage
     )
     if input_hash != submitted["input_hash"] or manifest != submitted["input_manifest"]:
         cards.fail(
             "draft_input_changed", "Inputs changed; read current inputs and submit again", 409, 3
         )
-    await validate_materials(session, actor, job.task_id, items, storage)
+    await validate_materials(session, actor, job.task_id, extraction_id, items, storage)
     completion = "partial" if any(item["kind"] == "gap" for item in items) else "complete"
     run = DraftRun(
         id=uuid4(),
@@ -322,7 +362,9 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
     }
 
 
-async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
+async def show_draft(
+    session: AsyncSession, actor: Identity, draft_id: UUID, storage: Storage | None = None
+):
     actor = await cards.access(session, actor, "draft:read")
     run = await session.get(DraftRun, draft_id)
     if run is None:
@@ -337,7 +379,7 @@ async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
     rows.sort(key=lambda item: positions[str(item.requirement_id)])
     tables = {key: [] for key in TABLES}
     _, _, current_manifest, _, _ = await assemble(
-        session, actor, run.task_id, run.extraction_job_id
+        session, actor, run.task_id, run.extraction_job_id, storage
     )
     current_inputs = {entry["requirement_id"]: entry for entry in current_manifest["requirements"]}
     invalidated = [
@@ -363,7 +405,7 @@ async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
             revision = await session.get(ResponseCardRevision, item.card_revision_id)
             if revision is None:
                 raise not_found()
-            view = await cards.card_view(session, actor, card, revision, requirement)
+            view = await cards.card_view(session, actor, card, revision, requirement, storage)
             if view["eligibility"] != ("eligible" if item.kind == "row" else "comply_only"):
                 invalidated.append(str(item.requirement_id))
         # A citation already listed as an invalid_citation gap is not a change since generation.
@@ -384,14 +426,25 @@ async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
         if item.kind == "row":
             if item.card_revision_id is None or item.table is None:
                 cards.fail("invalid_draft", "Draft row is incomplete", 500, 4)
+            material_rows = await cards.linked_evidence(session, item.card_revision_id)
+            for material in material_rows:
+                if material.kind != "image_region":
+                    continue
+                from app.services.screenshots import INVALID_IMAGE_CODES, validate_image_evidence
+
+                try:
+                    await validate_image_evidence(session, actor, material, storage=storage)
+                except ServiceError as error:
+                    if error.code not in INVALID_IMAGE_CODES:
+                        raise
+                    invalidated.append(str(item.requirement_id))
             entry |= {
                 "category": item.category,
                 "starred": item.starred,
                 "table": item.table,
                 **{key: getattr(item, key) for key in cards.CONTENT_FIELDS},
                 "evidence": [
-                    await cards.evidence_view(session, actor, row)
-                    for row in await cards.linked_evidence(session, item.card_revision_id)
+                    await cards.evidence_view(session, actor, row) for row in material_rows
                 ],
             }
             tables[item.table].append(entry)
@@ -419,7 +472,13 @@ async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
     ).model_dump(mode="json")
 
 
-async def list_drafts(session: AsyncSession, actor: Identity, task_id: UUID, job_id: UUID):
+async def list_drafts(
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    job_id: UUID,
+    storage: Storage | None = None,
+):
     actor = await cards.access(session, actor, "draft:read")
     await cards.extraction_scope(session, task_id, job_id)
     runs = (
@@ -431,7 +490,7 @@ async def list_drafts(session: AsyncSession, actor: Identity, task_id: UUID, job
     ).all()
     items = []
     for run in runs:
-        view = await show_draft(session, actor, run.id)
+        view = await show_draft(session, actor, run.id, storage)
         items.append(
             {
                 key: view[key]

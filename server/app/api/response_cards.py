@@ -144,7 +144,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.get("/drafts/{draft_id}", name="draft_show", response_model=Result)
     async def draft_show(draft_id: UUID, ctx=Depends(context, scope="function")):
-        view = await drafts.show_draft(ctx[0], ctx[1], draft_id)
+        view = await drafts.show_draft(ctx[0], ctx[1], draft_id, storage)
         warnings = [
             f"negative_deviation:{row['requirement_id']}"
             for rows in view["tables"].values()
@@ -160,7 +160,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.get("/tasks/{task_id}/drafts", name="draft_list", response_model=Result)
     async def draft_list(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
-        data, items = await drafts.list_drafts(ctx[0], ctx[1], task_id, job)
+        data, items = await drafts.list_drafts(ctx[0], ctx[1], task_id, job, storage)
         return result("draft list", data, items, await cards.scope_warnings(ctx[0], job))
 
     return router

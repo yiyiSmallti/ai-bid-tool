@@ -2867,6 +2867,7 @@
                     "certificate": "#/$defs/ResourceEvidenceInput",
                     "certificate_pdf_page": "#/$defs/PageEvidenceInput",
                     "feature": "#/$defs/ResourceEvidenceInput",
+                    "image_region": "#/$defs/ImageEvidenceInput",
                     "org_profile": "#/$defs/ResourceEvidenceInput",
                     "product": "#/$defs/ResourceEvidenceInput"
                   },
@@ -2878,8 +2879,66 @@
                   },
                   {
                     "$ref": "#/$defs/PageEvidenceInput"
+                  },
+                  {
+                    "$ref": "#/$defs/ImageEvidenceInput"
                   }
                 ]
+              },
+              "ImageEvidenceInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "asset_id": {
+                    "format": "uuid",
+                    "title": "Asset Id",
+                    "type": "string"
+                  },
+                  "claim_scope": {
+                    "enum": [
+                      "functional_observation",
+                      "design_explanation",
+                      "document_excerpt",
+                      "hardware_documentation"
+                    ],
+                    "title": "Claim Scope",
+                    "type": "string"
+                  },
+                  "expected_image_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Expected Image Sha256",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "image_region",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "region": {
+                    "$ref": "#/$defs/PixelRect"
+                  },
+                  "rendition_id": {
+                    "format": "uuid",
+                    "title": "Rendition Id",
+                    "type": "string"
+                  },
+                  "visual_observation": {
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "title": "Visual Observation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "asset_id",
+                  "rendition_id",
+                  "expected_image_sha256",
+                  "region",
+                  "claim_scope",
+                  "visual_observation"
+                ],
+                "title": "ImageEvidenceInput",
+                "type": "object"
               },
               "PageEvidenceInput": {
                 "additionalProperties": false,
@@ -2907,6 +2966,43 @@
                   "quote"
                 ],
                 "title": "PageEvidenceInput",
+                "type": "object"
+              },
+              "PixelRect": {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Height",
+                    "type": "integer"
+                  },
+                  "width": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Width",
+                    "type": "integer"
+                  },
+                  "x": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "X",
+                    "type": "integer"
+                  },
+                  "y": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "Y",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "title": "PixelRect",
                 "type": "object"
               },
               "ResourceEvidenceInput": {
@@ -3823,6 +3919,7 @@
                     "certificate": "#/$defs/ResourceEvidenceInput",
                     "certificate_pdf_page": "#/$defs/PageEvidenceInput",
                     "feature": "#/$defs/ResourceEvidenceInput",
+                    "image_region": "#/$defs/ImageEvidenceInput",
                     "org_profile": "#/$defs/ResourceEvidenceInput",
                     "product": "#/$defs/ResourceEvidenceInput"
                   },
@@ -3834,8 +3931,66 @@
                   },
                   {
                     "$ref": "#/$defs/PageEvidenceInput"
+                  },
+                  {
+                    "$ref": "#/$defs/ImageEvidenceInput"
                   }
                 ]
+              },
+              "ImageEvidenceInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "asset_id": {
+                    "format": "uuid",
+                    "title": "Asset Id",
+                    "type": "string"
+                  },
+                  "claim_scope": {
+                    "enum": [
+                      "functional_observation",
+                      "design_explanation",
+                      "document_excerpt",
+                      "hardware_documentation"
+                    ],
+                    "title": "Claim Scope",
+                    "type": "string"
+                  },
+                  "expected_image_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Expected Image Sha256",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "image_region",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "region": {
+                    "$ref": "#/$defs/PixelRect"
+                  },
+                  "rendition_id": {
+                    "format": "uuid",
+                    "title": "Rendition Id",
+                    "type": "string"
+                  },
+                  "visual_observation": {
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "title": "Visual Observation",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "asset_id",
+                  "rendition_id",
+                  "expected_image_sha256",
+                  "region",
+                  "claim_scope",
+                  "visual_observation"
+                ],
+                "title": "ImageEvidenceInput",
+                "type": "object"
               },
               "PageEvidenceInput": {
                 "additionalProperties": false,
@@ -3863,6 +4018,43 @@
                   "quote"
                 ],
                 "title": "PageEvidenceInput",
+                "type": "object"
+              },
+              "PixelRect": {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Height",
+                    "type": "integer"
+                  },
+                  "width": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Width",
+                    "type": "integer"
+                  },
+                  "x": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "X",
+                    "type": "integer"
+                  },
+                  "y": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "Y",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "title": "PixelRect",
                 "type": "object"
               },
               "ResourceEvidenceInput": {
@@ -7034,6 +7226,1928 @@
           ],
           "input": null
         },
+        "screenshot add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ArchiveDescriptor": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/zip",
+                      "text/html"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "sha256",
+                  "size_bytes",
+                  "media_type"
+                ],
+                "title": "ArchiveDescriptor",
+                "type": "object"
+              },
+              "BrowserSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "browser_version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Browser Version",
+                    "type": "string"
+                  },
+                  "capture_id": {
+                    "format": "uuid",
+                    "title": "Capture Id",
+                    "type": "string"
+                  },
+                  "capture_mode": {
+                    "enum": [
+                      "viewport",
+                      "element"
+                    ],
+                    "title": "Capture Mode",
+                    "type": "string"
+                  },
+                  "captured_at": {
+                    "format": "date-time",
+                    "title": "Captured At",
+                    "type": "string"
+                  },
+                  "device_scale_factor": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 4,
+                    "title": "Device Scale Factor",
+                    "type": "number"
+                  },
+                  "environment": {
+                    "enum": [
+                      "production",
+                      "test",
+                      "development",
+                      "prototype",
+                      "unknown"
+                    ],
+                    "title": "Environment",
+                    "type": "string"
+                  },
+                  "image_kind": {
+                    "enum": [
+                      "screenshot",
+                      "prototype"
+                    ],
+                    "title": "Image Kind",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "local_browser",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "prototype_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Prototype Run Id"
+                  },
+                  "route_label": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Route Label",
+                    "type": "string"
+                  },
+                  "software_version": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Software Version",
+                    "type": "string"
+                  },
+                  "system_origin": {
+                    "maxLength": 300,
+                    "minLength": 1,
+                    "title": "System Origin",
+                    "type": "string"
+                  },
+                  "task_feature_id": {
+                    "format": "uuid",
+                    "title": "Task Feature Id",
+                    "type": "string"
+                  },
+                  "tool_version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Tool Version",
+                    "type": "string"
+                  },
+                  "viewport_height": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Viewport Height",
+                    "type": "integer"
+                  },
+                  "viewport_width": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Viewport Width",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "task_feature_id",
+                  "image_kind",
+                  "software_version",
+                  "environment",
+                  "capture_id",
+                  "captured_at",
+                  "system_origin",
+                  "route_label",
+                  "browser_version",
+                  "tool_version",
+                  "viewport_width",
+                  "viewport_height",
+                  "device_scale_factor",
+                  "capture_mode"
+                ],
+                "title": "BrowserSource",
+                "type": "object"
+              },
+              "CertificateSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence_source_id": {
+                    "format": "uuid",
+                    "title": "Evidence Source Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "certificate_page",
+                    "title": "Kind",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_source_id"
+                ],
+                "title": "CertificateSource",
+                "type": "object"
+              },
+              "ContentMapping": {
+                "additionalProperties": false,
+                "properties": {
+                  "content_height": {
+                    "minimum": 1,
+                    "title": "Content Height",
+                    "type": "integer"
+                  },
+                  "content_offset_x": {
+                    "minimum": 0,
+                    "title": "Content Offset X",
+                    "type": "integer"
+                  },
+                  "content_offset_y": {
+                    "minimum": 0,
+                    "title": "Content Offset Y",
+                    "type": "integer"
+                  },
+                  "content_width": {
+                    "minimum": 1,
+                    "title": "Content Width",
+                    "type": "integer"
+                  },
+                  "crop": {
+                    "$ref": "#/$defs/PixelRect"
+                  },
+                  "footer_height": {
+                    "minimum": 0,
+                    "title": "Footer Height",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "crop",
+                  "content_offset_x",
+                  "content_offset_y",
+                  "content_width",
+                  "content_height",
+                  "footer_height"
+                ],
+                "title": "ContentMapping",
+                "type": "object"
+              },
+              "ImagePlan": {
+                "additionalProperties": false,
+                "properties": {
+                  "boxes": {
+                    "items": {
+                      "$ref": "#/$defs/PixelRect"
+                    },
+                    "maxItems": 20,
+                    "title": "Boxes",
+                    "type": "array"
+                  },
+                  "crop": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/PixelRect"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "redact": {
+                    "items": {
+                      "$ref": "#/$defs/PixelRect"
+                    },
+                    "maxItems": 200,
+                    "title": "Redact",
+                    "type": "array"
+                  }
+                },
+                "title": "ImagePlan",
+                "type": "object"
+              },
+              "PNGDescriptor": {
+                "additionalProperties": false,
+                "properties": {
+                  "height_px": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Height Px",
+                    "type": "integer"
+                  },
+                  "media_type": {
+                    "const": "image/png",
+                    "default": "image/png",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 41943040,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "width_px": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Width Px",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "sha256",
+                  "size_bytes",
+                  "width_px",
+                  "height_px"
+                ],
+                "title": "PNGDescriptor",
+                "type": "object"
+              },
+              "PixelRect": {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Height",
+                    "type": "integer"
+                  },
+                  "width": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Width",
+                    "type": "integer"
+                  },
+                  "x": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "X",
+                    "type": "integer"
+                  },
+                  "y": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "Y",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "title": "PixelRect",
+                "type": "object"
+              },
+              "PreparedScreenshot": {
+                "additionalProperties": false,
+                "properties": {
+                  "image": {
+                    "$ref": "#/$defs/PNGDescriptor"
+                  },
+                  "mapping": {
+                    "$ref": "#/$defs/ContentMapping"
+                  },
+                  "plan": {
+                    "$ref": "#/$defs/ImagePlan"
+                  },
+                  "plan_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Plan Sha256",
+                    "type": "string"
+                  },
+                  "preparation_profile": {
+                    "const": "screenshot-privacy-v1",
+                    "title": "Preparation Profile",
+                    "type": "string"
+                  },
+                  "prepared_at": {
+                    "format": "date-time",
+                    "title": "Prepared At",
+                    "type": "string"
+                  },
+                  "source": {
+                    "discriminator": {
+                      "mapping": {
+                        "certificate_page": "#/$defs/CertificateSource",
+                        "local_browser": "#/$defs/BrowserSource",
+                        "prototype_render": "#/$defs/PrototypeSource",
+                        "upload": "#/$defs/UploadSource",
+                        "vendor_pdf": "#/$defs/VendorSource",
+                        "vendor_web": "#/$defs/VendorSource"
+                      },
+                      "propertyName": "kind"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/$defs/UploadSource"
+                      },
+                      {
+                        "$ref": "#/$defs/BrowserSource"
+                      },
+                      {
+                        "$ref": "#/$defs/CertificateSource"
+                      },
+                      {
+                        "$ref": "#/$defs/VendorSource"
+                      },
+                      {
+                        "$ref": "#/$defs/PrototypeSource"
+                      }
+                    ],
+                    "title": "Source"
+                  },
+                  "source_height": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Source Height",
+                    "type": "integer"
+                  },
+                  "source_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Source Sha256",
+                    "type": "string"
+                  },
+                  "source_width": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Source Width",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "source",
+                  "source_sha256",
+                  "source_width",
+                  "source_height",
+                  "plan",
+                  "plan_sha256",
+                  "preparation_profile",
+                  "prepared_at",
+                  "image",
+                  "mapping"
+                ],
+                "title": "PreparedScreenshot",
+                "type": "object"
+              },
+              "PrototypeSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "prototype_render",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "prototype_run_id": {
+                    "format": "uuid",
+                    "title": "Prototype Run Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "prototype_run_id"
+                ],
+                "title": "PrototypeSource",
+                "type": "object"
+              },
+              "UploadSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "captured_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Captured At"
+                  },
+                  "environment": {
+                    "enum": [
+                      "production",
+                      "test",
+                      "development",
+                      "prototype",
+                      "unknown"
+                    ],
+                    "title": "Environment",
+                    "type": "string"
+                  },
+                  "image_kind": {
+                    "enum": [
+                      "screenshot",
+                      "diagram",
+                      "prototype"
+                    ],
+                    "title": "Image Kind",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "upload",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "prototype_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Prototype Run Id"
+                  },
+                  "software_version": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Software Version",
+                    "type": "string"
+                  },
+                  "source_label": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Source Label",
+                    "type": "string"
+                  },
+                  "task_feature_id": {
+                    "format": "uuid",
+                    "title": "Task Feature Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "task_feature_id",
+                  "image_kind",
+                  "source_label",
+                  "software_version",
+                  "environment"
+                ],
+                "title": "UploadSource",
+                "type": "object"
+              },
+              "VendorSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "archive": {
+                    "$ref": "#/$defs/ArchiveDescriptor"
+                  },
+                  "archive_redaction_plan_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Archive Redaction Plan Sha256",
+                    "type": "string"
+                  },
+                  "captured_at": {
+                    "format": "date-time",
+                    "title": "Captured At",
+                    "type": "string"
+                  },
+                  "content_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Content Sha256",
+                    "type": "string"
+                  },
+                  "final_url": {
+                    "format": "uri",
+                    "maxLength": 2083,
+                    "minLength": 1,
+                    "title": "Final Url",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "vendor_web",
+                      "vendor_pdf"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "page_count": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page Count"
+                  },
+                  "page_number": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page Number"
+                  },
+                  "search_candidate_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Search Candidate Id"
+                  },
+                  "source_url": {
+                    "format": "uri",
+                    "maxLength": 2083,
+                    "minLength": 1,
+                    "title": "Source Url",
+                    "type": "string"
+                  },
+                  "task_resource_id": {
+                    "format": "uuid",
+                    "title": "Task Resource Id",
+                    "type": "string"
+                  },
+                  "title": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "task_resource_id",
+                  "source_url",
+                  "final_url",
+                  "title",
+                  "captured_at",
+                  "content_sha256",
+                  "archive",
+                  "archive_redaction_plan_sha256"
+                ],
+                "title": "VendorSource",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "idempotency_key": {
+                "format": "uuid",
+                "title": "Idempotency Key",
+                "type": "string"
+              },
+              "prepared": {
+                "$ref": "#/$defs/PreparedScreenshot"
+              },
+              "reviewed_archive_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reviewed Archive Sha256"
+              },
+              "reviewed_upload_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Reviewed Upload Sha256",
+                "type": "string"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "prepared",
+              "reviewed_upload_sha256",
+              "idempotency_key"
+            ],
+            "title": "ScreenshotIngest",
+            "type": "object"
+          }
+        },
+        "screenshot analyze": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "AnalysisImageInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "expected_image_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Expected Image Sha256",
+                    "type": "string"
+                  },
+                  "rendition_id": {
+                    "format": "uuid",
+                    "title": "Rendition Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "rendition_id",
+                  "expected_image_sha256"
+                ],
+                "title": "AnalysisImageInput",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Input Hash"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "images": {
+                "items": {
+                  "$ref": "#/$defs/AnalysisImageInput"
+                },
+                "maxItems": 20,
+                "minItems": 1,
+                "title": "Images",
+                "type": "array"
+              },
+              "purposes": {
+                "items": {
+                  "enum": [
+                    "match_requirements",
+                    "propose_regions",
+                    "read_text"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 3,
+                "minItems": 1,
+                "title": "Purposes",
+                "type": "array"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
+              "requirement_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 50,
+                "minItems": 1,
+                "title": "Requirement Ids",
+                "type": "array"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "requirement_ids",
+              "images",
+              "purposes"
+            ],
+            "title": "ScreenshotAnalyzeInput",
+            "type": "object"
+          }
+        },
+        "screenshot annotate": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "asset_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ImagePlan": {
+                "additionalProperties": false,
+                "properties": {
+                  "boxes": {
+                    "items": {
+                      "$ref": "#/$defs/PixelRect"
+                    },
+                    "maxItems": 20,
+                    "title": "Boxes",
+                    "type": "array"
+                  },
+                  "crop": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/PixelRect"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "redact": {
+                    "items": {
+                      "$ref": "#/$defs/PixelRect"
+                    },
+                    "maxItems": 200,
+                    "title": "Redact",
+                    "type": "array"
+                  }
+                },
+                "title": "ImagePlan",
+                "type": "object"
+              },
+              "PixelRect": {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Height",
+                    "type": "integer"
+                  },
+                  "width": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Width",
+                    "type": "integer"
+                  },
+                  "x": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "X",
+                    "type": "integer"
+                  },
+                  "y": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "Y",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "title": "PixelRect",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_image_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Image Sha256",
+                "type": "string"
+              },
+              "parent_rendition_id": {
+                "format": "uuid",
+                "title": "Parent Rendition Id",
+                "type": "string"
+              },
+              "plan": {
+                "$ref": "#/$defs/ImagePlan"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "parent_rendition_id",
+              "expected_image_sha256",
+              "plan"
+            ],
+            "title": "ScreenshotAnnotate",
+            "type": "object"
+          }
+        },
+        "screenshot list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "screenshot prepare": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "receipt",
+              "options": [
+                "--receipt"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": false,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "source",
+              "options": [
+                "--source"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CertificateSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence_source_id": {
+                    "format": "uuid",
+                    "title": "Evidence Source Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "certificate_page",
+                    "title": "Kind",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_source_id"
+                ],
+                "title": "CertificateSource",
+                "type": "object"
+              },
+              "ImagePlan": {
+                "additionalProperties": false,
+                "properties": {
+                  "boxes": {
+                    "items": {
+                      "$ref": "#/$defs/PixelRect"
+                    },
+                    "maxItems": 20,
+                    "title": "Boxes",
+                    "type": "array"
+                  },
+                  "crop": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/PixelRect"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "redact": {
+                    "items": {
+                      "$ref": "#/$defs/PixelRect"
+                    },
+                    "maxItems": 200,
+                    "title": "Redact",
+                    "type": "array"
+                  }
+                },
+                "title": "ImagePlan",
+                "type": "object"
+              },
+              "PixelRect": {
+                "additionalProperties": false,
+                "properties": {
+                  "height": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Height",
+                    "type": "integer"
+                  },
+                  "width": {
+                    "maximum": 8192,
+                    "minimum": 1,
+                    "title": "Width",
+                    "type": "integer"
+                  },
+                  "x": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "X",
+                    "type": "integer"
+                  },
+                  "y": {
+                    "maximum": 8192,
+                    "minimum": 0,
+                    "title": "Y",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "width",
+                  "height"
+                ],
+                "title": "PixelRect",
+                "type": "object"
+              },
+              "PrototypeSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "prototype_render",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "prototype_run_id": {
+                    "format": "uuid",
+                    "title": "Prototype Run Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "prototype_run_id"
+                ],
+                "title": "PrototypeSource",
+                "type": "object"
+              },
+              "UploadSource": {
+                "additionalProperties": false,
+                "properties": {
+                  "captured_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Captured At"
+                  },
+                  "environment": {
+                    "enum": [
+                      "production",
+                      "test",
+                      "development",
+                      "prototype",
+                      "unknown"
+                    ],
+                    "title": "Environment",
+                    "type": "string"
+                  },
+                  "image_kind": {
+                    "enum": [
+                      "screenshot",
+                      "diagram",
+                      "prototype"
+                    ],
+                    "title": "Image Kind",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "upload",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "prototype_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Prototype Run Id"
+                  },
+                  "software_version": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Software Version",
+                    "type": "string"
+                  },
+                  "source_label": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Source Label",
+                    "type": "string"
+                  },
+                  "task_feature_id": {
+                    "format": "uuid",
+                    "title": "Task Feature Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "task_feature_id",
+                  "image_kind",
+                  "source_label",
+                  "software_version",
+                  "environment"
+                ],
+                "title": "UploadSource",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "plan": {
+                "$ref": "#/$defs/ImagePlan"
+              },
+              "source": {
+                "discriminator": {
+                  "mapping": {
+                    "certificate_page": "#/$defs/CertificateSource",
+                    "prototype_render": "#/$defs/PrototypeSource",
+                    "upload": "#/$defs/UploadSource"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/UploadSource"
+                  },
+                  {
+                    "$ref": "#/$defs/CertificateSource"
+                  },
+                  {
+                    "$ref": "#/$defs/PrototypeSource"
+                  }
+                ],
+                "title": "Source"
+              }
+            },
+            "required": [
+              "source",
+              "plan"
+            ],
+            "title": "ScreenshotPrepareInput",
+            "type": "object"
+          }
+        },
+        "screenshot preview": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rendition_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "screenshot prototype-decisions apply": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "PrototypeDecisionItem": {
+                "additionalProperties": false,
+                "properties": {
+                  "card_revision_id": {
+                    "format": "uuid",
+                    "title": "Card Revision Id",
+                    "type": "string"
+                  },
+                  "decision": {
+                    "enum": [
+                      "keep",
+                      "replace"
+                    ],
+                    "title": "Decision",
+                    "type": "string"
+                  },
+                  "evidence_id": {
+                    "format": "uuid",
+                    "title": "Evidence Id",
+                    "type": "string"
+                  },
+                  "expected_previous_decision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Previous Decision Id"
+                  },
+                  "html_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Html Sha256",
+                    "type": "string"
+                  },
+                  "image_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Image Sha256",
+                    "type": "string"
+                  },
+                  "keep_basis": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "already_delivered",
+                          "will_deliver"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Keep Basis"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 2000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reason"
+                  },
+                  "rendition_id": {
+                    "format": "uuid",
+                    "title": "Rendition Id",
+                    "type": "string"
+                  },
+                  "task_feature_id": {
+                    "format": "uuid",
+                    "title": "Task Feature Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "evidence_id",
+                  "card_revision_id",
+                  "rendition_id",
+                  "image_sha256",
+                  "html_sha256",
+                  "task_feature_id",
+                  "decision"
+                ],
+                "title": "PrototypeDecisionItem",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "evidence_ids": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 500,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Evidence Ids"
+              },
+              "expected_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Input Hash",
+                "type": "string"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "idempotency_key": {
+                "format": "uuid",
+                "title": "Idempotency Key",
+                "type": "string"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/PrototypeDecisionItem"
+                },
+                "maxItems": 500,
+                "minItems": 1,
+                "title": "Items",
+                "type": "array"
+              },
+              "module_label": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Module Label",
+                "type": "string"
+              },
+              "task_feature_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Task Feature Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "module_label",
+              "task_feature_ids",
+              "expected_input_hash",
+              "items",
+              "idempotency_key"
+            ],
+            "title": "PrototypeDecisionBatch",
+            "type": "object"
+          }
+        },
+        "screenshot prototype-decisions list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "screenshot prototype-decisions preview": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "evidence_ids": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 500,
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Evidence Ids"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "module_label": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Module Label",
+                "type": "string"
+              },
+              "task_feature_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 200,
+                "minItems": 1,
+                "title": "Task Feature Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "module_label",
+              "task_feature_ids"
+            ],
+            "title": "PrototypeDecisionPreviewInput",
+            "type": "object"
+          }
+        },
+        "screenshot show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "asset_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "screenshot suggestions": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "analysis",
+              "options": [
+                "--analysis"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "screenshot withdraw": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "asset_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "title": "ScreenshotWithdraw",
+            "type": "object"
+          }
+        },
         "task certificate add": {
           "cli_parameters": [
             {
@@ -8159,7 +10273,7 @@
         "title": "Result",
         "type": "object"
       },
-      "version": "1.2"
+      "version": "2.0"
     },
     "duration_ms": 0,
     "items": [],

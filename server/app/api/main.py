@@ -291,6 +291,11 @@ def create_app(
             yield session, identity
 
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
+    from app.api.screenshots import create_router as create_screenshot_router
+
+    app.include_router(
+        create_screenshot_router(context, db, storage, queue, settings, llm, resolve)
+    )
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1308,6 +1313,15 @@ def create_app(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
+        if job.kind in {"screenshot_render", "screenshot_analyze"}:
+            from app.services.screenshot_jobs import check_job_access
+
+            await check_job_access(session, identity, job)
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+            payload["ok"] = job.result.get("completion") != "partial"
+            payload["cost"] = job.result.get("cost", payload["cost"])
         if job.kind in {"draft", "card_generate"}:
             identity.require("draft:read" if job.kind == "draft" else "card:read")
             identity.require("task:read")
@@ -1320,7 +1334,7 @@ def create_app(
             if job.result.get("draft_id"):
                 from app.services.drafts import show_draft
 
-                await show_draft(session, identity, UUID(job.result["draft_id"]))
+                await show_draft(session, identity, UUID(job.result["draft_id"]), storage)
             if job.result.get("completion") == "partial":
                 payload["ok"] = False
             payload["warnings"] = job.result.get("warnings", [])

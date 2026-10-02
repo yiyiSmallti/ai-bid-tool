@@ -42,6 +42,15 @@ from app.schemas.response_card_contracts import (
     DraftRequest,
     TaskRedactionSet,
 )
+from app.schemas.screenshot_contracts import (
+    PrototypeDecisionBatch,
+    PrototypeDecisionPreviewInput,
+    ScreenshotAnalyzeInput,
+    ScreenshotAnnotate,
+    ScreenshotIngest,
+    ScreenshotPrepareInput,
+    ScreenshotWithdraw,
+)
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 
 # Only implemented commands are advertised; future commands are deliberately absent.
@@ -128,6 +137,18 @@ COMMANDS = {
     "billing balance": None,
     "billing redeem": CardRedeem,
     "schema": None,
+    "screenshot prepare": ScreenshotPrepareInput,
+    "screenshot add": ScreenshotIngest,
+    "screenshot list": None,
+    "screenshot show": None,
+    "screenshot annotate": ScreenshotAnnotate,
+    "screenshot preview": None,
+    "screenshot withdraw": ScreenshotWithdraw,
+    "screenshot analyze": ScreenshotAnalyzeInput,
+    "screenshot suggestions": None,
+    "screenshot prototype-decisions preview": PrototypeDecisionPreviewInput,
+    "screenshot prototype-decisions apply": PrototypeDecisionBatch,
+    "screenshot prototype-decisions list": None,
 }
 
 
