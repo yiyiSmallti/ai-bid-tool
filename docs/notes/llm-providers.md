@@ -54,7 +54,7 @@ actually answered.
 
 | Vendor result | Job outcome |
 | --- | --- |
-| Timeout, connection error, HTTP 408/409/429/5xx/529 | Requeued; error exit code 3; at most three attempts |
+| Timeout, connection error (including a TLS connection dropped mid-response), HTTP 408/409/429/5xx/529 | The call is retried after 10 and 30 seconds; if it still fails, the job is requeued with exit code 3, at most three attempts |
 | Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; the message names the reset time when the vendor gives one and asks the user to contact the system administrator |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |

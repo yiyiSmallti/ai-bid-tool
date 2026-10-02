@@ -10,6 +10,7 @@ from app.core.config import Settings
 from app.core.security import hash_password
 from app.core.totp import generate_secret
 from app.models.entities import Membership, Org, User
+from app.providers.llm import HTTPExtractor
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -19,6 +20,13 @@ PASSWORD_HASH = hash_password(PASSWORD)
 OPERATOR = "ops@example.test"
 OPERATOR_PASSWORD = "synthetic-operator-password"
 OPERATOR_SECRET = generate_secret()
+
+
+@pytest.fixture(autouse=True)
+def no_retry_waits(monkeypatch):
+    # Transient-failure retries are covered by their own test; elsewhere one vendor
+    # reply per call keeps scripted responses simple.
+    monkeypatch.setattr(HTTPExtractor, "retry_delays", ())
 
 
 @pytest.fixture(scope="session")

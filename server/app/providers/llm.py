@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import ssl
 import time
 from typing import Any
 
@@ -216,6 +217,9 @@ class HTTPExtractor:
     reasoning_levels: dict[str, dict] = {}
     default_reasoning: str | None = None
     reasoning: str | None = None
+    # Seconds to wait before retrying a batch after a transient failure such as a
+    # dropped connection; a long job should not restart because one call broke.
+    retry_delays: tuple[float, ...] = (10, 30)
 
     def __init__(
         self,
@@ -274,13 +278,27 @@ class HTTPExtractor:
                 answered.extend(result)
             return answered
 
+        async def call(client, batch: list[dict]) -> tuple[WireOutput, ProviderUsage]:
+            # Transient failures (dropped connections, timeouts, rate limits) are retried
+            # here so one broken call does not requeue a long job from the start.
+            for delay in (*self.retry_delays, None):
+                try:
+                    return await self.call(client, batch)
+                except ProviderFailure as exc:
+                    if not exc.retryable or delay is None or failed.is_set():
+                        raise
+                    usages.extend(exc.usage)
+                    exc.usage = []
+                await asyncio.sleep(delay)
+            raise AssertionError("unreachable")
+
         async def run(client, batch: list[dict]) -> list[tuple[list[dict], WireOutput]]:
             async with limit:
                 # Batches not yet started are skipped once another batch has failed.
                 if failed.is_set():
                     return []
                 try:
-                    wire, usage = await self.call(client, batch)
+                    wire, usage = await call(client, batch)
                 except ProviderFailure as exc:
                     usages.extend(exc.usage)
                     exc.usage = []
@@ -421,7 +439,8 @@ class HTTPExtractor:
             # connection alive with blank lines, so a total deadline is enforced here.
             async with asyncio.timeout(self.settings.llm_timeout_seconds):
                 response = await client.post(url, headers=headers, json=body)
-        except (TimeoutError, httpx.TimeoutException, httpx.TransportError):
+        except (TimeoutError, httpx.TimeoutException, httpx.TransportError, ssl.SSLError):
+            # httpx leaves a TLS connection dropped mid-response as a raw ssl.SSLError.
             raise ProviderFailure(
                 "LLM service is unreachable or timed out", retryable=True
             ) from None

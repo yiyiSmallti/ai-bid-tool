@@ -16,9 +16,11 @@ kind: changelog
   `req history` 列出全部抽取；要求带 `job_id` 与 `reasoning`。Result 契约升为 1.2。
 - 迁移 `0014`。决定见 [ADR 0004](adr/0004-extractions-per-reasoning-level.md)，机制见
   [reasoning-levels.md](notes/reasoning-levels.md)。
-- 模型返回空引用或空要求文字的条目按单条拒绝（`empty_quote`、`empty_text`），不再导致整次抽取失败；
-  抽取中的意外错误也会保留已发生调用的用量，日志只记录异常类型与调用栈。
-- 当时的完整回归：570 项通过；Playwright 端到端检查通过。
+- 模型返回空引用或空要求文字的条目按单条拒绝（`empty_quote`、`empty_text`）；抽取中的意外错误也会
+  保留已发生调用的用量，日志只记录异常类型与调用栈。
+- 网络中断、超时、限流等临时错误先在批次内重试两次（10 秒、30 秒后），不再让整个作业从头重排；
+  长时间请求中被断开的 TLS 连接（httpx 抛出的原始 `ssl.SSLError`）也按网络中断处理。
+- 当时的完整回归：572 项通过；Playwright 端到端检查通过。
 
 ## 2026-10-02：服务商额度用完的提示
 

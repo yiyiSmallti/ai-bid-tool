@@ -6,6 +6,7 @@ Vendor endpoints are simulated with httpx.MockTransport; no external service is 
 import asyncio
 import json
 import re
+import ssl
 import time
 from uuid import uuid4
 
@@ -540,3 +541,31 @@ async def test_unexpected_failure_keeps_billed_usage_and_logs_no_message(
         assert await requirement_rows(app, tenants) == []
     assert "RuntimeError" in caplog.text and "SECRET-TENDER-TEXT" not in caplog.text
     assert "SECRET-TENDER-TEXT" not in json.dumps(status)
+
+
+@pytest.mark.parametrize("recovers", [True, False])
+async def test_dropped_connections_are_retried_within_the_batch(
+    recovers, tenants, tmp_path, pdf_bytes, monkeypatch
+):
+    monkeypatch.setattr(AnthropicExtractor, "retry_delays", (0, 0))
+    # A TLS connection dropped mid-response surfaces from httpx as a raw ssl.SSLError.
+    replies = [ssl.SSLError("record layer failure"), httpx.Response(529, json={})]
+    replies.append(anthropic_reply(GOOD_ITEMS) if recovers else httpx.ReadTimeout("synthetic"))
+    vendor = Vendor(*replies)
+    settings = settings_for(tmp_path, "anthropic")
+    app = create_app(
+        settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        if recovers:
+            _, status = await run_job(api, app, header, document, "extract")
+            assert status["status"] == "succeeded", status
+            assert len(await requirement_rows(app, tenants)) == 2
+        else:
+            # After the retries the job is requeued as a transient failure, as before.
+            with pytest.raises(ProviderFailure) as failure:
+                await run_job(api, app, header, document, "extract")
+            assert failure.value.retryable
+    assert len(vendor.requests) == 3
