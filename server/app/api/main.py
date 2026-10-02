@@ -24,6 +24,7 @@ from starlette.exceptions import HTTPException
 
 from app.api.platform import create_router as create_platform_router
 from app.api.response_cards import create_router as create_response_router
+from app.api.sandbox import create_router as create_sandbox_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
@@ -80,6 +81,7 @@ from app.services import (
 from app.services.auth import SCOPES, authenticate, login, set_actor_context
 from app.services.extraction import EXTRACTION_VERSION, PROMPT_VERSION
 from app.services.parsing import PARSER_VERSION, validate_document
+from app.services.sandbox import guard_job as sandbox_guard_job
 from app.services.template_files import MAX_TEMPLATE_BYTES, validate_template
 from app.services.template_files import WARNINGS as TEMPLATE_WARNINGS
 
@@ -291,6 +293,7 @@ def create_app(
             yield session, identity
 
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
+    app.include_router(create_sandbox_router(context, db, storage, queue, crypto, processor))
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1304,10 +1307,13 @@ def create_app(
         job = await session.get(Job, job_id)
         if job is None:
             raise not_found()
+        await sandbox_guard_job(session, identity, job)
         payload = result(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
+        if job.kind == "sandbox" and job.status in {"failed", "cancelled"}:
+            payload["ok"] = False
         if job.kind in {"draft", "card_generate"}:
             identity.require("draft:read" if job.kind == "draft" else "card:read")
             identity.require("task:read")
@@ -1338,6 +1344,7 @@ def create_app(
         job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
         if job is None:
             raise not_found()
+        await sandbox_guard_job(session, identity, job, cancel=True)
         if job.status not in {"cancelled", "queued", "running"}:
             raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
         job.status, job.finished_at = "cancelled", datetime.now(UTC)
