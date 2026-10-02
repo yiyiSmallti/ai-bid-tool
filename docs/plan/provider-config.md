@@ -64,6 +64,19 @@ class ProviderConfigView(Contract):
 `usd` 即服务商成本。本草案只再新增一列 `provider_config_id`（使用的单位配置修订，未配置时为
 null），并把单位自带模型的 `charge` 记为 0，汇总中归为 `org` 计费类别。
 
+## 额度用完与余量
+
+- 服务商返回额度用完、欠费或套餐失效时，作业以 `provider_quota_exhausted` 失败、不重试，
+  报错带服务商给出的重置时间（如有）。平台模型提示联系系统管理员（已实现）；单位自带模型
+  改为提示单位管理员到服务商充值或续订。
+- `bid provider list` 与单位后台的模型页显示自带密钥的余量：
+  - 服务商提供余额接口的，测试与查看时实时查询并显示余额和币种。DeepSeek 为
+    `GET /user/balance`（`is_available`、`balance_infos`）。
+  - 智谱 Coding Plan 的额度查询接口待确认；确认前显示"该服务商不提供余量查询"。
+  - OpenAI、Anthropic 的普通 API 密钥无法查询余额，同样显示不支持。
+  - 所有服务商都附带本系统记录的本月用量（token 与按单位自填价格估算的成本）。
+- 余量查询只读、不计费，失败时显示"暂时无法查询"，不影响抽取。
+
 ## 权限
 
 - 新范围 `provider:read`、`provider:write`。只有 admin 角色有 `provider:write`。
