@@ -270,12 +270,8 @@ fn validate_plan_shape(plan: &RenderPlan) -> Result<(), RendererError> {
             || rectangle.y > MAX_DIMENSION
             || rectangle.width > MAX_DIMENSION
             || rectangle.height > MAX_DIMENSION
-            || rectangle.x.checked_add(rectangle.width).unwrap_or(u32::MAX) > MAX_DIMENSION
-            || rectangle
-                .y
-                .checked_add(rectangle.height)
-                .unwrap_or(u32::MAX)
-                > MAX_DIMENSION
+            || rectangle.x.saturating_add(rectangle.width) > MAX_DIMENSION
+            || rectangle.y.saturating_add(rectangle.height) > MAX_DIMENSION
         {
             return Err(RendererError::invalid("rectangle is invalid"));
         }
