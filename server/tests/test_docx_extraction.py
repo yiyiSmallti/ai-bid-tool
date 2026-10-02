@@ -253,3 +253,52 @@ async def test_truncated_word_batches_are_halved_until_the_output_fits(tenants, 
     # 9 blocks overflow; then the sections (2 and 7), then halves down to two blocks.
     assert sorted(map(len, seen), reverse=True) == [9, 7, 4, 3, 2, 2, 2, 2, 1]
     assert status["result"]["rejected"] == []
+
+
+async def test_a_long_cell_is_split_by_lines_and_cited_as_the_whole_cell(tenants, tmp_path):
+    lines = [f"{n}.功能项 {n} 须支持在线办理。" for n in range(1, 7)]
+    document = Document()
+    document.add_heading("第三章 采购需求", level=1)
+    document.add_table(rows=1, cols=1).cell(0, 0).text = "\n".join(lines)
+    output = io.BytesIO()
+    document.save(output)
+    seen: list[int] = []
+
+    def vendor(request: httpx.Request) -> httpx.Response:
+        content = json.loads(request.content)["messages"][0]["content"]
+        cell = re.search(r'<block id="t1r1c1">\n(.*?)\n</block>', content, re.S)
+        shown = cell.group(1).splitlines() if cell else []
+        seen.append(len(shown))
+        # More than two requirement lines overflow the output limit.
+        if len(shown) > 2:
+            return anthropic_reply([], stop="max_tokens")
+        return anthropic_reply([item("t1r1c1", line) for line in shown])
+
+    settings = settings_for(tmp_path, "anthropic")
+    app = create_app(
+        settings,
+        llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
+        queue=FakeQueue(),
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        task = (await api.post("/tasks", headers=header, json={"name": "Long cell"})).json()[
+            "data"
+        ]["id"]
+        uploaded = await api.post(
+            f"/tasks/{task}/documents",
+            headers=header,
+            files={"file": ("tender.docx", output.getvalue())},
+        )
+        document_id = uploaded.json()["data"]["id"]
+        await run_job(api, app, header, document_id, "parse")
+        _, status = await run_job(api, app, header, document_id, "extract")
+        assert status["status"] == "succeeded", status
+        rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
+
+    assert sorted(r["source"]["quote"] for r in rows) == sorted(lines)
+    assert {r["source"]["location"]["label"] for r in rows} == {
+        "第三章 采购需求 > 表 1 第 1 行第 1 列"
+    }
+    # Heading and cell; the heading alone (no cell) and the cell alone; then the cell's
+    # lines three and three, then two and one of each half.
+    assert sorted(seen, reverse=True) == [6, 6, 3, 3, 2, 2, 1, 1, 0]

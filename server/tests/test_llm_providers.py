@@ -5,6 +5,7 @@ Vendor endpoints are simulated with httpx.MockTransport; no external service is 
 
 import asyncio
 import json
+import re
 import time
 from uuid import uuid4
 
@@ -415,28 +416,38 @@ async def test_request_options_reach_the_vendor_without_overriding_core_fields(t
             settings_for(tmp_path, "anthropic", llm_request_options=invalid)
 
 
-async def test_truncation_down_to_a_single_page_fails_and_bills_each_call(
-    tenants, tmp_path, pdf_bytes
-):
-    # Two pages in one batch: the batch, then the first page alone, hit the output limit.
-    # One request at a time, so the second page is skipped after the first one fails.
-    vendor = Vendor(*(anthropic_reply(GOOD_ITEMS[:1], stop="max_tokens") for _ in range(2)))
+async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(tenants, tmp_path):
+    with pymupdf.open() as pdf:
+        pdf.new_page().insert_text(
+            (40, 60), "Line one is required.\nLine two is required.\nLine three.\nLine four."
+        )
+        content = pdf.tobytes()
+    requests: list[str] = []
+
+    def vendor(request: httpx.Request) -> httpx.Response:
+        requests.append(json.loads(request.content)["messages"][0]["content"])
+        return anthropic_reply(GOOD_ITEMS[:1], stop="max_tokens")
+
     settings = settings_for(tmp_path, "anthropic", llm_concurrency=1)
     app = create_app(
-        settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
+        settings,
+        llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
+        queue=FakeQueue(),
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
-        _, document = await create_document(api, header, pdf_bytes)
+        _, document = await create_document(api, header, content)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
         assert (status["status"], status["error"]["code"]) == ("failed", "invalid_provider_output")
-        assert "single page or block" in status["error"]["message"]
+        assert "single line" in status["error"]["message"]
         assert await requirement_rows(app, tenants) == []
-        assert len(await usage_rows(app, tenants)) == 2
-    pages = [
-        json.loads(r.content)["messages"][0]["content"].count("<page ") for r in vendor.requests
-    ]
-    assert pages == [2, 1]
+        assert len(await usage_rows(app, tenants)) == len(requests)
+
+    # The page, then halves of its lines, each still presented as page 1, down to one line.
+    shown = [re.findall(r'<page number="(\d+)">\n(.*?)\n</page>', r, re.S) for r in requests]
+    assert all(len(pages) == 1 and pages[0][0] == "1" for pages in shown)
+    lines = [len(pages[0][1].splitlines()) for pages in shown]
+    assert lines[0] == 4 and lines[-1] == 1 and lines == sorted(lines, reverse=True)
 
 
 async def test_quota_message_names_the_reset_time_but_no_other_vendor_text(

@@ -139,21 +139,47 @@ def batches(chunks: list[dict], budget: int) -> list[list[dict]]:
     return groups
 
 
+def split_lines(text: str) -> tuple[str, str] | None:
+    # Cut between lines near the middle of the text; a single line stays whole.
+    lines = text.split("\n")
+    if len(lines) < 2:
+        return None
+    cut, running = 1, len(lines[0]) + 1
+    while cut < len(lines) - 1 and running * 2 < len(text):
+        running += len(lines[cut]) + 1
+        cut += 1
+    return "\n".join(lines[:cut]), "\n".join(lines[cut:])
+
+
 def halve(batch: list[dict]) -> list[list[dict]] | None:
-    """Split a batch whose output was truncated: by chunk, then by Word block."""
+    """Split a batch whose output was truncated: by chunk, then block, then line.
+
+    Every part keeps its chunk ID and block ID, and citations are checked against the
+    stored full text, so a quote must still sit inside the whole page or block.
+    """
     if len(batch) > 1:
         middle = len(batch) // 2
         return [batch[:middle], batch[middle:]]
     [chunk] = batch
     blocks = chunk.get("blocks") or []
-    if len(blocks) < 2:
-        return None  # a single PDF page or block cannot be split further
-    middle = len(blocks) // 2
-    # Each half keeps the chunk ID, so citations still resolve to the stored chunk.
-    return [
-        [{**chunk, "blocks": part, "text": "\n".join(block["text"] for block in part)}]
-        for part in (blocks[:middle], blocks[middle:])
-    ]
+    if len(blocks) > 1:
+        middle = len(blocks) // 2
+        return [
+            [{**chunk, "blocks": part, "text": "\n".join(block["text"] for block in part)}]
+            for part in (blocks[:middle], blocks[middle:])
+        ]
+    if blocks:
+        # One long block, such as a table cell listing dozens of requirements.
+        halves = split_lines(blocks[0]["text"])
+        if halves is None:
+            return None
+        return [
+            [{**chunk, "blocks": [{**blocks[0], "text": part}], "text": part}] for part in halves
+        ]
+    halves = split_lines(chunk["text"])
+    if halves is None:
+        return None  # a single line cannot be split further
+    return [[{**chunk, "text": part}] for part in halves]
 
 
 def render_pages(batch: list[dict]) -> str:

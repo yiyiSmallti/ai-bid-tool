@@ -26,7 +26,7 @@ class TruncatedOutput(ProviderFailure):
 
     def __init__(self, usage: list[ProviderUsage]):
         super().__init__(
-            "Model output was truncated even for a single page or block; raise "
+            "Model output was truncated even for a single line; raise "
             "BID_LLM_MAX_OUTPUT_TOKENS or turn off model thinking with BID_LLM_REQUEST_OPTIONS",
             code="invalid_provider_output",
             usage=usage,
