@@ -315,7 +315,8 @@ async def test_model(
         "text": TEST_PAGE,
         "citation_verified": True,
     }
-    names = list(getattr(llm, "reasoning_levels", None) or {}) or [None]
+    # Levels come from the catalog row, so a model without its key still reports each one.
+    names = [level["name"] for level in row.reasoning or []] or [None]
 
     async def attempt(name: str | None) -> dict:
         level = llm.at_reasoning(name) if name and isinstance(llm, HTTPExtractor) else llm
@@ -359,11 +360,7 @@ async def test_model(
         )
     # Top-level fields describe the default level, or the first failure.
     shown = failed or next(
-        (
-            level
-            for level in levels
-            if level["reasoning"] == getattr(llm, "default_reasoning", None)
-        ),
+        (level for level in levels if level["reasoning"] == row.default_reasoning),
         levels[0],
     )
     view = {"model_id": model_id, "passed": passed, "usage": shown["usage"]}

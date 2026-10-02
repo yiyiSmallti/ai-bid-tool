@@ -245,3 +245,26 @@ async def test_models_without_levels_ignore_the_level_with_a_warning(tenants, tm
         await app.state.processor(header["X-Org-Id"], body["data"]["job_id"])
         status = (await api.get(f"/jobs/{body['data']['job_id']}", headers=header)).json()["data"]
         assert status["status"] == "succeeded" and status["reasoning"] is None
+
+
+async def test_model_test_reports_every_level_without_a_credential(glm):
+    api, _, vendor, _, ops, _, _ = glm
+    claude = {
+        **GLM,
+        "id": "claude",
+        "provider": "anthropic",
+        "model": "claude-synthetic",
+        "base_url": None,
+        "credential": "absent",
+        "default": False,
+        "reasoning": [{"name": "low", "effort": "low"}, {"name": "high", "effort": "high"}],
+        "default_reasoning": "high",
+    }
+    assert (await api.post("/platform/models", headers=ops, json=claude)).status_code == 200
+    tested = (await api.post("/platform/models/claude/test", headers=ops)).json()["data"]
+    assert tested["passed"] is False and tested["error"]["code"] == "provider_unavailable"
+    assert [(level["reasoning"], level["error"]["code"]) for level in tested["levels"]] == [
+        ("low", "provider_unavailable"),
+        ("high", "provider_unavailable"),
+    ]
+    assert vendor.bodies == []

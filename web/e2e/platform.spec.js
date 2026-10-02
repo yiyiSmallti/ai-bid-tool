@@ -78,6 +78,28 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await expect(row.getByTestId("test-result")).toContainText("未通过：provider_unavailable");
   await shot("models");
 
+  // Register the vendor's official reasoning levels and test each one.
+  await row.getByRole("button", { name: "编辑" }).click();
+  await page.click("text=添加档位");
+  await page.click("text=添加档位");
+  await page.fill("input[name=level-name-0]", "low");
+  await page.fill("textarea[name=level-options-0]", '{"thinking": {"type": "enabled"}, "reasoning_effort": "low"}');
+  await page.fill("input[name=level-name-1]", "max");
+  await page.fill("input[name=level-label-1]", "深度推理");
+  await page.fill("textarea[name=level-options-1]", "not json");
+  await page.fill("input[name=level-batch-1]", "4000");
+  await page.click("form.panel button[type=submit]");
+  await expect(page.getByRole("alert")).toContainText("档位 max 的请求参数必须是 JSON 对象");
+  await expect(page.getByRole("alert")).toContainText("请选择一个默认档位");
+  await page.fill("textarea[name=level-options-1]", '{"thinking": {"type": "enabled"}, "reasoning_effort": "max"}');
+  await page.getByLabel("默认档位 2").check();
+  await page.click("form.panel button[type=submit]");
+  await expect(row.getByTestId("levels-summary")).toHaveText("推理强度：low / max（默认）");
+  await row.getByRole("button", { name: "测试" }).click();
+  await expect(row.getByTestId("level-result-low")).toContainText("low：未通过：provider_unavailable");
+  await expect(row.getByTestId("level-result-max")).toContainText("max：未通过：provider_unavailable");
+  await shot("model-levels");
+
   await page.click("nav >> text=卡密");
   await page.fill("input[name=card-count]", "2");
   await page.fill("input[name=card-face]", "30");
