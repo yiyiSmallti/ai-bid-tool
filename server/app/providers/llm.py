@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.models.entities import PlatformModel
-from app.providers.base import ProviderFailure
+from app.providers.base import ProviderFailure, TruncatedOutput
 from app.providers.disabled import DisabledLLM
 from app.schemas.contracts import (
     Category,
@@ -130,6 +130,23 @@ def batches(chunks: list[dict], budget: int) -> list[list[dict]]:
     return groups
 
 
+def halve(batch: list[dict]) -> list[list[dict]] | None:
+    """Split a batch whose output was truncated: by chunk, then by Word block."""
+    if len(batch) > 1:
+        middle = len(batch) // 2
+        return [batch[:middle], batch[middle:]]
+    [chunk] = batch
+    blocks = chunk.get("blocks") or []
+    if len(blocks) < 2:
+        return None  # a single PDF page or block cannot be split further
+    middle = len(blocks) // 2
+    # Each half keeps the chunk ID, so citations still resolve to the stored chunk.
+    return [
+        [{**chunk, "blocks": part, "text": "\n".join(block["text"] for block in part)}]
+        for part in (blocks[:middle], blocks[middle:])
+    ]
+
+
 def render_pages(batch: list[dict]) -> str:
     parts = []
     for chunk in batch:
@@ -175,47 +192,53 @@ class HTTPExtractor:
         self.sale = sale_usd_per_mtok
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
-        groups = batches(chunks, self.settings.llm_batch_chars)
         limit = asyncio.Semaphore(max(1, self.settings.llm_concurrency))
         failed = asyncio.Event()
+        # Every finished call was billed by the vendor, including truncated ones.
+        usages: list[ProviderUsage] = []
 
-        async def run(client: httpx.AsyncClient, batch: list[dict]):
+        async def gather(client, groups) -> list[tuple[list[dict], WireOutput]]:
+            results = await asyncio.gather(
+                *(run(client, batch) for batch in groups), return_exceptions=True
+            )
+            for result in results:
+                if isinstance(result, BaseException):
+                    raise result
+            return [pair for result in results for pair in result]
+
+        async def run(client, batch: list[dict]) -> list[tuple[list[dict], WireOutput]]:
             async with limit:
                 # Batches not yet started are skipped once another batch has failed.
                 if failed.is_set():
-                    return None
+                    return []
                 try:
-                    return await self.call(client, batch)
-                except ProviderFailure:
-                    failed.set()
-                    raise
+                    wire, usage = await self.call(client, batch)
+                except ProviderFailure as exc:
+                    usages.extend(exc.usage)
+                    exc.usage = []
+                    parts = halve(batch) if isinstance(exc, TruncatedOutput) else None
+                    if parts is None:
+                        failed.set()
+                        raise
+                else:
+                    usages.append(usage)
+                    return [(batch, wire)]
+            # Retry the halves outside the semaphore so they can take free slots.
+            return await gather(client, parts)
 
         async with httpx.AsyncClient(
             transport=self.transport,
             timeout=httpx.Timeout(self.settings.llm_timeout_seconds, connect=10),
             follow_redirects=False,
         ) as client:
-            results = await asyncio.gather(
-                *(run(client, batch) for batch in groups), return_exceptions=True
-            )
-        usages: list[ProviderUsage] = []
-        failures: list[ProviderFailure] = []
-        for result in results:
-            if isinstance(result, ProviderFailure):
-                failures.append(result)
-                usages.extend(result.usage)
-            elif isinstance(result, BaseException):
-                raise result
-            elif result is not None:
-                usages.append(result[1])
-        if failures:
-            # Every finished call was billed by the vendor, so all of them are reported.
-            failures[0].usage = usages
-            raise failures[0]
+            try:
+                answered = await gather(client, batches(chunks, self.settings.llm_batch_chars))
+            except ProviderFailure as exc:
+                exc.usage = usages
+                raise
         items: list[ExtractedRequirement] = []
-        for batch, result in zip(groups, results, strict=True):
-            assert isinstance(result, tuple)
-            items.extend(self.attach(result[0], batch, usages))
+        for batch, wire in answered:
+            items.extend(self.attach(wire, batch, usages))
         return LLMResult(extraction=Extraction(items=items), usage=self.total(usages))
 
     def attach(
@@ -385,11 +408,7 @@ class AnthropicExtractor(HTTPExtractor):
                 "Model declined the request", refused=True, code="provider_refused", usage=[usage]
             )
         if stop == "max_tokens":
-            raise ProviderFailure(
-                "Model output was truncated; lower BID_LLM_BATCH_CHARS or raise BID_LLM_MAX_OUTPUT_TOKENS",
-                code="invalid_provider_output",
-                usage=[usage],
-            )
+            raise TruncatedOutput([usage])
         text = "".join(
             block.get("text", "")
             for block in payload.get("content") or []
@@ -450,11 +469,7 @@ class OpenAICompatibleExtractor(HTTPExtractor):
                 "Model declined the request", refused=True, code="provider_refused", usage=[usage]
             )
         if choice.get("finish_reason") == "length":
-            raise ProviderFailure(
-                "Model output was truncated; lower BID_LLM_BATCH_CHARS or raise BID_LLM_MAX_OUTPUT_TOKENS",
-                code="invalid_provider_output",
-                usage=[usage],
-            )
+            raise TruncatedOutput([usage])
         return self.parse(message.get("content") or "", usage), usage
 
 

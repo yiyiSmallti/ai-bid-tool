@@ -15,6 +15,7 @@ kind: changelog
   决定见 [ADR 0003](adr/0003-word-structural-citations.md)，机制见
   [docx-citations.md](notes/docx-citations.md)。
 - 引用比对忽略全角半角与弯直引号差异；要求按原文顺序列出。
+- 模型输出被截断时自动把批次对半拆开重发（先按章节，再按块），只有单页或单块仍超限才失败。
 - 抽取批次并发发送（`BID_LLM_CONCURRENCY`），默认批次 8,000 字、输出上限 32,000 token，
   每次调用有总时限；`BID_LLM_REQUEST_OPTIONS` 可向请求附加服务商参数。
 - [evals/extract_tender.py](../evals/extract_tender.py) 支持 Word，报告引用通过数与 ★ 召回。
@@ -23,7 +24,7 @@ kind: changelog
   ★ 条款 23/23 覆盖（含规则补抽）。
 - 引用不通过改为逐条拒绝：其余条目照常保存，被拒条目的位置、原文与原因写入作业结果
   `rejected` 并给出警告；全部不通过时仍以 `invalid_citation` 失败。
-- 当时的完整回归：555 项通过。
+- 当时的完整回归：556 项通过。
 
 ## 2026-10-01：预付余额与充值卡密
 

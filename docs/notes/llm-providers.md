@@ -20,7 +20,10 @@ calls `create_llm(settings)`.
 Both adapters call the vendor over httpx; no vendor SDK is installed. Chunks
 (PDF pages or Word sections) are grouped into batches of at most
 `BID_LLM_BATCH_CHARS` characters (default 8,000), and a chunk larger than the
-budget gets a batch of its own rather than being cut. Up to
+budget gets a batch of its own rather than being cut. When the model hits its
+output limit, the batch is halved and both halves are sent again: by chunk
+first, then a Word section by blocks. Only a single PDF page or block that
+still overflows fails the job. Up to
 `BID_LLM_CONCURRENCY` batches (default 4) run at once; after a failure, batches
 not yet started are skipped. Each vendor call has a total deadline of
 `BID_LLM_TIMEOUT_SECONDS`, so a response that keeps the connection alive
@@ -51,7 +54,7 @@ actually answered.
 | Timeout, connection error, HTTP 408/409/429/5xx/529 | Requeued; error exit code 3; at most three attempts |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
-| Truncated output, malformed JSON, schema mismatch, `ref` outside the batch | Failed, `invalid_provider_output` |
+| Truncated output on a single page or block, malformed JSON, schema mismatch, `ref` outside the batch | Failed, `invalid_provider_output` |
 | Some quotes not found at the cited position | Succeeded; those items are listed in `result.rejected` and not saved |
 | No quote found at its cited position | Failed, `invalid_citation`; nothing saved |
 
@@ -72,9 +75,10 @@ per-million-token prices, or `null` when either price is missing.
   still adds it from the source. `evals/extract_tender.py` reports verified
   citations and ★ recall per run.
 - Reasoning models can spend the whole output budget thinking. On GLM, a
-  section took about 11 times longer with thinking on and was cut off at
-  32,000 output tokens on long batches; disable it with
-  `BID_LLM_REQUEST_OPTIONS` if output is truncated.
+  section took about 11 times longer with thinking on, and the full reference
+  tender was cut off at 32,000 output tokens before halving existed. Halving
+  costs the truncated call plus the retries; disable thinking with
+  `BID_LLM_REQUEST_OPTIONS` when most batches overflow.
 - The cache key includes the provider, model, adapter version, and
   `PROMPT_VERSION`; bump `ADAPTER_VERSION` when the prompt or schema changes.
 

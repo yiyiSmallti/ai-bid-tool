@@ -2,7 +2,9 @@
 
 import io
 import json
+import re
 
+import httpx
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
@@ -215,3 +217,39 @@ async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(t
         }
     ]
     assert any("1 extracted requirements were not saved" in w for w in status["result"]["warnings"])
+
+
+async def test_truncated_word_batches_are_halved_until_the_output_fits(tenants, tmp_path):
+    answers = {
+        "p2": item("p2", "投标人须具备有效的营业执照。", "qualification"),
+        "p4": item("p4", "服务器内存不低于 64GB。"),
+        "p5": item("p5", "投标文件须注明“响应内容”及具体数值。"),
+    }
+    seen: list[list[str]] = []
+
+    def vendor(request: httpx.Request) -> httpx.Response:
+        content = json.loads(request.content)["messages"][0]["content"]
+        blocks = re.findall(r'<block id="([^"]+)">', content)
+        seen.append(blocks)
+        # Any request with more than two blocks overflows the output limit.
+        if len(blocks) > 2:
+            return anthropic_reply([], stop="max_tokens")
+        return anthropic_reply([answers[b] for b in blocks if b in answers])
+
+    settings = settings_for(tmp_path, "anthropic")
+    app = create_app(
+        settings,
+        llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
+        queue=FakeQueue(),
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        task, document = await upload_word(api, header)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        assert status["status"] == "succeeded", status
+        rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
+
+    assert [r["source"]["location"]["block_id"] for r in rows] == ["p2", "p4", "t1r2c2", "p5"]
+    # 9 blocks overflow; then the sections (2 and 7), then halves down to two blocks.
+    assert sorted(map(len, seen), reverse=True) == [9, 7, 4, 3, 2, 2, 2, 2, 1]
+    assert status["result"]["rejected"] == []

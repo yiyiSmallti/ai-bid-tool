@@ -21,6 +21,18 @@ class ProviderFailure(Exception):
         self.usage = usage or []
 
 
+class TruncatedOutput(ProviderFailure):
+    """The model hit its output limit; a smaller batch may still fit."""
+
+    def __init__(self, usage: list[ProviderUsage]):
+        super().__init__(
+            "Model output was truncated even for a single page or block; raise "
+            "BID_LLM_MAX_OUTPUT_TOKENS or turn off model thinking with BID_LLM_REQUEST_OPTIONS",
+            code="invalid_provider_output",
+            usage=usage,
+        )
+
+
 class LLMProvider(Protocol):
     name: str
     model: str

@@ -193,13 +193,6 @@ FAILURES = {
         4,
         0,
     ),
-    "truncated": (
-        anthropic_reply(GOOD_ITEMS[:1], stop="max_tokens"),
-        "failed",
-        "invalid_provider_output",
-        4,
-        1,
-    ),
     "refused": (anthropic_reply([], stop="refusal"), "failed", "provider_refused", 4, 1),
     "not_json": (
         httpx.Response(
@@ -391,3 +384,27 @@ async def test_request_options_reach_the_vendor_without_overriding_core_fields(t
     for invalid in ("not json", "[1, 2]"):
         with pytest.raises(ValidationError):
             settings_for(tmp_path, "anthropic", llm_request_options=invalid)
+
+
+async def test_truncation_down_to_a_single_page_fails_and_bills_each_call(
+    tenants, tmp_path, pdf_bytes
+):
+    # Two pages in one batch: the batch, then the first page alone, hit the output limit.
+    # One request at a time, so the second page is skipped after the first one fails.
+    vendor = Vendor(*(anthropic_reply(GOOD_ITEMS[:1], stop="max_tokens") for _ in range(2)))
+    settings = settings_for(tmp_path, "anthropic", llm_concurrency=1)
+    app = create_app(
+        settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
+    )
+    async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
+        _, document = await create_document(api, header, pdf_bytes)
+        await run_job(api, app, header, document, "parse")
+        _, status = await run_job(api, app, header, document, "extract")
+        assert (status["status"], status["error"]["code"]) == ("failed", "invalid_provider_output")
+        assert "single page or block" in status["error"]["message"]
+        assert await requirement_rows(app, tenants) == []
+        assert len(await usage_rows(app, tenants)) == 2
+    pages = [
+        json.loads(r.content)["messages"][0]["content"].count("<page ") for r in vendor.requests
+    ]
+    assert pages == [2, 1]
