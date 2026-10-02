@@ -201,10 +201,12 @@ class HTTPExtractor:
             results = await asyncio.gather(
                 *(run(client, batch) for batch in groups), return_exceptions=True
             )
+            answered: list[tuple[list[dict], WireOutput]] = []
             for result in results:
                 if isinstance(result, BaseException):
                     raise result
-            return [pair for result in results for pair in result]
+                answered.extend(result)
+            return answered
 
         async def run(client, batch: list[dict]) -> list[tuple[list[dict], WireOutput]]:
             async with limit:
