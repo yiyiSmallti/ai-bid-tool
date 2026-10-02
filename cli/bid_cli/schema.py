@@ -31,10 +31,35 @@ from app.schemas.profile_contracts import (
     TaskOrgProfileSelection,
 )
 from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
+from app.schemas.response_card_contracts import (
+    CardAction,
+    CardClassify,
+    CardCreate,
+    CardUpdate,
+    DispositionBatch,
+    DraftRequest,
+    TaskRedactionSet,
+)
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 
 # Only implemented commands are advertised; future commands are deliberately absent.
 COMMANDS = {
+    "card list": None,
+    "card show": None,
+    "card create": CardCreate,
+    "card update": CardUpdate,
+    "card classify": CardClassify,
+    "card disposition": DispositionBatch,
+    "card submit": CardAction,
+    "card withdraw": CardAction,
+    "card confirm": CardAction,
+    "card reject": CardAction,
+    "card needs-material": CardAction,
+    "card reopen": CardAction,
+    "task redaction set": TaskRedactionSet,
+    "draft": DraftRequest,
+    "draft show": None,
+    "draft list": None,
     "evidence source add": EvidenceSourceCreate,
     "evidence source list": None,
     "evidence source download": None,
@@ -110,6 +135,18 @@ def command_schema(app=None) -> dict:
 
         def visit(command, prefix=""):
             if isinstance(command, click.Group):
+                if prefix and command.invoke_without_command:
+                    parameters[prefix] = [
+                        {
+                            "name": param.name,
+                            "options": param.opts,
+                            "required": param.required,
+                            "type": param.type.name,
+                            "multiple": param.multiple,
+                            "default": str(param.default) if param.default is not None else None,
+                        }
+                        for param in command.params
+                    ]
                 for name, child in command.commands.items():
                     visit(child, (prefix + " " + name).strip())
             else:

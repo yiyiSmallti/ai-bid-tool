@@ -189,9 +189,22 @@ async def test_source_role_matrix_preserves_all_prior_grants(
     assert (
         await api.get(f"/evidence-sources/{source['id']}/preview/download-link", headers=headers[0])
     ).status_code == 200
-    later = {"evidence:source:read", "evidence:source:write", "billing:read", "billing:redeem"}
+    later = {
+        "evidence:source:read",
+        "evidence:source:write",
+        "billing:read",
+        "billing:redeem",
+        "card:read",
+        "card:write",
+        "card:generate",
+        "draft:run",
+        "draft:read",
+        "evidence:confirm",
+    }
     assert ROLE_SCOPES[role] - later == set(BASELINE[role])
-    assert {"evidence:confirm", "export"}.isdisjoint(ROLE_SCOPES[role])
+    # Human confirmation exists since response cards; tokens still cannot hold it, and no
+    # role may export yet.
+    assert "export" not in ROLE_SCOPES[role]
 
 
 @pytest.mark.parametrize(

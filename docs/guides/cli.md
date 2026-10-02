@@ -85,6 +85,104 @@ and a `label` such as `第五章 采购需求 > 表 5 第 3 行第 2 列`. Text 
 and footers in Word files are not parsed; the parse result lists them under
 `warnings`. Details are in [docx-citations.md](../notes/docx-citations.md).
 
+## Review responses and assemble a draft
+
+1. Choose a succeeded extraction with `req history --task TASK_ID --json`, then
+   list its complete requirement set:
+
+   ```sh
+   bid card list --task TASK_ID --job EXTRACTION_JOB_ID --json
+   ```
+
+   Keep using that extraction ID for card creation, disposition and assembly.
+   A slot marked `missing_card` still needs a decision. Read the inputs with
+   `bid schema --json`; write a private JSON input file
+   containing `extraction_job_id`, `requirement_id`, and `content` using the
+   [card contracts](../../server/app/schemas/response_card_contracts.py).
+
+2. Write the proposed response, choose `evidence` or `commitment`, and record the
+   deviation and its explanation. For evidence, use a real task selection ID,
+   an allowed field path and an exact quote, or a retained certificate page
+   `evidence_source_id` and exact page quote. Use the selection commands below
+   and [archive certificate pages](#archive-an-unconfirmed-pdf-page) first.
+   A commitment must have an empty evidence list.
+
+   ```sh
+   bid card create --task TASK_ID --input CARD_CREATE.json --json
+   bid card show --id CARD_ID --json
+   bid card update --id CARD_ID --input CARD_UPDATE.json --json
+   ```
+
+   Updates contain `expected_revision` and a complete replacement `content`.
+   For an unclassified draft, an admin supplies `expected_revision`,
+   `review_domain` and `reason` in `CLASSIFICATION.json`:
+
+   ```sh
+   bid card classify --id CARD_ID --input CLASSIFICATION.json --json
+   ```
+
+3. Submit a card, read its returned revision and evidence IDs, and have the
+   assigned professional reviewer inspect the actual materials and response.
+   Use a human login session for all decisions:
+
+   ```sh
+   bid card submit --id CARD_ID --expected-revision REVISION --json
+   bid card confirm --id CARD_ID --expected-revision REVIEW_REVISION --evidence EVIDENCE_ID --json
+   ```
+
+   Repeat `--evidence` for every linked item; omit it for a commitment. If the
+   card lists warnings, pass each with `--reviewed-warning CODE` and record the
+   handling decision with `--reason TEXT`. Technical members confirm technical
+   cards; bidders confirm commercial cards. Admins do not cross these domains.
+
+   To reject or request material, use `card reject` or `card needs-material`
+   with `--expected-revision` and `--reason`. Use `card withdraw` before editing
+   pending content, and the responsible reviewer's `card reopen` before editing
+   a confirmed card. Read retained reasons with `card show --id CARD_ID --history`.
+
+4. For procedural clauses that only require compliance, prepare
+   `DISPOSITIONS.json` with the extraction ID and an `items` array. Each item
+   contains `requirement_id`, `expected_revision` (`null` for no card),
+   `disposition` (`comply_only` or `respond`) and a human reason:
+
+   ```sh
+   bid card disposition --task TASK_ID --input DISPOSITIONS.json --json
+   ```
+
+   One conflict rejects the entire batch. Read the latest revisions and retry
+   the whole intended batch. Withdraw pending cards or reopen confirmed cards
+   first. Change a comply-only decision back to `respond` before editing it.
+
+5. Preview and then assemble all requirements from the chosen extraction:
+
+   ```sh
+   bid draft --task TASK_ID --job EXTRACTION_JOB_ID --dry-run --json
+   bid draft --task TASK_ID --job EXTRACTION_JOB_ID --wait --json
+   bid draft list --task TASK_ID --job EXTRACTION_JOB_ID --json
+   bid draft show --id DRAFT_ID --json
+   ```
+
+   Without `--wait`, the receipt identifies the background generation job.
+   Use `job status JOB_ID`, `job wait JOB_ID`, or `job cancel JOB_ID` with that
+   ID. A failed/cancelled identical input needs an explicit `--retry`; changed
+   fixed inputs need a fresh preview and submission. The result includes all
+   three tables, comply-only entries and gaps. Exit 5 preserves partial results;
+   review each gap and resubmit after completing the missing work. Negative
+   deviations remain in their rows. Check `validity` before using an old draft.
+
+6. To change the persisted outbound-redaction setting, a human admin prepares
+   `REDACTION.json` with `expected_revision` and `model_redaction_enabled`, then
+   runs:
+
+   ```sh
+   bid task list --json
+   bid task redaction set --task TASK_ID --input REDACTION.json --json
+   ```
+
+   Read the setting revision from the task list before another change. The
+   setting's purpose and the boundary between assembly and model drafting are
+   described in [response-cards.md](../notes/response-cards.md).
+
 ## Handle results
 
 With `--json`, every command prints one object with exactly the keys `ok`,

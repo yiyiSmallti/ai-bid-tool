@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
@@ -11,6 +11,11 @@ from app.core.security import Secrets, token_digest, verify_password
 from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
+    "card:read",
+    "card:write",
+    "card:generate",
+    "draft:run",
+    "draft:read",
     "billing:read",
     "evidence:source:read",
     "evidence:source:write",
@@ -36,6 +41,7 @@ SCOPES = {
     "template:write",
     "task:template",
 }
+
 ROLE_SCOPES = {
     "admin": {
         # billing:redeem is deliberately absent from SCOPES: tokens can never redeem cards.
@@ -121,6 +127,11 @@ ROLE_SCOPES = {
     },
 }
 
+for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.update({"card:read", "draft:read"})
+    if _role != "viewer":
+        _scopes.update({"card:write", "card:generate", "draft:run", "evidence:confirm"})
+
 
 @dataclass
 class Identity:
@@ -129,10 +140,31 @@ class Identity:
     scopes: set[str]
     role: str
     token_id: UUID | None = None
+    actor_kind: str = "session"
+
+    def __post_init__(self):
+        if self.token_id is not None and self.actor_kind == "session":
+            self.actor_kind = "token"
 
     def require(self, scope: str) -> None:
         if scope not in self.scopes:
             raise ServiceError("forbidden", "Permission denied", 403, 4)
+
+
+async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
+    """Only authenticated server code supplies transaction-local decision identity."""
+    await session.execute(
+        text(
+            "SELECT set_config('app.actor_kind', :kind, true), "
+            "set_config('app.actor_user_id', :user, true), "
+            "set_config('app.actor_token_id', :token, true)"
+        ),
+        {
+            "kind": actor.actor_kind,
+            "user": str(actor.user_id),
+            "token": str(actor.token_id) if actor.token_id else "",
+        },
+    )
 
 
 async def membership(session: AsyncSession, user_id: UUID, org_id: UUID) -> Membership:

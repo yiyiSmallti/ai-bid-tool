@@ -86,6 +86,13 @@ class ApiToken(Tenant, Base):
 
 class Task(Tenant, Base):
     __tablename__ = "tasks"
+    model_redaction_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default=text("true")
+    )
+    model_redaction_revision: Mapped[int] = mapped_column(
+        Integer, default=1, server_default=text("1")
+    )
+    model_redaction_by: Mapped[UUID | None] = mapped_column()
     name: Mapped[str] = mapped_column(String(200))
     tender_number: Mapped[str | None] = mapped_column(String(100))
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -95,6 +102,9 @@ class Task(Tenant, Base):
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
             ["org_id", "created_by"], ["memberships.org_id", "memberships.user_id"]
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "model_redaction_by"], ["memberships.org_id", "memberships.user_id"]
         ),
     )
 

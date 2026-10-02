@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
 from app.api.platform import create_router as create_platform_router
+from app.api.response_cards import create_router as create_response_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
@@ -67,7 +68,7 @@ from app.services import (
     resources,
     templates,
 )
-from app.services.auth import SCOPES, authenticate, login
+from app.services.auth import SCOPES, authenticate, login, set_actor_context
 from app.services.extraction import PROMPT_VERSION
 from app.services.parsing import PARSER_VERSION, validate_document
 from app.services.template_files import MAX_TEMPLATE_BYTES, validate_template
@@ -267,7 +268,10 @@ def create_app(
         # tenant transaction only after identity and active membership are verified.
         async with db.transaction(x_org_id) as session:
             identity = await authenticate(session, credentials.credentials, x_org_id, crypto)
+            await set_actor_context(session, identity)
             yield session, identity
+
+    app.include_router(create_response_router(context, db, storage, queue))
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -309,14 +313,29 @@ def create_app(
         task = Task(org_id=identity.org_id, created_by=identity.user_id, **body.model_dump())
         session.add(task)
         await session.flush()
-        return result("task create", serial(task, ("id", "name", "org_id")))
+        return result(
+            "task create",
+            serial(
+                task,
+                ("id", "name", "org_id", "model_redaction_enabled", "model_redaction_revision"),
+            ),
+        )
 
     @app.get("/tasks", name="task_list", response_model=Result)
     async def task_list(ctx=Depends(context, scope="function")):
         session, identity = ctx
         identity.require("task:read")
         tasks = (await session.scalars(select(Task).order_by(Task.created_at))).all()
-        return result("task list", items=[serial(task, ("id", "name", "org_id")) for task in tasks])
+        return result(
+            "task list",
+            items=[
+                serial(
+                    task,
+                    ("id", "name", "org_id", "model_redaction_enabled", "model_redaction_revision"),
+                )
+                for task in tasks
+            ],
+        )
 
     @app.post("/resources/products", name="resource_product_add", response_model=Result)
     async def product_add(body: ProductCreate, ctx=Depends(context, scope="function")):
@@ -1242,10 +1261,25 @@ def create_app(
         job = await session.get(Job, job_id)
         if job is None:
             raise not_found()
-        return result(
+        payload = result(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
+        if job.kind == "draft":
+            identity.require("draft:read")
+            identity.require("task:read")
+            if job.result.get("draft_id"):
+                from app.services.drafts import show_draft
+
+                await show_draft(session, identity, UUID(job.result["draft_id"]))
+            if job.result.get("completion") == "partial":
+                payload["ok"] = False
+            payload["warnings"] = job.result.get("warnings", [])
+            # Submission authorization data is internal worker state.
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+        return payload
 
     @app.post("/jobs/{job_id}/cancel", name="job_cancel", response_model=Result)
     async def job_cancel(job_id: UUID, ctx=Depends(context, scope="function")):

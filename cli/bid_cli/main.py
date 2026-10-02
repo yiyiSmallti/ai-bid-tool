@@ -36,6 +36,15 @@ from app.schemas.profile_contracts import (
     TaskOrgProfileSelection,
 )
 from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
+from app.schemas.response_card_contracts import (
+    CardAction,
+    CardClassify,
+    CardCreate,
+    CardUpdate,
+    DispositionBatch,
+    DraftRequest,
+    TaskRedactionSet,
+)
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from app.services.certificate_files import read_file as read_certificate_file
 from app.services.template_files import read_template
@@ -51,6 +60,9 @@ feature_app, task_feature_app = typer.Typer(), typer.Typer()
 certificate_app, task_certificate_app = typer.Typer(), typer.Typer()
 profile_app, task_profile_app = typer.Typer(), typer.Typer()
 template_app, task_template_app = typer.Typer(), typer.Typer()
+card_app = typer.Typer()
+draft_app = typer.Typer(invoke_without_command=True)
+redaction_app = typer.Typer()
 for name, group in (
     ("org", org_app),
     ("task", task_app),
@@ -59,6 +71,8 @@ for name, group in (
     ("job", job_app),
     ("token", token_app),
     ("resource", resource_app),
+    ("card", card_app),
+    ("draft", draft_app),
 ):
     app.add_typer(group, name=name)
 resource_app.add_typer(product_app, name="product")
@@ -71,6 +85,7 @@ resource_app.add_typer(profile_app, name="profile")
 task_app.add_typer(task_profile_app, name="profile")
 resource_app.add_typer(template_app, name="template")
 task_app.add_typer(task_template_app, name="template")
+task_app.add_typer(redaction_app, name="redaction")
 
 certificate_file_app, task_certificate_file_app = typer.Typer(), typer.Typer()
 certificate_app.add_typer(certificate_file_app, name="file")
@@ -212,11 +227,190 @@ def task_list(json_output: JsonOption = False):
     emit(call("GET", "/tasks"), "task list", json_output)
 
 
-def input_contract(path: Path, model: type[Contract]) -> dict:
-    if path.stat().st_size > 128 * 1024:
-        raise ServiceError("input_too_large", "Metadata input exceeds the limit", 400, 2)
+def input_contract(path: Path, model: type[Contract], max_bytes: int = 128 * 1024) -> dict:
+    if path.stat().st_size > max_bytes:
+        raise ServiceError("input_too_large", "JSON input exceeds the command limit", 400, 2)
     return model.model_validate(json.loads(path.read_text(encoding="utf-8"))).model_dump(
         mode="json"
+    )
+
+
+@card_app.command("list")
+def card_list(
+    task: Annotated[UUID, typer.Option()],
+    job: Annotated[UUID, typer.Option()],
+    json_output: JsonOption = False,
+):
+    emit(
+        call("GET", f"/tasks/{task}/cards", params={"job": str(job)}),
+        "card list",
+        json_output,
+    )
+
+
+@card_app.command("show")
+def card_show(
+    id: Annotated[UUID, typer.Option("--id")],
+    history: Annotated[bool, typer.Option()] = False,
+    json_output: JsonOption = False,
+):
+    emit(
+        call("GET", f"/cards/{id}", params={"history": str(history).lower()}),
+        "card show",
+        json_output,
+    )
+
+
+@card_app.command("create")
+def card_create(
+    task: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    body = input_contract(input, CardCreate, 4 * 1024 * 1024)
+    emit(call("POST", f"/tasks/{task}/cards", json=body), "card create", json_output)
+
+
+@card_app.command("update")
+def card_update(
+    id: Annotated[UUID, typer.Option("--id")],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    body = input_contract(input, CardUpdate, 4 * 1024 * 1024)
+    emit(call("PUT", f"/cards/{id}", json=body), "card update", json_output)
+
+
+@card_app.command("classify")
+def card_classify(
+    id: Annotated[UUID, typer.Option("--id")],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    body = input_contract(input, CardClassify)
+    emit(
+        call("POST", f"/cards/{id}/classification", json=body),
+        "card classify",
+        json_output,
+    )
+
+
+@card_app.command("disposition")
+def card_disposition(
+    task: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    body = input_contract(input, DispositionBatch, 12 * 1024 * 1024)
+    emit(
+        call("POST", f"/tasks/{task}/cards/dispositions", json=body),
+        "card disposition",
+        json_output,
+    )
+
+
+def card_action_request(
+    card_id: UUID,
+    expected_revision: int,
+    action: str,
+    evidence: list[UUID],
+    reviewed_warning: list[str],
+    reason: str | None,
+    as_json: bool,
+):
+    request = CardAction.model_validate(
+        {
+            "expected_revision": expected_revision,
+            "action": action,
+            "reviewed_evidence_ids": evidence,
+            "reviewed_warning_codes": reviewed_warning,
+            "reason": reason,
+        }
+    ).model_dump(mode="json")
+    command = f"card {action.replace('_', '-')}"
+    emit(call("POST", f"/cards/{card_id}/actions", json=request), command, as_json)
+
+
+@card_app.command("submit")
+def card_submit(
+    id: Annotated[UUID, typer.Option("--id")],
+    expected_revision: Annotated[int, typer.Option(min=1)],
+    json_output: JsonOption = False,
+):
+    card_action_request(id, expected_revision, "submit", [], [], None, json_output)
+
+
+@card_app.command("withdraw")
+def card_withdraw(
+    id: Annotated[UUID, typer.Option("--id")],
+    expected_revision: Annotated[int, typer.Option(min=1)],
+    reason: Annotated[str, typer.Option()],
+    json_output: JsonOption = False,
+):
+    card_action_request(id, expected_revision, "withdraw", [], [], reason, json_output)
+
+
+@card_app.command("confirm")
+def card_confirm(
+    id: Annotated[UUID, typer.Option("--id")],
+    expected_revision: Annotated[int, typer.Option(min=1)],
+    evidence: Annotated[list[UUID] | None, typer.Option("--evidence")] = None,
+    reviewed_warning: Annotated[list[str] | None, typer.Option("--reviewed-warning")] = None,
+    reason: Annotated[str | None, typer.Option()] = None,
+    json_output: JsonOption = False,
+):
+    card_action_request(
+        id,
+        expected_revision,
+        "confirm",
+        evidence or [],
+        reviewed_warning or [],
+        reason,
+        json_output,
+    )
+
+
+@card_app.command("reject")
+def card_reject(
+    id: Annotated[UUID, typer.Option("--id")],
+    expected_revision: Annotated[int, typer.Option(min=1)],
+    reason: Annotated[str, typer.Option()],
+    json_output: JsonOption = False,
+):
+    card_action_request(id, expected_revision, "reject", [], [], reason, json_output)
+
+
+@card_app.command("needs-material")
+def card_needs_material(
+    id: Annotated[UUID, typer.Option("--id")],
+    expected_revision: Annotated[int, typer.Option(min=1)],
+    reason: Annotated[str, typer.Option()],
+    json_output: JsonOption = False,
+):
+    card_action_request(id, expected_revision, "needs_material", [], [], reason, json_output)
+
+
+@card_app.command("reopen")
+def card_reopen(
+    id: Annotated[UUID, typer.Option("--id")],
+    expected_revision: Annotated[int, typer.Option(min=1)],
+    reason: Annotated[str, typer.Option()],
+    json_output: JsonOption = False,
+):
+    card_action_request(id, expected_revision, "reopen", [], [], reason, json_output)
+
+
+@redaction_app.command("set")
+def task_redaction_set(
+    task: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    body = input_contract(input, TaskRedactionSet)
+    emit(
+        call("PUT", f"/tasks/{task}/model-redaction", json=body),
+        "task redaction set",
+        json_output,
     )
 
 
@@ -717,6 +911,74 @@ async def wait_for_job(job_id: UUID, limit_seconds: float) -> dict:
     )
 
 
+def partial_completion_exit(body: dict) -> int:
+    data = body.get("data", {})
+    result = data.get("result") if isinstance(data.get("result"), dict) else data
+    if result.get("completion") == "partial":
+        body["ok"] = False
+        return 5
+    return 0
+
+
+@draft_app.callback()
+def draft_run(
+    ctx: typer.Context,
+    task: Annotated[UUID | None, typer.Option()] = None,
+    job: Annotated[UUID | None, typer.Option()] = None,
+    dry_run: Annotated[bool, typer.Option()] = False,
+    retry: Annotated[bool, typer.Option()] = False,
+    wait: Annotated[bool, typer.Option()] = False,
+    timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
+    json_output: JsonOption = False,
+):
+    if ctx.invoked_subcommand is not None:
+        return
+    if task is None or job is None:
+        raise ServiceError("invalid_input", "Draft requires --task and --job", 400, 2)
+    request = DraftRequest(
+        extraction_job_id=job,
+        dry_run=dry_run,
+        retry=retry,
+    ).model_dump(mode="json")
+    body = call("POST", f"/tasks/{task}/drafts", json=request)
+    if wait and not dry_run:
+        terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
+        result = terminal["data"].get("result") or {}
+        draft_id = result.get("draft_id")
+        if not draft_id:
+            raise ServiceError(
+                "invalid_server_response",
+                "Completed draft job did not identify its assembled draft",
+                502,
+                4,
+            )
+        body = call("GET", f"/drafts/{UUID(draft_id)}")
+    exit_code = partial_completion_exit(body)
+    emit(body, "draft", json_output, exit_code)
+
+
+@draft_app.command("show")
+def draft_show(
+    id: Annotated[UUID, typer.Option("--id")],
+    json_output: JsonOption = False,
+):
+    body = call("GET", f"/drafts/{id}")
+    emit(body, "draft show", json_output, partial_completion_exit(body))
+
+
+@draft_app.command("list")
+def draft_list(
+    task: Annotated[UUID, typer.Option()],
+    job: Annotated[UUID, typer.Option()],
+    json_output: JsonOption = False,
+):
+    emit(
+        call("GET", f"/tasks/{task}/drafts", params={"job": str(job)}),
+        "draft list",
+        json_output,
+    )
+
+
 def process(
     document: UUID,
     kind: str,
@@ -797,7 +1059,8 @@ def req_history(
 
 @job_app.command("status")
 def job_status(job_id: UUID, json_output: JsonOption = False):
-    emit(call("GET", f"/jobs/{job_id}"), "job status", json_output)
+    body = call("GET", f"/jobs/{job_id}")
+    emit(body, "job status", json_output, partial_completion_exit(body))
 
 
 @job_app.command("wait")
@@ -806,7 +1069,8 @@ def job_wait(
     timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
     json_output: JsonOption = False,
 ):
-    emit(asyncio.run(wait_for_job(job_id, timeout)), "job wait", json_output)
+    body = asyncio.run(wait_for_job(job_id, timeout))
+    emit(body, "job wait", json_output, partial_completion_exit(body))
 
 
 @job_app.command("cancel")

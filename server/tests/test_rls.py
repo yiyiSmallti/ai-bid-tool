@@ -19,6 +19,13 @@ TENANT_TABLES = (
     "requirements",
     "usage_records",
     "jobs",
+    "response_cards",
+    "response_card_revisions",
+    "evidence",
+    "card_evidence_links",
+    "card_generation_runs",
+    "draft_runs",
+    "response_items",
 )
 
 
@@ -106,7 +113,19 @@ def seeded(tenants, admin_engine):
                     ),
                 ]
             )
-            identifiers[org] = {"task": task.id, "document": document.id, "chunk": chunk.id}
+            session.flush()
+            from test_response_card_db import seed_response_rows
+
+            requirement = session.scalar(select(Requirement).where(Requirement.org_id == org))
+            response_ids = seed_response_rows(
+                session, org, tenants["users"][index], task, extraction, requirement
+            )
+            identifiers[org] = {
+                "task": task.id,
+                "document": document.id,
+                "chunk": chunk.id,
+                **response_ids,
+            }
     return {**tenants, "ids": identifiers}
 
 
@@ -118,13 +137,18 @@ async def test_every_business_table_enforces_read_write_scope(table, seeded, adm
         async with db.transaction(org_a) as session:
             visible = (await session.execute(text(f'SELECT org_id FROM "{table}"'))).scalars().all()
             assert visible and set(visible) == {org_a}
-            updated = await session.execute(
-                text(f'UPDATE "{table}" SET org_id=org_id WHERE org_id=:org'), {"org": org_b}
-            )
-            removed = await session.execute(
-                text(f'DELETE FROM "{table}" WHERE org_id=:org'), {"org": org_b}
-            )
-            assert updated.rowcount == removed.rowcount == 0
+            # Append-only response tables deny UPDATE/DELETE privileges even for
+            # a predicate matching no rows; verify that separately below.
+            if table in TENANT_TABLES[9:]:
+                updated = removed = None
+            else:
+                updated = await session.execute(
+                    text(f'UPDATE "{table}" SET org_id=org_id WHERE org_id=:org'), {"org": org_b}
+                )
+                removed = await session.execute(
+                    text(f'DELETE FROM "{table}" WHERE org_id=:org'), {"org": org_b}
+                )
+                assert updated.rowcount == removed.rowcount == 0
         async with db.transaction() as session:
             assert (await session.execute(text(f'SELECT id FROM "{table}"'))).all() == []
         with pytest.raises(DBAPIError) as error:

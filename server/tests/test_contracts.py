@@ -16,6 +16,8 @@ def test_schema_tracks_actual_commands():
 
     def visit(command, prefix=""):
         if hasattr(command, "commands"):
+            if prefix and command.invoke_without_command:
+                actual.add(prefix)
             for name, child in command.commands.items():
                 visit(child, (prefix + " " + name).strip())
         else:
@@ -35,6 +37,22 @@ def test_schema_tracks_actual_commands():
         (["login"], "login"),
         (["org", "use"], "org use"),
         (["task", "create"], "task create"),
+        (["task", "redaction", "set"], "task redaction set"),
+        (["card", "list"], "card list"),
+        (["card", "show"], "card show"),
+        (["card", "create"], "card create"),
+        (["card", "update"], "card update"),
+        (["card", "classify"], "card classify"),
+        (["card", "disposition"], "card disposition"),
+        (["card", "submit"], "card submit"),
+        (["card", "withdraw"], "card withdraw"),
+        (["card", "confirm"], "card confirm"),
+        (["card", "reject"], "card reject"),
+        (["card", "needs-material"], "card needs-material"),
+        (["card", "reopen"], "card reopen"),
+        (["draft"], "draft"),
+        (["draft", "show"], "draft show"),
+        (["draft", "list"], "draft list"),
         (["tender", "upload"], "tender upload"),
         (["tender", "parse"], "tender parse"),
         (["req", "extract"], "req extract"),
@@ -170,3 +188,64 @@ def test_profile_invalid_input_is_redacted_before_transport(case, tmp_path, caps
     body = json.loads(capsys.readouterr().out)
     assert error.value.code == 2 and body["command"] == "resource profile add"
     assert body["ok"] is False and "private-secret-profile" not in json.dumps(body)
+
+
+@pytest.mark.parametrize("case", ["duplicate_disposition", "commitment_evidence", "warning_reason"])
+def test_card_decisions_reject_invalid_input_before_transport(case, tmp_path, capsys, monkeypatch):
+    from bid_cli import main as cli_module
+
+    def forbidden_transport(*args, **kwargs):
+        raise AssertionError("Invalid card input must never reach transport")
+
+    monkeypatch.setattr(cli_module, "call", forbidden_transport)
+    identifier = str(uuid4())
+    source = tmp_path / "private-card.json"
+    if case == "duplicate_disposition":
+        item = {
+            "requirement_id": identifier,
+            "expected_revision": None,
+            "disposition": "comply_only",
+            "reason": "private-review-reason",
+        }
+        source.write_text(json.dumps({"extraction_job_id": identifier, "items": [item, item]}))
+        args = ["card", "disposition", "--task", identifier, "--input", str(source)]
+    elif case == "commitment_evidence":
+        source.write_text(
+            json.dumps(
+                {
+                    "extraction_job_id": identifier,
+                    "requirement_id": identifier,
+                    "content": {
+                        "response_kind": "commitment",
+                        "response_text": "private-response-text",
+                        "deviation": "none",
+                        "deviation_note": "private-deviation-note",
+                        "evidence": [
+                            {
+                                "kind": "product",
+                                "selection_id": identifier,
+                                "field_path": "name",
+                                "quote": "private-evidence-quote",
+                            }
+                        ],
+                    },
+                }
+            )
+        )
+        args = ["card", "create", "--task", identifier, "--input", str(source)]
+    else:
+        args = [
+            "card",
+            "confirm",
+            "--id",
+            identifier,
+            "--expected-revision",
+            "1",
+            "--reviewed-warning",
+            "private-warning-code",
+        ]
+    with pytest.raises(SystemExit) as error:
+        main([*args, "--json"])
+    body = json.loads(capsys.readouterr().out)
+    assert error.value.code == 2 and body["ok"] is False
+    assert "private-" not in json.dumps(body)

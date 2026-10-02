@@ -22,6 +22,7 @@ kind: readme
 英文，结构为 Problem / Usage / How it works / Pitfalls / Code。
 
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。
+- [response-cards.md](notes/response-cards.md)：人工响应卡片、证据确认、原子处置与三表初稿。
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
 - [llm-providers.md](notes/llm-providers.md)：抽取模型调用、批次、错误与计费。
 - [docx-citations.md](notes/docx-citations.md)：Word 按章节、段落、表格单元格引用。
@@ -47,6 +48,6 @@ kind: readme
 
 - [剩余范围与路线](plan/roadmap.md)（plan）：覆盖矩阵、已知缺陷、待定决定。
 - [Rust 标注契约草案](plan/annotation.md)（plan）：待批准的下一范围。
-- [人工确认与偏离表初稿契约草案](plan/review-and-draft.md)（plan）：B07/B08 的卡片确认、分表初稿与缺口，待批准。
+- [人工确认与偏离表初稿契约草案](plan/review-and-draft.md)（plan）：B07/B08 的两阶段卡片确认、模型起草与组表契约。
 - [模型配置契约草案](plan/provider-config.md)（plan）：单位自带模型与单位自选平台模型，待批准。
 - [变更记录](changelog.md)（changelog）：已交付范围。

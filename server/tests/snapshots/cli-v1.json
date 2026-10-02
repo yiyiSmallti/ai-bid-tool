@@ -78,6 +78,984 @@
     "ok": true,
     "warnings": []
   },
+  "card classify": {
+    "command": "card classify",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card confirm": {
+    "command": "card confirm",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card create": {
+    "command": "card create",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card disposition": {
+    "command": "card disposition",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "correlation_id": "00000000-0000-0000-0000-000000000001",
+      "updated": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "actor_kind": "session",
+        "confirmed_at": null,
+        "confirmed_by": null,
+        "content": {
+          "deviation": "none",
+          "deviation_note": "The offered delivery date is identical.",
+          "evidence": [],
+          "response_kind": "commitment",
+          "response_text": "We commit to the stated delivery date."
+        },
+        "disposition": "respond",
+        "disposition_at": "2026-10-01T00:00:00+00:00",
+        "disposition_by": "00000000-0000-0000-0000-000000000001",
+        "eligibility": "unconfirmed",
+        "evidence": [],
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "model_job_id": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "human",
+        "reason": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_domain": "technical",
+        "review_hint": null,
+        "reviewed_warning_codes": [],
+        "revision": 1,
+        "revision_id": "00000000-0000-0000-0000-000000000001",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
+          "page": 1,
+          "quote": "Synthetic source"
+        },
+        "state": "draft",
+        "suggested_disposition": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "warning_codes": []
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "card list": {
+    "command": "card list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "card": {
+          "actor_kind": "session",
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "content": {
+            "deviation": "none",
+            "deviation_note": "The offered delivery date is identical.",
+            "evidence": [],
+            "response_kind": "commitment",
+            "response_text": "We commit to the stated delivery date."
+          },
+          "disposition": "respond",
+          "disposition_at": "2026-10-01T00:00:00+00:00",
+          "disposition_by": "00000000-0000-0000-0000-000000000001",
+          "eligibility": "unconfirmed",
+          "evidence": [],
+          "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "model_job_id": null,
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "origin": "human",
+          "reason": null,
+          "requirement_id": "00000000-0000-0000-0000-000000000001",
+          "review_domain": "technical",
+          "review_hint": null,
+          "reviewed_warning_codes": [],
+          "revision": 1,
+          "revision_id": "00000000-0000-0000-0000-000000000001",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic source"
+          },
+          "state": "draft",
+          "suggested_disposition": null,
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "warning_codes": []
+        },
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
+          "page": 1,
+          "quote": "Synthetic source"
+        },
+        "status": "draft"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "card needs-material": {
+    "command": "card needs-material",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card reject": {
+    "command": "card reject",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card reopen": {
+    "command": "card reopen",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card show": {
+    "command": "card show",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "actor_kind": "session",
+        "confirmed_at": null,
+        "confirmed_by": null,
+        "content": {
+          "deviation": "none",
+          "deviation_note": "The offered delivery date is identical.",
+          "evidence": [],
+          "response_kind": "commitment",
+          "response_text": "We commit to the stated delivery date."
+        },
+        "disposition": "respond",
+        "disposition_at": "2026-10-01T00:00:00+00:00",
+        "disposition_by": "00000000-0000-0000-0000-000000000001",
+        "eligibility": "unconfirmed",
+        "evidence": [],
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "model_job_id": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "human",
+        "reason": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_domain": "technical",
+        "review_hint": null,
+        "reviewed_warning_codes": [],
+        "revision": 1,
+        "revision_id": "00000000-0000-0000-0000-000000000001",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
+          "page": 1,
+          "quote": "Synthetic source"
+        },
+        "state": "draft",
+        "suggested_disposition": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "warning_codes": []
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "card submit": {
+    "command": "card submit",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card update": {
+    "command": "card update",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "card withdraw": {
+    "command": "card withdraw",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actor_kind": "session",
+      "confirmed_at": null,
+      "confirmed_by": null,
+      "content": {
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date."
+      },
+      "disposition": "respond",
+      "disposition_at": "2026-10-01T00:00:00+00:00",
+      "disposition_by": "00000000-0000-0000-0000-000000000001",
+      "eligibility": "unconfirmed",
+      "evidence": [],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "model_job_id": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "origin": "human",
+      "reason": null,
+      "requirement_id": "00000000-0000-0000-0000-000000000001",
+      "review_domain": "technical",
+      "review_hint": null,
+      "reviewed_warning_codes": [],
+      "revision": 1,
+      "revision_id": "00000000-0000-0000-0000-000000000001",
+      "source": {
+        "chunk_id": "00000000-0000-0000-0000-000000000001",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "location": null,
+        "page": 1,
+        "quote": "Synthetic source"
+      },
+      "state": "draft",
+      "suggested_disposition": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "warning_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "draft": {
+    "command": "draft",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "completion": "partial",
+      "comply_only": [
+        {
+          "card_id": "00000000-0000-0000-0000-000000000003",
+          "card_revision_id": "00000000-0000-0000-0000-000000000003",
+          "disposition_at": "2026-10-01T00:00:00+00:00",
+          "disposition_by": "00000000-0000-0000-0000-000000000001",
+          "location_label": "Page 1",
+          "requirement_id": "00000000-0000-0000-0000-000000000003",
+          "tender_clause": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic source"
+          }
+        }
+      ],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "gaps": [
+        {
+          "card_id": null,
+          "card_revision_id": null,
+          "location_label": "Page 1",
+          "reasons": [
+            "missing_card"
+          ],
+          "requirement_id": "00000000-0000-0000-0000-000000000004",
+          "tender_clause": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic source"
+          }
+        }
+      ],
+      "generation_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "invalidated_requirements": [],
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "status": "draft",
+      "tables": {
+        "commercial": [
+          {
+            "card_id": "00000000-0000-0000-0000-000000000001",
+            "card_revision_id": "00000000-0000-0000-0000-000000000001",
+            "category": "qualification",
+            "deviation": "none",
+            "deviation_note": "The offered delivery date is identical.",
+            "evidence": [],
+            "location_label": "Page 1",
+            "requirement_id": "00000000-0000-0000-0000-000000000001",
+            "response_kind": "commitment",
+            "response_text": "We commit to the stated delivery date.",
+            "starred": false,
+            "table": "commercial",
+            "tender_clause": {
+              "chunk_id": "00000000-0000-0000-0000-000000000001",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "location": null,
+              "page": 1,
+              "quote": "Synthetic source"
+            }
+          }
+        ],
+        "substantive": [],
+        "technical": [
+          {
+            "card_id": "00000000-0000-0000-0000-000000000002",
+            "card_revision_id": "00000000-0000-0000-0000-000000000002",
+            "category": "technical",
+            "deviation": "negative",
+            "deviation_note": "One optional mode is not offered.",
+            "evidence": [
+              {
+                "active_selection": true,
+                "card_id": "00000000-0000-0000-0000-000000000002",
+                "confirmed_at": "2026-10-01T00:00:00+00:00",
+                "confirmed_by": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-000000000001",
+                "input": {
+                  "field_path": "name",
+                  "kind": "product",
+                  "quote": "Synthetic product",
+                  "selection_id": "00000000-0000-0000-0000-000000000001"
+                },
+                "material_kind": "declaration",
+                "org_id": "00000000-0000-0000-0000-000000000001",
+                "quote_check": "exact_field_match",
+                "resource_revision_id": "00000000-0000-0000-0000-000000000001",
+                "selection_id": "00000000-0000-0000-0000-000000000001",
+                "source_archive": null,
+                "task_id": "00000000-0000-0000-0000-000000000001"
+              }
+            ],
+            "location_label": "Page 1",
+            "requirement_id": "00000000-0000-0000-0000-000000000002",
+            "response_kind": "evidence",
+            "response_text": "The selected product has the named capability.",
+            "starred": false,
+            "table": "technical",
+            "tender_clause": {
+              "chunk_id": "00000000-0000-0000-0000-000000000001",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "location": null,
+              "page": 1,
+              "quote": "Synthetic source"
+            }
+          }
+        ]
+      },
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "draft list": {
+    "command": "draft list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "completion": "partial",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "generation_job_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "invalidated_requirements": [],
+        "status": "draft",
+        "summary": {
+          "comply_only": 1,
+          "gaps": 1,
+          "negative_deviations": 1,
+          "rows": 2
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "draft show": {
+    "command": "draft show",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "completion": "partial",
+      "comply_only": [
+        {
+          "card_id": "00000000-0000-0000-0000-000000000003",
+          "card_revision_id": "00000000-0000-0000-0000-000000000003",
+          "disposition_at": "2026-10-01T00:00:00+00:00",
+          "disposition_by": "00000000-0000-0000-0000-000000000001",
+          "location_label": "Page 1",
+          "requirement_id": "00000000-0000-0000-0000-000000000003",
+          "tender_clause": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic source"
+          }
+        }
+      ],
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "gaps": [
+        {
+          "card_id": null,
+          "card_revision_id": null,
+          "location_label": "Page 1",
+          "reasons": [
+            "missing_card"
+          ],
+          "requirement_id": "00000000-0000-0000-0000-000000000004",
+          "tender_clause": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic source"
+          }
+        }
+      ],
+      "generation_job_id": "00000000-0000-0000-0000-000000000001",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "invalidated_requirements": [],
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "status": "draft",
+      "tables": {
+        "commercial": [
+          {
+            "card_id": "00000000-0000-0000-0000-000000000001",
+            "card_revision_id": "00000000-0000-0000-0000-000000000001",
+            "category": "qualification",
+            "deviation": "none",
+            "deviation_note": "The offered delivery date is identical.",
+            "evidence": [],
+            "location_label": "Page 1",
+            "requirement_id": "00000000-0000-0000-0000-000000000001",
+            "response_kind": "commitment",
+            "response_text": "We commit to the stated delivery date.",
+            "starred": false,
+            "table": "commercial",
+            "tender_clause": {
+              "chunk_id": "00000000-0000-0000-0000-000000000001",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "location": null,
+              "page": 1,
+              "quote": "Synthetic source"
+            }
+          }
+        ],
+        "substantive": [],
+        "technical": [
+          {
+            "card_id": "00000000-0000-0000-0000-000000000002",
+            "card_revision_id": "00000000-0000-0000-0000-000000000002",
+            "category": "technical",
+            "deviation": "negative",
+            "deviation_note": "One optional mode is not offered.",
+            "evidence": [
+              {
+                "active_selection": true,
+                "card_id": "00000000-0000-0000-0000-000000000002",
+                "confirmed_at": "2026-10-01T00:00:00+00:00",
+                "confirmed_by": "00000000-0000-0000-0000-000000000001",
+                "id": "00000000-0000-0000-0000-000000000001",
+                "input": {
+                  "field_path": "name",
+                  "kind": "product",
+                  "quote": "Synthetic product",
+                  "selection_id": "00000000-0000-0000-0000-000000000001"
+                },
+                "material_kind": "declaration",
+                "org_id": "00000000-0000-0000-0000-000000000001",
+                "quote_check": "exact_field_match",
+                "resource_revision_id": "00000000-0000-0000-0000-000000000001",
+                "selection_id": "00000000-0000-0000-0000-000000000001",
+                "source_archive": null,
+                "task_id": "00000000-0000-0000-0000-000000000001"
+              }
+            ],
+            "location_label": "Page 1",
+            "requirement_id": "00000000-0000-0000-0000-000000000002",
+            "response_kind": "evidence",
+            "response_text": "The selected product has the named capability.",
+            "starred": false,
+            "table": "technical",
+            "tender_clause": {
+              "chunk_id": "00000000-0000-0000-0000-000000000001",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "location": null,
+              "page": 1,
+              "quote": "Synthetic source"
+            }
+          }
+        ]
+      },
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
   "evidence source add": {
     "command": "evidence source add",
     "cost": {
@@ -237,15 +1215,25 @@
       "attempts": 1,
       "error": null,
       "id": "00000000-0000-0000-0000-000000000001",
-      "kind": "parse",
+      "kind": "draft",
       "result": {
-        "pages": 1
+        "completion": "partial",
+        "cost": {
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "usd": 0.0
+        },
+        "draft_id": "00000000-0000-0000-0000-000000000001",
+        "exit_code": 5,
+        "warnings": [
+          "missing_card:00000000-0000-0000-0000-000000000004"
+        ]
       },
       "status": "succeeded"
     },
     "duration_ms": 0,
     "items": [],
-    "ok": true,
+    "ok": false,
     "warnings": []
   },
   "job wait": {
@@ -259,15 +1247,25 @@
       "attempts": 1,
       "error": null,
       "id": "00000000-0000-0000-0000-000000000001",
-      "kind": "parse",
+      "kind": "draft",
       "result": {
-        "pages": 1
+        "completion": "partial",
+        "cost": {
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "usd": 0.0
+        },
+        "draft_id": "00000000-0000-0000-0000-000000000001",
+        "exit_code": 5,
+        "warnings": [
+          "missing_card:00000000-0000-0000-0000-000000000004"
+        ]
       },
       "status": "succeeded"
     },
     "duration_ms": 0,
     "items": [],
-    "ok": true,
+    "ok": false,
     "warnings": []
   },
   "login": {
@@ -1436,6 +2434,1491 @@
             "title": "CardRedeem",
             "type": "object"
           }
+        },
+        "card classify": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "maxLength": 10000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "review_domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "review_domain",
+              "reason"
+            ],
+            "title": "CardClassify",
+            "type": "object"
+          }
+        },
+        "card confirm": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "evidence",
+              "options": [
+                "--evidence"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "reviewed_warning",
+              "options": [
+                "--reviewed-warning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "submit",
+                  "withdraw",
+                  "confirm",
+                  "reject",
+                  "needs_material",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reason"
+              },
+              "reviewed_evidence_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Evidence Ids",
+                "type": "array"
+              },
+              "reviewed_warning_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Warning Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "action"
+            ],
+            "title": "CardAction",
+            "type": "object"
+          }
+        },
+        "card create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CardContent": {
+                "additionalProperties": false,
+                "properties": {
+                  "deviation": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Deviation"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "deviation_note": {
+                    "anyOf": [
+                      {
+                        "maxLength": 10000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Deviation Note"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/EvidenceInput"
+                    },
+                    "maxItems": 100,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "response_kind": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ResponseKind"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "response_text": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Response Text"
+                  }
+                },
+                "title": "CardContent",
+                "type": "object"
+              },
+              "Deviation": {
+                "enum": [
+                  "none",
+                  "positive",
+                  "negative"
+                ],
+                "type": "string"
+              },
+              "EvidenceInput": {
+                "discriminator": {
+                  "mapping": {
+                    "certificate": "#/$defs/ResourceEvidenceInput",
+                    "certificate_pdf_page": "#/$defs/PageEvidenceInput",
+                    "feature": "#/$defs/ResourceEvidenceInput",
+                    "org_profile": "#/$defs/ResourceEvidenceInput",
+                    "product": "#/$defs/ResourceEvidenceInput"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ResourceEvidenceInput"
+                  },
+                  {
+                    "$ref": "#/$defs/PageEvidenceInput"
+                  }
+                ]
+              },
+              "PageEvidenceInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence_source_id": {
+                    "format": "uuid",
+                    "title": "Evidence Source Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "certificate_pdf_page",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_source_id",
+                  "quote"
+                ],
+                "title": "PageEvidenceInput",
+                "type": "object"
+              },
+              "ResourceEvidenceInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "field_path": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Field Path",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "product",
+                      "feature",
+                      "certificate",
+                      "org_profile"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  },
+                  "selection_id": {
+                    "format": "uuid",
+                    "title": "Selection Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "selection_id",
+                  "field_path",
+                  "quote"
+                ],
+                "title": "ResourceEvidenceInput",
+                "type": "object"
+              },
+              "ResponseKind": {
+                "enum": [
+                  "evidence",
+                  "commitment"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "$ref": "#/$defs/CardContent"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "requirement_id": {
+                "format": "uuid",
+                "title": "Requirement Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "requirement_id",
+              "content"
+            ],
+            "title": "CardCreate",
+            "type": "object"
+          }
+        },
+        "card disposition": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Disposition": {
+                "enum": [
+                  "respond",
+                  "comply_only"
+                ],
+                "type": "string"
+              },
+              "DispositionItem": {
+                "additionalProperties": false,
+                "properties": {
+                  "disposition": {
+                    "$ref": "#/$defs/Disposition"
+                  },
+                  "expected_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Revision"
+                  },
+                  "reason": {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "title": "Reason",
+                    "type": "string"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "disposition",
+                  "reason"
+                ],
+                "title": "DispositionItem",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/DispositionItem"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "title": "Items",
+                "type": "array"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "items"
+            ],
+            "title": "DispositionBatch",
+            "type": "object"
+          }
+        },
+        "card list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "card needs-material": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "submit",
+                  "withdraw",
+                  "confirm",
+                  "reject",
+                  "needs_material",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reason"
+              },
+              "reviewed_evidence_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Evidence Ids",
+                "type": "array"
+              },
+              "reviewed_warning_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Warning Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "action"
+            ],
+            "title": "CardAction",
+            "type": "object"
+          }
+        },
+        "card reject": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "submit",
+                  "withdraw",
+                  "confirm",
+                  "reject",
+                  "needs_material",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reason"
+              },
+              "reviewed_evidence_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Evidence Ids",
+                "type": "array"
+              },
+              "reviewed_warning_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Warning Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "action"
+            ],
+            "title": "CardAction",
+            "type": "object"
+          }
+        },
+        "card reopen": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "submit",
+                  "withdraw",
+                  "confirm",
+                  "reject",
+                  "needs_material",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reason"
+              },
+              "reviewed_evidence_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Evidence Ids",
+                "type": "array"
+              },
+              "reviewed_warning_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Warning Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "action"
+            ],
+            "title": "CardAction",
+            "type": "object"
+          }
+        },
+        "card show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "history",
+              "options": [
+                "--history"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "card submit": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "submit",
+                  "withdraw",
+                  "confirm",
+                  "reject",
+                  "needs_material",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reason"
+              },
+              "reviewed_evidence_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Evidence Ids",
+                "type": "array"
+              },
+              "reviewed_warning_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Warning Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "action"
+            ],
+            "title": "CardAction",
+            "type": "object"
+          }
+        },
+        "card update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CardContent": {
+                "additionalProperties": false,
+                "properties": {
+                  "deviation": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Deviation"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "deviation_note": {
+                    "anyOf": [
+                      {
+                        "maxLength": 10000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Deviation Note"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/EvidenceInput"
+                    },
+                    "maxItems": 100,
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "response_kind": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ResponseKind"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "response_text": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Response Text"
+                  }
+                },
+                "title": "CardContent",
+                "type": "object"
+              },
+              "Deviation": {
+                "enum": [
+                  "none",
+                  "positive",
+                  "negative"
+                ],
+                "type": "string"
+              },
+              "EvidenceInput": {
+                "discriminator": {
+                  "mapping": {
+                    "certificate": "#/$defs/ResourceEvidenceInput",
+                    "certificate_pdf_page": "#/$defs/PageEvidenceInput",
+                    "feature": "#/$defs/ResourceEvidenceInput",
+                    "org_profile": "#/$defs/ResourceEvidenceInput",
+                    "product": "#/$defs/ResourceEvidenceInput"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/ResourceEvidenceInput"
+                  },
+                  {
+                    "$ref": "#/$defs/PageEvidenceInput"
+                  }
+                ]
+              },
+              "PageEvidenceInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence_source_id": {
+                    "format": "uuid",
+                    "title": "Evidence Source Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "certificate_pdf_page",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "evidence_source_id",
+                  "quote"
+                ],
+                "title": "PageEvidenceInput",
+                "type": "object"
+              },
+              "ResourceEvidenceInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "field_path": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Field Path",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "product",
+                      "feature",
+                      "certificate",
+                      "org_profile"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  },
+                  "selection_id": {
+                    "format": "uuid",
+                    "title": "Selection Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "selection_id",
+                  "field_path",
+                  "quote"
+                ],
+                "title": "ResourceEvidenceInput",
+                "type": "object"
+              },
+              "ResponseKind": {
+                "enum": [
+                  "evidence",
+                  "commitment"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "content": {
+                "$ref": "#/$defs/CardContent"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "content"
+            ],
+            "title": "CardUpdate",
+            "type": "object"
+          }
+        },
+        "card withdraw": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "submit",
+                  "withdraw",
+                  "confirm",
+                  "reject",
+                  "needs_material",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "anyOf": [
+                  {
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reason"
+              },
+              "reviewed_evidence_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Evidence Ids",
+                "type": "array"
+              },
+              "reviewed_warning_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Warning Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "action"
+            ],
+            "title": "CardAction",
+            "type": "object"
+          }
+        },
+        "draft": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "extraction_job_id"
+            ],
+            "title": "DraftRequest",
+            "type": "object"
+          }
+        },
+        "draft list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "draft show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
         },
         "evidence source add": {
           "cli_parameters": [
@@ -4694,6 +7177,60 @@
           ],
           "input": null
         },
+        "task redaction set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "model_redaction_enabled": {
+                "title": "Model Redaction Enabled",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "model_redaction_enabled"
+            ],
+            "title": "TaskRedactionSet",
+            "type": "object"
+          }
+        },
         "task resource add": {
           "cli_parameters": [
             {
@@ -5545,6 +8082,24 @@
     "warnings": [
       "Company metadata is a declaration; authenticity, performance and qualification have not been verified"
     ]
+  },
+  "task redaction set": {
+    "command": "task redaction set",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "changed_by": "00000000-0000-0000-0000-000000000001",
+      "model_redaction_enabled": false,
+      "revision": 2,
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
   },
   "task resource add": {
     "command": "task resource add",

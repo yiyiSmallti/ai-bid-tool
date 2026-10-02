@@ -7,6 +7,9 @@ from bid_cli.main import main
 from cryptography.fernet import Fernet
 
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
+IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
+IDENTIFIER_3 = "00000000-0000-0000-0000-000000000003"
+IDENTIFIER_4 = "00000000-0000-0000-0000-000000000004"
 PRODUCT = {
     "id": IDENTIFIER,
     "org_id": IDENTIFIER,
@@ -219,6 +222,138 @@ SOURCE_WARNINGS = [
     "Source is an unconfirmed user-supplied PDF page; authenticity and eligibility are not verified; never eligible for draft/export"
 ]
 
+CLAUSE = {
+    "document_id": IDENTIFIER,
+    "chunk_id": IDENTIFIER,
+    "page": 1,
+    "location": None,
+    "quote": "Synthetic source",
+}
+EVIDENCE = {
+    "id": IDENTIFIER,
+    "org_id": IDENTIFIER,
+    "task_id": IDENTIFIER,
+    "card_id": IDENTIFIER_2,
+    "input": {
+        "kind": "product",
+        "selection_id": IDENTIFIER,
+        "field_path": "name",
+        "quote": "Synthetic product",
+    },
+    "selection_id": IDENTIFIER,
+    "resource_revision_id": IDENTIFIER,
+    "material_kind": "declaration",
+    "quote_check": "exact_field_match",
+    "source_archive": None,
+    "confirmed_by": IDENTIFIER,
+    "confirmed_at": "2026-10-01T00:00:00+00:00",
+    "active_selection": True,
+}
+CARD = {
+    "id": IDENTIFIER,
+    "org_id": IDENTIFIER,
+    "task_id": IDENTIFIER,
+    "extraction_job_id": IDENTIFIER,
+    "requirement_id": IDENTIFIER,
+    "revision": 1,
+    "revision_id": IDENTIFIER,
+    "state": "draft",
+    "review_domain": "technical",
+    "disposition": "respond",
+    "disposition_by": IDENTIFIER,
+    "disposition_at": "2026-10-01T00:00:00+00:00",
+    "suggested_disposition": None,
+    "origin": "human",
+    "actor_kind": "session",
+    "model_job_id": None,
+    "review_hint": None,
+    "source": CLAUSE,
+    "content": {
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date.",
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+    },
+    "evidence": [],
+    "confirmed_by": None,
+    "confirmed_at": None,
+    "reason": None,
+    "reviewed_warning_codes": [],
+    "warning_codes": [],
+    "eligibility": "unconfirmed",
+}
+DRAFT = {
+    "id": IDENTIFIER,
+    "org_id": IDENTIFIER,
+    "task_id": IDENTIFIER,
+    "extraction_job_id": IDENTIFIER,
+    "generation_job_id": IDENTIFIER,
+    "status": "draft",
+    "completion": "partial",
+    "validity": "current",
+    "input_hash": "e" * 64,
+    "tables": {
+        "substantive": [],
+        "commercial": [
+            {
+                "requirement_id": IDENTIFIER,
+                "card_id": IDENTIFIER,
+                "card_revision_id": IDENTIFIER,
+                "table": "commercial",
+                "category": "qualification",
+                "starred": False,
+                "tender_clause": CLAUSE,
+                "location_label": "Page 1",
+                "response_kind": "commitment",
+                "response_text": "We commit to the stated delivery date.",
+                "deviation": "none",
+                "deviation_note": "The offered delivery date is identical.",
+                "evidence": [],
+            }
+        ],
+        "technical": [
+            {
+                "requirement_id": IDENTIFIER_2,
+                "card_id": IDENTIFIER_2,
+                "card_revision_id": IDENTIFIER_2,
+                "table": "technical",
+                "category": "technical",
+                "starred": False,
+                "tender_clause": CLAUSE,
+                "location_label": "Page 1",
+                "response_kind": "evidence",
+                "response_text": "The selected product has the named capability.",
+                "deviation": "negative",
+                "deviation_note": "One optional mode is not offered.",
+                "evidence": [EVIDENCE],
+            }
+        ],
+    },
+    "comply_only": [
+        {
+            "requirement_id": IDENTIFIER_3,
+            "card_id": IDENTIFIER_3,
+            "card_revision_id": IDENTIFIER_3,
+            "tender_clause": CLAUSE,
+            "location_label": "Page 1",
+            "disposition_by": IDENTIFIER,
+            "disposition_at": "2026-10-01T00:00:00+00:00",
+        }
+    ],
+    "gaps": [
+        {
+            "requirement_id": IDENTIFIER_4,
+            "card_id": None,
+            "card_revision_id": None,
+            "tender_clause": CLAUSE,
+            "location_label": "Page 1",
+            "reasons": ["missing_card"],
+        }
+    ],
+    "invalidated_requirements": [],
+}
+
 
 async def fake_source_download(self, source_id, output):
     # Contract fixture only; real rendering/transport is tested independently.
@@ -391,6 +526,59 @@ async def fake_request(self, method, path, **kwargs):
         data = {"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}
     elif path == "/tasks":
         items = [{"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}]
+    elif path.endswith("/model-redaction"):
+        data = {
+            "task_id": IDENTIFIER,
+            "revision": 2,
+            "model_redaction_enabled": False,
+            "changed_by": IDENTIFIER,
+        }
+    elif path.endswith("/cards/dispositions"):
+        data = {"correlation_id": IDENTIFIER, "updated": 1}
+        items = [CARD]
+    elif path.endswith("/cards"):
+        if method == "POST":
+            data = CARD
+        else:
+            data = {"task_id": IDENTIFIER, "extraction_job_id": IDENTIFIER}
+            items = [
+                {
+                    "requirement_id": IDENTIFIER,
+                    "source": CLAUSE,
+                    "status": "draft",
+                    "card": CARD,
+                }
+            ]
+    elif path.startswith("/cards/"):
+        data = CARD
+        if kwargs.get("params", {}).get("history") == "true":
+            items = [CARD]
+    elif path.endswith("/drafts"):
+        if method == "POST":
+            data = {"job_id": IDENTIFIER, "status": "queued", "cached": False}
+        else:
+            data = {"task_id": IDENTIFIER, "extraction_job_id": IDENTIFIER}
+            items = [
+                {
+                    "id": IDENTIFIER,
+                    "task_id": IDENTIFIER,
+                    "extraction_job_id": IDENTIFIER,
+                    "generation_job_id": IDENTIFIER,
+                    "completion": "partial",
+                    "validity": "current",
+                    "status": "draft",
+                    "input_hash": "e" * 64,
+                    "invalidated_requirements": [],
+                    "summary": {
+                        "rows": 2,
+                        "comply_only": 1,
+                        "gaps": 1,
+                        "negative_deviations": 1,
+                    },
+                }
+            ]
+    elif path.startswith("/drafts/"):
+        data = DRAFT
     elif path.startswith("/resources/products"):
         if method == "POST":
             data = PRODUCT
@@ -521,9 +709,15 @@ async def fake_request(self, method, path, **kwargs):
     elif path.startswith("/jobs/"):
         data = {
             "id": IDENTIFIER,
-            "kind": "parse",
+            "kind": "draft",
             "status": "succeeded",
-            "result": {"pages": 1},
+            "result": {
+                "draft_id": IDENTIFIER,
+                "completion": "partial",
+                "warnings": [f"missing_card:{IDENTIFIER_4}"],
+                "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+                "exit_code": 5,
+            },
             "error": None,
             "attempts": 1,
         }
@@ -630,6 +824,51 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
     scan_file.write_bytes(pdf_bytes)
     evidence_input = tmp_path / "source.json"
     evidence_input.write_text(json.dumps({"task_certificate_id": IDENTIFIER, "page": 1}))
+    card_create_input = tmp_path / "card-create.json"
+    card_update_input = tmp_path / "card-update.json"
+    card_classify_input = tmp_path / "card-classify.json"
+    disposition_input = tmp_path / "card-disposition.json"
+    redaction_input = tmp_path / "redaction.json"
+    card_content = {
+        "response_kind": "commitment",
+        "response_text": "We commit to the stated delivery date.",
+        "deviation": "none",
+        "deviation_note": "The offered delivery date is identical.",
+        "evidence": [],
+    }
+    card_create_input.write_text(
+        json.dumps(
+            {
+                "extraction_job_id": IDENTIFIER,
+                "requirement_id": IDENTIFIER,
+                "content": card_content,
+            }
+        )
+    )
+    card_update_input.write_text(json.dumps({"expected_revision": 1, "content": card_content}))
+    card_classify_input.write_text(
+        json.dumps(
+            {"expected_revision": 1, "review_domain": "technical", "reason": "Assigned owner"}
+        )
+    )
+    disposition_input.write_text(
+        json.dumps(
+            {
+                "extraction_job_id": IDENTIFIER,
+                "items": [
+                    {
+                        "requirement_id": IDENTIFIER,
+                        "expected_revision": 1,
+                        "disposition": "respond",
+                        "reason": "Requires a response",
+                    }
+                ],
+            }
+        )
+    )
+    redaction_input.write_text(
+        json.dumps({"expected_revision": 1, "model_redaction_enabled": False})
+    )
     platform_model_input = tmp_path / "platform-model.json"
     platform_model_input.write_text(
         json.dumps(
@@ -648,6 +887,48 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "org use": ["org", "use", IDENTIFIER],
         "task create": ["task", "create", "--name", "Synthetic task"],
         "task list": ["task", "list"],
+        "task redaction set": [
+            "task", "redaction", "set", "--task", IDENTIFIER, "--input", str(redaction_input),
+        ],
+        "card list": ["card", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
+        "card show": ["card", "show", "--id", IDENTIFIER, "--history"],
+        "card create": [
+            "card", "create", "--task", IDENTIFIER, "--input", str(card_create_input),
+        ],
+        "card update": [
+            "card", "update", "--id", IDENTIFIER, "--input", str(card_update_input),
+        ],
+        "card classify": [
+            "card", "classify", "--id", IDENTIFIER, "--input", str(card_classify_input),
+        ],
+        "card disposition": [
+            "card", "disposition", "--task", IDENTIFIER, "--input", str(disposition_input),
+        ],
+        "card submit": [
+            "card", "submit", "--id", IDENTIFIER, "--expected-revision", "1",
+        ],
+        "card withdraw": [
+            "card", "withdraw", "--id", IDENTIFIER, "--expected-revision", "1", "--reason", "Edit",
+        ],
+        "card confirm": [
+            "card", "confirm", "--id", IDENTIFIER, "--expected-revision", "1",
+            "--evidence", IDENTIFIER, "--reviewed-warning", "proof_material_required",
+            "--reason", "Reviewed source page",
+        ],
+        "card reject": [
+            "card", "reject", "--id", IDENTIFIER, "--expected-revision", "1", "--reason", "Incorrect",
+        ],
+        "card needs-material": [
+            "card", "needs-material", "--id", IDENTIFIER, "--expected-revision", "1",
+            "--reason", "Certificate page is missing",
+        ],
+        "card reopen": [
+            "card", "reopen", "--id", IDENTIFIER, "--expected-revision", "1",
+            "--reason", "Material changed",
+        ],
+        "draft": ["draft", "--task", IDENTIFIER, "--job", IDENTIFIER, "--wait"],
+        "draft show": ["draft", "show", "--id", IDENTIFIER],
+        "draft list": ["draft", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
         "resource product add": ["resource", "product", "add", "--input", str(product_input)],
         "resource product list": ["resource", "product", "list"],
         "resource product update": [
@@ -869,8 +1150,14 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "schema": ["schema"],
     }  # fmt: skip
     actual = {}
+    partial_commands = {"draft", "draft show", "job status", "job wait"}
     for name, args in commands.items():
-        main([*common, *args, "--json"])
+        try:
+            main([*common, *args, "--json"])
+        except SystemExit as error:
+            assert name in partial_commands and error.code == 5
+        else:
+            assert name not in partial_commands
         body = json.loads(capsys.readouterr().out)
         body["duration_ms"] = 0
         if "encrypted_token_file" in body["data"]:

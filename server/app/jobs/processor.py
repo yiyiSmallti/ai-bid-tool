@@ -69,7 +69,7 @@ class Processor:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, document.id
             reasoning = current.reasoning
-            llm = await self.resolve(session) if self.resolve else self.llm
+            llm = await self.resolve(session) if self.resolve and kind != "draft" else self.llm
             key, suffix, expected_hash = (
                 document.storage_key,
                 Path(document.name).suffix.lower(),
@@ -104,6 +104,22 @@ class Processor:
                 return recognized
 
         try:
+            if kind == "draft":
+                from app.services.drafts import complete_draft
+                from app.services.response_cards import task_lock
+
+                async with self.db.transaction(org_id) as session:
+                    # Submission and selection changes use this same lock order.
+                    await task_lock(session, task_id)
+                    current = await session.scalar(
+                        select(Job).where(Job.id == job_id).with_for_update()
+                    )
+                    if current is None or current.status != "running" or current.run_id != run_id:
+                        return
+                    result = await complete_draft(session, current, self.storage)
+                    current.status, current.result, current.error = "succeeded", result, None
+                    current.finished_at = datetime.now(UTC)
+                return
             if kind == "parse":
                 content = await self.storage.read(org_id, key)
                 if hashlib.sha256(content).hexdigest() != expected_hash:
@@ -268,7 +284,7 @@ class Processor:
             if isinstance(exc, ServiceError):
                 error = {"code": exc.code, "message": exc.message, "exit_code": exc.exit_code}
                 # Exit code 3 marks transient failures such as object storage outages.
-                retryable = exc.exit_code == 3
+                retryable = exc.exit_code == 3 and exc.code != "draft_input_changed"
             elif isinstance(exc, ProviderFailure):
                 error = {
                     "code": exc.code,
