@@ -73,9 +73,9 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B01 tender parse | PDF 按页文本、扫描页本地 OCR；Word 按段落与表格单元格解析，按文档位置引用 | PDF 段落/表格/坐标结构、OCR 坐标入库；Word 文本框与页眉页脚 | 新大型依赖先说明 |
 | B02 req extract | Anthropic 与 OpenAI 兼容 adapter、并发批次、引用逐条核验、★ 规则并集、缓存、引用不通过逐条拒绝并报告、按官方档位选择推理强度与抽取历史；样例 Word 招标文件实测 446/449 条引用通过 | 要求确认入口；被拒条目的人工补录；单位后台的抽取页面 | 新契约 |
 | B03 参数判定 | `condition` 为自由 dict | 类型化 param/op/value/unit、单位换算、模糊表达转人工 | 新契约 |
-| B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认 | 网页/白皮书来源、区域截图（草案见 [screenshots.md](screenshots.md)）、自动满足判定 | 搜索/视觉依赖 API |
+| B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认 | 网页/白皮书来源、区域截图（契约见 [screenshots.md](screenshots.md)）、自动满足判定 | 搜索/视觉依赖 API |
 | B05 evidence stamp | 未实施 | Rust 裁剪、框选、溯源水印、哈希；草案见 [annotation.md](annotation.md) | 待批准 |
-| B06 ui mock | 未实施 | 真实截图优先、原型强制水印、软件响应表；草案见 [screenshots.md](screenshots.md) | 待批准 |
+| B06 ui mock | 未实施 | 真实截图优先、模型生成原型（导出前人工决定保留或替换）、软件响应表；契约见 [screenshots.md](screenshots.md) | 已批准 |
 | B07 人工确认 | 卡片与 Evidence 按职责人工确认、不可变修订、原子处置、模型提议与消费关口；决定见 [ADR 0005](../adr/0005-human-confirmed-responses.md) | 会签、任务成员与看板交互 | 新契约 |
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
 | B09 check | 未实施 | 标书与要求对照、废标/扣分风险、误报处理 | 语义校验依赖 LLM |
@@ -88,7 +88,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | --- | --- | --- | --- |
 | P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身 | check/score/agent 所需的通用结构化调用 | 新契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
-| P03 Vision/Search/Embedding/Browser | 未实施 | 四个协议与实现 | 本地 Browser 可独立 |
+| P03 Vision/Search/Embedding/Browser | 未实施 | 四个协议与实现；Browser 的隔离执行见 [sandbox.md](sandbox.md) | 本地 Browser 可独立 |
 | P04 ProviderConfig | 平台模型目录、平台默认模型及按售价计费 | 单位自带模型、单位自选平台模型、`provider set/test`；草案见 [provider-config.md](provider-config.md) | 待批准 |
 | P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草部分成功 | 跨能力限流与统一进度 | 新契约 |
 | M01 记忆存储 | 未实施 | 四层记忆 CRUD、候选审批、失效 | 全局来源待定 |
@@ -96,7 +96,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | M03 自动候选 | 未实施 | 驳回/修改生成 candidate、评测样本 | 依赖 B07 |
 | U01 看板 | 未实施 | Vue 3 看板、资源/配置/记忆管理页；招标与审阅页面契约见 [org-console.md](org-console.md) | 已批准 |
 | U02 卡片/SSE | API/CLI 卡片修订与状态迁移 | 看板交互、SSE | 界面契约 |
-| A01 内置 agent | 未实施 | CLI 工具映射、无确认/导出权限、状态恢复、预算询问 | 编排依赖 API |
+| A01 内置 agent | 未实施 | CLI 工具映射、无确认/导出权限、状态恢复、预算询问；执行环境边界见 [sandbox.md](sandbox.md) | 编排依赖 API |
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记、可选 `mcp serve` | 新接口确认 |
 | C01 CLI 契约 | Result 七键、schema 注册、统一退出码、两种模式 | 后续命令、主版本兼容周期 | 新命令确认 |
 | C02 缓存 | 模型起草固定输入/版本缓存，保留人工确认，组表重算依赖 | 其他能力的跨依赖失效 | 新契约 |
