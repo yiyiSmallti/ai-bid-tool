@@ -536,6 +536,20 @@ async def fake_request(self, method, path, **kwargs):
     elif path.endswith("/cards/dispositions"):
         data = {"correlation_id": IDENTIFIER, "updated": 1}
         items = [CARD]
+    elif path.endswith("/cards/generations"):
+        assert kwargs["json"] == {
+            "extraction_job_id": IDENTIFIER,
+            "requirement_ids": [IDENTIFIER, IDENTIFIER_2],
+            "reasoning": "high",
+            "dry_run": False,
+            "retry": True,
+        }
+        data = {
+            "job_id": IDENTIFIER_2,
+            "generation_job_id": IDENTIFIER_2,
+            "status": "queued",
+            "cached": False,
+        }
     elif path.endswith("/cards"):
         if method == "POST":
             data = CARD
@@ -706,6 +720,30 @@ async def fake_request(self, method, path, **kwargs):
         ]
     elif path.endswith("/cancel"):
         data = {"id": IDENTIFIER, "status": "cancelled"}
+    elif path == f"/jobs/{IDENTIFIER_2}":
+        data = {
+            "id": IDENTIFIER_2,
+            "kind": "card_generate",
+            "status": "succeeded",
+            "error": None,
+            "attempts": 1,
+            "reasoning": "high",
+            "result": {
+                "generation_job_id": IDENTIFIER_2,
+                "completion": "partial",
+                "created_revision_ids": [IDENTIFIER_3],
+                "skipped": {},
+                "rejected_references": {IDENTIFIER: ["m1:quote_not_sent"]},
+                "needs_material": [IDENTIFIER],
+                "usage_record_ids": [IDENTIFIER_4],
+                "charge": "0.001",
+                "billing_currency": "USD",
+                "stop_reason": None,
+                "warnings": [f"needs_material:{IDENTIFIER}"],
+                "cost": {"llm_tokens": 1000, "ocr_pages": 0, "usd": None},
+                "exit_code": 5,
+            },
+        }
     elif path.startswith("/jobs/"):
         data = {
             "id": IDENTIFIER,
@@ -933,6 +971,11 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "card show": ["card", "show", "--id", IDENTIFIER, "--history"],
         "card create": [
             "card", "create", "--task", IDENTIFIER, "--input", str(card_create_input),
+        ],
+        "card generate": [
+            "card", "generate", "--task", IDENTIFIER, "--job", IDENTIFIER,
+            "--requirement", IDENTIFIER, "--requirement", IDENTIFIER_2,
+            "--reasoning", "high", "--retry", "--wait",
         ],
         "card update": [
             "card", "update", "--id", IDENTIFIER, "--input", str(card_update_input),
@@ -1191,7 +1234,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "schema": ["schema"],
     }  # fmt: skip
     actual = {}
-    partial_commands = {"draft", "draft show", "job status", "job wait"}
+    partial_commands = {"card generate", "draft", "draft show", "job status", "job wait"}
     for name, args in commands.items():
         try:
             main([*common, *args, "--json"])

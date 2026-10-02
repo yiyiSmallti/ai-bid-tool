@@ -29,9 +29,16 @@ from app.models.entities import (
     TaskResource,
     User,
 )
-from app.models.response_cards import CardEvidenceLink, Evidence, ResponseCard, ResponseCardRevision
+from app.models.response_cards import (
+    CardEvidenceLink,
+    CardGenerationRun,
+    Evidence,
+    ResponseCard,
+    ResponseCardRevision,
+)
 from app.providers.storage import Storage
 from app.schemas.response_card_contracts import (
+    RESOURCE_FIELD_PATHS,
     CardAction,
     CardClassify,
     CardContent,
@@ -55,7 +62,7 @@ MATERIALS = {
         "task_resource_id",
         "product_revision_id",
         "resource:read",
-        {"name", "vendor", "model", "model_version", "official_url", "whitepaper_url"},
+        RESOURCE_FIELD_PATHS["product"],
     ),
     "feature": (
         TaskFeature,
@@ -63,7 +70,7 @@ MATERIALS = {
         "task_feature_id",
         "feature_revision_id",
         "resource:read",
-        {"product_id", "name", "description", "status"},
+        RESOURCE_FIELD_PATHS["feature"],
     ),
     "certificate": (
         TaskCertificate,
@@ -71,7 +78,7 @@ MATERIALS = {
         "task_certificate_id",
         "certificate_revision_id",
         "certificate:read",
-        {"kind", "name", "number", "valid_from", "valid_until"},
+        RESOURCE_FIELD_PATHS["certificate"],
     ),
     "org_profile": (
         TaskOrgProfile,
@@ -79,7 +86,7 @@ MATERIALS = {
         "task_org_profile_id",
         "profile_revision_id",
         "profile:read",
-        {"name", "registration_details", "performance_summary", "standard_wording"},
+        RESOURCE_FIELD_PATHS["org_profile"],
     ),
 }
 CONTENT_FIELDS = ("response_kind", "response_text", "deviation", "deviation_note")
@@ -91,6 +98,7 @@ COPY_FIELDS = (
     "disposition_at",
     "suggested_disposition",
     "review_hint",
+    "model_job_id",
 )
 
 
@@ -433,13 +441,14 @@ async def card_view(
         await evidence_view(session, actor, row)
         for row in await linked_evidence(session, revision.id)
     ]
+    generation_stale = await generation_materials_stale(session, actor, revision)
     if not await citation_valid(session, requirement):
         eligibility = "invalid_citation"
     elif revision_quote_hash(revision, requirement) != quote_hash(requirement.quote):
         eligibility = "needs_reconfirmation"
     elif revision.disposition == "comply_only":
         eligibility = "comply_only"
-    elif any(not row["active_selection"] for row in evidence):
+    elif generation_stale or any(not row["active_selection"] for row in evidence):
         eligibility = "stale_material"
     elif revision.review_domain is None:
         eligibility = "unclassified"
@@ -482,6 +491,34 @@ async def card_view(
     ).model_dump(mode="json")
 
 
+async def generation_materials_stale(
+    session: AsyncSession, actor: Identity, revision: ResponseCardRevision
+) -> bool:
+    if revision.model_job_id is None:
+        return False
+    run = await session.scalar(
+        select(CardGenerationRun).where(
+            CardGenerationRun.generation_job_id == revision.model_job_id
+        )
+    )
+    if run is None:
+        fail("missing_generation_run", "Model response has no fixed input record", 500, 4)
+    stale = False
+    # Every field/page supplied to this proposal could influence its text, even
+    # when it was not cited. Human content replacement starts a new dependency set.
+    for entry in run.input_manifest["materials"]:
+        if entry["kind"] == "certificate_pdf_page":
+            _, selected, _ = await require_source(session, actor, UUID(entry["evidence_source_id"]))
+        else:
+            model, _, _, _, scope, _ = MATERIALS[entry["kind"]]
+            actor.require(scope)
+            selected = await session.get(model, UUID(entry["selection_id"]))
+            if selected is None:
+                raise not_found()
+        stale |= not selected.active
+    return stale
+
+
 async def append_revision(
     session: AsyncSession,
     actor: Identity,
@@ -499,7 +536,7 @@ async def append_revision(
         raise not_found()
     quote_sha256 = (
         quote_hash(requirement.quote)
-        if previous is None or action in {"update", "disposition", "reopen", "withdraw"}
+        if previous is None or action in {"update", "generate", "disposition", "reopen", "withdraw"}
         else revision_quote_hash(previous, requirement)
     )
     revision = ResponseCardRevision(
@@ -509,7 +546,7 @@ async def append_revision(
         revision=number,
         quote_sha256=quote_sha256,
         **({key: getattr(previous, key) for key in COPY_FIELDS} | values if previous else values),
-        origin="human" if actor.actor_kind == "session" else "agent",
+        origin={"session": "human", "worker": "model"}.get(actor.actor_kind, "agent"),
         actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind=actor.actor_kind,
@@ -646,6 +683,7 @@ async def update_card(
             **body.content.model_dump(exclude={"evidence"}),
             "state": "draft",
             "review_hint": None,
+            "model_job_id": None,
         },
     )
     return await card_view(session, actor, card, revision, requirement)

@@ -45,8 +45,9 @@ and the concurrent spending bound are defined in
 [prepaid-billing.md](prepaid-billing.md). Job costs are rebuilt from persisted
 usage when an attempt is claimed, on completion/failure and after each call,
 so a retry does not reset charges. No partial extraction is published on a
-guard failure. Model card generation should activate the same execution
-context while applying its own partial-result contract.
+guard failure. Model card generation activates the same execution context;
+its publication and partial-result rules are defined in
+[response-cards.md](response-cards.md#model-proposals).
 
 Configure lease and heartbeat settings using
 [development.md](../guides/development.md#configure-job-guards).

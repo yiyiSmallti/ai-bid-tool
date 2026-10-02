@@ -1,4 +1,4 @@
-# LLM extraction providers
+# LLM extraction and drafting providers
 
 ## Problem
 
@@ -132,6 +132,44 @@ USD is computed from configured per-million-token prices, or `null` when
 either price is missing. Anthropic cached input tokens are included in input
 usage at those configured prices.
 
+### Structured response drafting
+
+`LLMProvider.draft(requirements, materials)` is implemented by both HTTP adapters
+through [drafting.py](../../server/app/providers/drafting.py). It uses the platform
+default model and `with_reasoning`, the same per-request timeout, request options,
+finite transient retries, reservation and `HTTPExtractor.post` settlement. The
+extraction prompt, wire format, parallel batches, gap filling and citation
+post-processing retain their own entry point and behavior.
+
+The drafting wire schema describes per-requirement response proposals. Anthropic
+uses `output_config.format`; OpenAI-compatible endpoints use JSON schema or JSON
+object mode with the schema in the system prompt. Every request receives only
+the fixed outbound snapshot described in
+[model-drafting-redaction.md](model-drafting-redaction.md). The model is instructed
+to treat supplied text as data, retain negative deviations, distinguish material
+declarations from proof and leave unavailable evidence empty.
+
+`groups` budgets serialized requirements together with the complete material
+text. Whole requirements are processed sequentially; a large single input gets
+its own batch. Truncated or malformed responses halve the requirement batch;
+one requirement is the terminal boundary. No field/page text is spliced, no
+previous response is supplied and no drafting gap-fill pass runs. `plan_calls`
+receives the planned first-pass batch count before any requests, so recursive
+halves and transient retries share the correctly scaled cumulative ceiling.
+
+Each completed batch retains its exact request-local reference map for service
+validation. Later provider/admission failure stops new requests and returns
+completed batches plus a safe error code; the worker applies the partial-result
+and review rules in [response-cards.md](response-cards.md#model-proposals).
+Immediate accounting precedes parsing for every HTTP response. Drafting's
+`safe_metadata` mode suppresses arbitrary vendor error strings and untrusted
+model-name echoes before persistence. It records the configured model or a
+recognized Anthropic fallback identity. An unrecognized reported model is
+accounted as `unverified-model` and fails with `invalid_provider_model`; no
+arbitrary reported label is persisted. Sent text and raw responses never enter
+usage, audit, errors or regular logs. Usage's `job_id` links each call to the
+fixed reasoning level and its generation snapshot.
+
 ## Pitfalls
 
 - Error messages keep only the HTTP status and vendor error type. Response
@@ -159,9 +197,10 @@ usage at those configured prices.
   `EXTRACTION_VERSION` for post-processing or citation semantics, and
   `ADAPTER_VERSION` for adapter or wire-schema compatibility changes.
 - Budget exhaustion is an atomic extraction failure: already verified
-  intermediate items are not saved as a partial requirement list. The future
-  card-generation contract may keep verified partial results, but must reuse
-  call accounting and attempt guards. Lease and cancellation behavior are in
+  intermediate items are not saved as a partial requirement list. Consumers
+  must not infer that extraction publishes partial requirements from
+  drafting's separate partial-result policy. Both reuse call accounting and
+  attempt guards. Lease and cancellation behavior are in
   [background-jobs.md](background-jobs.md).
 
 ## Code
@@ -169,8 +208,10 @@ usage at those configured prices.
 - [server/app/providers/llm.py](../../server/app/providers/llm.py): `HTTPExtractor.extract`, `uncovered_parameters`, `parameter_segments`, `AnthropicExtractor`, `OpenAICompatibleExtractor`, `create_llm`, `WIRE_SCHEMA`.
 - [server/app/services/extraction.py](../../server/app/services/extraction.py): exact-span location, citation rejection, starred-source merging, and fingerprints.
 - [server/app/providers/base.py](../../server/app/providers/base.py): `ProviderFailure` with `code` and `usage`.
+- [server/app/providers/drafting.py](../../server/app/providers/drafting.py): structured proposal prompt/schema, batches and retry boundaries.
 - [server/app/jobs/processor.py](../../server/app/jobs/processor.py): usage recording and job states.
 - [server/app/core/config.py](../../server/app/core/config.py): `llm_*` settings and startup validation.
 - [server/tests/test_llm_providers.py](../../server/tests/test_llm_providers.py): end-to-end cases through the API and job processor.
+- [server/tests/test_card_generation.py](../../server/tests/test_card_generation.py): drafting calls through both adapters with fixed inputs and per-call billing.
 - [server/tests/test_parameter_extraction.py](../../server/tests/test_parameter_extraction.py): parameter coverage, original positions, rejection, deduplication and per-call accounting through the API and job processor.
 - [evals/extract_tender.py](../../evals/extract_tender.py): real-vendor run on a public tender.

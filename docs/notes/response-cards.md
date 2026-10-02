@@ -13,8 +13,9 @@ than presenting an incomplete table as a complete bid.
 Follow [Review responses and assemble a draft](../guides/cli.md#review-responses-and-assemble-a-draft).
 The shared inputs and views are defined in
 [response_card_contracts.py](../../server/app/schemas/response_card_contracts.py).
-The wider workflow, including model proposals and outbound redaction, is specified
-in [review-and-draft.md](../plan/review-and-draft.md).
+The review decisions and their rationale are recorded in
+[ADR 0005](../adr/0005-human-confirmed-responses.md). The outbound input boundary is
+defined in [model-drafting-redaction.md](model-drafting-redaction.md).
 
 ## How it works
 
@@ -33,8 +34,20 @@ cards, bidders review commercial cards, and admins classify an unclassified draf
 or change the task redaction setting. Admin status does not confer a professional
 reviewer's authority. API token scopes exclude confirmation and export.
 
-The transition table in the approved contract governs submit, withdraw, confirm,
-reject, request-material, and reopen actions. Confirmation requires complete
+The service and database enforce these transitions:
+
+| From | Action | To |
+| --- | --- | --- |
+| No card | Create or generate | draft |
+| draft / rejected / needs_material | Edit or generate | draft |
+| draft | Submit | pending_review |
+| pending_review | Confirm / reject / request material | confirmed / rejected / needs_material |
+| pending_review | Withdraw with a reason | draft |
+| confirmed | Responsible human reopens with a reason | draft |
+
+Each action appends a revision. Pending and confirmed content cannot be replaced
+directly. A human `comply_only` decision protects content until the responsible
+reviewer changes that decision back to `respond`. Confirmation requires complete
 response text, deviation and explanation, an exact tender citation, and explicit
 review of every linked evidence ID and warning. An evidence response requires
 confirmed material; a commitment has no evidence. Confirmation records `respond`
@@ -51,6 +64,53 @@ page text. Human confirmation changes the Evidence's page review status; the
 Replacing a task selection invalidates dependent material. Selecting the old
 resource revision again creates another selection and does not revive the old
 Evidence. A confirmed card must be reopened, updated and reviewed again.
+
+### Model proposals
+
+`submit_generation` in [card_generation.py](../../server/app/services/card_generation.py)
+requires `card:generate`, `card:read`, `task:read` and every selected material's
+read grants. It fixes the successful extraction job, selected requirements,
+current card revision IDs, model/catalog identity, reasoning and versioned
+input manifest. The encrypted text snapshot lives in internal `jobs.result.submission`
+until publication; job status never exposes submission state. Publication appends
+an immutable `CardGenerationRun` with the same encrypted snapshot and public
+ID/hash manifest, satisfying the database's running-attempt insertion gate.
+
+The cache includes the input hash and expected revisions. An untouched model
+revision maps back to its generating run's expected revision for cache lookup,
+so repeating the same request reuses its paid result. A manual edit, new input,
+reasoning level, catalog revision, prompt/schema/adapter version or redaction
+setting changes the key. Retries keep the original encrypted input and cumulative
+call budget. Changed configuration fails explicitly before sending new text.
+
+The worker fixes `origin=model`, `actor_kind=worker`, `model_job_id` and `state=draft`.
+It never sets a human disposition or confirmer. Under the task lock it checks each
+expected revision again. Confirmed, pending and comply-only cards are reported as
+protected skips at submission and publication; concurrent edits report
+`revision_conflict`; a changed requirement quote/location reports
+`requirement_input_changed`. A proposal changing a recorded current negative deviation to
+none or positive is rejected. Missing/duplicate proposals and unknown requirement
+IDs are reported without storing their output text.
+
+Valid responses from completed batches may be published after a later provider
+or budget failure, with `completion=partial`, `stop_reason`, usage IDs and exit 5.
+Without a completed batch the job fails without cards. Lease loss, cancellation,
+heartbeat failure or accounting failure publishes no proposals. Protected skips
+alone do not cause partial completion; invalid references, missing proposals,
+revision conflicts and `needs_material` do. A successful partial job is terminal;
+repeat requests return it, while editing the unresolved card or changing inputs
+creates a new submission. Cost and admission behavior is defined in
+[prepaid-billing.md](prepaid-billing.md#admission-and-the-spending-bound).
+
+Every supplied field/page is a conservative dependency of the model's response,
+even if not cited. Submission, classification and review actions retain
+`model_job_id`; an explicit content replacement starts new dependencies. A
+model-generated commitment that received materials therefore becomes stale when
+one of those selections is replaced. A commitment generated without material
+inputs, a manually authored commitment and a comply-only decision have no such
+dependency. `generation_materials_stale` checks the full manifest and its read
+permissions. The database's `response_generation_materials_active` enforces the
+same dependency boundary during confirmation and assembly.
 
 The PostgreSQL gates in
 [0015_response_cards.py](../../server/migrations/versions/0015_response_cards.py)
@@ -121,11 +181,9 @@ text, response text, material quotes and credentials are not copied into logs.
 - Citation repair is not card repair. It leaves unlocatable requirements and all
   card revisions unchanged; the human review workflow is what renews a response
   or `comply_only` decision after a source quote changes.
-- The task redaction setting is persisted and protected, but its outbound behavior
-  belongs to the model drafting workflow. Changing it does not redact stored tender
-  text or rewrite existing responses.
-- Model proposal fields and the generation-run table reserve the approved data
-  contract; the command registry in [schema.py](../../cli/bid_cli/schema.py) defines
+- A changed redaction setting stops new calls from queued or running generation;
+  it does not alter stored tender text, prior responses or already issued calls.
+- The command registry in [schema.py](../../cli/bid_cli/schema.py) defines
   available commands. Export requires its own authorization and renewed evidence
   checks; a historical draft is not an export authorization.
 - Downgrade refuses to delete review history. Retain the schema when reverting
@@ -138,8 +196,11 @@ text, response text, material quotes and credentials are not copied into logs.
 - [services/response_cards.py](../../server/app/services/response_cards.py): actor checks, material resolution, revisions and human actions.
 - [services/citation_repair.py](../../server/app/services/citation_repair.py): preview-bound tenant-admin citation repair and hash-only audit metadata.
 - [services/drafts.py](../../server/app/services/drafts.py): manifests, complete assembly and historical validity.
+- [services/card_generation.py](../../server/app/services/card_generation.py): fixed inputs, cache, worker publication and partial results.
+- [server/migrations/versions/0018_generation_dependencies.py](../../server/migrations/versions/0018_generation_dependencies.py): model input dependency gates and catalog identity width.
 - [server/migrations/versions/0017_exact_citations.py](../../server/migrations/versions/0017_exact_citations.py): quote provenance and immutable revision hashes.
 - [api/response_cards.py](../../server/app/api/response_cards.py): authenticated API entry points.
 - [jobs/processor.py](../../server/app/jobs/processor.py): attempt-safe background publication.
 - [test_response_cards.py](../../server/tests/test_response_cards.py): API-to-worker workflows and repeatable synthetic artifact.
+- [test_card_generation.py](../../server/tests/test_card_generation.py): model-to-review chain, outbound privacy, references, costs, attempts and isolation with MockTransport.
 - [test_response_card_db.py](../../server/tests/test_response_card_db.py), [test_rls.py](../../server/tests/test_rls.py): direct SQL gates and tenant isolation.

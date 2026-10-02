@@ -192,18 +192,13 @@ class ModelCardProposal(_TrimmedContract):
     deviation_note: str = Field(min_length=1, max_length=10000)
     evidence: list[ModelEvidenceRef] = Field(default_factory=list, max_length=100)
 
-    @model_validator(mode="after")
-    def evidence_matches_response_kind(self):
-        if self.response_kind == "commitment" and self.evidence:
-            raise ValueError("commitment proposals cannot cite evidence")
-        return self
-
 
 class CardGenerateRequest(_TrimmedContract):
     extraction_job_id: UUID
     requirement_ids: list[UUID] | None = None
     reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
     dry_run: bool = False
+    retry: bool = False
 
     @field_validator("requirement_ids")
     @classmethod
@@ -220,16 +215,22 @@ class CardGeneratePreview(_TrimmedContract):
     selected_requirements: list[UUID]
     skipped: dict[UUID, str]
     input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
-    platform_model_id: str = Field(min_length=1)
-    model_revision: int = Field(ge=1)
+    platform_model_id: str | None = None
+    model_revision: int | None = Field(default=None, ge=1)
+    model: str
     reasoning: str | None = None
     model_redaction_enabled: bool
     input_refs: list[str]
+    input_manifest: dict
+    redaction_rule_version: str
     redacted_counts: dict[str, int]
     estimated_cost: Cost
     estimated_charge: Decimal | None = Field(default=None, ge=0)
     billing_currency: str = Field(min_length=3, max_length=3)
     cost_basis: Literal["known", "unknown"]
+    cost_basis_reason: str
+    estimate_kind: Literal["first_pass_upper_bound"] = "first_pass_upper_bound"
+    admission_blocker: str | None = None
     estimated_duration_ms: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
@@ -255,6 +256,7 @@ class CardGenerateResult(_TrimmedContract):
     usage_record_ids: list[UUID]
     charge: Decimal | None = Field(default=None, ge=0)
     billing_currency: str = Field(min_length=3, max_length=3)
+    stop_reason: str | None = None
 
 
 class EvidenceView(_TimestampContract):

@@ -6,6 +6,27 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-02：模型响应起草与外发遮挡
+
+- 新增 `bid card generate`、对应 API 和后台作业：按指定抽取作业及要求生成 model/worker 草稿，
+  提出处置建议、响应、偏离与候选引用；受保护卡片跳过，落盘复核版本，模型不能弱化已记录负偏离。
+- 提交固定并加密保存输入正文；清单限定为已选要求原文/位置、任务固定资源可引用字段及证书来源页
+  本地文本，公开预检只返回标识、哈希、遮挡状态、版本与命中数。默认遮挡金额、联系人/电话、
+  身份证号、银行账号，仅单位人类 admin 能关闭；每次厂商调用前重新检查权限和设置修订。
+- Anthropic 与 OpenAI 兼容 adapter 增加结构化起草，共用默认模型、官方 reasoning、逐次准入、
+  用量结算和预付扣费；起草分批、截断/格式错误拆分及瞬时重试均计费，首轮计划参与调用上限。
+  有效部分结果保留并返回退出码 5，未完成项和引用拒绝只报告标识及原因，不记录原始收发文本。
+- 模型局部引用同时核验实际发送文本和固定原文；无有效引用仍为需补材料的 evidence 草稿，
+  不自动转承诺。承诺多余引用丢弃并警示；候选证据和文字始终需要人工审阅确认。
+- 迁移 `0018` 扩大起草记录的 adapter 目录标识字段，并补充模型输入依赖在人工确认、旧稿失效和
+  组表时的数据库关口；不新增业务表，不改写历史。组表规则更新为 `response-draft-v3`。
+- 注册命令与 CLI JSON 快照，Result 七键及版本保持 `1.2`。原批准契约转换为
+  [ADR 0005](adr/0005-human-confirmed-responses.md)，机制见
+  [响应卡片](notes/response-cards.md)、[模型外发与遮挡](notes/model-drafting-redaction.md)和
+  [LLM 接入层](notes/llm-providers.md)，操作见 [CLI 指南](guides/cli.md#generate-model-response-proposals)。
+- 凭据未配置的平台模型不再先检查余额，抽取与起草直接以 `provider_unavailable` 说明原因。
+  由 Codex 实现，在真实数据库上验证并修正；当时的完整回归：768 项通过。
+
 ## 2026-10-02：要求引用精确原文与受控修复
 
 - 抽取引用先按 NFKC、弯直引号和空白规范化定位，再保存唯一命中的原文连续片段；模型原始引文另存
@@ -64,8 +85,8 @@ kind: changelog
 - API、本地/远程 CLI 和 `bid schema` 新增对应命令；保留 Result 七键及版本 `1.2`，
   有缺口的组表及其作业查询/等待使用部分成功退出码。机制见
   [response-cards.md](notes/response-cards.md)，操作见 [CLI 指南](guides/cli.md#review-responses-and-assemble-a-draft)。
-- 第二阶段继续使用 [批准契约](plan/review-and-draft.md) 实现模型起草和实际外发遮挡；
-  第一阶段不提供模型起草命令或导出。
+- 第一阶段预留模型起草与实际外发遮挡，未提供起草命令或导出；后续决策归档于
+  [ADR 0005](adr/0005-human-confirmed-responses.md)。
 - 样例招标文件开发环境冒烟：1,056 条要求全部列为无卡片缺口，其中 9 条为仅规范化匹配的 `invalid_citation`，
   组表以部分成功退出。当时的完整回归：680 项通过。
 

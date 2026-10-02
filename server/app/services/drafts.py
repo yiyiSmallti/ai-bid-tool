@@ -18,7 +18,7 @@ from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.resources import audit
 
-RULE_VERSION = "response-draft-v2"
+RULE_VERSION = "response-draft-v3"
 TABLES = ("substantive", "commercial", "technical")
 
 
@@ -83,7 +83,9 @@ async def assemble(session: AsyncSession, actor: Identity, task_id: UUID, job_id
                     )
                 if view["review_domain"] is None:
                     reasons.append("unclassified")
-                if any(not material["active_selection"] for material in view["evidence"]):
+                if await cards.generation_materials_stale(session, actor, revision) or any(
+                    not material["active_selection"] for material in view["evidence"]
+                ):
                     reasons.append("stale_material")
                 if eligibility == "needs_reconfirmation":
                     reasons.append("needs_reconfirmation")

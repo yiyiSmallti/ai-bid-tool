@@ -32,12 +32,13 @@ requires a reason, and writes an `adjust` entry. Both restore the caller's
 `app.current_org`. A trigger makes `redeemed` and `void` final, and the
 runtime role has no column grant that could mark a card redeemed.
 
-`require_funds` checks positive available funds at submission in
-[main.py](../../server/app/api/main.py). This check is advisory: every model
+`require_funds` checks positive available funds at extraction submission in
+[main.py](../../server/app/api/main.py) and drafting submission in
+[card_generation.py](../../server/app/services/card_generation.py). This check is advisory: every model
 request must also pass `JobExecution.admit` in
 [execution.py](../../server/app/jobs/execution.py), including split batches,
 gap filling and transient retries. The execution context is shared by model
-capabilities; future card generation must use the same context and
+capabilities; extraction and card generation use the same context and
 `accounted_call` in [calls.py](../../server/app/providers/calls.py).
 
 ### Admission and the spending bound

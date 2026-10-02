@@ -202,7 +202,7 @@ class CardGenerationRun(RunFields, Tenant, Base):
     redaction_rule_version: Mapped[str] = mapped_column(String(40))
     prompt_version: Mapped[str] = mapped_column(String(40))
     schema_version: Mapped[str] = mapped_column(String(40))
-    adapter_version: Mapped[str] = mapped_column(String(40))
+    adapter_version: Mapped[str] = mapped_column(String(100))
     encrypted_input: Mapped[str | None] = mapped_column(Text)
     result: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
     __table_args__ = run_constraints()

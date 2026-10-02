@@ -1,6 +1,9 @@
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from app.schemas.contracts import LLMResult, OCRText, ProviderUsage
+
+if TYPE_CHECKING:
+    from app.providers.drafting import DraftingOutput
 
 
 class ProviderFailure(Exception):
@@ -51,6 +54,8 @@ class LLMProvider(Protocol):
     test_only: bool
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult: ...
+
+    async def draft(self, requirements: list[dict], materials: list[dict]) -> "DraftingOutput": ...
 
 
 class OCRProvider(Protocol):

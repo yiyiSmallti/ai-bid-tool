@@ -89,21 +89,27 @@ class Processor:
                 Path(document.name).suffix.lower(),
                 document.sha256,
             )
-            chunks = [
-                dict(
-                    id=row.id,
-                    document_id=row.document_id,
-                    page=row.page,
-                    text=row.text,
-                    citation_verified=row.citation_verified,
-                    blocks=row.blocks,
-                )
-                for row in (
-                    await session.scalars(
-                        select(Chunk).where(Chunk.document_id == document_id).order_by(Chunk.seq)
+            chunks = (
+                []
+                if kind in {"draft", "card_generate"}
+                else [
+                    dict(
+                        id=row.id,
+                        document_id=row.document_id,
+                        page=row.page,
+                        text=row.text,
+                        citation_verified=row.citation_verified,
+                        blocks=row.blocks,
                     )
-                ).all()
-            ]
+                    for row in (
+                        await session.scalars(
+                            select(Chunk)
+                            .where(Chunk.document_id == document_id)
+                            .order_by(Chunk.seq)
+                        )
+                    ).all()
+                ]
+            )
 
         execution = JobExecution(self.settings, self.db, org_id, job_id, run_id)
         async with execution.activate():
@@ -120,6 +126,14 @@ class Processor:
                     return recognized
 
             try:
+                if kind == "card_generate":
+                    from app.services.card_generation import generate
+
+                    # Drafting uses only its encrypted submission snapshot, and every
+                    # HTTP call settles through this active JobExecution context.
+                    incremental = True
+                    await generate(execution, llm, self.storage)
+                    return
                 if kind == "draft":
                     from app.services.drafts import complete_draft
                     from app.services.response_cards import task_lock
@@ -306,7 +320,12 @@ class Processor:
                 if isinstance(exc, ServiceError):
                     error = {"code": exc.code, "message": exc.message, "exit_code": exc.exit_code}
                     # Exit code 3 marks transient failures such as object storage outages.
-                    retryable = exc.exit_code == 3 and exc.code != "draft_input_changed"
+                    retryable = exc.exit_code == 3 and exc.code not in {
+                        "draft_input_changed",
+                        "generation_input_changed",
+                        "generation_model_changed",
+                        "generation_rules_changed",
+                    }
                 elif isinstance(exc, ProviderFailure):
                     error = {
                         "code": exc.code,
@@ -337,5 +356,22 @@ class Processor:
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
+                    if kind == "card_generate":
+                        from app.services.card_generation import worker
+                        from app.services.resources import audit
+
+                        audit(
+                            session,
+                            worker(current),
+                            "card.generate.retry" if should_retry else "card.generate.failed",
+                            job_id,
+                            {
+                                "generation_job_id": str(job_id),
+                                "run_id": str(run_id),
+                                "reason_code": error["code"],
+                                "actor_kind": "worker",
+                                "correlation_id": str(job_id),
+                            },
+                        )
                 if should_retry:
                     raise ProviderFailure("Retryable provider failure", retryable=True) from None

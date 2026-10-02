@@ -23,8 +23,9 @@ kind: readme
 
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。
 - [response-cards.md](notes/response-cards.md)：人工响应卡片、证据确认、原子处置与三表初稿。
+- [model-drafting-redaction.md](notes/model-drafting-redaction.md)：模型起草输入快照、外发遮挡和双文本引用核验。
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
-- [llm-providers.md](notes/llm-providers.md)：抽取模型调用、批次、错误与计费。
+- [llm-providers.md](notes/llm-providers.md)：抽取与响应起草的模型调用、批次、错误与计费。
 - [docx-citations.md](notes/docx-citations.md)：Word 按章节、段落、表格单元格引用。
 - [reasoning-levels.md](notes/reasoning-levels.md)：按官方档位选择推理强度、抽取历史。
 - [platform-console.md](notes/platform-console.md)：平台运营后台、TOTP、单位启停、模型目录计费。
@@ -43,11 +44,11 @@ kind: readme
 - [0002 预付余额与充值卡密](adr/0002-prepaid-billing.md)（adr）
 - [0003 Word 招标文件按文档位置引用](adr/0003-word-structural-citations.md)（adr）
 - [0004 按官方档位选择推理强度，每次抽取独立保存](adr/0004-extractions-per-reasoning-level.md)（adr）
+- [0005 模型提议与人工确认分离的响应卡片](adr/0005-human-confirmed-responses.md)（adr）
 
 ## 计划与记录
 
 - [剩余范围与路线](plan/roadmap.md)（plan）：覆盖矩阵、已知缺陷、待定决定。
 - [Rust 标注契约草案](plan/annotation.md)（plan）：待批准的下一范围。
-- [人工确认与偏离表初稿契约草案](plan/review-and-draft.md)（plan）：B07/B08 的两阶段卡片确认、模型起草与组表契约。
 - [模型配置契约草案](plan/provider-config.md)（plan）：单位自带模型与单位自选平台模型，待批准。
 - [变更记录](changelog.md)（changelog）：已交付范围。

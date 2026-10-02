@@ -41,6 +41,7 @@ from app.schemas.response_card_contracts import (
     CardAction,
     CardClassify,
     CardCreate,
+    CardGenerateRequest,
     CardUpdate,
     DispositionBatch,
     DraftRequest,
@@ -919,6 +920,38 @@ def partial_completion_exit(body: dict) -> int:
         body["ok"] = False
         return 5
     return 0
+
+
+@card_app.command("generate")
+def card_generate(
+    task: Annotated[UUID, typer.Option()],
+    job: Annotated[UUID, typer.Option()],
+    requirement: Annotated[list[UUID] | None, typer.Option("--requirement")] = None,
+    reasoning: Annotated[
+        str | None, typer.Option(help="One of the model's official reasoning levels")
+    ] = None,
+    dry_run: Annotated[bool, typer.Option()] = False,
+    retry: Annotated[bool, typer.Option()] = False,
+    wait: Annotated[bool, typer.Option()] = False,
+    timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
+    json_output: JsonOption = False,
+):
+    request = CardGenerateRequest(
+        extraction_job_id=job,
+        requirement_ids=requirement or None,
+        reasoning=reasoning,
+        dry_run=dry_run,
+        retry=retry,
+    )
+    body = call("POST", f"/tasks/{task}/cards/generations", json=request.model_dump(mode="json"))
+    if wait and not dry_run:
+        terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
+        output = terminal["data"]["result"]
+        body["data"].update(output)
+        body["data"]["status"] = terminal["data"]["status"]
+        body["cost"] = output["cost"]
+        body["warnings"] = output.get("warnings", [])
+    emit(body, "card generate", json_output, partial_completion_exit(body))
 
 
 @draft_app.callback()

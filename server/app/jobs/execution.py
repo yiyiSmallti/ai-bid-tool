@@ -2,6 +2,7 @@
 
 import asyncio
 import math
+from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
@@ -48,6 +49,7 @@ class JobExecution:
         self.org_id, self.job_id, self.run_id = org_id, job_id, run_id
         self.stopped: ProviderFailure | None = None
         self.planned_calls = 0
+        self.before_admit: Callable[[AsyncSession], Awaitable[None]] | None = None
 
     def plan(self, first_pass_calls: int) -> None:
         self.planned_calls = max(self.planned_calls, first_pass_calls)
@@ -132,6 +134,8 @@ class JobExecution:
         call_id = uuid4()
         async with self.db.transaction(self.org_id) as session:
             await self.owned_job(session)
+            if self.before_admit is not None:
+                await self.before_admit(session)
             count, spent = (
                 await session.execute(
                     select(

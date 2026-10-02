@@ -141,7 +141,8 @@ audit boundary are described in
    containing `extraction_job_id`, `requirement_id`, and `content` using the
    [card contracts](../../server/app/schemas/response_card_contracts.py).
 
-2. Write the proposed response, choose `evidence` or `commitment`, and record the
+2. [Generate a model proposal](#generate-model-response-proposals), or write the proposed response,
+   choose `evidence` or `commitment`, and record the
    deviation and its explanation. For evidence, use a real task selection ID,
    an allowed field path and an exact quote, or a retained certificate page
    `evidence_source_id` and exact page quote. Use the selection commands below
@@ -223,6 +224,63 @@ audit boundary are described in
    Read the setting revision from the task list before another change. The
    setting's purpose and the boundary between assembly and model drafting are
    described in [response-cards.md](../notes/response-cards.md).
+
+## Generate model response proposals
+
+1. Select the resources and archive any certificate pages needed by the task.
+   Pick a successful extraction ID from `req history`, then inspect the outbound
+   manifest and estimate before generation:
+
+   ```sh
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --reasoning LEVEL --dry-run --json
+   ```
+
+   Omit `--reasoning` to use the catalog default. Check `selected_requirements`,
+   `skipped`, `input_manifest`, `redacted_counts`, `model_redaction_enabled`,
+   `admission_blocker` and `estimated_charge`. The preview returns identifiers
+   and hashes, never material values, and does not create a job or call a vendor.
+   The labelled estimate covers a first-pass allowance; actual retries can add
+   cost. Unknown prices remain null. For `page_text_unavailable`, inspect the
+   original page manually; this command does not perform OCR.
+
+2. Submit the same scope and wait for the result:
+
+   ```sh
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --reasoning LEVEL --wait --json
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --requirement REQUIREMENT_ID_1 --requirement REQUIREMENT_ID_2 --wait --json
+   ```
+
+   Repeat `--requirement` to limit the selected requirements; omitting it selects
+   the complete extraction. The job fixes the task's current selected inputs.
+   Without `--wait`, use the returned `generation_job_id` with `job status`,
+   `job wait` or `job cancel`. `--timeout` controls CLI waiting, not vendor calls.
+
+3. Inspect `created_revision_ids`, `skipped`, `rejected_references`,
+   `needs_material`, `stop_reason`, `usage_record_ids` and `charge`. Exit 5 means
+   some candidates or references need attention; valid created drafts remain
+   available through `card list` and `card show`. Review the response against
+   its original requirement and materials, edit it if needed, then follow the
+   human submit/confirm steps above. A model's `suggested_disposition` never
+   changes the human disposition.
+
+4. For a failed/cancelled job whose fixed inputs remain valid, resubmit with
+   `--retry`. A protected pending card must first be withdrawn; a confirmed
+   card must be reopened by the responsible reviewer. For a revision conflict,
+   model/catalog change, changed redaction setting or changed material selection,
+   obtain a new preview and submit again. An unchanged successful request,
+   including a partial success, returns the existing job without billing again.
+   Use repeated `--requirement` flags to select only unresolved requirements,
+   or edit the unresolved card and replace missing materials before submitting
+   a new request.
+
+   ```sh
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --retry --wait --json
+   ```
+
+The task switch can be changed only by a human org admin with `task redaction set`
+as shown above. Disabling it explicitly authorizes unmasked manifest text for
+subsequent submissions. Review the detection boundaries in
+[model-drafting-redaction.md](../notes/model-drafting-redaction.md#outbound-rules).
 
 ## Handle results
 

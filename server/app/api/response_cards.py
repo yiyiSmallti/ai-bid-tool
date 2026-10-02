@@ -13,16 +13,17 @@ from app.schemas.response_card_contracts import (
     CardAction,
     CardClassify,
     CardCreate,
+    CardGenerateRequest,
     CardUpdate,
     DispositionBatch,
     DraftRequest,
     TaskRedactionSet,
 )
-from app.services import drafts
+from app.services import card_generation, drafts
 from app.services import response_cards as cards
 
 
-def create_router(context, db, storage, queue):
+def create_router(context, db, storage, queue, settings, llm, resolve):
     router = APIRouter()
 
     def result(command, data=None, items=None, warnings=None, *, partial=False):
@@ -117,6 +118,29 @@ def create_router(context, db, storage, queue):
                 if saved is not None:
                     saved.queue_id = queue_id
         return result("draft", data, warnings=warnings)
+
+    @router.post("/tasks/{task_id}/cards/generations", name="card_generate", response_model=Result)
+    async def card_generate(
+        task_id: UUID, body: CardGenerateRequest, ctx=Depends(context, scope="function")
+    ):
+        session, actor = ctx
+        provider = await resolve(session) if resolve else llm
+        data, job, warnings = await card_generation.submit_generation(
+            session, actor, task_id, body, storage, provider, settings
+        )
+        if job is not None and job.status == "queued" and job.queue_id is None:
+            await session.commit()
+            try:
+                queue_id = await queue.enqueue(str(actor.org_id), str(job.id))
+            except (OSError, ConnectorException, OperationalError) as exc:
+                raise ServiceError(
+                    "queue_unavailable", "Job saved; repeat request to schedule it", 503, 3
+                ) from exc
+            async with db.transaction(actor.org_id) as update:
+                saved = await update.get(Job, job.id)
+                if saved is not None:
+                    saved.queue_id = queue_id
+        return result("card generate", data, warnings=warnings)
 
     @router.get("/drafts/{draft_id}", name="draft_show", response_model=Result)
     async def draft_show(draft_id: UUID, ctx=Depends(context, scope="function")):

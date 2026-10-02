@@ -32,7 +32,13 @@ from app.core.security import Secrets, token_digest
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task
-from app.providers.llm import create_llm, reasoning_choices, resolve_llm, with_reasoning
+from app.providers.llm import (
+    billable,
+    create_llm,
+    reasoning_choices,
+    resolve_llm,
+    with_reasoning,
+)
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
 from app.schemas.certificate_contracts import (
@@ -284,7 +290,7 @@ def create_app(
             await set_actor_context(session, identity)
             yield session, identity
 
-    app.include_router(create_response_router(context, db, storage, queue))
+    app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1060,7 +1066,8 @@ def create_app(
             return result(command, data, warnings=warnings)
         if kind == "extract" and document.status != "parsed":
             raise ServiceError("not_parsed", "Parse the document before extraction", 400, 2)
-        if kind == "extract" and getattr(model, "platform_model_id", None):
+        # A missing credential fails as provider_unavailable, not as a balance problem.
+        if kind == "extract" and billable(model):
             await billing.require_funds(session, settings.billing_currency)
         version = (
             f"{PARSER_VERSION}:{ocr.name}:{ocr.version}:{settings.ocr_language}"
@@ -1301,9 +1308,15 @@ def create_app(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
-        if job.kind == "draft":
-            identity.require("draft:read")
+        if job.kind in {"draft", "card_generate"}:
+            identity.require("draft:read" if job.kind == "draft" else "card:read")
             identity.require("task:read")
+            if job.kind == "card_generate":
+                from app.services.card_generation import check_input_access
+
+                await check_input_access(
+                    session, identity, job.task_id, job.result["submission"]["input_manifest"]
+                )
             if job.result.get("draft_id"):
                 from app.services.drafts import show_draft
 
@@ -1311,6 +1324,7 @@ def create_app(
             if job.result.get("completion") == "partial":
                 payload["ok"] = False
             payload["warnings"] = job.result.get("warnings", [])
+            payload["cost"] = job.result.get("cost", payload["cost"])
             # Submission authorization data is internal worker state.
             payload["data"]["result"] = {
                 key: value for key, value in job.result.items() if key != "submission"

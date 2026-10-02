@@ -291,6 +291,54 @@
     "ok": true,
     "warnings": []
   },
+  "card generate": {
+    "command": "card generate",
+    "cost": {
+      "llm_tokens": 1000,
+      "ocr_pages": 0,
+      "usd": null
+    },
+    "data": {
+      "billing_currency": "USD",
+      "cached": false,
+      "charge": "0.001",
+      "completion": "partial",
+      "cost": {
+        "llm_tokens": 1000,
+        "ocr_pages": 0,
+        "usd": null
+      },
+      "created_revision_ids": [
+        "00000000-0000-0000-0000-000000000003"
+      ],
+      "exit_code": 5,
+      "generation_job_id": "00000000-0000-0000-0000-000000000002",
+      "job_id": "00000000-0000-0000-0000-000000000002",
+      "needs_material": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "rejected_references": {
+        "00000000-0000-0000-0000-000000000001": [
+          "m1:quote_not_sent"
+        ]
+      },
+      "skipped": {},
+      "status": "succeeded",
+      "stop_reason": null,
+      "usage_record_ids": [
+        "00000000-0000-0000-0000-000000000004"
+      ],
+      "warnings": [
+        "needs_material:00000000-0000-0000-0000-000000000001"
+      ]
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": [
+      "needs_material:00000000-0000-0000-0000-000000000001"
+    ]
+  },
   "card list": {
     "command": "card list",
     "cost": {
@@ -3038,6 +3086,154 @@
               "items"
             ],
             "title": "DispositionBatch",
+            "type": "object"
+          }
+        },
+        "card generate": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "requirement",
+              "options": [
+                "--requirement"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reasoning",
+              "options": [
+                "--reasoning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
+              "requirement_ids": {
+                "anyOf": [
+                  {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Requirement Ids"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "extraction_job_id"
+            ],
+            "title": "CardGenerateRequest",
             "type": "object"
           }
         },

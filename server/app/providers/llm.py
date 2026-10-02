@@ -314,6 +314,7 @@ class HTTPExtractor:
     reasoning_levels: dict[str, dict] = {}
     default_reasoning: str | None = None
     reasoning: str | None = None
+    model_revision: int | None = None
     # Seconds to wait before retrying a batch after a transient failure such as a
     # dropped connection; a long job should not restart because one call broke.
     retry_delays: tuple[float, ...] = (10, 30)
@@ -351,12 +352,18 @@ class HTTPExtractor:
             sale_usd_per_mtok=self.sale,
         )
         copy.version = self.version
+        copy.model_revision = self.model_revision
         copy.reasoning_levels, copy.default_reasoning = (
             self.reasoning_levels,
             self.default_reasoning,
         )
         copy.reasoning = name
         return copy
+
+    async def draft(self, requirements: list[dict], materials: list[dict]):
+        from app.providers.drafting import draft
+
+        return await draft(self, requirements, materials)
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         limit = asyncio.Semaphore(max(1, self.settings.llm_concurrency))
@@ -615,7 +622,13 @@ class HTTPExtractor:
         return self.usage(started, payload.get("model") or self.model, inputs, outputs)
 
     async def post(
-        self, client: httpx.AsyncClient, url: str, headers: dict, body: dict
+        self,
+        client: httpx.AsyncClient,
+        url: str,
+        headers: dict,
+        body: dict,
+        *,
+        safe_metadata: bool = False,
     ) -> tuple[dict, ProviderUsage]:
         async def request():
             started = time.monotonic()
@@ -634,13 +647,48 @@ class HTTPExtractor:
                 )
             if response.status_code != 200 and "usage" not in payload:
                 self.check_status(response)
-            return (response, payload), self.response_usage(payload, started)
+            reported_model = payload.get("model") or self.model
+            # Known Anthropic fallback identities are metadata, never free-form
+            # model text. An unrecognized echo is still charged, then rejected.
+            trusted_model = reported_model == self.model or (
+                self.name == "anthropic"
+                and isinstance(reported_model, str)
+                and re.fullmatch(
+                    r"claude-(?:opus|sonnet|haiku)-\d{1,2}(?:[-.]\d{1,2})?(?:-\d{8})?",
+                    reported_model,
+                )
+                is not None
+            )
+            metadata = (
+                {**payload, "model": reported_model if trusted_model else "unverified-model"}
+                if safe_metadata
+                else payload
+            )
+            return (response, payload, trusted_model), self.response_usage(metadata, started)
 
-        (response, payload), usage = await accounted_call(
-            self.reservation(body), self.platform_model_id is not None, request
-        )
-        # Account error envelopes that include usage before applying their error/retry policy.
-        self.check_status(response, [usage])
+        try:
+            (response, payload, trusted_model), usage = await accounted_call(
+                self.reservation(body), self.platform_model_id is not None, request
+            )
+            # Account error envelopes that include usage before applying their error/retry policy.
+            self.check_status(response, [usage])
+            if safe_metadata and not trusted_model:
+                raise ProviderFailure(
+                    "Vendor model identity is unrecognized",
+                    code="invalid_provider_model",
+                    usage=[usage],
+                )
+        except ProviderFailure as exc:
+            if not safe_metadata:
+                raise
+            # Vendor error types and model names are untrusted strings and can echo input.
+            raise ProviderFailure(
+                "Drafting call stopped; see the error code",
+                code=exc.code,
+                retryable=exc.retryable,
+                refused=exc.refused,
+                usage=exc.usage,
+            ) from None
         return payload, usage
 
     async def send(
@@ -797,12 +845,26 @@ def create_llm(settings: Settings):
     return DisabledLLM()
 
 
+def billable(llm) -> bool:
+    """Whether calls go to a platform model that can actually be called and charged."""
+    return bool(getattr(llm, "platform_model_id", None)) and not isinstance(
+        llm, UnavailablePlatformModel
+    )
+
+
 class UnavailablePlatformModel(DisabledLLM):
     """The catalog default exists but its credential is missing from the deployment."""
 
     def __init__(self, entry: PlatformModel):
         self.name, self.model = entry.provider, entry.model
         self.version = f"{ADAPTER_VERSION}:{entry.id}:{entry.revision}"
+        self.platform_model_id, self.model_revision = entry.id, entry.revision
+        self.reasoning_levels = {level["name"]: level for level in entry.reasoning or []}
+        self.default_reasoning = entry.default_reasoning
+
+    def at_reasoning(self, name: str):
+        # Preserve catalog identity for previews; this adapter still cannot issue a call.
+        return self
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         raise ProviderFailure("The platform model's credential is not configured")
@@ -838,6 +900,7 @@ def platform_llm(settings: Settings, entry: PlatformModel, transport=None):
     )
     # Editing the catalog entry changes the job cache key.
     llm.version = f"{ADAPTER_VERSION}:{entry.id}:{entry.revision}"
+    llm.model_revision = entry.revision
     llm.reasoning_levels = {level["name"]: level for level in entry.reasoning or []}
     llm.default_reasoning = entry.default_reasoning
     return llm
