@@ -214,8 +214,10 @@ async def test_prototype_image_export_gate_keep_attachment_and_replace(
             )
         assert media == [rendition_sha]
         assert "证据图片" in text and "Synthetic workflow control is visible." in text
+        # The fixture's own human-written response mentions a prototype; system text must not.
+        system_text = text.replace("The synthetic prototype displays the requested workflow.", "")
         for hidden in ("prototype", "原型", "will_deliver", kept["id"]):
-            assert hidden not in text.lower(), hidden
+            assert hidden not in system_text.lower(), hidden
 
         set_role(admin_engine, org, user, "technical")
         await decide(

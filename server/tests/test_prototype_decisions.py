@@ -296,12 +296,14 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
                 f"/tasks/{task}/prototype-decisions/preview", headers=header, json=preview_body
             )
             assert wrong_role.status_code == 403
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+        # Only an admin can issue tokens; the token is then used while the member is technical.
+        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         token = await token_header(
             api,
             header,
             scopes=["task:read", "card:read", "resource:read", "screenshot:read"],
         )
+        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         token_denied = await api.post(
             f"/tasks/{task}/prototype-decisions/preview", headers=token, json=preview_body
         )
