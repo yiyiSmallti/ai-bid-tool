@@ -319,6 +319,7 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
         "draft:run",
         "draft:read",
         "evidence:confirm",
+        "export",
     } == set(old[role])
 
 

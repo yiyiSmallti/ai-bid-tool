@@ -202,11 +202,11 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "draft:run",
         "draft:read",
         "evidence:confirm",
+        "export",
     }
     assert ROLE_SCOPES[role] - later == set(BASELINE[role])
-    # Human confirmation exists since response cards; tokens still cannot hold it, and no
-    # role may export yet.
-    assert "export" not in ROLE_SCOPES[role]
+    # Export is a human bidder responsibility; source-read remains unchanged.
+    assert ("export" in ROLE_SCOPES[role]) == (role == "bidder")
 
 
 @pytest.mark.parametrize(

@@ -75,6 +75,7 @@ ROLE_SCOPES = {
         "task:template",
     },
     "bidder": {
+        "export",
         "evidence:source:read",
         "evidence:source:write",
         "task:read",

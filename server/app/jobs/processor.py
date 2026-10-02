@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
@@ -101,7 +102,7 @@ class Processor:
             )
             chunks = (
                 []
-                if kind in {"draft", "card_generate", "provider_test"}
+                if kind in {"draft", "card_generate", "provider_test", "export_render"}
                 else [
                     dict(
                         id=row.id,
@@ -145,6 +146,17 @@ class Processor:
 
                     incremental = True
                     await execute_test(execution, llm)
+                    return
+                if kind == "export_render":
+                    from app.jobs.export_render import render
+
+                    try:
+                        async with asyncio.timeout(self.settings.export_deadline_seconds):
+                            await render(execution, self.storage)
+                    except TimeoutError as exc:
+                        raise ServiceError(
+                            "export_render_timeout", "Export job deadline exceeded", 503, 3
+                        ) from exc
                     return
                 assert task_id is not None and document_id is not None
                 if kind == "card_generate":
@@ -343,6 +355,7 @@ class Processor:
                     # Exit code 3 marks transient failures such as object storage outages.
                     retryable = exc.exit_code == 3 and exc.code not in {
                         "draft_input_changed",
+                        "export_input_changed",
                         "generation_input_changed",
                         "generation_model_changed",
                         "generation_rules_changed",
@@ -377,6 +390,10 @@ class Processor:
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
+                    if kind == "export_render":
+                        from app.jobs.export_render import failure_audit
+
+                        await failure_audit(session, current, error["code"])
                     if kind == "card_generate":
                         from app.services.card_generation import worker
                         from app.services.resources import audit

@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
+from app.api.exports import create_router as create_export_router
 from app.api.platform import create_router as create_platform_router
 from app.api.providers import create_router as create_provider_router
 from app.api.response_cards import create_router as create_response_router
@@ -293,6 +294,7 @@ def create_app(
     app.include_router(
         create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)
     )
+    app.include_router(create_export_router(context, db, storage, queue, settings, crypto))
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1310,6 +1312,10 @@ def create_app(
         job = await session.get(Job, job_id)
         if job is None:
             raise not_found()
+        if job.kind == "export_render":
+            from app.services.exports import job_access
+
+            await job_access(session, identity, job, storage)
         payload = result(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
@@ -1320,6 +1326,11 @@ def create_app(
                 key: value for key, value in job.result.items() if key != "submission"
             }
             payload["cost"] = job.result.get("cost", payload["cost"])
+        if job.kind == "export_render":
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+            return payload
         if job.kind in {"draft", "card_generate"}:
             identity.require("draft:read" if job.kind == "draft" else "card:read")
             identity.require("task:read")
@@ -1350,6 +1361,10 @@ def create_app(
         job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
         if job is None:
             raise not_found()
+        if job.kind == "export_render":
+            from app.services.exports import job_access
+
+            await job_access(session, identity, job, storage, cancel=True)
         if job.status not in {"cancelled", "queued", "running"}:
             raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
         job.status, job.finished_at = "cancelled", datetime.now(UTC)
