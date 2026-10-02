@@ -178,4 +178,7 @@ async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
         _, status = await run_job(api, app, header, document, "extract")
         assert status["status"] == "succeeded", status
         rows = (await api.get(f"/tasks/{task}/requirements", headers=header)).json()["items"]
-        assert [r["source"]["location"]["block_id"] for r in rows] == ["t1r2c2", "p5"]  # source order
+        assert [r["source"]["location"]["block_id"] for r in rows] == [
+            "t1r2c2",
+            "p5",
+        ]  # source order
