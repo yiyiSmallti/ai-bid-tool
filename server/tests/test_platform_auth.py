@@ -57,13 +57,15 @@ async def audit_rows(api):
 
 
 async def test_operator_signs_in_with_password_and_totp(client):
-    response = await sign_in(client)
+    # Pin the code's counter so a 30-second boundary during the request cannot change it.
+    counter = now_counter()
+    response = await sign_in(client, counter=counter)
     assert response.status_code == 200, response.text
     data = response.json()["data"]
     assert data["email"] == OPERATOR and data["expires_in"] == 1800
     [row] = await audit_rows(client)
     assert (row.action, row.outcome) == ("platform.login", "success")
-    assert row.details == {"totp_counter": now_counter()}
+    assert row.details == {"totp_counter": counter}
 
 
 @pytest.mark.parametrize(

@@ -80,7 +80,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
 | B09 check | 未实施 | 标书与要求对照、废标/扣分风险、误报处理 | 语义校验依赖 LLM |
 | B10 score | 未实施 | 逐项预估分、失分原因、引用 | 语义评估依赖 LLM |
-| B11 export | 未实施 | 仅人工导出、模板适配、证据附件、审计；草案见 [export.md](export.md) | 待批准 |
+| B11 export | 未实施 | 仅人工导出、模板适配、证据附件、审计；契约见 [export.md](export.md) | 已批准 |
 
 ## 覆盖矩阵：Provider、记忆、看板、agent 与 CLI
 
@@ -94,7 +94,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | M01 记忆存储 | 未实施 | 四层记忆 CRUD、候选审批、失效 | 全局来源待定 |
 | M02 记忆检索 | 未实施 | 强制 `org_id` 与作用域过滤、优先级 | 向量依赖 Embedding |
 | M03 自动候选 | 未实施 | 驳回/修改生成 candidate、评测样本 | 依赖 B07 |
-| U01 看板 | 未实施 | Vue 3 看板、资源/配置/记忆管理页；招标与审阅页面草案见 [org-console.md](org-console.md) | 待批准 |
+| U01 看板 | 未实施 | Vue 3 看板、资源/配置/记忆管理页；招标与审阅页面契约见 [org-console.md](org-console.md) | 已批准 |
 | U02 卡片/SSE | API/CLI 卡片修订与状态迁移 | 看板交互、SSE | 界面契约 |
 | A01 内置 agent | 未实施 | CLI 工具映射、无确认/导出权限、状态恢复、预算询问 | 编排依赖 API |
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记、可选 `mcp serve` | 新接口确认 |
