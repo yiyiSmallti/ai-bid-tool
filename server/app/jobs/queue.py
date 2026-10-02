@@ -5,6 +5,7 @@ import procrastinate
 from sqlalchemy.engine import make_url
 
 from app.core.config import Settings
+from app.jobs.sandbox_queue import register_sandbox_task
 
 
 class Queue:
@@ -27,9 +28,14 @@ class Queue:
                 raise RuntimeError("Worker processor is not configured")
             await self.processor(org_id, job_id)
 
+        self.sandbox_task = register_sandbox_task(self.app, lambda: self.processor)
         self.task = process
         self.lock = asyncio.Lock()
 
     async def enqueue(self, org_id: str, job_id: str) -> int:
         async with self.lock, self.app.open_async():
             return await self.task.defer_async(org_id=org_id, job_id=job_id)
+
+    async def enqueue_sandbox(self, org_id: str, job_id: str) -> int:
+        async with self.lock, self.app.open_async():
+            return await self.sandbox_task.defer_async(org_id=org_id, job_id=job_id)

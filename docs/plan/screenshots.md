@@ -1,11 +1,11 @@
 ---
 kind: plan
-status: "已批准，未实施"
+status: "部分实施：Phase A；沙盒与导出接线待实施"
 ---
 
 # 契约草案：功能截图、原型与厂家证据配图
 
-状态：**已批准，未实施**（2026-10-02，未定事项按“已定决定”中的推荐方案）。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
+状态：**部分实施：Phase A；沙盒与导出接线待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
 水印边界。下文按已批准的推荐选项描述契约，各项选择见[已定决定](#已定决定)。
 
 ## 目标与边界
@@ -1082,3 +1082,32 @@ Provider 使用假实现，不能把合成材料或假调用当作真实取证�
 | 图片证据是否必须另有本地 OCR 引文 | **推荐 A：多模态读字仅辅助，区域观察 + 人工逐图核对即可**；B：另要求可核验本地 OCR 引文，须增加坐标、误识别纠正及逐字验证契约。两案都保留已定的多模态读字能力，不能将模型读字自动当 quote |
 | 厂家搜索服务与来源确认 | **推荐 A：平台配置一个 SearchProvider，按固定产品来源与人工核对筛选官网/PDF，价格齐备后付费调用**；B：平台维护厂家域名白名单并限定搜索范围，仍由人核对型号与页内容。具体搜索供应商及请求单价在接入前确定，不硬编码到业务层 |
 | 首版能否脱离任务收集截图 | **推荐 A：绑定明确任务和成功抽取 job**，直接复用 Job 的真实 Document 关系与卡片关口；B：建立通用图库，须另定版本选择及无招标文档的作业归属，不能把 Job 约束随意放宽 |
+
+
+## Phase A 实施记录
+
+| 范围 | 状态与入口 |
+| --- | --- |
+| 截图/图示上传、固定证书页脱敏、本机 PNG/JPEG 准备 | 已实施；[`screenshot_contracts.py`](../../server/app/schemas/screenshot_contracts.py)、[`screenshots.py`](../../server/app/services/screenshots.py)；实际 Rust 构建与像素验收仍须在具备工具链的环境执行 |
+| 同一 Rust 引擎的遮挡、裁剪、区域框、无标签原型 profile | 已实施；[`stamp/src/main.rs`](../../stamp/src/main.rs)；无 Python 绘图替代，缺二进制明确失败 |
+| 精确哈希隐私放行、加密保存、签名预览、撤下与审计 | 已实施；[`API`](../../server/app/api/screenshots.py)；人工入库不等于证据确认 |
+| image_region 卡片、逐卡确认、draft 图片依赖与失效重算 | 已实施；[`response_cards.py`](../../server/app/services/response_cards.py)、[`drafts.py`](../../server/app/services/drafts.py) |
+| 原型逐项/模块 keep/replace 决定、前版本与精确集合门禁 | 已实施；[`prototype_decisions.py`](../../server/app/services/prototype_decisions.py)；其 export 检查函数未连接导出路由 |
+| 匹配要求、区域建议、读字及调用准入/计费 | 已实施；[`screenshot_vision.py`](../../server/app/providers/screenshot_vision.py)、[`screenshot_jobs.py`](../../server/app/services/screenshot_jobs.py)；只发送已放行派生图，未调用真实厂商 |
+| PostgreSQL FORCE RLS 与数据库门禁 | 迁移和两单位测试已实施；[`0023`](../../server/migrations/versions/0023_screenshots.py) 接在沙箱迁移 `0022` 之后 |
+| 本机浏览器运行页采集入口 `bid screenshot capture` | 已确认归入 Phase B，未实施；待沙盒分支合并后接入统一回执、脱敏与归档交接，保持客户端本机执行边界 |
+| 厂家搜索候选入口 `bid evidence search` | 已确认归入 Phase B，未实施；与沙盒及厂家网页/PDF 采集管线一起接入，候选仍不直接成为 Evidence |
+| HTML 原型生成/渲染与厂家网页/PDF 采集 | Phase B，未实施；待沙盒分支合并后接入。已预留生成、回执、搜索候选与厂家归档的单位内关系，无客户端伪造生成记录的 API |
+| 正式导出图片消费、决定检查接线和 DOCX 实物验收 | 未实施；由维护者将决定检查接入导出分支，不能据此声明完整截图合同验收完成 |
+
+落实的接口决定：
+
+- 对外契约升为 `2.0`，保留旧 Evidence 输入分支。新分支、材料枚举及 nullable quote 不伪装为旧严格客户端的兼容改动。
+- 模块预检与提交增加可选 `evidence_ids` 显式子集，用于同功能被多卡引用时的逐项决定；未指定时仍必须覆盖列明功能集合中的全部有效原型 Evidence。
+- 模块批次保存固定 target manifest，延迟数据库触发器核对每一项目标及数量，不能提交半批决定。
+- 平台选中推理档位的 request_options 中使用服务端 `screenshot_vision` 能力与图片计价规则；未配置可靠规则时拒绝调用，不按 base64 大小推算图片 token。
+- 多模态图像每调用一张，整次显式选择的 PNG 合计限制为 40 MiB；按需拆分请求，不隐式裁图或降采样。模型区域在持久化前转换为图片内容区坐标。
+- 分析的要求文本始终使用既有遮挡规则；关闭普通模型起草的文本遮挡不会放宽本图片分析入口。
+- 本机与 worker 使用相同受限 Rust 管道，工具与构建产物保存在当前 worktree 的 data/work；数据库、Rust 工具链和导出集成分别验收。
+
+实现机制集中在[截图证据笔记](../notes/screenshot-evidence.md)。验证工件保存在 data/work，未写入 docs。

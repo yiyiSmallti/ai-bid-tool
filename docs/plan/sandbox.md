@@ -1,13 +1,38 @@
 ---
 kind: plan
-status: "已批准，未实施"
+status: "已实施，待真实隔离验收"
 ---
 
 # 契约草案：不可信内容与工具执行沙箱
 
-状态：**已批准，未实施**（2026-10-02，未定事项按“已定决定”中的推荐方案）。对应[路线图](roadmap.md#覆盖矩阵provider记忆看板agent-与-cli)
+状态：**已实施，待真实隔离验收**。对应[路线图](roadmap.md#覆盖矩阵provider记忆看板agent-与-cli)
 P03 Browser、A01，首先服务 B06 原型渲染和 B04 网页/白皮书采集。下文按推荐选项定义
 拟实施边界；技术依赖、限额和产品选择集中在[已定决定](#已定决定)，不代表部署授权。
+
+## 实施范围与已解决决定
+
+| 范围 | 状态 | 实现与边界 |
+| --- | --- | --- |
+| 类型化 API/CLI、固定输入、作业与归档 | 已实施 | 入口、权限与来源关系见 [sandbox-execution.md](../notes/sandbox-execution.md)；数据库关口由 PostgreSQL 测试覆盖 |
+| 无网络执行、独立验证与清理 | 已实施运行时适配，待真实验收 | Docker CLI 后端与测试假后端；默认关闭。测试开关与部署准备见[运行时指南](../guides/sandbox-runtime.md) |
+| 厂家代理与来源回执 | 已实施 | 精确 URL 允许名单、固定 IP/TLS、持久单节点配额、拒绝摘要与归档；见 [sandbox-fetch.md](../notes/sandbox-fetch.md) |
+| 控制通道 | 已实施，待实际节点验收 | 本地多 UID Unix socket；远程 TLS 1.3 双向证书验证、主机名校验与双端叶证书指纹固定。证书不进入容器 |
+| 真实隔离与攻击验收 | 待执行 | 真实容器测试默认跳过；假后端通过不代表网络/逃逸验收通过 |
+| Evidence/Card、生成模型、agent 编排 | 未实施，沿用相邻契约 | 本流提供已生成 HTML 的渲染和公开来源原始产物，不代行人工确认 |
+
+实施时收敛的决定：
+
+- 允许名单首个实现只支持精确规范化 URL，是批准路径范围的保守子集。维护方可通过
+  文件里的 active revision 选择新提交策略；原修订不因新增修订自动撤销。
+- 固定容器 CPU 上限下调为 1 vCPU，配合更短的组级硬期限和低配额周期，使累计 CPU
+  不因终态采样间隔获得额外预算。资源计量精度和 daemon 终止延迟仍须真实验收。
+- supplied HTML 的生成 job/provider/model 保留 null；首期不接受调用方自报生成模型。
+  未来内部组合调用需单独接入已验证生成作业关系。
+- 错误后的清理确认使用 supervisor 绑定回执；后续回收追加审计，不改写原失败事实。
+  中断导致计量不完整时按剩余上界扣预算，不能据此重新得到完整执行额度。
+- Playwright 只安装在固定隔离镜像内；PNG/PDF 验证复用 PyMuPDF，不给业务 worker
+  新增浏览器或图像解码路径。准备镜像、Colima/Docker、runsc 与系统服务仅提供步骤，
+  不属于本分支执行的部署动作。
 
 ## 目标与边界
 
@@ -311,7 +336,7 @@ TaskResource/ProductRevision、ApiToken 及可选生成 job 关系均采用含 `
 
 ## Pydantic 与 Provider 契约草案
 
-下列类型只在本文定义。复用 [`Contract、Cost、Result`](../../server/app/schemas/contracts.py)
+以下保留批准的接口形状；实现与字段校验见 [sandbox_contracts.py](../../server/app/schemas/sandbox_contracts.py)。复用 [`Contract、Cost、Result`](../../server/app/schemas/contracts.py)
 的 `extra=forbid`，由同一套 Pydantic v2 类型生成 API/CLI Schema。UUID/哈希/金额/时间
 使用明确类型；新增能力不预先固定既有契约版本号。
 
@@ -664,7 +689,7 @@ console/异常文本也由攻击者控制，默认只记计数、hash 和类型�
 建议顺序为 Schema/授权与关系约束 → 离线原型渲染与完整性验证 → 代理和公开网页/PDF →
 作业恢复/资源计量 → 下载/隔离攻击验收。每一步通过实际 CLI/API、真实队列 worker、
 隔离 runtime 和存储走通；不以 mock SandboxExecutor 或计划文字证明已隔离。
-本节只列未来验收条件，不表示本次已经实现或运行功能测试。
+本节保留完整验收条件；实际已交付范围和待执行项见[实施范围与已解决决定](#实施范围与已解决决定)。
 
 1. **首批入口与工件**：合成任务、成功提取 job、固定功能/产品修订经 render/capture
    真实入口到 worker，再下载核验 PNG/DOM/PDF，受权核验内部清单。原型 origin、生成

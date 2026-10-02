@@ -2,13 +2,14 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Literal, cast
 from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
 from app.schemas.contracts import Category, Contract, Cost, Source
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive
+from app.schemas.screenshot_contracts import ImageEvidenceInput, PixelRect, RenditionView
 
 type CardState = Literal["draft", "pending_review", "confirmed", "rejected", "needs_material"]
 type ReviewDomain = Literal["commercial", "technical"]
@@ -80,7 +81,7 @@ class PageEvidenceInput(_TrimmedContract):
 
 
 type EvidenceInput = Annotated[
-    ResourceEvidenceInput | PageEvidenceInput, Field(discriminator="kind")
+    ResourceEvidenceInput | PageEvidenceInput | ImageEvidenceInput, Field(discriminator="kind")
 ]
 
 
@@ -260,6 +261,7 @@ class CardGenerateResult(_TrimmedContract):
 
 
 class EvidenceView(_TimestampContract):
+    image_rendition: RenditionView | None = None
     id: UUID
     org_id: UUID
     task_id: UUID
@@ -267,24 +269,107 @@ class EvidenceView(_TimestampContract):
     input: EvidenceInput
     selection_id: UUID
     resource_revision_id: UUID
-    material_kind: Literal["declaration", "user_supplied_pdf_page"]
-    quote_check: Literal["exact_field_match", "unreviewed_page", "human_page_review"]
+    material_kind: Literal[
+        "declaration",
+        "user_supplied_pdf_page",
+        "user_screenshot",
+        "browser_screenshot",
+        "user_diagram",
+        "certificate_image",
+        "vendor_web",
+        "vendor_pdf",
+        "prototype",
+    ]
+    quote_check: Literal[
+        "exact_field_match",
+        "unreviewed_page",
+        "human_page_review",
+        "unreviewed_image",
+        "human_image_review",
+    ]
     source_archive: EvidenceSourceArchive | None = None
+    screenshot_asset_id: UUID | None = None
+    screenshot_rendition_id: UUID | None = None
+    image_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    region: PixelRect | None = None
+    claim_scope: (
+        Literal[
+            "functional_observation",
+            "design_explanation",
+            "document_excerpt",
+            "hardware_documentation",
+        ]
+        | None
+    ) = None
+    visual_observation: str | None = Field(default=None, min_length=1, max_length=4000)
     confirmed_by: UUID | None = None
     confirmed_at: datetime | None = None
     active_selection: bool
 
     @model_validator(mode="after")
-    def page_archive_matches_material(self):
+    def input_matches_fixed_material(self):
+        is_image = isinstance(self.input, ImageEvidenceInput)
         is_page = isinstance(self.input, PageEvidenceInput)
+        image_materials = {
+            "user_screenshot",
+            "browser_screenshot",
+            "user_diagram",
+            "certificate_image",
+            "vendor_web",
+            "vendor_pdf",
+            "prototype",
+        }
+        if is_image != (self.material_kind in image_materials):
+            raise ValueError("image evidence material_kind must match its input kind")
         if is_page != (self.material_kind == "user_supplied_pdf_page"):
             raise ValueError("evidence material_kind must match its input kind")
-        if is_page != (self.source_archive is not None):
+        archive_required = is_page or self.material_kind == "certificate_image"
+        if archive_required != (self.source_archive is not None):
             raise ValueError("certificate page evidence requires its source archive")
-        if is_page and self.quote_check == "exact_field_match":
-            raise ValueError("certificate page evidence cannot use field quote checks")
-        if not is_page and self.quote_check != "exact_field_match":
+        if is_image:
+            image_input = cast(ImageEvidenceInput, self.input)
+            if self.quote_check not in {"unreviewed_image", "human_image_review"}:
+                raise ValueError("image evidence requires an image review state")
+            fixed = (
+                self.screenshot_asset_id,
+                self.screenshot_rendition_id,
+                self.image_sha256,
+                self.region,
+                self.claim_scope,
+                self.visual_observation,
+            )
+            if any(value is None for value in fixed):
+                raise ValueError("image evidence requires its complete fixed image reference")
+            if (
+                image_input.asset_id != self.screenshot_asset_id
+                or image_input.rendition_id != self.screenshot_rendition_id
+                or image_input.expected_image_sha256 != self.image_sha256
+                or image_input.region != self.region
+                or image_input.claim_scope != self.claim_scope
+                or image_input.visual_observation != self.visual_observation
+            ):
+                raise ValueError("image evidence input must match its fixed image reference")
+        elif any(
+            value is not None
+            for value in (
+                self.screenshot_asset_id,
+                self.screenshot_rendition_id,
+                self.image_sha256,
+                self.region,
+                self.claim_scope,
+                self.visual_observation,
+            )
+        ):
+            raise ValueError("legacy evidence cannot contain image reference fields")
+        elif is_page and self.quote_check not in {"unreviewed_page", "human_page_review"}:
+            raise ValueError("certificate page evidence requires a page review state")
+        elif not is_page and self.quote_check != "exact_field_match":
             raise ValueError("resource evidence requires an exact field quote check")
+        if self.confirmed_by is None and self.quote_check in {
+            "human_page_review",
+            "human_image_review",
+        }:
+            raise ValueError("unconfirmed evidence cannot claim human review")
         if (self.confirmed_by is None) != (self.confirmed_at is None):
             raise ValueError("evidence confirmation actor and time must be set together")
         return self

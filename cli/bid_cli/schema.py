@@ -14,6 +14,17 @@ from app.schemas.contracts import (
     TokenCreate,
 )
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
+from app.schemas.export_contracts import (
+    ExportBindingCreate,
+    ExportBindingPreview,
+    ExportBindingView,
+    ExportDownloadResult,
+    ExportPrepare,
+    ExportPreview,
+    ExportRelease,
+    ExportRunView,
+    ExportView,
+)
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
 from app.schemas.platform_contracts import (
     CardRedeem,
@@ -31,6 +42,7 @@ from app.schemas.profile_contracts import (
     OrgProfileUpdate,
     TaskOrgProfileSelection,
 )
+from app.schemas.provider_contracts import ProviderConfigInput, ProviderTest
 from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
 from app.schemas.response_card_contracts import (
     CardAction,
@@ -42,10 +54,30 @@ from app.schemas.response_card_contracts import (
     DraftRequest,
     TaskRedactionSet,
 )
+from app.schemas.sandbox_contracts import PrototypeSpec, VendorSpec
+from app.schemas.screenshot_contracts import (
+    PrototypeDecisionBatch,
+    PrototypeDecisionPreviewInput,
+    ScreenshotAnalyzeInput,
+    ScreenshotAnnotate,
+    ScreenshotIngest,
+    ScreenshotPrepareInput,
+    ScreenshotWithdraw,
+)
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
+from pydantic import TypeAdapter
 
 # Only implemented commands are advertised; future commands are deliberately absent.
 COMMANDS = {
+    "provider list": None,
+    "provider history": None,
+    "provider set": ProviderConfigInput,
+    "provider test": ProviderTest,
+    "sandbox render": PrototypeSpec,
+    "sandbox capture": VendorSpec,
+    "sandbox list": None,
+    "sandbox show": None,
+    "sandbox download": None,
     "card list": None,
     "card show": None,
     "card create": CardCreate,
@@ -66,6 +98,14 @@ COMMANDS = {
     "evidence source add": EvidenceSourceCreate,
     "evidence source list": None,
     "evidence source download": None,
+    "export binding create": ExportBindingCreate,
+    "export binding list": None,
+    "export prepare": ExportPrepare,
+    "export run show": None,
+    "export release": ExportRelease,
+    "export list": None,
+    "export show": None,
+    "export download": None,
     "login": Login,
     "org use": None,
     "task create": TaskCreate,
@@ -128,6 +168,29 @@ COMMANDS = {
     "billing balance": None,
     "billing redeem": CardRedeem,
     "schema": None,
+    "screenshot prepare": ScreenshotPrepareInput,
+    "screenshot add": ScreenshotIngest,
+    "screenshot list": None,
+    "screenshot show": None,
+    "screenshot annotate": ScreenshotAnnotate,
+    "screenshot preview": None,
+    "screenshot withdraw": ScreenshotWithdraw,
+    "screenshot analyze": ScreenshotAnalyzeInput,
+    "screenshot suggestions": None,
+    "screenshot prototype-decisions preview": PrototypeDecisionPreviewInput,
+    "screenshot prototype-decisions apply": PrototypeDecisionBatch,
+    "screenshot prototype-decisions list": None,
+}
+
+EXPORT_OUTPUTS = {
+    "export binding create": TypeAdapter(ExportBindingPreview | ExportBindingView),
+    "export binding list": TypeAdapter(ExportBindingView),
+    "export prepare": TypeAdapter(ExportPreview | ExportRunView),
+    "export run show": TypeAdapter(ExportRunView),
+    "export release": TypeAdapter(ExportView),
+    "export list": TypeAdapter(ExportView),
+    "export show": TypeAdapter(ExportView),
+    "export download": TypeAdapter(ExportDownloadResult),
 }
 
 
@@ -184,6 +247,9 @@ def command_schema(app=None) -> dict:
             name: {
                 "input": model.model_json_schema() if model else None,
                 "cli_parameters": parameters.get(name, []),
+                **(
+                    {"output": EXPORT_OUTPUTS[name].json_schema()} if name in EXPORT_OUTPUTS else {}
+                ),
             }
             for name, model in COMMANDS.items()
         },

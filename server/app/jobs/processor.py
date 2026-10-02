@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
@@ -36,9 +37,17 @@ class Processor:
         self.settings, self.db, self.storage, self.llm, self.ocr = settings, db, storage, llm, ocr
         # Optional coroutine (session) -> LLMProvider choosing the platform default model.
         self.resolve = resolve
+        self.sandbox_browser = None
+        self.sandbox_fetch_transport = None
+        self.sandbox_resolver = None
 
     async def record_usage(
-        self, org_id: UUID, task_id: UUID, usages: list[ProviderUsage], job_id: UUID, run_id: UUID
+        self,
+        org_id: UUID,
+        task_id: UUID | None,
+        usages: list[ProviderUsage],
+        job_id: UUID,
+        run_id: UUID,
     ):
         async with self.db.transaction(org_id) as session:
             job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
@@ -60,6 +69,10 @@ class Processor:
 
     async def __call__(self, org: str, job: str):
         org_id, job_id = UUID(org), UUID(job)
+        from app.jobs.sandbox import process_if_sandbox
+
+        if await process_if_sandbox(self, org_id, job_id):
+            return
         async with self.db.transaction(org_id) as session:
             current = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
             if current is None or current.status in {"cancelled", "succeeded", "failed"}:
@@ -78,20 +91,33 @@ class Processor:
             current.lease_until = datetime.now(UTC) + timedelta(
                 seconds=self.settings.job_lease_seconds
             )
-            document = await session.get(Document, current.document_id)
-            if document is None:
+            document = (
+                await session.get(Document, current.document_id) if current.document_id else None
+            )
+            if document is None and current.kind != "provider_test":
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
-            task_id, kind, document_id = current.task_id, current.kind, document.id
+            task_id, kind, document_id = current.task_id, current.kind, current.document_id
             reasoning = current.reasoning
-            llm = await self.resolve(session) if self.resolve and kind != "draft" else self.llm
             key, suffix, expected_hash = (
-                document.storage_key,
-                Path(document.name).suffix.lower(),
-                document.sha256,
+                (
+                    document.storage_key,
+                    Path(document.name).suffix.lower(),
+                    document.sha256,
+                )
+                if document is not None
+                else ("", "", "")
             )
             chunks = (
                 []
-                if kind in {"draft", "card_generate"}
+                if kind
+                in {
+                    "draft",
+                    "card_generate",
+                    "provider_test",
+                    "export_render",
+                    "screenshot_render",
+                    "screenshot_analyze",
+                }
                 else [
                     dict(
                         id=row.id,
@@ -126,6 +152,42 @@ class Processor:
                     return recognized
 
             try:
+                llm = self.llm
+                if self.resolve and kind in {
+                    "extract",
+                    "card_generate",
+                    "provider_test",
+                    "screenshot_analyze",
+                }:
+                    async with self.db.transaction(org_id) as session:
+                        llm = await self.resolve(session, current)
+                if kind == "provider_test":
+                    from app.services.provider_configs import execute_test
+
+                    incremental = True
+                    await execute_test(execution, llm)
+                    return
+                if kind == "export_render":
+                    from app.jobs.export_render import render
+
+                    try:
+                        async with asyncio.timeout(self.settings.export_deadline_seconds):
+                            await render(execution, self.storage)
+                    except TimeoutError as exc:
+                        raise ServiceError(
+                            "export_render_timeout", "Export job deadline exceeded", 503, 3
+                        ) from exc
+                    return
+                if kind in {"screenshot_render", "screenshot_analyze"}:
+                    from app.services.screenshot_jobs import process_analysis, process_render
+
+                    incremental = True
+                    if kind == "screenshot_render":
+                        await process_render(execution, self.storage)
+                    else:
+                        await process_analysis(execution, self.storage, llm)
+                    return
+                assert task_id is not None and document_id is not None
                 if kind == "card_generate":
                     from app.services.card_generation import generate
 
@@ -322,6 +384,7 @@ class Processor:
                     # Exit code 3 marks transient failures such as object storage outages.
                     retryable = exc.exit_code == 3 and exc.code not in {
                         "draft_input_changed",
+                        "export_input_changed",
                         "generation_input_changed",
                         "generation_model_changed",
                         "generation_rules_changed",
@@ -349,13 +412,17 @@ class Processor:
                     )
                     if current is None or current.status == "cancelled" or current.run_id != run_id:
                         return
-                    should_retry = retryable and current.attempts < 3
+                    should_retry = retryable and current.attempts < 3 and kind != "provider_test"
                     current.status = "queued" if should_retry else "failed"
                     current.error = error
                     current.result = {**current.result, "cost": await job_cost(session, job_id)}
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
+                    if kind == "export_render":
+                        from app.jobs.export_render import failure_audit
+
+                        await failure_audit(session, current, error["code"])
                     if kind == "card_generate":
                         from app.services.card_generation import worker
                         from app.services.resources import audit

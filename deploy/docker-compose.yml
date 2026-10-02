@@ -49,6 +49,7 @@ services:
     environment: &runtime
       BID_DATABASE_URL: ${BID_DATABASE_URL:?Set runtime URL for bid_app at postgres/bid}
       BID_ENCRYPTION_KEY: ${BID_ENCRYPTION_KEY:?Set encryption key}
+      BID_SECRETS_KEY: ${BID_SECRETS_KEY:-}
       BID_STORAGE: ${BID_STORAGE:-local}
       BID_DATA_DIR: /app/data
       BID_S3_ENDPOINT: ${BID_S3_CONTAINER_ENDPOINT:-http://minio:9000}

@@ -11,6 +11,10 @@ from app.core.security import Secrets, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
+    "provider:read",
+    "sandbox:read",
+    "sandbox:render",
+    "sandbox:capture",
     "card:read",
     "card:write",
     "card:generate",
@@ -44,6 +48,7 @@ SCOPES = {
 
 ROLE_SCOPES = {
     "admin": {
+        "provider:write",
         # billing:redeem is deliberately absent from SCOPES: tokens can never redeem cards.
         "billing:read",
         "billing:redeem",
@@ -73,6 +78,7 @@ ROLE_SCOPES = {
         "task:template",
     },
     "bidder": {
+        "export",
         "evidence:source:read",
         "evidence:source:write",
         "task:read",
@@ -127,10 +133,24 @@ ROLE_SCOPES = {
     },
 }
 
+SCOPES.update({"screenshot:read", "screenshot:write"})
+
 for _role, _scopes in ROLE_SCOPES.items():
-    _scopes.update({"card:read", "draft:read"})
+    _scopes.update({"provider:read", "screenshot:read"})
     if _role != "viewer":
-        _scopes.update({"card:write", "card:generate", "draft:run", "evidence:confirm"})
+        _scopes.update({"screenshot:write", "screenshot:ingest"})
+    _scopes.update({"card:read", "draft:read", "sandbox:read"})
+    if _role != "viewer":
+        _scopes.update(
+            {
+                "card:write",
+                "card:generate",
+                "draft:run",
+                "evidence:confirm",
+                "sandbox:render",
+                "sandbox:capture",
+            }
+        )
 
 
 @dataclass

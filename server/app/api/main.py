@@ -19,11 +19,14 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
+from app.api.exports import create_router as create_export_router
+from app.api.org_console import create_router as create_org_console_router
 from app.api.platform import create_router as create_platform_router
+from app.api.providers import create_router as create_provider_router
 from app.api.response_cards import create_router as create_response_router
+from app.api.sandbox import create_router as create_sandbox_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
@@ -32,9 +35,10 @@ from app.core.security import Secrets, token_digest
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task
+from app.providers.configured import model_identity
+from app.providers.disabled import DisabledLLM
 from app.providers.llm import (
     billable,
-    create_llm,
     reasoning_choices,
     resolve_llm,
     with_reasoning,
@@ -80,6 +84,7 @@ from app.services import (
 from app.services.auth import SCOPES, authenticate, login, set_actor_context
 from app.services.extraction import EXTRACTION_VERSION, PROMPT_VERSION
 from app.services.parsing import PARSER_VERSION, validate_document
+from app.services.sandbox import guard_job as sandbox_guard_job
 from app.services.template_files import MAX_TEMPLATE_BYTES, validate_template
 from app.services.template_files import WARNINGS as TEMPLATE_WARNINGS
 
@@ -131,16 +136,14 @@ def create_app(
     db, crypto = Database(settings), Secrets(settings.encryption_key.get_secret_value())
     password_attempts = PasswordAttempts(db)
     storage = create_storage(settings)
-    # An injected provider is used as is; otherwise the platform default model, when set,
-    # takes precedence over the BID_LLM_* fallback for every job.
-    resolve: Callable[[AsyncSession], Awaitable[Any]] | None = None
+    # Test injection is explicit; runtime jobs resolve org configuration then the catalog.
+    resolve: Callable[..., Awaitable[Any]] | None = None
     if llm is None:
-        fallback = create_llm(settings)
 
-        async def resolve_default(session):
-            return await resolve_llm(session, settings, fallback, llm_transport)
+        async def resolve_default(session, job=None):
+            return await resolve_llm(session, settings, llm_transport, job)
 
-        resolve, llm = resolve_default, fallback
+        resolve, llm = resolve_default, DisabledLLM()
     ocr = ocr or LocalOCR(settings.ocr_language, settings.ocr_data_dir)
     queue = queue or Queue(settings)
     processor = Processor(settings, db, storage, llm, ocr, resolve)
@@ -290,7 +293,18 @@ def create_app(
             await set_actor_context(session, identity)
             yield session, identity
 
+    app.include_router(create_org_console_router(context))
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
+    app.include_router(
+        create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)
+    )
+    app.include_router(create_export_router(context, db, storage, queue, settings, crypto))
+    app.include_router(create_sandbox_router(context, db, storage, queue, crypto, processor))
+    from app.api.screenshots import create_router as create_screenshot_router
+
+    app.include_router(
+        create_screenshot_router(context, db, storage, queue, settings, llm, resolve)
+    )
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1045,7 +1059,7 @@ def create_app(
         command = "tender parse" if kind == "parse" else "req extract"
         if kind == "parse" and body.reasoning is not None:
             raise ServiceError("invalid_input", "Reasoning levels apply only to extraction", 400, 2)
-        model = await resolve(session) if resolve is not None else llm
+        model = await resolve(session) if resolve is not None and kind == "extract" else llm
         level, level_warnings = None, []
         if kind == "extract":
             model, level, level_warnings = with_reasoning(model, body.reasoning)
@@ -1089,6 +1103,10 @@ def create_app(
                 kind=kind,
                 cache_key=cache_key,
                 reasoning=level,
+                provider_config_id=getattr(model, "provider_config_id", None)
+                if kind == "extract"
+                else None,
+                provider_identity=model_identity(model) if kind == "extract" else None,
             )
             .on_conflict_do_nothing(index_elements=["org_id", "cache_key"])
             .returning(Job.id)
@@ -1304,10 +1322,37 @@ def create_app(
         job = await session.get(Job, job_id)
         if job is None:
             raise not_found()
+        if job.kind == "export_render":
+            from app.services.exports import job_access
+
+            await job_access(session, identity, job, storage)
+        await sandbox_guard_job(session, identity, job)
         payload = result(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
+        if job.kind in {"screenshot_render", "screenshot_analyze"}:
+            from app.services.screenshot_jobs import check_job_access
+
+            await check_job_access(session, identity, job)
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+            payload["ok"] = job.result.get("completion") != "partial"
+            payload["cost"] = job.result.get("cost", payload["cost"])
+        if job.kind == "sandbox" and job.status in {"failed", "cancelled"}:
+            payload["ok"] = False
+        if job.kind == "provider_test":
+            identity.require("provider:read")
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+            payload["cost"] = job.result.get("cost", payload["cost"])
+        if job.kind == "export_render":
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+            return payload
         if job.kind in {"draft", "card_generate"}:
             identity.require("draft:read" if job.kind == "draft" else "card:read")
             identity.require("task:read")
@@ -1320,7 +1365,7 @@ def create_app(
             if job.result.get("draft_id"):
                 from app.services.drafts import show_draft
 
-                await show_draft(session, identity, UUID(job.result["draft_id"]))
+                await show_draft(session, identity, UUID(job.result["draft_id"]), storage)
             if job.result.get("completion") == "partial":
                 payload["ok"] = False
             payload["warnings"] = job.result.get("warnings", [])
@@ -1338,6 +1383,11 @@ def create_app(
         job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
         if job is None:
             raise not_found()
+        if job.kind == "export_render":
+            from app.services.exports import job_access
+
+            await job_access(session, identity, job, storage, cancel=True)
+        await sandbox_guard_job(session, identity, job, cancel=True)
         if job.status not in {"cancelled", "queued", "running"}:
             raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
         job.status, job.finished_at = "cancelled", datetime.now(UTC)

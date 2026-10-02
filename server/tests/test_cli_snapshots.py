@@ -1,6 +1,8 @@
+import hashlib
 import json
 from pathlib import Path
 
+import bid_cli.export as export_cli
 from app.schemas.contracts import Result
 from bid_cli.client import Client
 from bid_cli.main import main
@@ -135,6 +137,90 @@ TEMPLATE_WARNINGS = [
     "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
 ]
 
+EXPORT_COLUMNS = [
+    {"key": key, "width_percent": width}
+    for key, width in zip(
+        (
+            "ordinal",
+            "tender_clause",
+            "source_location",
+            "response",
+            "deviation",
+            "deviation_note",
+            "evidence",
+        ),
+        (5, 25, 15, 25, 10, 10, 10),
+        strict=True,
+    )
+]
+EXPORT_SECTIONS = [
+    {
+        "section": section,
+        "heading_style_id": "Heading 1",
+        "table_style_id": "Table Grid",
+        "columns": EXPORT_COLUMNS if section in {"substantive", "commercial", "technical"} else [],
+    }
+    for section in (
+        "substantive",
+        "commercial",
+        "technical",
+        "comply_only",
+        "gaps",
+        "evidence_appendix",
+    )
+]
+EXPORT_BINDING = {
+    "id": IDENTIFIER,
+    "org_id": IDENTIFIER,
+    "template_revision_id": IDENTIFIER,
+    "template_sha256": "b" * 64,
+    "binding_hash": "c" * 64,
+    "static_content_hash": "d" * 64,
+    "adapter_version": "docx-export-v1",
+    "sections": EXPORT_SECTIONS,
+    "reviewed_by": IDENTIFIER,
+    "reviewed_at": "2026-10-01T00:00:00Z",
+}
+EXPORT_RUN = {
+    "id": IDENTIFIER,
+    "org_id": IDENTIFIER,
+    "task_id": IDENTIFIER,
+    "draft_id": IDENTIFIER,
+    "render_job_id": IDENTIFIER_2,
+    "mode": "review_copy",
+    "input_hash": "e" * 64,
+    "state": "awaiting_release",
+    "candidate_sha256": "f" * 64,
+    "export_id": None,
+    "issues": [],
+}
+EXPORT_FILE = {
+    "name": "synthetic-review.docx",
+    "sha256": "a" * 64,
+    "size_bytes": 1,
+    "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+EXPORT_VIEW = {
+    "id": IDENTIFIER,
+    "org_id": IDENTIFIER,
+    "task_id": IDENTIFIER,
+    "run_id": IDENTIFIER,
+    "draft_id": IDENTIFIER,
+    "task_template_id": IDENTIFIER,
+    "template_revision_id": IDENTIFIER,
+    "binding_id": IDENTIFIER,
+    "mode": "review_copy",
+    "completion": "partial",
+    "validity": "current",
+    "input_hash": "e" * 64,
+    "manifest_hash": "f" * 64,
+    "file": EXPORT_FILE,
+    "released_by": IDENTIFIER,
+    "released_at": "2026-10-01T00:00:00Z",
+    "issues": [],
+    "invalidated_requirement_ids": [],
+}
+
 
 async def fake_download(self, revision_id, output):
     # JSON shape fixture only; the actual download transport has independent tests.
@@ -147,6 +233,22 @@ async def fake_download(self, revision_id, output):
             "file": TEMPLATE["file"],
         },
         warnings=TEMPLATE_WARNINGS,
+    ).model_dump(mode="json")
+
+
+async def fake_export_download(self, export_id, output):
+    return Result(
+        ok=False,
+        command="export download",
+        data={
+            "export_id": str(export_id),
+            "output_path": str(output),
+            "file": EXPORT_FILE,
+            "mode": "review_copy",
+            "completion": "partial",
+            "validity": "current",
+            "issues": [],
+        },
     ).model_dump(mode="json")
 
 
@@ -221,6 +323,41 @@ SOURCE = {
 SOURCE_WARNINGS = [
     "Source is an unconfirmed user-supplied PDF page; authenticity and eligibility are not verified; never eligible for draft/export"
 ]
+
+SANDBOX_ARTIFACT = {
+    "id": IDENTIFIER,
+    "run_id": IDENTIFIER,
+    "attempt_id": IDENTIFIER,
+    "kind": "rendered_html",
+    "sha256": "e" * 64,
+    "size_bytes": 1,
+    "media_type": "text/html",
+    "width": None,
+    "height": None,
+    "page": None,
+    "parent_artifact_id": None,
+    "provenance_manifest_hash": "f" * 64,
+}
+SANDBOX_RUN = {
+    "id": IDENTIFIER,
+    "org_id": IDENTIFIER,
+    "task_id": IDENTIFIER,
+    "job_id": IDENTIFIER,
+    "purpose": "prototype_offline",
+    "request_hash": "a" * 64,
+    "profile": "prototype-v1",
+    "policy_revision": "policy-v1",
+    "selection_active": True,
+    "state": "queued",
+    "attempt_id": None,
+    "cleanup_state": "not_started",
+    "artifacts": [],
+    "metrics": None,
+    "issues": [],
+    "usage_ids": [],
+    "charge": None,
+    "charge_currency": None,
+}
 
 CLAUSE = {
     "document_id": IDENTIFIER,
@@ -366,6 +503,17 @@ async def fake_source_download(self, source_id, output):
             "file": SOURCE["preview"],
         },
         warnings=SOURCE_WARNINGS,
+    ).model_dump(mode="json")
+
+
+async def fake_sandbox_download(self, artifact_id, output):
+    return Result(
+        ok=True,
+        command="sandbox download",
+        data={
+            "artifact": SANDBOX_ARTIFACT,
+            "output_path": str(output),
+        },
     ).model_dump(mode="json")
 
 
@@ -522,10 +670,55 @@ async def fake_request(self, method, path, **kwargs):
         ]
     elif path == "/billing/redeem":
         data = {"card_id": IDENTIFIER, "amount": 10.0, "balance": 10.0, "currency": "USD"}
+    elif path.endswith("/sandbox-runs"):
+        if method == "POST":
+            submit = kwargs.get("json") or json.loads(kwargs["data"]["submit"])
+            purpose = submit["spec"]["purpose"]
+            if submit["dry_run"]:
+                data = {
+                    "dry_run": True,
+                    "request_hash": "a" * 64,
+                    "purpose": purpose,
+                    "profile": "prototype-v1" if purpose == "prototype_offline" else "capture-v1",
+                    "policy_revision": "policy-v1",
+                    "ready": True,
+                    "issues": [],
+                    "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+                    "estimate_basis": "no_vendor_call",
+                    "reserved_charge": None,
+                    "charge_currency": None,
+                    "estimated_duration_ms": None,
+                }
+            else:
+                assert submit["expected_request_hash"] == "a" * 64
+                data = {
+                    **SANDBOX_RUN,
+                    "purpose": purpose,
+                    "profile": "prototype-v1" if purpose == "prototype_offline" else "capture-v1",
+                }
+        else:
+            data, items = kwargs["params"], [SANDBOX_RUN]
+    elif path.startswith("/sandbox-runs/"):
+        data = SANDBOX_RUN
     elif path == "/tasks" and method == "POST":
         data = {"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}
     elif path == "/tasks":
         items = [{"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}]
+    elif path == "/export-template-bindings":
+        if method == "POST":
+            data = EXPORT_BINDING
+        else:
+            data, items = {"template_revision_id": IDENTIFIER}, [EXPORT_BINDING]
+    elif path.endswith("/export-runs"):
+        data = EXPORT_RUN
+    elif path.startswith("/export-runs/") and path.endswith("/release"):
+        data = EXPORT_VIEW
+    elif path.startswith("/export-runs/"):
+        data = EXPORT_RUN
+    elif path.endswith("/exports"):
+        data, items = {"task_id": IDENTIFIER}, [EXPORT_VIEW]
+    elif path.startswith("/exports/"):
+        data = EXPORT_VIEW
     elif path.endswith("/model-redaction"):
         data = {
             "task_id": IDENTIFIER,
@@ -858,6 +1051,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
     monkeypatch.setattr(Client, "download_template", fake_download)
     monkeypatch.setattr(Client, "download_certificate_file", fake_scan_download)
     monkeypatch.setattr(Client, "download_evidence_source", fake_source_download)
+    monkeypatch.setattr(export_cli, "download_export", fake_export_download)
+    monkeypatch.setattr("bid_cli.sandbox.download_artifact", fake_sandbox_download)
     source = tmp_path / "fixture.pdf"
     source.write_bytes(b"Synthetic transport fixture")
     product_input, update_input, selection_input = (
@@ -901,6 +1096,36 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
     scan_file.write_bytes(pdf_bytes)
     evidence_input = tmp_path / "source.json"
     evidence_input.write_text(json.dumps({"task_certificate_id": IDENTIFIER, "page": 1}))
+    sandbox_html = tmp_path / "prototype.html"
+    sandbox_html.write_text("<html>synthetic</html>")
+    sandbox_render_input = tmp_path / "sandbox-render.json"
+    sandbox_render_input.write_text(
+        json.dumps(
+            {
+                "purpose": "prototype_offline",
+                "extraction_job_id": IDENTIFIER,
+                "task_feature_id": IDENTIFIER,
+                "expected_feature_revision_id": IDENTIFIER,
+                "html_sha256": hashlib.sha256(sandbox_html.read_bytes()).hexdigest(),
+                "html_size_bytes": len(sandbox_html.read_bytes()),
+            }
+        )
+    )
+    sandbox_capture_input = tmp_path / "sandbox-capture.json"
+    sandbox_capture_input.write_text(
+        json.dumps(
+            {
+                "purpose": "vendor_capture",
+                "extraction_job_id": IDENTIFIER,
+                "task_resource_id": IDENTIFIER,
+                "expected_product_revision_id": IDENTIFIER,
+                "source_field": "official_url",
+                "expected_source_url_sha256": "a" * 64,
+                "format": "web",
+                "capture_key": IDENTIFIER,
+            }
+        )
+    )
     card_create_input = tmp_path / "card-create.json"
     card_update_input = tmp_path / "card-update.json"
     card_classify_input = tmp_path / "card-classify.json"
@@ -946,6 +1171,38 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
     redaction_input.write_text(
         json.dumps({"expected_revision": 1, "model_redaction_enabled": False})
     )
+    export_binding_input = tmp_path / "export-binding.json"
+    export_prepare_input = tmp_path / "export-prepare.json"
+    export_release_input = tmp_path / "export-release.json"
+    export_binding_input.write_text(
+        json.dumps(
+            {
+                "template_revision_id": IDENTIFIER,
+                "expected_template_sha256": "b" * 64,
+                "expected_static_content_hash": "d" * 64,
+                "sections": EXPORT_SECTIONS,
+            }
+        )
+    )
+    export_prepare_input.write_text(
+        json.dumps(
+            {
+                "draft_id": IDENTIFIER,
+                "task_template_id": IDENTIFIER,
+                "binding_id": IDENTIFIER,
+                "mode": "review_copy",
+                "expected_input_hash": "e" * 64,
+            }
+        )
+    )
+    export_release_input.write_text(
+        json.dumps(
+            {
+                "expected_input_hash": "e" * 64,
+                "expected_candidate_sha256": "f" * 64,
+            }
+        )
+    )
     platform_model_input = tmp_path / "platform-model.json"
     platform_model_input.write_text(
         json.dumps(
@@ -964,6 +1221,19 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "org use": ["org", "use", IDENTIFIER],
         "task create": ["task", "create", "--name", "Synthetic task"],
         "task list": ["task", "list"],
+        "sandbox render": [
+            "sandbox", "render", "--task", IDENTIFIER, "--html", str(sandbox_html),
+            "--input", str(sandbox_render_input),
+        ],
+        "sandbox capture": [
+            "sandbox", "capture", "--task", IDENTIFIER, "--input", str(sandbox_capture_input),
+        ],
+        "sandbox list": ["sandbox", "list", "--task", IDENTIFIER],
+        "sandbox show": ["sandbox", "show", "--id", IDENTIFIER],
+        "sandbox download": [
+            "sandbox", "download", "--artifact", IDENTIFIER,
+            "--output", str(tmp_path / "sandbox-artifact.bin"),
+        ],
         "task redaction set": [
             "task", "redaction", "set", "--task", IDENTIFIER, "--input", str(redaction_input),
         ],
@@ -1011,6 +1281,14 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "draft": ["draft", "--task", IDENTIFIER, "--job", IDENTIFIER, "--wait"],
         "draft show": ["draft", "show", "--id", IDENTIFIER],
         "draft list": ["draft", "list", "--task", IDENTIFIER, "--job", IDENTIFIER],
+        "export binding create": ["export", "binding", "create", "--input", str(export_binding_input)],
+        "export binding list": ["export", "binding", "list", "--template-revision", IDENTIFIER],
+        "export prepare": ["export", "prepare", "--task", IDENTIFIER, "--input", str(export_prepare_input), "--wait"],
+        "export run show": ["export", "run", "show", "--id", IDENTIFIER],
+        "export release": ["export", "release", "--run", IDENTIFIER, "--input", str(export_release_input)],
+        "export list": ["export", "list", "--task", IDENTIFIER],
+        "export show": ["export", "show", "--id", IDENTIFIER],
+        "export download": ["export", "download", "--id", IDENTIFIER, "--output", str(tmp_path / "export.docx")],
         "resource product add": ["resource", "product", "add", "--input", str(product_input)],
         "resource product list": ["resource", "product", "list"],
         "resource product update": [
@@ -1234,7 +1512,15 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "schema": ["schema"],
     }  # fmt: skip
     actual = {}
-    partial_commands = {"card generate", "draft", "draft show", "job status", "job wait"}
+    partial_commands = {
+        "card generate",
+        "draft",
+        "draft show",
+        "export download",
+        "export release",
+        "job status",
+        "job wait",
+    }
     for name, args in commands.items():
         try:
             main([*common, *args, "--json"])

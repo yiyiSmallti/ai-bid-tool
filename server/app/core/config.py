@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="BID_", extra="ignore", env_ignore_empty=True)
     database_url: SecretStr
     encryption_key: SecretStr
+    secrets_key: SecretStr | None = None
     data_dir: Path = Path("data")
     storage: str = "local"
     s3_endpoint: str | None = None
@@ -52,6 +53,13 @@ class Settings(BaseSettings):
     job_vendor_calls_per_batch: float = Field(default=4, ge=1)
     job_lease_seconds: int = Field(default=900, ge=3)
     job_heartbeat_seconds: float = Field(default=30, gt=0, allow_inf_nan=False)
+    # Export profiles may be tightened by deployment but never exceed approved limits.
+    export_max_requirements: int = Field(default=2000, ge=1, le=2000)
+    export_max_attachments: int = Field(default=300, ge=1, le=300)
+    export_max_output_bytes: int = Field(default=512 * 1024 * 1024, ge=1, le=512 * 1024 * 1024)
+    export_max_expanded_bytes: int = Field(default=1024 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
+    export_memory_bytes: int = Field(default=1024 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
+    export_deadline_seconds: float = Field(default=900, gt=0, le=900, allow_inf_nan=False)
     # Built console from web/dist; served under /app when set.
     web_dir: Path | None = None
 
