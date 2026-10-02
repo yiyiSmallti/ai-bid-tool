@@ -11,8 +11,7 @@ B11，依赖 R01、B07、B08。批准范围按[已定决定](#已定决定)执�
 | 部分 | 状态与边界 |
 | --- | --- |
 | 人类模板绑定、预检、prepare → worker 候选 → release → 下载、正式件/审阅件、证书页附件、加密、审计、限额与哈希 | **已实施**；机制和代码入口见 [human-section-exports.md](../notes/human-section-exports.md) |
-| `prototype_decision_required`、`prototype_replacement_pending`、`prototype_decision_stale` | **未实施，待合并截图流**；单一接入函数为 [exports.py](../../server/app/services/exports.py) 的 `collect_additional_refusal_issues`，保留指向 [screenshots.md](screenshots.md) 的 TODO |
-| PostgreSQL 迁移、RLS、并发和完整 API/processor 验收 | 已编写端到端关口测试；本沙箱无法连接 PostgreSQL 测试实例，须由维护者运行，不能视为已通过 |
+| 图片证据附件与 `prototype_decision_required`、`prototype_replacement_pending`、`prototype_decision_stale` | **已实施**；见 [human-section-exports.md](../notes/human-section-exports.md) 的图片附件与原型门禁说明 |
 | Word/WPS 视觉分页及隔离 S3 完整下载验收 | 保留为验收项；DOCX 解包/重开和合成工件验证不能替代此项 |
 
 ## 目标与边界

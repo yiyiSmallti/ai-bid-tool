@@ -20,7 +20,7 @@ from app.models.entities import Job
 from app.models.exports import ExportRenderCandidate, ExportRun
 from app.providers.storage import Storage
 from app.schemas.contracts import Cost
-from app.services import evidence_sources, exports, templates
+from app.services import evidence_sources, exports, screenshots, templates
 from app.services.auth import set_actor_context
 from app.services.resources import audit
 
@@ -161,9 +161,15 @@ async def render(execution: JobExecution, storage: Storage) -> None:
             del template
             pages = []
             for attachment in manifest["attachments"]:
-                content, _ = await evidence_sources.read_preview(
-                    session, actor, UUID(attachment["evidence_source_id"]), storage
-                )
+                if attachment.get("kind") == "image":
+                    asset, rendition = await screenshots.rendition_access(
+                        session, actor, UUID(attachment["rendition_id"])
+                    )
+                    content = await screenshots.read_rendition(storage, asset, rendition)
+                else:
+                    content, _ = await evidence_sources.read_preview(
+                        session, actor, UUID(attachment["evidence_source_id"]), storage
+                    )
                 private_write(root / f"page-{attachment['ordinal']}.png", content)
                 del content
                 pages.append(attachment["ordinal"])

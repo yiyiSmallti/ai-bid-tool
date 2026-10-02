@@ -1,11 +1,11 @@
 ---
 kind: plan
-status: "部分实施：Phase A；沙盒与导出接线待实施"
+status: "部分实施：Phase A 与导出接线；沙盒接入待实施"
 ---
 
 # 契约草案：功能截图、原型与厂家证据配图
 
-状态：**部分实施：Phase A；沙盒与导出接线待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
+状态：**部分实施：Phase A 与导出接线；沙盒接入待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
 水印边界。下文按已批准的推荐选项描述契约，各项选择见[已定决定](#已定决定)。
 
 ## 目标与边界
@@ -1092,13 +1092,13 @@ Provider 使用假实现，不能把合成材料或假调用当作真实取证�
 | 同一 Rust 引擎的遮挡、裁剪、区域框、无标签原型 profile | 已实施；[`stamp/src/main.rs`](../../stamp/src/main.rs)；无 Python 绘图替代，缺二进制明确失败 |
 | 精确哈希隐私放行、加密保存、签名预览、撤下与审计 | 已实施；[`API`](../../server/app/api/screenshots.py)；人工入库不等于证据确认 |
 | image_region 卡片、逐卡确认、draft 图片依赖与失效重算 | 已实施；[`response_cards.py`](../../server/app/services/response_cards.py)、[`drafts.py`](../../server/app/services/drafts.py) |
-| 原型逐项/模块 keep/replace 决定、前版本与精确集合门禁 | 已实施；[`prototype_decisions.py`](../../server/app/services/prototype_decisions.py)；其 export 检查函数未连接导出路由 |
+| 原型逐项/模块 keep/replace 决定、前版本与精确集合门禁 | 已实施；[`prototype_decisions.py`](../../server/app/services/prototype_decisions.py)；正式导出经 `prototype_gate` 消费 |
 | 匹配要求、区域建议、读字及调用准入/计费 | 已实施；[`screenshot_vision.py`](../../server/app/providers/screenshot_vision.py)、[`screenshot_jobs.py`](../../server/app/services/screenshot_jobs.py)；只发送已放行派生图，未调用真实厂商 |
 | PostgreSQL FORCE RLS 与数据库门禁 | 迁移和两单位测试已实施；[`0023`](../../server/migrations/versions/0023_screenshots.py) 接在沙箱迁移 `0022` 之后 |
 | 本机浏览器运行页采集入口 `bid screenshot capture` | 已确认归入 Phase B，未实施；待沙盒分支合并后接入统一回执、脱敏与归档交接，保持客户端本机执行边界 |
 | 厂家搜索候选入口 `bid evidence search` | 已确认归入 Phase B，未实施；与沙盒及厂家网页/PDF 采集管线一起接入，候选仍不直接成为 Evidence |
 | HTML 原型生成/渲染与厂家网页/PDF 采集 | Phase B，未实施；待沙盒分支合并后接入。已预留生成、回执、搜索候选与厂家归档的单位内关系，无客户端伪造生成记录的 API |
-| 正式导出图片消费、决定检查接线和 DOCX 实物验收 | 未实施；由维护者将决定检查接入导出分支，不能据此声明完整截图合同验收完成 |
+| 正式导出图片消费、决定检查接线和 DOCX 实物验收 | 已实施；见 [human-section-exports.md](../notes/human-section-exports.md)。端到端测试依赖 Rust 渲染器，CI 构建后运行 |
 
 落实的接口决定：
 

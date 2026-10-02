@@ -72,6 +72,24 @@ Reading a retained export compares its inputs against the recorded profile rathe
 than silently rebinding it to the currently installed renderer. Re-rendering still
 requires that profile to be available. Conflicting output hashes stop publication.
 
+Confirmed `image_region` Evidence becomes an image attachment: the manifest fixes
+the rendition ID, PNG hash, size and dimensions, deduplicates by rendition, and
+the worker reads the rendition through the screenshot access checks. Every image is
+titled `证据图片` and indexed as `图片` with its confirmed visual observation, whatever
+its source, so a document never shows which images are prototypes.
+
+A final section also runs `prototype_gate`: each prototype image needs a current
+`keep` decision from
+[prototype_decisions.py](../../server/app/services/prototype_decisions.py), otherwise
+`prototype_decision_required`, `prototype_replacement_pending` or
+`prototype_decision_stale` blocks it. The current decisions and their set hash are
+part of the input manifest, so a later decision makes the run and its export stale.
+`export_run_evidence.prototype_decision_id` stores the kept decision, and
+[0024_export_images.py](../../server/migrations/versions/0024_export_images.py)
+adds `export_prototype_kept` to the completion gate, which requires that decision
+to be the latest `keep` for the same card revision, rendition and feature revision.
+Review copies never depend on decisions.
+
 Preparation, candidate publication and human release use the task, sorted cards,
 member/dependency and run/job lock order. File I/O occurs outside the short final
 mutation checks. The service re-reads fixed inputs under locks before committing
@@ -94,11 +112,9 @@ replacement. Only the verified local receipt reports a completed download.
 
 ## Pitfalls
 
-- The additional refusal hook is
-  `collect_additional_refusal_issues` in
-  [exports.py](../../server/app/services/exports.py). Prototype disposition refusals
-  remain an explicit integration task in [screenshots.md](../plan/screenshots.md).
-  Their internal reasons must not become visible prototype labels in documents.
+- Prototype decision reasons and material kinds stay in the internal manifest and
+  issues. The renderer must not print `material_kind` for images; adding a
+  per-source caption would reveal prototypes.
 - Source archives remain unconfirmed. Export eligibility comes from the human
   Evidence confirmation; an archive preview or a selected certificate alone is
   insufficient. A declaration does not invent a page attachment.
@@ -125,3 +141,4 @@ replacement. Only the verified local receipt reports a completed download.
 - [test_export_db.py](../../server/tests/test_export_db.py): runtime-role SQL gates and two-organization table isolation.
 - [test_export_renderer.py](../../server/tests/test_export_renderer.py): strict templates, preserved media and cross-process synthetic page artifacts.
 - [test_export_client.py](../../server/tests/test_export_client.py): CLI schema, partial completion and hostile download transports.
+- [test_export_images.py](../../server/tests/test_export_images.py): prototype gate, keep link, embedded rendition bytes and staleness after replace.

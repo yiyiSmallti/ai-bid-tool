@@ -58,7 +58,7 @@ kind: readme
 - [剩余范围与路线](plan/roadmap.md)（plan）：覆盖矩阵、已知缺陷、待定决定。
 - [Rust 标注契约草案](plan/annotation.md)（plan）：待批准的下一范围。
 - [单位模型配置契约](plan/provider-config.md)（plan）：单位自带模型与平台模型选择，已实施。
-- [导出契约](plan/export.md)（plan）：按单位 Word 模板人工导出偏离表与证据附件，部分实施，图片附件与原型门禁待接线。
+- [导出契约](plan/export.md)（plan）：按单位 Word 模板人工导出偏离表与证据附件，部分已实施，待 Word/WPS 视觉分页验收。
 - [截图与证据配图契约](plan/screenshots.md)（plan）：截图与厂家资料取证、脱敏、模型原型与响应证据，Phase A 已实施。
 - [沙盒契约](plan/sandbox.md)（plan）：不可信生成内容与内置 agent 的隔离执行环境，已实施，待真实隔离验收。
 - [单位后台契约](plan/org-console.md)（plan）：网页端招标、抽取与响应卡审阅流程，已实施，付费起草待绑定契约。

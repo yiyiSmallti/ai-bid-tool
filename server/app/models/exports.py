@@ -105,9 +105,18 @@ class ExportRunEvidence(Tenant, Base):
     card_revision_id: Mapped[UUID] = mapped_column()
     evidence_id: Mapped[UUID] = mapped_column()
     attachment_ordinal: Mapped[int | None] = mapped_column(Integer)
+    prototype_decision_id: Mapped[UUID | None] = mapped_column()
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "run_item_id", "evidence_id"),
+        ForeignKeyConstraint(
+            ["org_id", "evidence_id", "prototype_decision_id"],
+            [
+                "prototype_evidence_decisions.org_id",
+                "prototype_evidence_decisions.evidence_id",
+                "prototype_evidence_decisions.id",
+            ],
+        ),
         ForeignKeyConstraint(
             ["org_id", "run_id", "run_item_id", "card_revision_id"],
             [

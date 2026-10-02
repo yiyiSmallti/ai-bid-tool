@@ -720,6 +720,21 @@ def _read_private(path: Path, limit: int, code: str) -> bytes:
     return value
 
 
+# Image evidence is rendered uniformly: the document never reveals which images are
+# prototypes, user screenshots or vendor captures.
+IMAGE_MATERIALS = frozenset(
+    {
+        "user_screenshot",
+        "browser_screenshot",
+        "user_diagram",
+        "certificate_image",
+        "vendor_web",
+        "vendor_pdf",
+        "prototype",
+    }
+)
+
+
 def _validate_png(content: bytes, width: int, height: int) -> None:
     if len(content) < 24 or content[:8] != b"\x89PNG\r\n\x1a\n" or content[12:16] != b"IHDR":
         _fail("attachment_integrity", "Evidence page is not a PNG")
@@ -763,6 +778,7 @@ def _validate_manifest(
         _fail("invalid_export_manifest", "Every requirement must occur exactly once")
     gaps = 0
     evidence_bindings: dict[str, tuple[str, int | None]] = {}
+    image_evidence: set[str] = set()
     for item in items:
         kind = item.get("kind")
         if kind not in {"row", "comply_only", "gap"}:
@@ -794,10 +810,12 @@ def _validate_manifest(
                 _text(evidence_item.get("confirmed_at"), "evidence.confirmed_at")
                 material_kind = evidence_item.get("material_kind")
                 attachment_ordinal = evidence_item.get("attachment_ordinal")
-                if material_kind == "user_supplied_pdf_page":
+                if material_kind == "user_supplied_pdf_page" or material_kind in IMAGE_MATERIALS:
                     attachment_ordinal = _integer(
                         attachment_ordinal, "evidence.attachment_ordinal", minimum=1
                     )
+                    if material_kind in IMAGE_MATERIALS:
+                        image_evidence.add(evidence_id)
                 elif material_kind == "declaration":
                     if attachment_ordinal is not None:
                         _fail(
@@ -842,9 +860,15 @@ def _validate_manifest(
         if label != f"E{index + 1:03d}" or label in seen_labels:
             _fail("invalid_export_manifest", "Attachment labels must be stable E001 ordinals")
         seen_labels.add(label)
-        _sha(attachment.get("original_sha256"), "attachment.original_sha256")
+        is_image = attachment.get("kind") == "image"
+        if is_image:
+            _text(attachment.get("rendition_id"), "attachment.rendition_id")
+        elif "kind" in attachment:
+            _fail("invalid_export_manifest", "Attachment kind is unsupported")
+        else:
+            _sha(attachment.get("original_sha256"), "attachment.original_sha256")
+            _integer(attachment.get("page"), "attachment.page", minimum=1)
         _sha(attachment.get("png_sha256"), "attachment.png_sha256")
-        _integer(attachment.get("page"), "attachment.page", minimum=1)
         size = _integer(attachment.get("size_bytes"), "attachment.size_bytes", minimum=1)
         width = _integer(attachment.get("width"), "attachment.width", minimum=1)
         height = _integer(attachment.get("height"), "attachment.height", minimum=1)
@@ -868,7 +892,9 @@ def _validate_manifest(
             for evidence_id, (_, ordinal) in evidence_bindings.items()
             if ordinal == index + 1
         }
-        if set(evidence_ids) != expected_evidence:
+        if set(evidence_ids) != expected_evidence or any(
+            (evidence_id in image_evidence) != is_image for evidence_id in evidence_ids
+        ):
             _fail(
                 "invalid_export_manifest",
                 "Attachment evidence IDs do not match row evidence references",
@@ -1147,7 +1173,14 @@ def _render_evidence_index(
             reference = str(attachment["label"]) if attachment else "声明"
             evidence_input = _mapping(evidence.get("input", {}), "evidence.input")
             detail = str(evidence_input.get("quote", ""))
-            if attachment:
+            material = str(evidence.get("material_kind", ""))
+            if attachment and attachment.get("kind") == "image":
+                material = "图片"
+                detail = (
+                    f"所见：{evidence.get('visual_observation', '')}；"
+                    f"PNG SHA-256 {attachment['png_sha256']}"
+                )
+            elif attachment:
                 detail = (
                     f"摘录：{detail}；原件页 {attachment['page']}；"
                     f"原件 SHA-256 {attachment['original_sha256']}；"
@@ -1159,7 +1192,7 @@ def _render_evidence_index(
                     evidence_id,
                     f"{evidence['confirmed_by']} / {evidence['confirmed_at']}",
                     f"{evidence.get('selection_id', '')} / {evidence.get('resource_revision_id', '')}",
-                    f"{evidence.get('material_kind', '')}；{detail}",
+                    f"{material}；{detail}",
                 ]
             )
     _render_simple_table(
@@ -1255,9 +1288,12 @@ def _render_attachments(
         title = document.add_paragraph()
         _set_paragraph_style_id(title, str(binding["heading_style_id"]))
         title.paragraph_format.page_break_before = True
+        requirements = ", ".join(attachment["requirement_ids"])
         title.add_run(
-            f"{label} 证据页｜修订 {attachment['revision_id']}｜原件第 {attachment['page']} 页｜"
-            f"SHA-256 {attachment['original_sha256']}｜要求 {', '.join(attachment['requirement_ids'])}"
+            f"{label} 证据图片｜SHA-256 {attachment['png_sha256']}｜要求 {requirements}"
+            if attachment.get("kind") == "image"
+            else f"{label} 证据页｜修订 {attachment['revision_id']}｜原件第 {attachment['page']} 页｜"
+            f"SHA-256 {attachment['original_sha256']}｜要求 {requirements}"
         )
         for run in title.runs:
             run.font.hidden = False

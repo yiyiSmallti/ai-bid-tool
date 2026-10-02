@@ -33,6 +33,11 @@ jobs:
               handle.write("BID_ENCRYPTION_KEY=" + Fernet.generate_key().decode() + "\n")
               handle.write("BID_CLI_KEY=" + Fernet.generate_key().decode() + "\n")
           PY
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Build the screenshot renderer so image tests run instead of skipping
+        run: CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" sh scripts/build_screenshot_renderer.sh
       - run: uv run ruff check server cli scripts evals
       - run: uv run ruff format --check server cli scripts evals
       - run: uv run pyright
