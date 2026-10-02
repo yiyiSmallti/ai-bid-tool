@@ -181,6 +181,9 @@ class JobExecution:
                         "billing_currency_mismatch",
                         "Balance currency does not match billing currency",
                     )
+            # Settlement may have failed while this admission awaited row locks.
+            if self.stopped is not None:
+                raise self.stopped
             session.add(
                 VendorCall(
                     id=call_id,
@@ -253,6 +256,13 @@ class JobExecution:
                         "Could not persist vendor usage; no more calls allowed",
                     ) from None
                 await asyncio.sleep(0.05 * (attempt + 1))
+            except (SQLAlchemyError, ProviderFailure):
+                # Pool timeouts and domain failures are not transient DBAPI errors.
+                # Fence admission before the caller tries to persist unknown state.
+                raise self.stop(
+                    "usage_accounting_failed",
+                    "Could not persist vendor usage; no more calls allowed",
+                ) from None
         else:
             raise AssertionError("unreachable")
         if exceeded:
@@ -262,14 +272,22 @@ class JobExecution:
             )
 
     async def unknown(self, call_id: UUID) -> None:
-        async with self.db.transaction(self.org_id) as session:
-            await session.execute(
-                update(VendorCall)
-                .where(
-                    VendorCall.id == call_id,
-                    VendorCall.job_id == self.job_id,
-                    VendorCall.run_id == self.run_id,
-                    VendorCall.state == "pending",
+        try:
+            async with self.db.transaction(self.org_id) as session:
+                await session.execute(
+                    update(VendorCall)
+                    .where(
+                        VendorCall.id == call_id,
+                        VendorCall.job_id == self.job_id,
+                        VendorCall.run_id == self.run_id,
+                        VendorCall.state == "pending",
+                    )
+                    .values(state="unknown")
                 )
-                .values(state="unknown")
-            )
+        except SQLAlchemyError:
+            # A failed marker leaves the durable pending reservation in place.
+            # Never replace an accounting stop with a raw pool/driver exception.
+            raise self.stop(
+                "usage_accounting_failed",
+                "Could not persist unknown vendor outcome; no more calls allowed",
+            ) from None

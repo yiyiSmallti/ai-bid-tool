@@ -121,8 +121,12 @@ late links to historical revisions, incomplete draft coverage, and updates or
 deletes of history. Trusted application authentication supplies the actor context;
 SQL access as the application role is not an alternative authentication API.
 
-Card citation checks require the stored quote to occur as exact text and to have
-one unique normalized match at the recorded page or Word block. Migration `0017`
+Card citation checks require the stored quote to occur as exact text and to
+resolve to one original span at the recorded page or Word block. Application and
+database checks use the same normalization and segment-boundary disambiguation
+defined in [docx-citations.md](docx-citations.md#how-it-works). Migration `0019`
+replaces the shared database citation predicate consumed by confirmation and
+draft gates; it does not rewrite requirements or review history. Migration `0017`
 adds nullable `requirements.model_quote` and
 `response_card_revisions.quote_sha256`. Creation, editing, withdrawal, reopening,
 and human disposition bind a new revision to the current exact requirement quote;

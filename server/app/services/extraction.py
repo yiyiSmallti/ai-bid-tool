@@ -7,7 +7,7 @@ from app.core.errors import ServiceError
 from app.schemas.contracts import Category, ExtractedRequirement, Extraction, Location, Source
 
 PROMPT_VERSION = "req-v3"
-EXTRACTION_VERSION = "exact-spans-v1"
+EXTRACTION_VERSION = "exact-spans-v2"
 
 
 QUOTES = str.maketrans(
@@ -179,8 +179,8 @@ def merge_starred(extraction: Extraction, chunks: list[dict]) -> Extraction:
             else [(chunk["text"], None)]
         )
         for text, block in units:
-            for line in re.split(r"[；;\r\n]+", text):
-                quote = line.strip()
+            for segment in re.finditer(r"[^；;\r\n]+", text):
+                quote = segment.group().strip()
                 if (
                     not quote
                     or not re.search(r"[★☆]|实质性要求|否决投标|废标", quote)
@@ -200,7 +200,8 @@ def merge_starred(extraction: Extraction, chunks: list[dict]) -> Extraction:
                             and item.source.location.block_id == block["block_id"]
                         )
                     )
-                    and normalize(item.source.quote) in normalize(quote)
+                    and (span := locate_span(text, item.source.quote)[0]) is not None
+                    and segment.start() <= span[0] < span[1] <= segment.end()
                 ]
                 if matching:
                     for item in matching:

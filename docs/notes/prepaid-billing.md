@@ -47,7 +47,11 @@ For a platform call, `HTTPExtractor.reservation` in
 [llm.py](../../server/app/providers/llm.py) computes an upper charge `R` at the
 catalog sale prices: input allowance is the UTF-8 byte length of the whole JSON
 request plus 4,096 framing tokens; output allowance is the request's output
-token limit, multiplied by `n` when present. The amount is rounded upward to
+largest top-level output token limit actually sent, multiplied by `n` when
+present. Every recognized limit and `n` must be a positive integer; choosing a
+smaller alias cannot lower the reservation. Request construction and catalog
+validation prohibit output-limit options as defined in
+[llm-providers.md](llm-providers.md#how-it-works). The amount is rounded upward to
 eight decimal places. Unknown or invalid sale prices fail with
 `billing_price_unavailable`, rather than authorizing an unpriced call.
 
@@ -94,8 +98,15 @@ Migration [0016_vendor_call_guards.py](../../server/migrations/versions/0016_ven
 adds tenant-scoped reservations and the unique `(org_id, job_id, run_id,
 call_id)` usage key, with a composite foreign key to the admitted call. A
 balance entry also has a unique usage reference. A transient accounting write
-is retried at most three times with the same identifiers; an ambiguous commit
-cannot deduct twice. Other database failures stop further calls explicitly.
+is retried at most three times with the same identifiers, only for invalidated
+connections, connection SQLSTATEs, serialization failures and deadlocks; an
+ambiguous commit cannot deduct twice. Unrecovered driver errors, pool timeouts,
+other SQLAlchemy failures and missing accounting parents set the attempt stop
+flag before any unknown-state write and surface as `usage_accounting_failed`.
+Failure to persist that marker also stops admission; the existing `pending`
+reservation remains held. Admission rechecks the flag after waiting for locks.
+Waiting extraction batches stop, while already sent requests drain through
+settlement even after the flag is set.
 Legacy usage is left intact; the job attribution and ceilings cover calls
 admitted through this mechanism.
 

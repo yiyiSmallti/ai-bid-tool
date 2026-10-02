@@ -102,7 +102,7 @@ def request_body(llm: "HTTPExtractor", requirements: list[dict], materials: list
             "messages": [{"role": "system", "content": system}, {"role": "user", "content": text}],
             "response_format": response_format,
         }
-    return {**settings.request_options(), **body}
+    return llm.build_request(body)
 
 
 @dataclass

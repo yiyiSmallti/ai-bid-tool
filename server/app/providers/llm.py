@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ServiceError, log_unexpected
+from app.core.llm_options import output_limits, validate_request_options
 from app.models.entities import PlatformModel
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import accounted_call, plan_calls
@@ -32,7 +33,7 @@ from app.schemas.contracts import (
 )
 from app.services.extraction import cited, fingerprint, locate_span, location_of, normalize
 
-ADAPTER_VERSION = "http-extract-v4"
+ADAPTER_VERSION = "http-extract-v5"
 logger = logging.getLogger(__name__)
 RETRYABLE_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 # Exhausted quota, unpaid accounts and expired plans do not recover within the retry
@@ -570,6 +571,34 @@ class HTTPExtractor:
             charge=charge,
         )
 
+    def build_request(self, body: dict) -> dict:
+        # Validate here as well as in the catalog: environment settings and old
+        # catalog levels can still reach both extraction and drafting workers.
+        try:
+            options = validate_request_options(self.settings.request_options())
+        except ValueError:
+            raise ProviderFailure(
+                "Request options contain invalid or reserved output limits",
+                code="invalid_provider_options",
+            ) from None
+        return {**options, **body}
+
+    @staticmethod
+    def output_token_bound(body: dict) -> int:
+        # Both adapters send top-level limits. Nested option aliases were rejected
+        # at construction; JSON Schema maxLength fields bound characters, not tokens.
+        limits = output_limits(body, nested=False)
+        copies = body.get("n", 1)
+        if (
+            not limits
+            or any(type(value) is not int or value < 1 for value in limits)
+            or type(copies) is not int
+            or copies < 1
+        ):
+            raise ProviderFailure("Model output limit is invalid", code="billing_bound_unavailable")
+        # A compatible endpoint may ignore any smaller alias that is present.
+        return max(limits) * copies
+
     def reservation(self, body: dict) -> Decimal:
         if self.platform_model_id is None:
             return Decimal(0)
@@ -580,20 +609,9 @@ class HTTPExtractor:
         # Byte-level tokenizers cannot emit more content tokens than UTF-8 bytes.
         # Count the entire request (including schema) plus conservative framing space.
         input_bound = len(json.dumps(body, ensure_ascii=False).encode("utf-8")) + 4096
-        output_bound = body.get("max_completion_tokens", body["max_tokens"])
-        copies = body.get("n", 1)
-        if (
-            type(output_bound) is not int
-            or output_bound < 1
-            or type(copies) is not int
-            or copies < 1
-        ):
-            raise ProviderFailure("Model output limit is invalid", code="billing_bound_unavailable")
+        output_bound = self.output_token_bound(body)
         return (
-            (
-                input_bound * Decimal(str(self.sale[0]))
-                + output_bound * copies * Decimal(str(self.sale[1]))
-            )
+            (input_bound * Decimal(str(self.sale[0])) + output_bound * Decimal(str(self.sale[1])))
             / 1_000_000
         ).quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
 
@@ -772,7 +790,7 @@ class AnthropicExtractor(HTTPExtractor):
             headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
             body["fallbacks"] = "default"
         base = (settings.llm_base_url or "https://api.anthropic.com").rstrip("/")
-        body = {**self.settings.request_options(), **body}
+        body = self.build_request(body)
         payload, usage = await self.post(client, f"{base}/v1/messages", headers, body)
         stop = payload.get("stop_reason")
         if stop == "refusal":
@@ -819,7 +837,7 @@ class OpenAICompatibleExtractor(HTTPExtractor):
             "response_format": response_format,
         }
         base = (settings.llm_base_url or "https://api.openai.com/v1").rstrip("/")
-        body = {**self.settings.request_options(), **body}
+        body = self.build_request(body)
         payload, usage = await self.post(client, f"{base}/chat/completions", headers, body)
         choices = payload.get("choices") or []
         if not choices:

@@ -257,9 +257,7 @@ def estimate(llm, secret: dict) -> dict:
     bodies = [request_body(llm, batch, secret["materials"]) for batch in batches]
     # A conservative first-pass allowance, not a promise about retries or halving.
     input_tokens = sum(len(json.dumps(body, ensure_ascii=False).encode()) + 4096 for body in bodies)
-    output_tokens = sum(
-        body.get("max_completion_tokens", body["max_tokens"]) * body.get("n", 1) for body in bodies
-    )
+    output_tokens = sum(llm.output_token_bound(body) for body in bodies)
     prices = llm.settings.llm_input_usd_per_mtok, llm.settings.llm_output_usd_per_mtok
     usd = (
         None

@@ -60,9 +60,21 @@ boundaries because they occur inside numbers and model names. Zero or several
 such occurrences produce `ambiguous_quote`, even when one occurrence happens to
 use the model's exact typography.
 
+Database confirmation and draft checks call `response_locate_quote` from
+[0019_citation_boundaries.py](../../server/migrations/versions/0019_citation_boundaries.py).
+It maps NFKC-normalized characters back to whole original normalization units,
+checks the same original-character boundaries, and rejects partial compatibility
+expansions and unresolved ambiguity. The combining-character set is frozen from
+Python's Unicode database when the migration runs. `response_citation_valid`
+additionally requires the stored quote to occur verbatim at the bound page or
+block. An inner `5mm插孔` match in `3.5mm插孔` therefore does not prevent review
+of the single standalone `5mm插孔` occurrence. The same rule distinguishes
+`内存：≥16 GB` from its occurrence inside `扩展内存：≥16 GB`.
+
 The ★ rule (`★`, 实质性要求, 否决投标, 废标) splits each block on Chinese or ASCII
-semicolons and newlines. It marks every extracted item whose quote sits in the
-explicitly marked segment, leaves adjacent unmarked segments unchanged, and adds
+semicolons and newlines. It uses the located original quote interval to mark
+every extracted item contained in the explicitly marked segment, leaves adjacent
+unmarked segments unchanged even when they share a substring, and adds
 a missing marked segment directly from the source. Heading-only segments ending
 in a colon are skipped. Requirements are listed in reading order: document,
 chunk `seq`, then block position.
@@ -97,3 +109,4 @@ cannot be located uniquely remain unchanged.
 - [server/migrations/versions/0013_docx_locations.py](../../server/migrations/versions/0013_docx_locations.py): schema.
 - [server/migrations/versions/0017_exact_citations.py](../../server/migrations/versions/0017_exact_citations.py): exact-source quote provenance for new and legacy requirements.
 - [server/tests/test_docx_blocks.py](../../server/tests/test_docx_blocks.py), [server/tests/test_docx_extraction.py](../../server/tests/test_docx_extraction.py): parser and end-to-end cases.
+- [test_adversarial_citations.py](../../server/tests/test_adversarial_citations.py): extraction, repair, human confirmation, draft assembly and SQL/Python locator parity.

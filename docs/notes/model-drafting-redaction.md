@@ -101,6 +101,9 @@ the first call is reported as `admission_blocker=insufficient_balance`; a first
 call beyond the job charge ceiling reports `job_charge_limit_exceeded`. These
 are read-only checks, and every real call still requires live reservation.
 Duration is unknown until execution.
+Estimation and admission use the same output-token bound. Both adapters build
+draft requests through the [reserved output-limit contract](llm-providers.md#how-it-works),
+so environment or legacy reasoning options cannot inject a competing limit.
 Actual request cost, settlement and unresolved reservations follow
 [prepaid-billing.md](prepaid-billing.md).
 

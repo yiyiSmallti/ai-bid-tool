@@ -1,4 +1,8 @@
-"""Platform console routes end to end: access boundaries, provisioning, catalog and billing."""
+"""Platform console routes end to end: access boundaries, provisioning, catalog and billing.
+
+Output-limit failure mode: a reasoning level can bypass the adapter limit using an alias
+or nested vendor configuration; both new and revised catalog entries must reject it.
+"""
 
 import json
 import re
@@ -191,6 +195,53 @@ async def test_model_catalog_revisions_and_single_default(console, monkeypatch):
         "/platform/models", headers=console.ops, json={**MODEL, "enabled": False, "default": True}
     )
     assert invalid.status_code == 422
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"max_tokens": 32000},
+        {"max_completion_tokens": 1},
+        {"max_output_tokens": 1},
+        {"max_new_tokens": 1},
+        {"maxTokens": 1},
+        {"generation_config": {"maxOutputTokens": 1}},
+    ],
+)
+async def test_catalog_rejects_reserved_output_limits(console, provider, options, tmp_path):
+    body = {
+        **MODEL,
+        "provider": provider,
+        "reasoning": [{"name": "unsafe", "request_options": options}],
+        "default_reasoning": "unsafe",
+    }
+    rejected = await console.post("/platform/models", headers=console.ops, json=body)
+    assert rejected.status_code == 422, rejected.text
+    assert (await console.get("/platform/models", headers=console.ops)).json()["items"] == []
+    created = await console.post(
+        "/platform/models", headers=console.ops, json={**MODEL, "provider": provider}
+    )
+    assert created.status_code == 200, created.text
+    rejected_update = await console.post(
+        "/platform/models", headers=console.ops, json={**body, "expected_revision": 1}
+    )
+    assert rejected_update.status_code == 422, rejected_update.text
+    [saved] = (await console.get("/platform/models", headers=console.ops)).json()["items"]
+    assert saved["revision"] == 1 and saved["reasoning"] == []
+    assert console.vendor.requests == []
+    (tmp_path / "catalog-limit-rejection.json").write_text(
+        json.dumps(
+            {
+                "provider": provider,
+                "options": options,
+                "create_status": rejected.status_code,
+                "update_status": rejected_update.status_code,
+                "revision": saved["revision"],
+            },
+            indent=2,
+        )
+    )
 
 
 async def test_default_platform_model_drives_extraction_and_charges(console, tenants, pdf_bytes):

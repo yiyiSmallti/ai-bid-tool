@@ -32,7 +32,13 @@ not yet started are skipped. Each vendor call has a total deadline of
 `BID_LLM_TIMEOUT_SECONDS`, so a response that keeps the connection alive
 without finishing still ends. `BID_LLM_REQUEST_OPTIONS` is a JSON object merged
 into every request body, for vendor switches such as
-`{"thinking": {"type": "disabled"}}`; the adapter's own fields win on conflict.
+`{"thinking": {"type": "disabled"}}`. Output-limit fields and aliases are
+reserved: both adapters reject them with `invalid_provider_options` before
+admission in extraction and drafting, including nested vendor options. The
+platform catalog rejects such reasoning levels at creation and update. The
+shared field list and spelling rules are in
+[llm_options.py](../../server/app/core/llm_options.py); other adapter-owned fields
+win on conflict. Set the output limit through `BID_LLM_MAX_OUTPUT_TOKENS`.
 
 The model sees each PDF page as `<page number="N">` and each Word block as
 `<block id="p37">` inside its section, and returns items that cite a page
@@ -60,8 +66,10 @@ including nonnumeric parameters, with that parameter's own quote and all its
 source details. Heading-only items are skipped even when starred; `merge_starred`
 also skips a heading ending in a colon without content after it. Star detection
 splits a block on Chinese or ASCII semicolons and newlines, so only an explicitly
-marked segment becomes starred. Every model item whose exact source quote sits
-inside that segment is marked; a missing marked segment is added from the source.
+marked segment becomes starred. `locate_span` resolves each item's quote against
+the complete stored page or block, and only an interval contained in the marked
+segment becomes starred. A substring inside another parameter's name cannot
+mark an adjacent item or suppress addition of a missing marked segment.
 
 After the first pass, `HTTPExtractor.extract` performs one parameter gap-fill
 sweep. `uncovered_parameters` splits the full stored block or page text on
@@ -214,4 +222,5 @@ fixed reasoning level and its generation snapshot.
 - [server/tests/test_llm_providers.py](../../server/tests/test_llm_providers.py): end-to-end cases through the API and job processor.
 - [server/tests/test_card_generation.py](../../server/tests/test_card_generation.py): drafting calls through both adapters with fixed inputs and per-call billing.
 - [server/tests/test_parameter_extraction.py](../../server/tests/test_parameter_extraction.py): parameter coverage, original positions, rejection, deduplication and per-call accounting through the API and job processor.
+- [test_adversarial_citations.py](../../server/tests/test_adversarial_citations.py): located star membership and citation continuity through human review and draft assembly.
 - [evals/extract_tender.py](../../evals/extract_tender.py): real-vendor run on a public tender.

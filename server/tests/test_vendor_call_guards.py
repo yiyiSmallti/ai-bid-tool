@@ -5,6 +5,9 @@ concurrent jobs reuse a balance; retries reset ceilings; missing prices admit fr
 cancellation or output parsing drops completed usage; ambiguous accounting commits charge
 again; stale attempts renew a lease or keep calling; new attempt totals lose old charges;
 reservations/usage cross an org boundary; unknown vendor outcomes release funds prematurely.
+Output-limit aliases must fail before admission, and the largest transmitted limit must
+be reserved. Pool timeouts, permanent/exhausted DB errors and missing accounting parents
+must stop queued batches even if marking the outcome unknown also fails; sent calls settle.
 """
 
 import asyncio
@@ -25,6 +28,7 @@ from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
 from conftest import FakeQueue
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import DBAPIError, OperationalError
+from sqlalchemy.exc import TimeoutError as PoolTimeoutError
 from test_api import create_document, run_job
 from test_job_boundaries import session_for
 from test_llm_providers import anthropic_reply, settings_for
@@ -44,7 +48,7 @@ def pdf_lines(count=8, parameter=False):
 async def environment(
     tenants, tmp_path, handler, *, balance="10", provider="anthropic", **settings
 ):
-    config = settings_for(tmp_path, provider, llm_concurrency=1, **settings)
+    config = settings_for(tmp_path, provider, **({"llm_concurrency": 1} | settings))
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
     llm = adapter(
         config,
@@ -594,3 +598,174 @@ async def test_call_ceiling_grows_with_the_planned_first_pass(tenants, tmp_path)
         result = await status(api, header, job)
     assert result["status"] == "succeeded", result
     assert len(requests) == 3
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"max_completion_tokens": 1},
+        {"max_tokens": 64000},
+        {"max_output_tokens": 1},
+        {"max_new_tokens": 1},
+        {"maxOutputTokens": 1},
+        {"generation_config": {"max_output_tokens": 1}},
+    ],
+)
+async def test_conflicting_output_limits_never_reach_extraction_vendor(
+    tenants, tmp_path, provider, options
+):
+    requests = []
+
+    def vendor(request):
+        requests.append(request)
+        raise AssertionError("Conflicting limits must fail before dispatch")
+
+    async with environment(
+        tenants, tmp_path, vendor, provider=provider, llm_request_options=json.dumps(options)
+    ) as (app, api, header):
+        _, job = await prepare(app, api, header)
+        await app.state.processor(header["X-Org-Id"], job)
+        result = await status(api, header, job)
+        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        assert result["status"] == "failed"
+        assert result["error"]["code"] == "invalid_provider_options"
+        assert requests == calls == usages == entries == []
+        assert saved == 0 and balance == Decimal("10")
+        evidence(tmp_path, "conflicting_limits", calls, usages, balance, result)
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+async def test_reservation_uses_largest_transmitted_output_limit(
+    tenants, tmp_path, monkeypatch, provider
+):
+    # Inject at the post boundary to exercise the accounting defence separately
+    # from request-options validation. A vendor may ignore the smaller alias.
+    adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
+    original = adapter.post
+    bodies = []
+
+    async def with_two_limits(self, client, url, headers, body, **kwargs):
+        return await original(
+            self, client, url, headers, {**body, "max_completion_tokens": 1}, **kwargs
+        )
+
+    monkeypatch.setattr(adapter, "post", with_two_limits)
+
+    def vendor(request):
+        body = json.loads(request.content)
+        bodies.append(body)
+        if provider == "anthropic":
+            payload = anthropic_reply([]).json()
+            payload["usage"]["output_tokens"] = body["max_tokens"]
+            return httpx.Response(200, json=payload)
+        return httpx.Response(
+            200,
+            json={
+                "model": "synthetic-model",
+                "usage": {"prompt_tokens": 1200, "completion_tokens": body["max_tokens"]},
+                "choices": [{"message": {"content": '{"items":[]}'}, "finish_reason": "stop"}],
+            },
+        )
+
+    async with environment(tenants, tmp_path, vendor, provider=provider) as (app, api, header):
+        _, job = await prepare(app, api, header)
+        await app.state.processor(header["X-Org-Id"], job)
+        result = await status(api, header, job)
+        calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job)
+        assert result["status"] == "succeeded", result
+        assert len(calls) == len(usages) == len(entries) == len(bodies) == 1
+        assert calls[0].reserved_charge >= Decimal("0.032")
+        assert calls[0].reserved_charge >= usages[0].charge
+        assert bodies[0]["max_completion_tokens"] == 1 and bodies[0]["max_tokens"] == 32000
+        assert balance == Decimal("9.9668")
+        evidence(tmp_path, "largest_limit", calls, usages, balance, result)
+
+
+@pytest.mark.parametrize("unknown_fails", [False, True])
+@pytest.mark.parametrize("fault", ["pool_timeout", "permanent", "exhausted", "missing_parent"])
+async def test_settlement_failure_stops_waiting_batches_and_drains_sent_calls(
+    tenants, tmp_path, monkeypatch, unknown_fails, fault
+):
+    sent_two, unknown_finished = asyncio.Event(), asyncio.Event()
+    bodies, writes, stopped = [], [], []
+    original_complete = JobExecution._complete_once
+    original_unknown = JobExecution.unknown
+    first_call = None
+    fail_unknown = False
+
+    async def vendor(request):
+        bodies.append(json.loads(request.content))
+        if len(bodies) == 2:
+            sent_two.set()
+            await asyncio.wait_for(unknown_finished.wait(), 5)
+        return anthropic_reply([])
+
+    async def fail_first_settlement(self, call_id, usage):
+        nonlocal first_call, fail_unknown
+        writes.append(call_id)
+        if first_call is None:
+            first_call = call_id
+        if call_id == first_call:
+            await asyncio.wait_for(sent_two.wait(), 5)
+            fail_unknown = unknown_fails
+            if fault == "pool_timeout":
+                raise PoolTimeoutError("synthetic pool exhausted")
+            if fault == "missing_parent":
+                raise ProviderFailure("Accounting job is missing", code="usage_accounting_failed")
+            raise OperationalError(
+                None,
+                None,
+                ConnectionError("synthetic settlement failure"),
+                connection_invalidated=fault == "exhausted",
+            )
+        return await original_complete(self, call_id, usage)
+
+    async def observe_unknown(self, call_id):
+        try:
+            return await original_unknown(self, call_id)
+        finally:
+            stopped.append(self.stopped.code if self.stopped else None)
+            unknown_finished.set()
+
+    monkeypatch.setattr(JobExecution, "_complete_once", fail_first_settlement)
+    monkeypatch.setattr(JobExecution, "unknown", observe_unknown)
+    with pymupdf.open() as pdf:
+        for page_number in range(5):
+            page = pdf.new_page()
+            lines = [f"Synthetic page {page_number}, unique obligation {i:02d}." for i in range(30)]
+            assert page.insert_textbox(page.rect + (40, 40, -40, -40), "\n".join(lines)) >= 0
+        content = pdf.tobytes()
+    async with environment(tenants, tmp_path, vendor, llm_concurrency=2, llm_batch_chars=1000) as (
+        app,
+        api,
+        header,
+    ):
+        transaction = app.state.db.transaction
+
+        @asynccontextmanager
+        async def interrupted_transaction(*args, **kwargs):
+            nonlocal fail_unknown
+            if fail_unknown:
+                fail_unknown = False
+                raise PoolTimeoutError("synthetic unknown-state pool exhausted")
+            async with transaction(*args, **kwargs) as session:
+                yield session
+
+        monkeypatch.setattr(app.state.db, "transaction", interrupted_transaction)
+        _, job = await prepare(app, api, header, content)
+        await asyncio.wait_for(app.state.processor(header["X-Org-Id"], job), 15)
+        result = await status(api, header, job)
+        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        assert result["status"] == "failed" and result["error"]["code"] == "usage_accounting_failed"
+        assert stopped == ["usage_accounting_failed"]
+        assert len(bodies) == len(calls) == 2  # three further first-pass batches never sent
+        assert writes.count(first_call) == (3 if fault == "exhausted" else 1)
+        assert len(usages) == len(entries) == 1 and usages[0].call_id != first_call
+        assert {call.state for call in calls} == {
+            "completed",
+            "pending" if unknown_fails else "unknown",
+        }
+        assert balance == Decimal("9.9985") and saved == 0
+        assert result["result"]["cost"]["llm_tokens"] == 1500
+        evidence(tmp_path, "settlement_stop", calls, usages, balance, result)

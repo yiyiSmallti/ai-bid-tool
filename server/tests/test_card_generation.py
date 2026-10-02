@@ -17,6 +17,8 @@ Failure modes identified before implementation:
   retries cannot duplicate revisions or billing; dry-run makes no calls or writes.
 * Workflow: extraction -> generation -> human review -> immutable draft, with
   two-org isolation and a repeatable sanitized artifact outside the repository.
+* Output limits: legacy/environment options must not inject a conflicting output
+  alias into either adapter's drafting request, reserve too little or spend funds.
 """
 
 import asyncio
@@ -185,6 +187,46 @@ async def execute(api, app, header, receipt):
     response = await api.get(f"/jobs/{job}", headers=header)
     assert response.status_code == 200, response.text
     return response.json()
+
+
+@pytest.mark.parametrize("provider", ["anthropic", "openai"])
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"max_tokens": 64000},
+        {"max_completion_tokens": 1},
+        {"max_output_tokens": 1},
+        {"max_new_tokens": 1},
+        {"generation_config": {"maxOutputTokens": 1}},
+    ],
+)
+async def test_drafting_rejects_conflicting_output_limits(tenants, tmp_path, provider, options):
+    async with drafting_client(tenants, tmp_path, provider) as (api, app, headers, vendor, llm):
+        header = headers[0]
+        task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
+        # Reproduce a legacy level/environment option after the unrelated extraction.
+        llm.settings = llm.settings.model_copy(update={"llm_request_options": json.dumps(options)})
+        receipt = await submit(api, header, task, extraction)
+        result = (await execute(api, app, header, receipt))["data"]
+        assert result["status"] == "failed", result
+        assert result["error"]["code"] == "invalid_provider_options"
+        assert vendor.drafts == []
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            assert (
+                await session.scalar(
+                    select(func.count())
+                    .select_from(VendorCall)
+                    .where(VendorCall.job_id == UUID(receipt["data"]["job_id"]))
+                )
+                == 0
+            )
+            assert await session.scalar(select(func.count()).select_from(CardGenerationRun)) == 0
+        (tmp_path / "drafting-limit-rejection.json").write_text(
+            json.dumps(
+                sanitized_artifact({"provider": provider, "options": options, "job": result}),
+                indent=2,
+            )
+        )
 
 
 async def slots(api, header, task, extraction):
