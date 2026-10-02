@@ -31,8 +31,9 @@ Vendors publish no API listing a model's levels, so the catalog is the source.
 level at submission and returns `HTTPExtractor.at_reasoning(name)`, a copy
 whose settings carry that level's options, batch size, and effort; the level's
 options replace `BID_LLM_REQUEST_OPTIONS`. An unknown level fails with
-`unsupported_reasoning` (exit 2). A model without levels, including the
-`BID_LLM_*` fallback, ignores the option and warns.
+`unsupported_reasoning` (exit 2). A model without levels ignores the option and
+warns. Org models use the same level schema through
+[provider configuration](provider-config.md#resolution-and-cache).
 
 The level is stored in `jobs.reasoning` and appended to the cache key, so each
 level is a separate job and repeating one returns the existing job. The

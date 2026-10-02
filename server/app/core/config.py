@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="BID_", extra="ignore", env_ignore_empty=True)
     database_url: SecretStr
     encryption_key: SecretStr
+    secrets_key: SecretStr | None = None
     data_dir: Path = Path("data")
     storage: str = "local"
     s3_endpoint: str | None = None

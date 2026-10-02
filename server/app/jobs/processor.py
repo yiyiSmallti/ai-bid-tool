@@ -38,7 +38,12 @@ class Processor:
         self.resolve = resolve
 
     async def record_usage(
-        self, org_id: UUID, task_id: UUID, usages: list[ProviderUsage], job_id: UUID, run_id: UUID
+        self,
+        org_id: UUID,
+        task_id: UUID | None,
+        usages: list[ProviderUsage],
+        job_id: UUID,
+        run_id: UUID,
     ):
         async with self.db.transaction(org_id) as session:
             job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
@@ -78,20 +83,25 @@ class Processor:
             current.lease_until = datetime.now(UTC) + timedelta(
                 seconds=self.settings.job_lease_seconds
             )
-            document = await session.get(Document, current.document_id)
-            if document is None:
+            document = (
+                await session.get(Document, current.document_id) if current.document_id else None
+            )
+            if document is None and current.kind != "provider_test":
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
-            task_id, kind, document_id = current.task_id, current.kind, document.id
+            task_id, kind, document_id = current.task_id, current.kind, current.document_id
             reasoning = current.reasoning
-            llm = await self.resolve(session) if self.resolve and kind != "draft" else self.llm
             key, suffix, expected_hash = (
-                document.storage_key,
-                Path(document.name).suffix.lower(),
-                document.sha256,
+                (
+                    document.storage_key,
+                    Path(document.name).suffix.lower(),
+                    document.sha256,
+                )
+                if document is not None
+                else ("", "", "")
             )
             chunks = (
                 []
-                if kind in {"draft", "card_generate"}
+                if kind in {"draft", "card_generate", "provider_test"}
                 else [
                     dict(
                         id=row.id,
@@ -126,6 +136,17 @@ class Processor:
                     return recognized
 
             try:
+                llm = self.llm
+                if self.resolve and kind in {"extract", "card_generate", "provider_test"}:
+                    async with self.db.transaction(org_id) as session:
+                        llm = await self.resolve(session, current)
+                if kind == "provider_test":
+                    from app.services.provider_configs import execute_test
+
+                    incremental = True
+                    await execute_test(execution, llm)
+                    return
+                assert task_id is not None and document_id is not None
                 if kind == "card_generate":
                     from app.services.card_generation import generate
 
@@ -349,7 +370,7 @@ class Processor:
                     )
                     if current is None or current.status == "cancelled" or current.run_id != run_id:
                         return
-                    should_retry = retryable and current.attempts < 3
+                    should_retry = retryable and current.attempts < 3 and kind != "provider_test"
                     current.status = "queued" if should_retry else "failed"
                     current.error = error
                     current.result = {**current.result, "cost": await job_cost(session, job_id)}

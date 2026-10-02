@@ -247,6 +247,8 @@ async def test_certificate_roles_preserve_old_grants(
             "task:template",
             "billing:read",
             "billing:redeem",
+            "provider:read",
+            "provider:write",
             "card:read",
             "card:write",
             "card:generate",

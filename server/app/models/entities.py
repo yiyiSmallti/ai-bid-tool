@@ -81,6 +81,7 @@ class ApiToken(Tenant, Base):
             "NOT (scopes ? 'evidence:confirm') AND NOT (scopes ? 'export')",
             name="token_forbidden_scopes",
         ),
+        CheckConstraint("NOT (scopes ? 'provider:write')", name="token_no_provider_write"),
     )
 
 
@@ -177,7 +178,8 @@ class Requirement(Tenant, Base):
 
 class UsageRecord(Tenant, Base):
     __tablename__ = "usage_records"
-    task_id: Mapped[UUID] = mapped_column()
+    task_id: Mapped[UUID | None] = mapped_column()
+    provider_config_id: Mapped[UUID | None] = mapped_column()
     provider: Mapped[str] = mapped_column(String(100))
     model: Mapped[str] = mapped_column(String(100))
     version: Mapped[str] = mapped_column(String(100))
@@ -196,6 +198,9 @@ class UsageRecord(Tenant, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "job_id", "run_id", "call_id"),
+        ForeignKeyConstraint(
+            ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
+        ),
         CheckConstraint("call_id IS NULL OR (job_id IS NOT NULL AND run_id IS NOT NULL)"),
         Index("usage_records_job", "org_id", "job_id"),
         ForeignKeyConstraint(["org_id", "job_id"], ["jobs.org_id", "jobs.id"]),
@@ -235,8 +240,10 @@ class VendorCall(Tenant, Base):
 
 class Job(Tenant, Base):
     __tablename__ = "jobs"
-    task_id: Mapped[UUID] = mapped_column()
-    document_id: Mapped[UUID] = mapped_column()
+    task_id: Mapped[UUID | None] = mapped_column()
+    document_id: Mapped[UUID | None] = mapped_column()
+    provider_config_id: Mapped[UUID | None] = mapped_column()
+    provider_identity: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     kind: Mapped[str] = mapped_column(String(20))
     cache_key: Mapped[str] = mapped_column(String(64))
     status: Mapped[str] = mapped_column(String(20), default="queued")
@@ -251,6 +258,13 @@ class Job(Tenant, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "cache_key"),
+        ForeignKeyConstraint(
+            ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
+        ),
+        CheckConstraint(
+            "(kind = 'provider_test' AND task_id IS NULL AND document_id IS NULL) OR (kind <> 'provider_test' AND task_id IS NOT NULL AND document_id IS NOT NULL)",
+            name="job_document_binding",
+        ),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
         ForeignKeyConstraint(["org_id", "document_id"], ["documents.org_id", "documents.id"]),
         CheckConstraint(

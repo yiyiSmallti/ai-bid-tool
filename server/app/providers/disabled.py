@@ -1,9 +1,12 @@
+from uuid import UUID
+
 from app.providers.base import ProviderFailure
 from app.providers.drafting import DraftingOutput
 from app.schemas.contracts import LLMResult
 
 
 class DisabledLLM:
+    provider_config_id: UUID | None = None
     name = "unconfigured"
     model = "unconfigured"
     version = "disabled-v1"
@@ -11,7 +14,7 @@ class DisabledLLM:
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         raise ProviderFailure(
-            "Real API integration is deferred. No approved LLM provider is configured."
+            "No organization provider or enabled platform default model is configured."
         )
 
     async def draft(self, requirements: list[dict], materials: list[dict]) -> DraftingOutput:

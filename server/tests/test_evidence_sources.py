@@ -194,6 +194,8 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "evidence:source:write",
         "billing:read",
         "billing:redeem",
+        "provider:read",
+        "provider:write",
         "card:read",
         "card:write",
         "card:generate",

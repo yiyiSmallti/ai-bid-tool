@@ -5246,6 +5246,334 @@
           ],
           "input": null
         },
+        "provider history": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "provider list": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "provider set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "key_file",
+              "options": [
+                "--key-file"
+              ],
+              "required": false,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ReasoningLevel": {
+                "additionalProperties": false,
+                "description": "One of the vendor's official reasoning levels for a catalog model.",
+                "properties": {
+                  "batch_chars": {
+                    "default": 8000,
+                    "maximum": 200000,
+                    "minimum": 1000,
+                    "title": "Batch Chars",
+                    "type": "integer"
+                  },
+                  "effort": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z]{1,10}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Effort"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "request_options": {
+                    "additionalProperties": true,
+                    "title": "Request Options",
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "ReasoningLevel",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "base_url": {
+                "anyOf": [
+                  {
+                    "maxLength": 300,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Base Url"
+              },
+              "capability": {
+                "const": "llm_extract",
+                "default": "llm_extract",
+                "title": "Capability",
+                "type": "string"
+              },
+              "default_reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Default Reasoning"
+              },
+              "expected_revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Revision"
+              },
+              "input_usd_per_mtok": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Input Usd Per Mtok"
+              },
+              "json_mode": {
+                "default": "json_schema",
+                "enum": [
+                  "json_schema",
+                  "json_object"
+                ],
+                "title": "Json Mode",
+                "type": "string"
+              },
+              "model": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Model"
+              },
+              "output_usd_per_mtok": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Output Usd Per Mtok"
+              },
+              "platform_model_id": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Platform Model Id"
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "anthropic",
+                      "openai"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Provider"
+              },
+              "reasoning": {
+                "items": {
+                  "$ref": "#/$defs/ReasoningLevel"
+                },
+                "maxItems": 8,
+                "title": "Reasoning",
+                "type": "array"
+              },
+              "source": {
+                "enum": [
+                  "platform",
+                  "org"
+                ],
+                "title": "Source",
+                "type": "string"
+              }
+            },
+            "required": [
+              "source"
+            ],
+            "title": "ProviderConfigInput",
+            "type": "object"
+          }
+        },
+        "provider test": {
+          "cli_parameters": [
+            {
+              "default": "llm_extract",
+              "multiple": false,
+              "name": "capability",
+              "options": [
+                "--capability"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reasoning",
+              "options": [
+                "--reasoning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "capability": {
+                "const": "llm_extract",
+                "default": "llm_extract",
+                "title": "Capability",
+                "type": "string"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              }
+            },
+            "title": "ProviderTest",
+            "type": "object"
+          }
+        },
         "req extract": {
           "cli_parameters": [
             {
