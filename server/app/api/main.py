@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
 from app.api.exports import create_router as create_export_router
+from app.api.org_console import create_router as create_org_console_router
 from app.api.platform import create_router as create_platform_router
 from app.api.providers import create_router as create_provider_router
 from app.api.response_cards import create_router as create_response_router
@@ -290,6 +291,7 @@ def create_app(
             await set_actor_context(session, identity)
             yield session, identity
 
+    app.include_router(create_org_console_router(context))
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
     app.include_router(
         create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)

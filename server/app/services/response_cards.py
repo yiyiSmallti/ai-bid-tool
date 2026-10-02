@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import re
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import NoReturn
 from uuid import UUID, uuid4
@@ -14,9 +15,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError, not_found
 from app.models.entities import (
     ApiToken,
+    CertificateFile,
     CertificateRevision,
     Chunk,
     Document,
+    EvidenceSource,
     FeatureRevision,
     Job,
     OrgProfileRevision,
@@ -50,7 +53,8 @@ from app.schemas.response_card_contracts import (
     TaskRedactionSet,
 )
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_actor_context
-from app.services.evidence_sources import require_source, source_data
+from app.services.evidence_sources import joined_sources, require_source, source_data
+from app.services.evidence_sources import require_access as require_source_access
 from app.services.extraction import locate_quote
 from app.services.resources import audit
 
@@ -225,7 +229,11 @@ def source(requirement: Requirement) -> dict:
 
 
 async def citation_valid(session: AsyncSession, requirement: Requirement) -> bool:
-    chunk = await session.get(Chunk, requirement.chunk_id)
+    return citation_valid_in_chunk(requirement, await session.get(Chunk, requirement.chunk_id))
+
+
+def citation_valid_in_chunk(requirement: Requirement, chunk: Chunk | None) -> bool:
+    """Apply the same exact-span predicate to an explicitly loaded source chunk."""
     if (
         chunk is None
         or not chunk.citation_verified
@@ -251,7 +259,10 @@ async def citation_valid(session: AsyncSession, requirement: Requirement) -> boo
 
 
 async def location_label(session: AsyncSession, requirement: Requirement) -> str:
-    document = await session.get(Document, requirement.document_id)
+    return location_label_for(requirement, await session.get(Document, requirement.document_id))
+
+
+def location_label_for(requirement: Requirement, document: Document | None) -> str:
     if document is None:
         raise not_found()
     if requirement.page is not None:
@@ -399,6 +410,10 @@ async def evidence_view(session: AsyncSession, actor: Identity, row: Evidence) -
             "field_path": row.field_path,
             "quote": row.quote,
         }
+    return evidence_view_data(row, selected, selection_id, revision_id, item, archive)
+
+
+def evidence_view_data(row, selected, selection_id, revision_id, item, archive) -> dict:
     return EvidenceView.model_validate(
         dict(
             id=row.id,
@@ -442,7 +457,26 @@ async def card_view(
         for row in await linked_evidence(session, revision.id)
     ]
     generation_stale = await generation_materials_stale(session, actor, revision)
-    if not await citation_valid(session, requirement):
+    return card_view_data(
+        card,
+        revision,
+        requirement,
+        evidence,
+        generation_stale,
+        await citation_valid(session, requirement),
+    )
+
+
+def card_view_data(
+    card: ResponseCard,
+    revision: ResponseCardRevision,
+    requirement: Requirement,
+    evidence: list[dict],
+    generation_stale: bool,
+    valid_citation: bool,
+) -> dict:
+    """One projection/eligibility rule for both single-card and batched reads."""
+    if not valid_citation:
         eligibility = "invalid_citation"
     elif revision_quote_hash(revision, requirement) != quote_hash(requirement.quote):
         eligibility = "needs_reconfirmation"
@@ -517,6 +551,232 @@ async def generation_materials_stale(
                 raise not_found()
         stale |= not selected.active
     return stale
+
+
+@dataclass
+class CardReadBatch:
+    """Request-local read graph; its projections never issue SQL or load lazily.
+
+    Current card views and historical row evidence share one graph. Retaining
+    all parents explicitly avoids relying on SQLAlchemy's weak identity map.
+    Permissions are checked when each input is consumed, including uncited
+    generation inputs and evidence attached to protected comply-only cards.
+    """
+
+    actor: Identity
+    requirements: dict[UUID, Requirement]
+    chunks: dict[UUID, Chunk]
+    documents: dict[UUID, Document]
+    cards: dict[UUID, ResponseCard]
+    revisions: dict[UUID, ResponseCardRevision]
+    links: dict[UUID, list[Evidence]]
+    selections: dict[str, dict]
+    sources: dict[UUID, tuple[EvidenceSource, TaskCertificate, CertificateFile]]
+    generation_manifests: dict[UUID, dict]
+    by_requirement: dict[UUID, ResponseCard]
+    _citations: dict[UUID, bool] = field(default_factory=dict)
+    _evidence: dict[UUID, dict] = field(default_factory=dict)
+    _generation_stale: dict[UUID, bool] = field(default_factory=dict)
+    _views: dict[UUID, dict] = field(default_factory=dict)
+
+    @classmethod
+    async def load(
+        cls,
+        session: AsyncSession,
+        actor: Identity,
+        requirements: list[Requirement],
+        *,
+        historical_card_ids: set[UUID],
+        historical_revision_ids: set[UUID],
+    ) -> "CardReadBatch":
+        required = {row.id: row for row in requirements}
+        chunks = {
+            row.id: row
+            for row in await session.scalars(
+                select(Chunk).where(Chunk.id.in_({row.chunk_id for row in requirements}))
+            )
+        }
+        documents = {
+            row.id: row
+            for row in await session.scalars(
+                select(Document).where(Document.id.in_({row.document_id for row in requirements}))
+            )
+        }
+        loaded_cards = {
+            row.id: row
+            for row in await session.scalars(
+                select(ResponseCard).where(
+                    ResponseCard.requirement_id.in_(required)
+                    | ResponseCard.id.in_(historical_card_ids)
+                )
+            )
+        }
+        revision_ids = historical_revision_ids | {
+            row.current_revision_id for row in loaded_cards.values()
+        }
+        revisions = {
+            row.id: row
+            for row in await session.scalars(
+                select(ResponseCardRevision).where(ResponseCardRevision.id.in_(revision_ids))
+            )
+        }
+        links: dict[UUID, list[Evidence]] = {}
+        evidence: dict[UUID, Evidence] = {}
+        for revision_id, row in await session.execute(
+            select(CardEvidenceLink.revision_id, Evidence)
+            .join(
+                Evidence,
+                (Evidence.org_id == CardEvidenceLink.org_id)
+                & (Evidence.id == CardEvidenceLink.evidence_id),
+            )
+            .where(CardEvidenceLink.revision_id.in_(revision_ids))
+            .order_by(Evidence.created_at, Evidence.id)
+        ):
+            links.setdefault(revision_id, []).append(row)
+            evidence[row.id] = row
+        current_revision_ids = {row.current_revision_id for row in loaded_cards.values()}
+        model_jobs = {
+            row.model_job_id
+            for row in revisions.values()
+            if row.id in current_revision_ids and row.model_job_id is not None
+        }
+        # Never load encrypted model text merely to check material dependencies.
+        generation_manifests = dict(
+            (
+                await session.execute(
+                    select(
+                        CardGenerationRun.generation_job_id, CardGenerationRun.input_manifest
+                    ).where(CardGenerationRun.generation_job_id.in_(model_jobs))
+                )
+            )
+            .tuples()
+            .all()
+        )
+        selection_ids: dict[str, set[UUID]] = {kind: set() for kind in MATERIALS}
+        source_ids: set[UUID] = set()
+        for row in evidence.values():
+            if row.kind == "certificate_pdf_page":
+                if row.evidence_source_id is not None:
+                    source_ids.add(row.evidence_source_id)
+            else:
+                selection_field = MATERIALS[row.kind][2]
+                selection_ids[row.kind].add(getattr(row, selection_field))
+        for manifest in generation_manifests.values():
+            for entry in manifest["materials"]:
+                if entry["kind"] == "certificate_pdf_page":
+                    source_ids.add(UUID(entry["evidence_source_id"]))
+                else:
+                    selection_ids[entry["kind"]].add(UUID(entry["selection_id"]))
+        selections = {}
+        for kind, (model, _, _, _, _, _) in MATERIALS.items():
+            selections[kind] = {
+                row.id: row
+                for row in await session.scalars(
+                    select(model).where(model.id.in_(selection_ids[kind]))
+                )
+            }
+        sources = {
+            row.id: (row, selected, original)
+            for row, selected, original in await session.execute(
+                joined_sources().where(EvidenceSource.id.in_(source_ids))
+            )
+        }
+        return cls(
+            actor=actor,
+            requirements=required,
+            chunks=chunks,
+            documents=documents,
+            cards=loaded_cards,
+            revisions=revisions,
+            links=links,
+            selections=selections,
+            sources=sources,
+            generation_manifests=generation_manifests,
+            by_requirement={row.requirement_id: row for row in loaded_cards.values()},
+        )
+
+    def citation_valid(self, requirement: Requirement) -> bool:
+        if requirement.id not in self._citations:
+            self._citations[requirement.id] = citation_valid_in_chunk(
+                requirement, self.chunks.get(requirement.chunk_id)
+            )
+        return self._citations[requirement.id]
+
+    def selected(self, kind: str, selection_id: UUID):
+        self.actor.require(MATERIALS[kind][4])
+        selected = self.selections[kind].get(selection_id)
+        if selected is None:
+            raise not_found()
+        return selected
+
+    def page_source(self, source_id: UUID | None):
+        require_source_access(self.actor, "evidence:source:read")
+        source = self.sources.get(source_id) if source_id is not None else None
+        if source is None:
+            raise not_found()
+        return source
+
+    def evidence_view(self, row: Evidence) -> dict:
+        if row.id not in self._evidence:
+            archive = None
+            if row.kind == "certificate_pdf_page":
+                if row.evidence_source_id is None:
+                    raise not_found()
+                archived, selected, original = self.page_source(row.evidence_source_id)
+                archive = source_data(archived, selected, original)
+                selection_id, revision_id = selected.id, selected.certificate_revision_id
+                item = {
+                    "kind": row.kind,
+                    "evidence_source_id": str(archived.id),
+                    "quote": row.quote,
+                }
+            else:
+                _, _, selection_field, revision_field, _, _ = MATERIALS[row.kind]
+                selected = self.selected(row.kind, getattr(row, selection_field))
+                selection_id, revision_id = selected.id, getattr(row, revision_field)
+                item = {
+                    "kind": row.kind,
+                    "selection_id": str(selection_id),
+                    "field_path": row.field_path,
+                    "quote": row.quote,
+                }
+            self._evidence[row.id] = evidence_view_data(
+                row, selected, selection_id, revision_id, item, archive
+            )
+        return self._evidence[row.id]
+
+    def generation_materials_stale(self, revision: ResponseCardRevision) -> bool:
+        job_id = revision.model_job_id
+        if job_id is None:
+            return False
+        if job_id not in self._generation_stale:
+            manifest = self.generation_manifests.get(job_id)
+            if manifest is None:
+                fail("missing_generation_run", "Model response has no fixed input record", 500, 4)
+            stale = False
+            for entry in manifest["materials"]:
+                if entry["kind"] == "certificate_pdf_page":
+                    _, selected, _ = self.page_source(UUID(entry["evidence_source_id"]))
+                else:
+                    selected = self.selected(entry["kind"], UUID(entry["selection_id"]))
+                stale |= not selected.active
+            self._generation_stale[job_id] = stale
+        return self._generation_stale[job_id]
+
+    def card_view(
+        self, card: ResponseCard, revision: ResponseCardRevision, requirement: Requirement
+    ) -> dict:
+        if revision.id not in self._views:
+            evidence = [self.evidence_view(row) for row in self.links.get(revision.id, [])]
+            self._views[revision.id] = card_view_data(
+                card,
+                revision,
+                requirement,
+                evidence,
+                self.generation_materials_stale(revision),
+                self.citation_valid(requirement),
+            )
+        return self._views[revision.id]
 
 
 async def append_revision(

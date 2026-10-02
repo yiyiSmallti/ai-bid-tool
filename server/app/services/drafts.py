@@ -323,24 +323,84 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
     }
 
 
-async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
-    actor = await cards.access(session, actor, "draft:read")
-    run = await session.get(DraftRun, draft_id)
-    if run is None:
-        raise not_found()
+def current_draft_inputs(requirements: list[Requirement], batch: cards.CardReadBatch) -> dict:
+    """Recreate the assembly manifest without per-item database round trips.
+
+    Full card projection still checks evidence and uncited model-input grants
+    before eligibility precedence (even when comply-only ignores stale inputs).
+    Source and material hashes use the unchanged assembly manifest shape.
+    """
+    current = {}
+    for requirement in requirements:
+        card = batch.by_requirement.get(requirement.id)
+        view = None
+        if card is not None:
+            revision = batch.revisions.get(card.current_revision_id)
+            if revision is None:
+                raise not_found()
+            view = batch.card_view(card, revision, requirement)
+        # Preserve assembly's source checks for missing cards as well as rows.
+        batch.citation_valid(requirement)
+        cards.location_label_for(requirement, batch.documents.get(requirement.document_id))
+        eligibility = view["eligibility"] if view else "missing_card"
+        kind = {"eligible": "row", "comply_only": "comply_only"}.get(eligibility, "gap")
+        current[str(requirement.id)] = {
+            "requirement_id": str(requirement.id),
+            "card_revision_id": view["revision_id"] if view else None,
+            "source_hash": digest(cards.source(requirement)),
+            "category": requirement.category,
+            "starred": requirement.starred,
+            "kind": kind,
+            "eligibility": eligibility,
+            "evidence": [
+                {
+                    "id": row["id"],
+                    "active": row["active_selection"],
+                    "confirmed_by": row["confirmed_by"],
+                }
+                for row in view["evidence"]
+            ]
+            if view
+            else [],
+        }
+    return current
+
+
+async def load_draft_reads(
+    session: AsyncSession, actor: Identity, runs: list[DraftRun], requirements: list[Requirement]
+):
     rows = list(
-        (await session.scalars(select(ResponseItem).where(ResponseItem.draft_id == run.id))).all()
+        (
+            await session.scalars(
+                select(ResponseItem).where(ResponseItem.draft_id.in_(run.id for run in runs))
+            )
+        ).all()
     )
-    positions = {
-        entry["requirement_id"]: index
-        for index, entry in enumerate(run.input_manifest["requirements"])
-    }
-    rows.sort(key=lambda item: positions[str(item.requirement_id)])
+    batch = await cards.CardReadBatch.load(
+        session,
+        actor,
+        requirements,
+        historical_card_ids={row.card_id for row in rows if row.card_id is not None},
+        historical_revision_ids={
+            row.card_revision_id for row in rows if row.card_revision_id is not None
+        },
+    )
+    grouped: dict[UUID, list[ResponseItem]] = {run.id: [] for run in runs}
+    for row in rows:
+        grouped[row.draft_id].append(row)
+    for run in runs:
+        positions = {
+            entry["requirement_id"]: index
+            for index, entry in enumerate(run.input_manifest["requirements"])
+        }
+        grouped[run.id].sort(key=lambda item: positions[str(item.requirement_id)])
+    return batch, grouped, current_draft_inputs(requirements, batch)
+
+
+def draft_view(
+    run: DraftRun, rows: list[ResponseItem], batch: cards.CardReadBatch, current_inputs: dict
+) -> dict:
     tables = {key: [] for key in TABLES}
-    _, _, current_manifest, _, _ = await assemble(
-        session, actor, run.task_id, run.extraction_job_id
-    )
-    current_inputs = {entry["requirement_id"]: entry for entry in current_manifest["requirements"]}
     invalidated = [
         entry["requirement_id"]
         for entry in run.input_manifest["requirements"]
@@ -348,32 +408,30 @@ async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
     ]
     comply_only, gaps = [], []
     for item in rows:
-        requirement = await session.get(Requirement, item.requirement_id)
+        requirement = batch.requirements.get(item.requirement_id)
         if requirement is None:
             raise not_found()
-        card = await session.get(ResponseCard, item.card_id) if item.card_id else None
+        card = batch.cards.get(item.card_id) if item.card_id else None
         if card is None:
-            current = await session.scalar(
-                select(ResponseCard).where(ResponseCard.requirement_id == item.requirement_id)
-            )
+            current = batch.by_requirement.get(item.requirement_id)
             if current is not None:
                 invalidated.append(str(item.requirement_id))
         elif card.current_revision_id != item.card_revision_id:
             invalidated.append(str(item.requirement_id))
         elif item.kind != "gap":
-            revision = await session.get(ResponseCardRevision, item.card_revision_id)
+            revision = (
+                batch.revisions.get(item.card_revision_id)
+                if item.card_revision_id is not None
+                else None
+            )
             if revision is None:
                 raise not_found()
-            view = await cards.card_view(session, actor, card, revision, requirement)
+            view = batch.card_view(card, revision, requirement)
             if view["eligibility"] != ("eligible" if item.kind == "row" else "comply_only"):
                 invalidated.append(str(item.requirement_id))
         # A citation already listed as an invalid_citation gap is not a change since generation.
         already_reported = item.kind == "gap" and "invalid_citation" in (item.gap_reasons or [])
-        if (
-            requirement
-            and not already_reported
-            and not await cards.citation_valid(session, requirement)
-        ):
+        if requirement and not already_reported and not batch.citation_valid(requirement):
             invalidated.append(str(item.requirement_id))
         entry = {
             "requirement_id": str(item.requirement_id),
@@ -391,8 +449,7 @@ async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
                 "table": item.table,
                 **{key: getattr(item, key) for key in cards.CONTENT_FIELDS},
                 "evidence": [
-                    await cards.evidence_view(session, actor, row)
-                    for row in await cards.linked_evidence(session, item.card_revision_id)
+                    batch.evidence_view(row) for row in batch.links.get(item.card_revision_id, [])
                 ],
             }
             tables[item.table].append(entry)
@@ -420,9 +477,19 @@ async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
     ).model_dump(mode="json")
 
 
+async def show_draft(session: AsyncSession, actor: Identity, draft_id: UUID):
+    actor = await cards.access(session, actor, "draft:read")
+    run = await session.get(DraftRun, draft_id)
+    if run is None:
+        raise not_found()
+    _, requirements = await cards.extraction_scope(session, run.task_id, run.extraction_job_id)
+    batch, grouped, current_inputs = await load_draft_reads(session, actor, [run], requirements)
+    return draft_view(run, grouped[run.id], batch, current_inputs)
+
+
 async def list_drafts(session: AsyncSession, actor: Identity, task_id: UUID, job_id: UUID):
     actor = await cards.access(session, actor, "draft:read")
-    await cards.extraction_scope(session, task_id, job_id)
+    _, requirements = await cards.extraction_scope(session, task_id, job_id)
     runs = (
         await session.scalars(
             select(DraftRun)
@@ -430,9 +497,14 @@ async def list_drafts(session: AsyncSession, actor: Identity, task_id: UUID, job
             .order_by(DraftRun.created_at, DraftRun.id)
         )
     ).all()
+    if not runs:
+        return {"task_id": str(task_id), "extraction_job_id": str(job_id)}, []
+    batch, grouped, current_inputs = await load_draft_reads(
+        session, actor, list(runs), requirements
+    )
     items = []
     for run in runs:
-        view = await show_draft(session, actor, run.id)
+        view = draft_view(run, grouped[run.id], batch, current_inputs)
         items.append(
             {
                 key: view[key]
