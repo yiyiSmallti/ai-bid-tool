@@ -287,8 +287,8 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
             headers=header,
             json={**preview_body, "task_feature_ids": [feature["id"], feature["id"]]},
         )
-        assert duplicated_module.status_code == 400
-        assert duplicated_module.json()["data"]["error"]["code"] == "duplicate_selection"
+        assert duplicated_module.status_code == 422
+        assert duplicated_module.json()["data"]["error"]["code"] == "invalid_input"
 
         for role in ("admin", "bidder"):
             set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], role)

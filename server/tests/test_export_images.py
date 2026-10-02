@@ -161,7 +161,8 @@ async def test_prototype_image_export_gate_keep_attachment_and_replace(
         undecided = await api.post(
             f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
         )
-        assert undecided.status_code == 200, undecided.text
+        # A blocked preflight answers 400 export_blocked and still lists every issue.
+        assert undecided.json()["data"]["error"]["code"] == "export_blocked", undecided.text
         blocks = {i["code"] for i in undecided.json()["data"]["issues"] if i["severity"] == "block"}
         assert blocks == {"prototype_decision_required"}
         review = await api.post(
