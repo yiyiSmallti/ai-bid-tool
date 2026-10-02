@@ -22,6 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
+from app.api.exports import create_router as create_export_router
 from app.api.platform import create_router as create_platform_router
 from app.api.response_cards import create_router as create_response_router
 from app.core.config import Settings
@@ -291,6 +292,7 @@ def create_app(
             yield session, identity
 
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
+    app.include_router(create_export_router(context, db, storage, queue, settings, crypto))
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1304,10 +1306,19 @@ def create_app(
         job = await session.get(Job, job_id)
         if job is None:
             raise not_found()
+        if job.kind == "export_render":
+            from app.services.exports import job_access
+
+            await job_access(session, identity, job, storage)
         payload = result(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
+        if job.kind == "export_render":
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+            return payload
         if job.kind in {"draft", "card_generate"}:
             identity.require("draft:read" if job.kind == "draft" else "card:read")
             identity.require("task:read")
@@ -1338,6 +1349,10 @@ def create_app(
         job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
         if job is None:
             raise not_found()
+        if job.kind == "export_render":
+            from app.services.exports import job_access
+
+            await job_access(session, identity, job, storage, cancel=True)
         if job.status not in {"cancelled", "queued", "running"}:
             raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
         job.status, job.finished_at = "cancelled", datetime.now(UTC)

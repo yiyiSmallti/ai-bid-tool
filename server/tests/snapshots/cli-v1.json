@@ -1236,6 +1236,497 @@
       "Source is an unconfirmed user-supplied PDF page; authenticity and eligibility are not verified; never eligible for draft/export"
     ]
   },
+  "export binding create": {
+    "command": "export binding create",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "adapter_version": "docx-export-v1",
+      "binding_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "reviewed_at": "2026-10-01T00:00:00Z",
+      "reviewed_by": "00000000-0000-0000-0000-000000000001",
+      "sections": [
+        {
+          "columns": [
+            {
+              "key": "ordinal",
+              "width_percent": 5
+            },
+            {
+              "key": "tender_clause",
+              "width_percent": 25
+            },
+            {
+              "key": "source_location",
+              "width_percent": 15
+            },
+            {
+              "key": "response",
+              "width_percent": 25
+            },
+            {
+              "key": "deviation",
+              "width_percent": 10
+            },
+            {
+              "key": "deviation_note",
+              "width_percent": 10
+            },
+            {
+              "key": "evidence",
+              "width_percent": 10
+            }
+          ],
+          "heading_style_id": "Heading 1",
+          "section": "substantive",
+          "table_style_id": "Table Grid"
+        },
+        {
+          "columns": [
+            {
+              "key": "ordinal",
+              "width_percent": 5
+            },
+            {
+              "key": "tender_clause",
+              "width_percent": 25
+            },
+            {
+              "key": "source_location",
+              "width_percent": 15
+            },
+            {
+              "key": "response",
+              "width_percent": 25
+            },
+            {
+              "key": "deviation",
+              "width_percent": 10
+            },
+            {
+              "key": "deviation_note",
+              "width_percent": 10
+            },
+            {
+              "key": "evidence",
+              "width_percent": 10
+            }
+          ],
+          "heading_style_id": "Heading 1",
+          "section": "commercial",
+          "table_style_id": "Table Grid"
+        },
+        {
+          "columns": [
+            {
+              "key": "ordinal",
+              "width_percent": 5
+            },
+            {
+              "key": "tender_clause",
+              "width_percent": 25
+            },
+            {
+              "key": "source_location",
+              "width_percent": 15
+            },
+            {
+              "key": "response",
+              "width_percent": 25
+            },
+            {
+              "key": "deviation",
+              "width_percent": 10
+            },
+            {
+              "key": "deviation_note",
+              "width_percent": 10
+            },
+            {
+              "key": "evidence",
+              "width_percent": 10
+            }
+          ],
+          "heading_style_id": "Heading 1",
+          "section": "technical",
+          "table_style_id": "Table Grid"
+        },
+        {
+          "columns": [],
+          "heading_style_id": "Heading 1",
+          "section": "comply_only",
+          "table_style_id": "Table Grid"
+        },
+        {
+          "columns": [],
+          "heading_style_id": "Heading 1",
+          "section": "gaps",
+          "table_style_id": "Table Grid"
+        },
+        {
+          "columns": [],
+          "heading_style_id": "Heading 1",
+          "section": "evidence_appendix",
+          "table_style_id": "Table Grid"
+        }
+      ],
+      "static_content_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "template_revision_id": "00000000-0000-0000-0000-000000000001",
+      "template_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "export binding list": {
+    "command": "export binding list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "template_revision_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "adapter_version": "docx-export-v1",
+        "binding_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reviewed_at": "2026-10-01T00:00:00Z",
+        "reviewed_by": "00000000-0000-0000-0000-000000000001",
+        "sections": [
+          {
+            "columns": [
+              {
+                "key": "ordinal",
+                "width_percent": 5
+              },
+              {
+                "key": "tender_clause",
+                "width_percent": 25
+              },
+              {
+                "key": "source_location",
+                "width_percent": 15
+              },
+              {
+                "key": "response",
+                "width_percent": 25
+              },
+              {
+                "key": "deviation",
+                "width_percent": 10
+              },
+              {
+                "key": "deviation_note",
+                "width_percent": 10
+              },
+              {
+                "key": "evidence",
+                "width_percent": 10
+              }
+            ],
+            "heading_style_id": "Heading 1",
+            "section": "substantive",
+            "table_style_id": "Table Grid"
+          },
+          {
+            "columns": [
+              {
+                "key": "ordinal",
+                "width_percent": 5
+              },
+              {
+                "key": "tender_clause",
+                "width_percent": 25
+              },
+              {
+                "key": "source_location",
+                "width_percent": 15
+              },
+              {
+                "key": "response",
+                "width_percent": 25
+              },
+              {
+                "key": "deviation",
+                "width_percent": 10
+              },
+              {
+                "key": "deviation_note",
+                "width_percent": 10
+              },
+              {
+                "key": "evidence",
+                "width_percent": 10
+              }
+            ],
+            "heading_style_id": "Heading 1",
+            "section": "commercial",
+            "table_style_id": "Table Grid"
+          },
+          {
+            "columns": [
+              {
+                "key": "ordinal",
+                "width_percent": 5
+              },
+              {
+                "key": "tender_clause",
+                "width_percent": 25
+              },
+              {
+                "key": "source_location",
+                "width_percent": 15
+              },
+              {
+                "key": "response",
+                "width_percent": 25
+              },
+              {
+                "key": "deviation",
+                "width_percent": 10
+              },
+              {
+                "key": "deviation_note",
+                "width_percent": 10
+              },
+              {
+                "key": "evidence",
+                "width_percent": 10
+              }
+            ],
+            "heading_style_id": "Heading 1",
+            "section": "technical",
+            "table_style_id": "Table Grid"
+          },
+          {
+            "columns": [],
+            "heading_style_id": "Heading 1",
+            "section": "comply_only",
+            "table_style_id": "Table Grid"
+          },
+          {
+            "columns": [],
+            "heading_style_id": "Heading 1",
+            "section": "gaps",
+            "table_style_id": "Table Grid"
+          },
+          {
+            "columns": [],
+            "heading_style_id": "Heading 1",
+            "section": "evidence_appendix",
+            "table_style_id": "Table Grid"
+          }
+        ],
+        "static_content_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "template_revision_id": "00000000-0000-0000-0000-000000000001",
+        "template_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "export download": {
+    "command": "export download",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "completion": "partial",
+      "export_id": "00000000-0000-0000-0000-000000000001",
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic-review.docx",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": 1
+      },
+      "issues": [],
+      "mode": "review_copy",
+      "output_path": "<download-output>",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "export list": {
+    "command": "export list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "binding_id": "00000000-0000-0000-0000-000000000001",
+        "completion": "partial",
+        "draft_id": "00000000-0000-0000-0000-000000000001",
+        "file": {
+          "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "name": "synthetic-review.docx",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 1
+        },
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "invalidated_requirement_ids": [],
+        "issues": [],
+        "manifest_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "mode": "review_copy",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "released_at": "2026-10-01T00:00:00Z",
+        "released_by": "00000000-0000-0000-0000-000000000001",
+        "run_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "task_template_id": "00000000-0000-0000-0000-000000000001",
+        "template_revision_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "export prepare": {
+    "command": "export prepare",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "candidate_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "draft_id": "00000000-0000-0000-0000-000000000001",
+      "export_id": null,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "issues": [],
+      "mode": "review_copy",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "render_job_id": "00000000-0000-0000-0000-000000000002",
+      "state": "awaiting_release",
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "export release": {
+    "command": "export release",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "binding_id": "00000000-0000-0000-0000-000000000001",
+      "completion": "partial",
+      "draft_id": "00000000-0000-0000-0000-000000000001",
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic-review.docx",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": 1
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "invalidated_requirement_ids": [],
+      "issues": [],
+      "manifest_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "mode": "review_copy",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "released_at": "2026-10-01T00:00:00Z",
+      "released_by": "00000000-0000-0000-0000-000000000001",
+      "run_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "task_template_id": "00000000-0000-0000-0000-000000000001",
+      "template_revision_id": "00000000-0000-0000-0000-000000000001",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "export run show": {
+    "command": "export run show",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "candidate_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "draft_id": "00000000-0000-0000-0000-000000000001",
+      "export_id": null,
+      "id": "00000000-0000-0000-0000-000000000001",
+      "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "issues": [],
+      "mode": "review_copy",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "render_job_id": "00000000-0000-0000-0000-000000000002",
+      "state": "awaiting_release",
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "export show": {
+    "command": "export show",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "binding_id": "00000000-0000-0000-0000-000000000001",
+      "completion": "partial",
+      "draft_id": "00000000-0000-0000-0000-000000000001",
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic-review.docx",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": 1
+      },
+      "id": "00000000-0000-0000-0000-000000000001",
+      "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "invalidated_requirement_ids": [],
+      "issues": [],
+      "manifest_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "mode": "review_copy",
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "released_at": "2026-10-01T00:00:00Z",
+      "released_by": "00000000-0000-0000-0000-000000000001",
+      "run_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "task_template_id": "00000000-0000-0000-0000-000000000001",
+      "template_revision_id": "00000000-0000-0000-0000-000000000001",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
   "job cancel": {
     "command": "job cancel",
     "cost": {
@@ -4319,6 +4810,2229 @@
             }
           ],
           "input": null
+        },
+        "export binding create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "tender_clause",
+                      "source_location",
+                      "response",
+                      "deviation",
+                      "deviation_note",
+                      "evidence"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "ExportColumn",
+                "type": "object"
+              },
+              "ExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/ExportColumn"
+                    },
+                    "maxItems": 7,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "ExportSectionBinding",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_static_content_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Static Content Hash"
+              },
+              "expected_template_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Template Sha256",
+                "type": "string"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/ExportSectionBinding"
+                },
+                "maxItems": 6,
+                "minItems": 6,
+                "title": "Sections",
+                "type": "array"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_revision_id",
+              "expected_template_sha256",
+              "sections"
+            ],
+            "title": "ExportBindingCreate",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ExportBindingAnchor": {
+                "additionalProperties": false,
+                "properties": {
+                  "paragraph": {
+                    "minimum": 1,
+                    "title": "Paragraph",
+                    "type": "integer"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "section_index": {
+                    "minimum": 0,
+                    "title": "Section Index",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "section",
+                  "paragraph",
+                  "section_index"
+                ],
+                "title": "ExportBindingAnchor",
+                "type": "object"
+              },
+              "ExportBindingPreview": {
+                "additionalProperties": false,
+                "properties": {
+                  "adapter_version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Adapter Version",
+                    "type": "string"
+                  },
+                  "anchors": {
+                    "items": {
+                      "$ref": "#/$defs/ExportBindingAnchor"
+                    },
+                    "maxItems": 6,
+                    "title": "Anchors",
+                    "type": "array"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "issues": {
+                    "items": {
+                      "$ref": "#/$defs/ExportIssue"
+                    },
+                    "title": "Issues",
+                    "type": "array"
+                  },
+                  "static_content_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Static Content Hash",
+                    "type": "string"
+                  },
+                  "template_revision_id": {
+                    "format": "uuid",
+                    "title": "Template Revision Id",
+                    "type": "string"
+                  },
+                  "template_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Template Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "template_revision_id",
+                  "template_sha256",
+                  "static_content_hash",
+                  "adapter_version",
+                  "anchors",
+                  "issues"
+                ],
+                "title": "ExportBindingPreview",
+                "type": "object"
+              },
+              "ExportBindingView": {
+                "additionalProperties": false,
+                "properties": {
+                  "adapter_version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Adapter Version",
+                    "type": "string"
+                  },
+                  "binding_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Binding Hash",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reviewed_at": {
+                    "format": "date-time",
+                    "title": "Reviewed At",
+                    "type": "string"
+                  },
+                  "reviewed_by": {
+                    "format": "uuid",
+                    "title": "Reviewed By",
+                    "type": "string"
+                  },
+                  "sections": {
+                    "items": {
+                      "$ref": "#/$defs/ExportSectionBinding"
+                    },
+                    "maxItems": 6,
+                    "minItems": 6,
+                    "title": "Sections",
+                    "type": "array"
+                  },
+                  "static_content_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Static Content Hash",
+                    "type": "string"
+                  },
+                  "template_revision_id": {
+                    "format": "uuid",
+                    "title": "Template Revision Id",
+                    "type": "string"
+                  },
+                  "template_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Template Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "template_revision_id",
+                  "template_sha256",
+                  "binding_hash",
+                  "static_content_hash",
+                  "adapter_version",
+                  "sections",
+                  "reviewed_by",
+                  "reviewed_at"
+                ],
+                "title": "ExportBindingView",
+                "type": "object"
+              },
+              "ExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "tender_clause",
+                      "source_location",
+                      "response",
+                      "deviation",
+                      "deviation_note",
+                      "evidence"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "ExportColumn",
+                "type": "object"
+              },
+              "ExportIssue": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "issue_id": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Issue Id",
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "severity": {
+                    "enum": [
+                      "block",
+                      "acknowledge"
+                    ],
+                    "title": "Severity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_id",
+                  "code",
+                  "severity"
+                ],
+                "title": "ExportIssue",
+                "type": "object"
+              },
+              "ExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/ExportColumn"
+                    },
+                    "maxItems": 7,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "ExportSectionBinding",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ExportBindingPreview"
+              },
+              {
+                "$ref": "#/$defs/ExportBindingView"
+              }
+            ]
+          }
+        },
+        "export binding list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "template_revision",
+              "options": [
+                "--template-revision"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "tender_clause",
+                      "source_location",
+                      "response",
+                      "deviation",
+                      "deviation_note",
+                      "evidence"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "ExportColumn",
+                "type": "object"
+              },
+              "ExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/ExportColumn"
+                    },
+                    "maxItems": 7,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "ExportSectionBinding",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "adapter_version": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Adapter Version",
+                "type": "string"
+              },
+              "binding_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Binding Hash",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reviewed_at": {
+                "format": "date-time",
+                "title": "Reviewed At",
+                "type": "string"
+              },
+              "reviewed_by": {
+                "format": "uuid",
+                "title": "Reviewed By",
+                "type": "string"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/ExportSectionBinding"
+                },
+                "maxItems": 6,
+                "minItems": 6,
+                "title": "Sections",
+                "type": "array"
+              },
+              "static_content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Static Content Hash",
+                "type": "string"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              },
+              "template_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Template Sha256",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "template_revision_id",
+              "template_sha256",
+              "binding_hash",
+              "static_content_hash",
+              "adapter_version",
+              "sections",
+              "reviewed_by",
+              "reviewed_at"
+            ],
+            "title": "ExportBindingView",
+            "type": "object"
+          }
+        },
+        "export download": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ExportFile": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "default": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 536870912,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "ExportFile",
+                "type": "object"
+              },
+              "ExportIssue": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "issue_id": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Issue Id",
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "severity": {
+                    "enum": [
+                      "block",
+                      "acknowledge"
+                    ],
+                    "title": "Severity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_id",
+                  "code",
+                  "severity"
+                ],
+                "title": "ExportIssue",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "CLI receipt fields needed to preserve review-copy partial semantics.",
+            "properties": {
+              "completion": {
+                "enum": [
+                  "complete",
+                  "partial"
+                ],
+                "title": "Completion",
+                "type": "string"
+              },
+              "export_id": {
+                "format": "uuid",
+                "title": "Export Id",
+                "type": "string"
+              },
+              "file": {
+                "$ref": "#/$defs/ExportFile"
+              },
+              "issues": {
+                "items": {
+                  "$ref": "#/$defs/ExportIssue"
+                },
+                "title": "Issues",
+                "type": "array"
+              },
+              "mode": {
+                "enum": [
+                  "final_section",
+                  "review_copy"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "output_path": {
+                "minLength": 1,
+                "title": "Output Path",
+                "type": "string"
+              },
+              "validity": {
+                "enum": [
+                  "current",
+                  "stale"
+                ],
+                "title": "Validity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id",
+              "output_path",
+              "file",
+              "mode",
+              "completion",
+              "validity",
+              "issues"
+            ],
+            "title": "ExportDownloadResult",
+            "type": "object"
+          }
+        },
+        "export list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ExportFile": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "default": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 536870912,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "ExportFile",
+                "type": "object"
+              },
+              "ExportIssue": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "issue_id": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Issue Id",
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "severity": {
+                    "enum": [
+                      "block",
+                      "acknowledge"
+                    ],
+                    "title": "Severity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_id",
+                  "code",
+                  "severity"
+                ],
+                "title": "ExportIssue",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "binding_id": {
+                "format": "uuid",
+                "title": "Binding Id",
+                "type": "string"
+              },
+              "completion": {
+                "enum": [
+                  "complete",
+                  "partial"
+                ],
+                "title": "Completion",
+                "type": "string"
+              },
+              "draft_id": {
+                "format": "uuid",
+                "title": "Draft Id",
+                "type": "string"
+              },
+              "file": {
+                "$ref": "#/$defs/ExportFile"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "invalidated_requirement_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": "Invalidated Requirement Ids",
+                "type": "array"
+              },
+              "issues": {
+                "items": {
+                  "$ref": "#/$defs/ExportIssue"
+                },
+                "title": "Issues",
+                "type": "array"
+              },
+              "manifest_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Manifest Hash",
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "final_section",
+                  "review_copy"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "released_at": {
+                "format": "date-time",
+                "title": "Released At",
+                "type": "string"
+              },
+              "released_by": {
+                "format": "uuid",
+                "title": "Released By",
+                "type": "string"
+              },
+              "run_id": {
+                "format": "uuid",
+                "title": "Run Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "task_template_id": {
+                "format": "uuid",
+                "title": "Task Template Id",
+                "type": "string"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              },
+              "validity": {
+                "enum": [
+                  "current",
+                  "stale"
+                ],
+                "title": "Validity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "run_id",
+              "draft_id",
+              "task_template_id",
+              "template_revision_id",
+              "binding_id",
+              "mode",
+              "completion",
+              "validity",
+              "input_hash",
+              "manifest_hash",
+              "file",
+              "released_by",
+              "released_at",
+              "issues",
+              "invalidated_requirement_ids"
+            ],
+            "title": "ExportView",
+            "type": "object"
+          }
+        },
+        "export prepare": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "acknowledged_issue_ids": {
+                "items": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "title": "Acknowledged Issue Ids",
+                "type": "array"
+              },
+              "binding_id": {
+                "format": "uuid",
+                "title": "Binding Id",
+                "type": "string"
+              },
+              "draft_id": {
+                "format": "uuid",
+                "title": "Draft Id",
+                "type": "string"
+              },
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Input Hash"
+              },
+              "mode": {
+                "enum": [
+                  "final_section",
+                  "review_copy"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              },
+              "task_template_id": {
+                "format": "uuid",
+                "title": "Task Template Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "draft_id",
+              "task_template_id",
+              "binding_id",
+              "mode"
+            ],
+            "title": "ExportPrepare",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "ExportIssue": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "issue_id": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Issue Id",
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "severity": {
+                    "enum": [
+                      "block",
+                      "acknowledge"
+                    ],
+                    "title": "Severity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_id",
+                  "code",
+                  "severity"
+                ],
+                "title": "ExportIssue",
+                "type": "object"
+              },
+              "ExportPreview": {
+                "additionalProperties": false,
+                "properties": {
+                  "attachment_pages": {
+                    "maximum": 300,
+                    "minimum": 0,
+                    "title": "Attachment Pages",
+                    "type": "integer"
+                  },
+                  "comply_only_count": {
+                    "maximum": 2000,
+                    "minimum": 0,
+                    "title": "Comply Only Count",
+                    "type": "integer"
+                  },
+                  "draft_id": {
+                    "format": "uuid",
+                    "title": "Draft Id",
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "estimated_cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "estimated_duration_ms": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Duration Ms"
+                  },
+                  "estimated_output_bytes": {
+                    "anyOf": [
+                      {
+                        "maximum": 536870912,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Output Bytes"
+                  },
+                  "gap_count": {
+                    "maximum": 2000,
+                    "minimum": 0,
+                    "title": "Gap Count",
+                    "type": "integer"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "issues": {
+                    "items": {
+                      "$ref": "#/$defs/ExportIssue"
+                    },
+                    "title": "Issues",
+                    "type": "array"
+                  },
+                  "mode": {
+                    "enum": [
+                      "final_section",
+                      "review_copy"
+                    ],
+                    "title": "Mode",
+                    "type": "string"
+                  },
+                  "negative_count": {
+                    "maximum": 2000,
+                    "minimum": 0,
+                    "title": "Negative Count",
+                    "type": "integer"
+                  },
+                  "ready": {
+                    "title": "Ready",
+                    "type": "boolean"
+                  },
+                  "requirement_count": {
+                    "maximum": 2000,
+                    "minimum": 0,
+                    "title": "Requirement Count",
+                    "type": "integer"
+                  },
+                  "table_rows": {
+                    "additionalProperties": {
+                      "type": "integer"
+                    },
+                    "propertyNames": {
+                      "enum": [
+                        "substantive",
+                        "commercial",
+                        "technical"
+                      ]
+                    },
+                    "title": "Table Rows",
+                    "type": "object"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "task_id",
+                  "draft_id",
+                  "mode",
+                  "input_hash",
+                  "ready",
+                  "requirement_count",
+                  "table_rows",
+                  "comply_only_count",
+                  "gap_count",
+                  "negative_count",
+                  "attachment_pages",
+                  "issues",
+                  "estimated_cost"
+                ],
+                "title": "ExportPreview",
+                "type": "object"
+              },
+              "ExportRunView": {
+                "additionalProperties": false,
+                "properties": {
+                  "candidate_sha256": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Candidate Sha256"
+                  },
+                  "draft_id": {
+                    "format": "uuid",
+                    "title": "Draft Id",
+                    "type": "string"
+                  },
+                  "export_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Export Id"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "issues": {
+                    "items": {
+                      "$ref": "#/$defs/ExportIssue"
+                    },
+                    "title": "Issues",
+                    "type": "array"
+                  },
+                  "mode": {
+                    "enum": [
+                      "final_section",
+                      "review_copy"
+                    ],
+                    "title": "Mode",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "render_job_id": {
+                    "format": "uuid",
+                    "title": "Render Job Id",
+                    "type": "string"
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "rendering",
+                      "awaiting_release",
+                      "released",
+                      "failed",
+                      "cancelled",
+                      "invalidated"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "draft_id",
+                  "render_job_id",
+                  "mode",
+                  "input_hash",
+                  "state",
+                  "candidate_sha256",
+                  "export_id",
+                  "issues"
+                ],
+                "title": "ExportRunView",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ExportPreview"
+              },
+              {
+                "$ref": "#/$defs/ExportRunView"
+              }
+            ]
+          }
+        },
+        "export release": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "run",
+              "options": [
+                "--run"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_candidate_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Candidate Sha256",
+                "type": "string"
+              },
+              "expected_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Input Hash",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_input_hash",
+              "expected_candidate_sha256"
+            ],
+            "title": "ExportRelease",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ExportFile": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "default": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 536870912,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "ExportFile",
+                "type": "object"
+              },
+              "ExportIssue": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "issue_id": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Issue Id",
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "severity": {
+                    "enum": [
+                      "block",
+                      "acknowledge"
+                    ],
+                    "title": "Severity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_id",
+                  "code",
+                  "severity"
+                ],
+                "title": "ExportIssue",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "binding_id": {
+                "format": "uuid",
+                "title": "Binding Id",
+                "type": "string"
+              },
+              "completion": {
+                "enum": [
+                  "complete",
+                  "partial"
+                ],
+                "title": "Completion",
+                "type": "string"
+              },
+              "draft_id": {
+                "format": "uuid",
+                "title": "Draft Id",
+                "type": "string"
+              },
+              "file": {
+                "$ref": "#/$defs/ExportFile"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "invalidated_requirement_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": "Invalidated Requirement Ids",
+                "type": "array"
+              },
+              "issues": {
+                "items": {
+                  "$ref": "#/$defs/ExportIssue"
+                },
+                "title": "Issues",
+                "type": "array"
+              },
+              "manifest_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Manifest Hash",
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "final_section",
+                  "review_copy"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "released_at": {
+                "format": "date-time",
+                "title": "Released At",
+                "type": "string"
+              },
+              "released_by": {
+                "format": "uuid",
+                "title": "Released By",
+                "type": "string"
+              },
+              "run_id": {
+                "format": "uuid",
+                "title": "Run Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "task_template_id": {
+                "format": "uuid",
+                "title": "Task Template Id",
+                "type": "string"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              },
+              "validity": {
+                "enum": [
+                  "current",
+                  "stale"
+                ],
+                "title": "Validity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "run_id",
+              "draft_id",
+              "task_template_id",
+              "template_revision_id",
+              "binding_id",
+              "mode",
+              "completion",
+              "validity",
+              "input_hash",
+              "manifest_hash",
+              "file",
+              "released_by",
+              "released_at",
+              "issues",
+              "invalidated_requirement_ids"
+            ],
+            "title": "ExportView",
+            "type": "object"
+          }
+        },
+        "export run show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ExportIssue": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "issue_id": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Issue Id",
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "severity": {
+                    "enum": [
+                      "block",
+                      "acknowledge"
+                    ],
+                    "title": "Severity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_id",
+                  "code",
+                  "severity"
+                ],
+                "title": "ExportIssue",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "candidate_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Candidate Sha256"
+              },
+              "draft_id": {
+                "format": "uuid",
+                "title": "Draft Id",
+                "type": "string"
+              },
+              "export_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Export Id"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "issues": {
+                "items": {
+                  "$ref": "#/$defs/ExportIssue"
+                },
+                "title": "Issues",
+                "type": "array"
+              },
+              "mode": {
+                "enum": [
+                  "final_section",
+                  "review_copy"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "render_job_id": {
+                "format": "uuid",
+                "title": "Render Job Id",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "queued",
+                  "rendering",
+                  "awaiting_release",
+                  "released",
+                  "failed",
+                  "cancelled",
+                  "invalidated"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "draft_id",
+              "render_job_id",
+              "mode",
+              "input_hash",
+              "state",
+              "candidate_sha256",
+              "export_id",
+              "issues"
+            ],
+            "title": "ExportRunView",
+            "type": "object"
+          }
+        },
+        "export show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ExportFile": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "default": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 536870912,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "ExportFile",
+                "type": "object"
+              },
+              "ExportIssue": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "issue_id": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Issue Id",
+                    "type": "string"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "severity": {
+                    "enum": [
+                      "block",
+                      "acknowledge"
+                    ],
+                    "title": "Severity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "issue_id",
+                  "code",
+                  "severity"
+                ],
+                "title": "ExportIssue",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "binding_id": {
+                "format": "uuid",
+                "title": "Binding Id",
+                "type": "string"
+              },
+              "completion": {
+                "enum": [
+                  "complete",
+                  "partial"
+                ],
+                "title": "Completion",
+                "type": "string"
+              },
+              "draft_id": {
+                "format": "uuid",
+                "title": "Draft Id",
+                "type": "string"
+              },
+              "file": {
+                "$ref": "#/$defs/ExportFile"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "invalidated_requirement_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": "Invalidated Requirement Ids",
+                "type": "array"
+              },
+              "issues": {
+                "items": {
+                  "$ref": "#/$defs/ExportIssue"
+                },
+                "title": "Issues",
+                "type": "array"
+              },
+              "manifest_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Manifest Hash",
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "final_section",
+                  "review_copy"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "released_at": {
+                "format": "date-time",
+                "title": "Released At",
+                "type": "string"
+              },
+              "released_by": {
+                "format": "uuid",
+                "title": "Released By",
+                "type": "string"
+              },
+              "run_id": {
+                "format": "uuid",
+                "title": "Run Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "task_template_id": {
+                "format": "uuid",
+                "title": "Task Template Id",
+                "type": "string"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              },
+              "validity": {
+                "enum": [
+                  "current",
+                  "stale"
+                ],
+                "title": "Validity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "run_id",
+              "draft_id",
+              "task_template_id",
+              "template_revision_id",
+              "binding_id",
+              "mode",
+              "completion",
+              "validity",
+              "input_hash",
+              "manifest_hash",
+              "file",
+              "released_by",
+              "released_at",
+              "issues",
+              "invalidated_requirement_ids"
+            ],
+            "title": "ExportView",
+            "type": "object"
+          }
         },
         "job cancel": {
           "cli_parameters": [

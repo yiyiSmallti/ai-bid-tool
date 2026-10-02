@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
@@ -83,7 +84,11 @@ class Processor:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, document.id
             reasoning = current.reasoning
-            llm = await self.resolve(session) if self.resolve and kind != "draft" else self.llm
+            llm = (
+                await self.resolve(session)
+                if self.resolve and kind not in {"draft", "export_render"}
+                else self.llm
+            )
             key, suffix, expected_hash = (
                 document.storage_key,
                 Path(document.name).suffix.lower(),
@@ -91,7 +96,7 @@ class Processor:
             )
             chunks = (
                 []
-                if kind in {"draft", "card_generate"}
+                if kind in {"draft", "card_generate", "export_render"}
                 else [
                     dict(
                         id=row.id,
@@ -126,6 +131,17 @@ class Processor:
                     return recognized
 
             try:
+                if kind == "export_render":
+                    from app.jobs.export_render import render
+
+                    try:
+                        async with asyncio.timeout(self.settings.export_deadline_seconds):
+                            await render(execution, self.storage)
+                    except TimeoutError as exc:
+                        raise ServiceError(
+                            "export_render_timeout", "Export job deadline exceeded", 503, 3
+                        ) from exc
+                    return
                 if kind == "card_generate":
                     from app.services.card_generation import generate
 
@@ -322,6 +338,7 @@ class Processor:
                     # Exit code 3 marks transient failures such as object storage outages.
                     retryable = exc.exit_code == 3 and exc.code not in {
                         "draft_input_changed",
+                        "export_input_changed",
                         "generation_input_changed",
                         "generation_model_changed",
                         "generation_rules_changed",
@@ -356,6 +373,10 @@ class Processor:
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
+                    if kind == "export_render":
+                        from app.jobs.export_render import failure_audit
+
+                        await failure_audit(session, current, error["code"])
                     if kind == "card_generate":
                         from app.services.card_generation import worker
                         from app.services.resources import audit

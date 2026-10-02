@@ -1,12 +1,19 @@
 ---
 kind: plan
-status: "已批准，未实施"
+status: "部分已实施"
 ---
 
-# 契约草案：人工导出响应章节 Word
+# 契约：人工导出响应章节 Word
 
-状态：**已批准，未实施**（2026-10-02，按“待你决定”中的推荐方案）。对应[路线图](roadmap.md#覆盖矩阵解析要求证据响应与校验)
-B11，依赖 R01、B07、B08。下文按推荐方案定义拟实施边界；末节保留需要批准的具体选择。
+状态：**部分已实施**。对应[路线图](roadmap.md#覆盖矩阵解析要求证据响应与校验)
+B11，依赖 R01、B07、B08。批准范围按[已定决定](#已定决定)执行，交付与待集成边界如下。
+
+| 部分 | 状态与边界 |
+| --- | --- |
+| 人类模板绑定、预检、prepare → worker 候选 → release → 下载、正式件/审阅件、证书页附件、加密、审计、限额与哈希 | **已实施**；机制和代码入口见 [human-section-exports.md](../notes/human-section-exports.md) |
+| `prototype_decision_required`、`prototype_replacement_pending`、`prototype_decision_stale` | **未实施，待合并截图流**；单一接入函数为 [exports.py](../../server/app/services/exports.py) 的 `collect_additional_refusal_issues`，保留指向 [screenshots.md](screenshots.md) 的 TODO |
+| PostgreSQL 迁移、RLS、并发和完整 API/processor 验收 | 已编写端到端关口测试；本沙箱无法连接 PostgreSQL 测试实例，须由维护者运行，不能视为已通过 |
+| Word/WPS 视觉分页及隔离 S3 完整下载验收 | 保留为验收项；DOCX 解包/重开和合成工件验证不能替代此项 |
 
 ## 目标与边界
 
@@ -186,7 +193,7 @@ PNG 哈希的页面去重；同页多个 Evidence 的摘录、确认记录及引
 背景材料中的检测报告、业绩合同、社保证明或截图，只有已由受支持来源和确认链表示的
 页面才能消费；其余保持人工编排或后续材料类型扩展。
 
-## 拟新增数据模型与数据库约束
+## 数据模型与数据库约束
 
 下列每张业务表均须 `org_id NOT NULL`、`UNIQUE(org_id,id)`、ENABLE/FORCE RLS；
 运行角色无表所有权、SUPERUSER、BYPASSRLS、TRUNCATE、改删历史权限。缺单位上下文
@@ -235,9 +242,10 @@ manifest 是受 RLS 保护的固定事实清单，至少含每条要求/引用�
 任务元数据、完整警示及确认集合、组表规则/适配/渲染版本。规范化关联表是权限与外键依据，
 manifest 必须由这些行产生并校验一致，不能仅持有一个不可检查的总哈希。
 
-## Pydantic 契约草案
+## Pydantic 契约
 
-以下模型仅为文档内提案。复用
+以下为批准的接口字段；可执行字段验证以
+[export_contracts.py](../../server/app/schemas/export_contracts.py) 为准。复用
 [`Contract、Cost、Result`](../../server/app/schemas/contracts.py)和上游 DraftView/Source，
 统一 `extra=forbid`，不另建顶层 Result、不冻结当前契约版本号。
 
@@ -531,9 +539,10 @@ input_hash 由规范 JSON 的 UTF-8 字节计算，含显式默认值、固定�
 
 ## 批准后的端到端验收
 
-实施顺序：契约/schema 与身份边界 → 迁移/数据库关口 → 模板适配 → 固定清单与渲染
-worker → 人工发布/下载 → 下列端到端检查。本节是未来验收条件，本草案不表示已实现、
-已生成 DOCX 或已跑功能测试；本次仅对本文执行文档检查。
+验收顺序：契约/schema 与身份边界 → 迁移/数据库关口 → 模板适配 → 固定清单与渲染
+worker → 人工发布/下载 → 下列端到端检查。代码实施状态不等于这些验收条件全部通过；
+数据库、隔离 S3 和 Word/WPS 的未完成验收范围见本文开头。验证日志和合成工件仅放在
+工作树的 `data/work/`，不写入文档目录。
 
 1. **真实入口闭环**：在隔离环境用两个人类职责账号从上传合成招标、固定资源、逐卡确认、
    draft、模板绑定、prepare、真实 worker、release 到 download 跑通本地和远程 CLI/API。
@@ -602,3 +611,20 @@ worker → 人工发布/下载 → 下列端到端检查。本节是未来验收
 | 证书页排版与清晰度 | **推荐复用已核验的 150 dpi 整页 PNG，附录逐页、重复页去重**，对当前确认链改动最小；备选先扩展更高分辨率的版本化页面渲染与 hash 契约再导出，或另立内联图排版。均不默认附整本 PDF |
 | 历史失效件下载 | **推荐历史元数据可查、失效文件禁止重新下载，旧签名同样拒绝**；备选后续增加仅人类专职归档读取能力并单独设计醒目标识和权限，本切片不加 allow-stale |
 | 首版规模上限 | **推荐 2,000 条要求、300 个唯一附件页、512 MiB DOCX、1 GiB 解包/进程内存、15 分钟 deadline**，合成大工件验收后采用；备选先限定 1,000 条/150 页/256 MiB/10 分钟，以更小范围完成首版。任一方案都不静默删减材料 |
+
+
+## 实施时明确的细节
+
+- 静态正文标题白名单取所选 `TemplateRevision.data.chapters` 的完整章节树，不新增
+  可自由注入正文的请求字段；缺少可用锚点或样式时拒绝绑定。
+- `input_hash` 固定事实、issue 集合与渲染 profile；`manifest_hash` 再绑定精确警示确认。
+  run 幂等键额外包含发起人。声明仅有证据索引，只有确认证书页分配附件编号。
+- 已发布 run 失效后返回 `state=invalidated`，保留已有 `export_id`，
+  `candidate_sha256=null`；历史读取仍成功，签发和实际下载拒绝。
+- CLI 下载先读取 ExportView，再取签名链接，核对同一文件描述符。审阅件下载回执用
+  `ExportDownloadResult` 补充 mode/completion/validity/issues，不改变 Result 七个顶层键。
+- `bid schema` 仅为新增 export 命令追加 output JSON Schema，既有命令定义不变。
+- Linux 用进程地址空间上限，macOS 用父进程采样 RSS 后终止渲染进程；达到任何限额均失败，
+  不删页或降采样。部署配置只允许下调批准上限。
+- 已有材料表保留单位 RLS，worker 的逐材料读取收窄由受信任的固定输入加载服务执行；
+  新导出表另有 run/attempt 级 worker RLS，不宣称旧材料表新增了该策略。
