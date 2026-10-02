@@ -9,16 +9,16 @@ import ssl
 import time
 from decimal import ROUND_CEILING, Decimal
 from typing import Any
+from uuid import UUID
 
 import httpx
 from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ServiceError, log_unexpected
 from app.core.llm_options import output_limits, validate_request_options
-from app.models.entities import PlatformModel
+from app.models.entities import Job, PlatformModel
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import accounted_call, plan_calls
 from app.providers.disabled import DisabledLLM
@@ -327,6 +327,8 @@ class HTTPExtractor:
         *,
         platform_model_id: str | None = None,
         sale_usd_per_mtok: tuple[float, float] | None = None,
+        provider_config_id: UUID | None = None,
+        org_owned: bool = False,
     ):
         if not settings.llm_model:
             raise ValueError("BID_LLM_MODEL is required")
@@ -335,6 +337,7 @@ class HTTPExtractor:
         self.transport = transport
         self.platform_model_id = platform_model_id
         self.sale = sale_usd_per_mtok
+        self.provider_config_id, self.org_owned = provider_config_id, org_owned
 
     def at_reasoning(self, name: str) -> "HTTPExtractor":
         """A copy that sends this level's vendor options and uses its batch size."""
@@ -351,6 +354,8 @@ class HTTPExtractor:
             self.transport,
             platform_model_id=self.platform_model_id,
             sale_usd_per_mtok=self.sale,
+            provider_config_id=self.provider_config_id,
+            org_owned=self.org_owned,
         )
         copy.version = self.version
         copy.model_revision = self.model_revision
@@ -543,7 +548,12 @@ class HTTPExtractor:
             output_tokens=sum(u.output_tokens for u in usages),
             usd=None if any(u.usd is None for u in usages) else sum(u.usd or 0 for u in usages),
             platform_model_id=self.platform_model_id,
-            charge=None if self.sale is None else sum(u.charge or 0 for u in usages),
+            provider_config_id=self.provider_config_id,
+            charge=0
+            if self.org_owned
+            else None
+            if self.sale is None
+            else sum(u.charge or 0 for u in usages),
         )
 
     def usage(self, started: float, model: str, input_tokens: int, output_tokens: int):
@@ -568,7 +578,8 @@ class HTTPExtractor:
             output_tokens=output_tokens,
             usd=usd,
             platform_model_id=self.platform_model_id,
-            charge=charge,
+            provider_config_id=self.provider_config_id,
+            charge=0 if self.org_owned else charge,
         )
 
     def build_request(self, body: dict) -> dict:
@@ -677,19 +688,33 @@ class HTTPExtractor:
                 )
                 is not None
             )
+            key = self.settings.llm_api_key
+            # Compare JSON-escaped strings as well, so quotes/backslashes in a key
+            # cannot hide an echo in a response field or its reported model name.
+            echoed_key = key is not None and json.dumps(key.get_secret_value(), ensure_ascii=False)[
+                1:-1
+            ] in json.dumps(payload, ensure_ascii=False)
             metadata = (
                 {**payload, "model": reported_model if trusted_model else "unverified-model"}
-                if safe_metadata
+                if safe_metadata or echoed_key
                 else payload
             )
-            return (response, payload, trusted_model), self.response_usage(metadata, started)
+            return (response, payload, trusted_model, echoed_key), self.response_usage(
+                metadata, started
+            )
 
         try:
-            (response, payload, trusted_model), usage = await accounted_call(
+            (response, payload, trusted_model, echoed_key), usage = await accounted_call(
                 self.reservation(body), self.platform_model_id is not None, request
             )
             # Account error envelopes that include usage before applying their error/retry policy.
             self.check_status(response, [usage])
+            if echoed_key:
+                raise ProviderFailure(
+                    "Vendor response echoed a credential",
+                    code="invalid_provider_output",
+                    usage=[usage],
+                )
             if safe_metadata and not trusted_model:
                 raise ProviderFailure(
                     "Vendor model identity is unrecognized",
@@ -697,11 +722,11 @@ class HTTPExtractor:
                     usage=[usage],
                 )
         except ProviderFailure as exc:
-            if not safe_metadata:
+            if not safe_metadata or exc.code == "provider_quota_exhausted":
                 raise
             # Vendor error types and model names are untrusted strings and can echo input.
             raise ProviderFailure(
-                "Drafting call stopped; see the error code",
+                "Model call stopped; see the error code",
                 code=exc.code,
                 retryable=exc.retryable,
                 refused=exc.refused,
@@ -724,25 +749,43 @@ class HTTPExtractor:
             ) from None
         return response
 
-    @staticmethod
-    def check_status(response: httpx.Response, usages: list[ProviderUsage] | None = None) -> None:
+    def check_status(
+        self, response: httpx.Response, usages: list[ProviderUsage] | None = None
+    ) -> None:
         if response.status_code != 200:
             try:
-                error = response.json().get("error") or {}
+                payload = response.json()
+                error = payload.get("error") or {} if isinstance(payload, dict) else {}
                 if not isinstance(error, dict):
                     error = {}
             except ValueError:
                 error = {}
             # OpenAI and Anthropic send a type; Zhipu and others send a vendor code.
-            kind = str(error.get("type") or error.get("code") or "unknown")[:40]
+            kind = str(error.get("type") or error.get("code") or "unknown")
+            if kind not in QUOTA_CODES | QUOTA_TYPES | {
+                "rate_limit_error",
+                "authentication_error",
+                "invalid_request_error",
+                "overloaded_error",
+                "1302",
+                "1305",
+            }:
+                kind = "unknown"
             codes = {str(error.get("type")), str(error.get("code"))}
             if response.status_code == 402 or codes & (QUOTA_CODES | QUOTA_TYPES):
                 # Only a reset timestamp is taken from the vendor message.
-                reset = RESET_TIME.search(str(error.get("message") or ""))
+                message = str(error.get("message") or "")
+                if self.settings.llm_api_key is not None:
+                    message = message.replace(self.settings.llm_api_key.get_secret_value(), "")
+                reset = RESET_TIME.search(message)
                 raise ProviderFailure(
                     f"Model quota is used up or the plan is unavailable ({kind})"
                     + (f"; it resets at {reset.group()}" if reset else "")
-                    + ". Contact your system administrator.",
+                    + (
+                        ". Ask your organization administrator to recharge or renew with the vendor."
+                        if self.org_owned
+                        else ". Contact your system administrator."
+                    ),
                     code="provider_quota_exhausted",
                     usage=usages,
                 )
@@ -955,13 +998,10 @@ def reasoning_choices(llm) -> list[dict]:
     ]
 
 
-async def resolve_llm(session: AsyncSession, settings: Settings, fallback, transport=None):
-    """Use the platform default model when one is set, else the BID_LLM_* fallback."""
-    entry = await session.scalar(
-        select(PlatformModel).where(
-            PlatformModel.capability == "llm_extract",
-            PlatformModel.is_default.is_(True),
-            PlatformModel.enabled.is_(True),
-        )
-    )
-    return fallback if entry is None else platform_llm(settings, entry, transport)
+async def resolve_llm(
+    session: AsyncSession, settings: Settings, transport=None, job: Job | None = None
+):
+    """Org revision, platform default, then explicitly unconfigured; no environment fallback."""
+    from app.providers.configured import resolve_configured
+
+    return await resolve_configured(session, settings, transport, job)

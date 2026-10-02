@@ -11,6 +11,7 @@ from app.core.security import Secrets, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
+    "provider:read",
     "card:read",
     "card:write",
     "card:generate",
@@ -44,6 +45,7 @@ SCOPES = {
 
 ROLE_SCOPES = {
     "admin": {
+        "provider:write",
         # billing:redeem is deliberately absent from SCOPES: tokens can never redeem cards.
         "billing:read",
         "billing:redeem",
@@ -128,6 +130,7 @@ ROLE_SCOPES = {
 }
 
 for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.add("provider:read")
     _scopes.update({"card:read", "draft:read"})
     if _role != "viewer":
         _scopes.update({"card:write", "card:generate", "draft:run", "evidence:confirm"})

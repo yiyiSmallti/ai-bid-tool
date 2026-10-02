@@ -53,9 +53,11 @@ from app.services.template_files import read_template
 from pydantic import ValidationError
 
 from bid_cli.client import Client, State, new_output_path, save_download
+from bid_cli.providers import app as provider_app
 from bid_cli.schema import command_schema
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
+app.add_typer(provider_app, name="provider")
 org_app, task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(6))
 resource_app, product_app, task_resource_app = (typer.Typer() for _ in range(3))
 feature_app, task_feature_app = typer.Typer(), typer.Typer()

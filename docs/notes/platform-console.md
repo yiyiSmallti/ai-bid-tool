@@ -85,13 +85,13 @@ invalidates it. The token sits in the URL fragment, which browsers do not send
 to the server or in a `Referer`. Migration `0011` grants `bid_app` the
 column update this needs.
 
-When the catalog has an enabled default model for `llm_extract`, `resolve_llm`
-in [llm.py](../../server/app/providers/llm.py) builds the adapter from it with
-the key in `BID_PLATFORM_CREDENTIAL_<NAME>`, for both job submission and
-processing. Usage then stores vendor cost in `usd` and the sale-price amount, in
+Catalog adapters use the key in `BID_PLATFORM_CREDENTIAL_<NAME>`. Tenant selection,
+fallback order and queued-job identity are defined in
+[provider-config.md](provider-config.md#resolution-and-cache). Platform usage stores
+vendor cost in `usd` and the sale-price amount, in
 `BID_BILLING_CURRENCY`, in `charge`; the charge is deducted from the prepaid
-balance described in [prepaid-billing.md](prepaid-billing.md). Without a default, the `BID_LLM_*` fallback is used and its usage
-counts as `unbilled`. A default whose credential is missing fails extraction
+balance described in [prepaid-billing.md](prepaid-billing.md). Legacy environment-adapter
+usage counts as `unbilled`. A default whose credential is missing fails extraction
 with `provider_unavailable` instead of falling back. Catalog models may list
 the vendor's official reasoning levels; see
 [reasoning-levels.md](reasoning-levels.md).
@@ -108,8 +108,8 @@ strict Content-Security-Policy and `Referrer-Policy: no-referrer`.
 - A new column in a summary function's result is a disclosure decision. Keep
   business tables out of `bid_platform_fn`'s policies.
 - Catalog models cannot be deleted, only disabled, so usage keeps its reference.
-- Changing the default model between job submission and processing makes the
-  worker use the new model under the old cache key.
+- Catalog edits can stop queued jobs whose fixed model identity no longer matches;
+  a fresh submission uses the new catalog revision.
 - The model test button makes a real vendor call inside a database
   transaction and is billed by the vendor; it records cost in the audit log only.
 - The limits above also affect ordinary org users. Accounts recover when fewer

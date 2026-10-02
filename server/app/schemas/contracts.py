@@ -117,6 +117,7 @@ class Extraction(Contract):
 
 
 class ProviderUsage(Contract):
+    provider_config_id: UUID | None = None
     provider: str
     model: str
     version: str

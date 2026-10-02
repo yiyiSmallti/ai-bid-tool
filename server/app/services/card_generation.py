@@ -25,6 +25,7 @@ from app.models.entities import (
 )
 from app.models.response_cards import CardGenerationRun, ResponseCard, ResponseCardRevision
 from app.providers.base import LLMProvider, ProviderFailure
+from app.providers.configured import model_identity
 from app.providers.drafting import (
     PROMPT_VERSION,
     SCHEMA_VERSION,
@@ -51,16 +52,6 @@ from app.services.extraction import locate_quote
 from app.services.resources import audit
 
 PROTECTED = {"confirmed", "pending_review", "comply_only"}
-
-
-def model_identity(llm) -> dict:
-    return {
-        "provider": llm.name,
-        "model": llm.model,
-        "adapter_version": llm.version,
-        "platform_model_id": getattr(llm, "platform_model_id", None),
-        "model_revision": getattr(llm, "model_revision", None),
-    }
 
 
 def protected(revision: ResponseCardRevision | None) -> str | None:
@@ -266,7 +257,7 @@ def estimate(llm, secret: dict) -> dict:
     )
     charge = (
         sum((llm.reservation(body) for body in bodies), Decimal(0))
-        if llm.sale is not None
+        if llm.sale is not None or llm.org_owned
         else None
     )
     return {
@@ -401,6 +392,8 @@ async def submit_generation(
             cache_key=cache_key,
             status="queued",
             reasoning=reasoning,
+            provider_config_id=getattr(llm, "provider_config_id", None),
+            provider_identity=model_identity(llm),
             result={
                 "submission": {
                     "input_manifest": manifest,
@@ -753,7 +746,7 @@ async def publish(session, actor, job, output, secret, storage, settings):
     )
     charge = (
         None
-        if manifest["model"]["platform_model_id"] is None and usages
+        if any(row.charge is None for row in usages)
         else sum((row.charge or Decimal(0) for row in usages), Decimal(0))
     )
     result = CardGenerateResult(
@@ -775,6 +768,8 @@ async def publish(session, actor, job, output, secret, storage, settings):
     warnings.extend(f"needs_material:{key}" for key in needs_material)
     if output.failure:
         warnings.append(output.failure.code)
+        if output.failure.code == "provider_quota_exhausted":
+            warnings.append(str(output.failure))
     result |= {"warnings": warnings, "exit_code": 5 if partial else 0}
     run = CardGenerationRun(
         id=uuid4(),

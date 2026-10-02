@@ -9,11 +9,10 @@ a defined job state rather than partial or silent results.
 
 ## Usage
 
-Select the platform model with `BID_LLM_PROVIDER` (`anthropic` or `openai`)
-and its `BID_LLM_*` settings, then restart the API and worker. Setup steps are
-in [development.md](../guides/development.md#configure-the-extraction-model).
-Tests inject an adapter built with an `httpx.MockTransport`; production code
-calls `create_llm(settings)`.
+Configure tenant models and select platform catalog models through
+[provider configuration](provider-config.md#usage). `BID_LLM_*` still supplies
+adapter execution limits and standalone/eval configuration; it does not select a
+tenant job's fallback model. Tests inject adapters with `httpx.MockTransport`.
 
 ## How it works
 
@@ -118,7 +117,7 @@ actually answered.
 | Vendor result | Job outcome |
 | --- | --- |
 | Timeout, connection error (including a TLS connection dropped mid-response), HTTP 408/409/429/5xx/529 | The call is retried after 10 and 30 seconds; if it still fails, the job is requeued with exit code 3, at most three attempts |
-| Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; the message names the reset time when the vendor gives one and asks the user to contact the system administrator |
+| Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; reset time and payer-specific guidance follow [provider-config.md](provider-config.md#quota-and-balance) |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
 | Truncated or malformed output on a single line | Failed, `invalid_provider_output` |
@@ -143,8 +142,8 @@ usage at those configured prices.
 ### Structured response drafting
 
 `LLMProvider.draft(requirements, materials)` is implemented by both HTTP adapters
-through [drafting.py](../../server/app/providers/drafting.py). It uses the platform
-default model and `with_reasoning`, the same per-request timeout, request options,
+through [drafting.py](../../server/app/providers/drafting.py). It uses the shared
+tenant model resolver and `with_reasoning`, the same per-request timeout, request options,
 finite transient retries, reservation and `HTTPExtractor.post` settlement. The
 extraction prompt, wire format, parallel batches, gap filling and citation
 post-processing retain their own entry point and behavior.
@@ -180,7 +179,7 @@ fixed reasoning level and its generation snapshot.
 
 ## Pitfalls
 
-- Error messages keep only the HTTP status and vendor error type. Response
+- Error messages keep only the HTTP status and recognized vendor error types. Response
   bodies can echo input, so they are never stored or logged.
 - An empty environment variable counts as unset; a selected provider without
   its key or model stops startup.

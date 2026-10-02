@@ -245,6 +245,7 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
     )
     actor = await cards.access(session, actor, "draft:run")
     actor.require("card:read")
+    assert job.task_id is not None  # Only provider_test jobs may omit the task.
     await cards.task_lock(session, job.task_id)
     extraction_id = UUID(submitted["extraction_job_id"])
     _, items, manifest, input_hash, negatives = await assemble(

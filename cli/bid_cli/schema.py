@@ -31,6 +31,7 @@ from app.schemas.profile_contracts import (
     OrgProfileUpdate,
     TaskOrgProfileSelection,
 )
+from app.schemas.provider_contracts import ProviderConfigInput, ProviderTest
 from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
 from app.schemas.response_card_contracts import (
     CardAction,
@@ -46,6 +47,10 @@ from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate
 
 # Only implemented commands are advertised; future commands are deliberately absent.
 COMMANDS = {
+    "provider list": None,
+    "provider history": None,
+    "provider set": ProviderConfigInput,
+    "provider test": ProviderTest,
     "card list": None,
     "card show": None,
     "card create": CardCreate,

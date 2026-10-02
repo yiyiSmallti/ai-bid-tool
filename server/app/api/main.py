@@ -19,10 +19,10 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException
 
 from app.api.platform import create_router as create_platform_router
+from app.api.providers import create_router as create_provider_router
 from app.api.response_cards import create_router as create_response_router
 from app.core.config import Settings
 from app.core.db import Database
@@ -32,9 +32,10 @@ from app.core.security import Secrets, token_digest
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task
+from app.providers.configured import model_identity
+from app.providers.disabled import DisabledLLM
 from app.providers.llm import (
     billable,
-    create_llm,
     reasoning_choices,
     resolve_llm,
     with_reasoning,
@@ -131,16 +132,14 @@ def create_app(
     db, crypto = Database(settings), Secrets(settings.encryption_key.get_secret_value())
     password_attempts = PasswordAttempts(db)
     storage = create_storage(settings)
-    # An injected provider is used as is; otherwise the platform default model, when set,
-    # takes precedence over the BID_LLM_* fallback for every job.
-    resolve: Callable[[AsyncSession], Awaitable[Any]] | None = None
+    # Test injection is explicit; runtime jobs resolve org configuration then the catalog.
+    resolve: Callable[..., Awaitable[Any]] | None = None
     if llm is None:
-        fallback = create_llm(settings)
 
-        async def resolve_default(session):
-            return await resolve_llm(session, settings, fallback, llm_transport)
+        async def resolve_default(session, job=None):
+            return await resolve_llm(session, settings, llm_transport, job)
 
-        resolve, llm = resolve_default, fallback
+        resolve, llm = resolve_default, DisabledLLM()
     ocr = ocr or LocalOCR(settings.ocr_language, settings.ocr_data_dir)
     queue = queue or Queue(settings)
     processor = Processor(settings, db, storage, llm, ocr, resolve)
@@ -291,6 +290,9 @@ def create_app(
             yield session, identity
 
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
+    app.include_router(
+        create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)
+    )
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1045,7 +1047,7 @@ def create_app(
         command = "tender parse" if kind == "parse" else "req extract"
         if kind == "parse" and body.reasoning is not None:
             raise ServiceError("invalid_input", "Reasoning levels apply only to extraction", 400, 2)
-        model = await resolve(session) if resolve is not None else llm
+        model = await resolve(session) if resolve is not None and kind == "extract" else llm
         level, level_warnings = None, []
         if kind == "extract":
             model, level, level_warnings = with_reasoning(model, body.reasoning)
@@ -1089,6 +1091,10 @@ def create_app(
                 kind=kind,
                 cache_key=cache_key,
                 reasoning=level,
+                provider_config_id=getattr(model, "provider_config_id", None)
+                if kind == "extract"
+                else None,
+                provider_identity=model_identity(model) if kind == "extract" else None,
             )
             .on_conflict_do_nothing(index_elements=["org_id", "cache_key"])
             .returning(Job.id)
@@ -1308,6 +1314,12 @@ def create_app(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
+        if job.kind == "provider_test":
+            identity.require("provider:read")
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
+            payload["cost"] = job.result.get("cost", payload["cost"])
         if job.kind in {"draft", "card_generate"}:
             identity.require("draft:read" if job.kind == "draft" else "card:read")
             identity.require("task:read")
