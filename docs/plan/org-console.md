@@ -5,7 +5,7 @@ status: "已实施（U1、U2、U3 预检）；U3 付费运行待后端绑定契�
 
 # 契约：单位端招标任务与响应审阅控制台
 
-状态：**U1、U2 与 U3 预检已实施；U3 付费运行待后端绑定契约**。
+状态：**U1、U2 与 U3 预检已实施；U3 付费运行待后端绑定契约**（草案见 [drafting-binding.md](drafting-binding.md)）。
 实现机制见 [org-console.md](../notes/org-console.md)。数据库与真实 API 的 Playwright 验收由维护者执行，
 大列表性能门槛尚待该环境核验，不将实现状态视为验收通过。范围对应[路线图](roadmap.md)的 B02、U01、U02，
 在 `web/` 的 Vue 3 应用中接入任务、解析、抽取、响应卡审阅和偏离表初稿。
