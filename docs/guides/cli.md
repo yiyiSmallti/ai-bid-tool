@@ -54,8 +54,8 @@ bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req list --t
    `job wait JOB_ID` or `job status JOB_ID`.
 3. `req extract --dry-run` reports whether the document is parsed without
    calling a model or creating a job. Cost estimates are `null` when unknown.
-4. `req extract` requires a parsed PDF whose pages have verified citations
-   and a configured model ([development.md](development.md#configure-the-extraction-model)).
+4. `req extract` requires a parsed PDF or Word document with verified
+   citations and a configured model ([development.md](development.md#configure-the-extraction-model)).
    Without one it fails with `provider_unavailable` and exit 4. If any quote
    is not verbatim source text, the job fails with `invalid_citation` and
    saves nothing.
@@ -64,8 +64,11 @@ bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE req list --t
    repeat the parse or extract command with `--retry`. Repeating it without
    `--retry` returns the existing job.
 
-Word files keep their text and tables but have no verified page numbers.
-Convert them to PDF before extracting cited requirements.
+Requirements are listed in reading order. A PDF source cites `page`; a Word
+source has `page: null` and a `location` with the block ID, the heading path,
+and a `label` such as `第五章 采购需求 > 表 5 第 3 行第 2 列`. Text boxes, headers,
+and footers in Word files are not parsed; the parse result lists them under
+`warnings`. Details are in [docx-citations.md](../notes/docx-citations.md).
 
 ## Handle results
 

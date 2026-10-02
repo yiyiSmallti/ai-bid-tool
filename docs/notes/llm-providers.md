@@ -4,7 +4,7 @@
 
 Requirement extraction must call a real model, record what each call cost,
 and never save a requirement whose citation cannot be checked against the
-stored page text. Vendor outages, refusals, and truncated output must end in
+stored source text. Vendor outages, refusals, and truncated output must end in
 a defined job state rather than partial or silent results.
 
 ## Usage
@@ -17,20 +17,28 @@ calls `create_llm(settings)`.
 
 ## How it works
 
-Both adapters call the vendor over httpx; no vendor SDK is installed. Pages
-are grouped into batches of at most `BID_LLM_BATCH_CHARS` characters, and a
-page larger than the budget gets a batch of its own rather than being cut.
-Batches run one after another.
+Both adapters call the vendor over httpx; no vendor SDK is installed. Chunks
+(PDF pages or Word sections) are grouped into batches of at most
+`BID_LLM_BATCH_CHARS` characters (default 8,000), and a chunk larger than the
+budget gets a batch of its own rather than being cut. Up to
+`BID_LLM_CONCURRENCY` batches (default 4) run at once; after a failure, batches
+not yet started are skipped. Each vendor call has a total deadline of
+`BID_LLM_TIMEOUT_SECONDS`, so a response that keeps the connection alive
+without finishing still ends. `BID_LLM_REQUEST_OPTIONS` is a JSON object merged
+into every request body, for vendor switches such as
+`{"thinking": {"type": "disabled"}}`; the adapter's own fields win on conflict.
 
-The model sees each page as `<page number="N">` and returns items that cite a
-page number and a verbatim quote. Output is constrained to `WIRE_SCHEMA`:
+The model sees each PDF page as `<page number="N">` and each Word block as
+`<block id="p37">` inside its section, and returns items that cite a page
+number or block ID as `ref` with a verbatim quote. Word citations are covered
+in [docx-citations.md](docx-citations.md). Output is constrained to `WIRE_SCHEMA`:
 Anthropic through `output_config.format`, OpenAI-compatible services through
 `response_format` (`json_schema`, or `json_object` with the schema in the
-prompt). The adapter maps each page number back to its chunk ID and document
-ID, so the model never reproduces UUIDs. `condition` is typed as
+prompt). The adapter maps each `ref` back to its chunk ID and document ID, so the
+model never reproduces UUIDs. `condition` is typed as
 `param/op/value/unit` or null, because structured outputs require closed
-objects. The processor then checks every quote against the stored page text
-and rejects the whole result if any quote fails.
+objects. The processor then checks every quote against the stored page or
+block text and rejects the whole result if any quote fails.
 
 On Anthropic, effort comes from `BID_LLM_EFFORT`, and a safety decline is
 retried server-side on another model (`fallbacks: "default"`) unless
@@ -42,7 +50,7 @@ actually answered.
 | Timeout, connection error, HTTP 408/409/429/5xx/529 | Requeued; error exit code 3; at most three attempts |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
-| Truncated output, malformed JSON, schema mismatch, page outside the batch | Failed, `invalid_provider_output` |
+| Truncated output, malformed JSON, schema mismatch, `ref` outside the batch | Failed, `invalid_provider_output` |
 | A quote that is not verbatim | Failed, `invalid_citation`; nothing saved |
 
 Each completed call produces one `ProviderUsage`. When a later batch fails,
@@ -59,8 +67,12 @@ per-million-token prices, or `null` when either price is missing.
 - The configured prices apply to whichever model answered. After a refusal
   fallback, the recorded cost is an estimate at the primary model's prices.
 - Whole-result rejection means one altered quote discards a paid extraction.
-  `evals/extract_tender.py` reports the verbatim rate per item so the policy
-  can be judged on real tenders.
+  `evals/extract_tender.py` reports verified citations and ★ recall per run so
+  the policy can be judged on real tenders.
+- Reasoning models can spend the whole output budget thinking. On GLM, a
+  section took about 11 times longer with thinking on and was cut off at
+  32,000 output tokens on long batches; disable it with
+  `BID_LLM_REQUEST_OPTIONS` if output is truncated.
 - The cache key includes the provider, model, adapter version, and
   `PROMPT_VERSION`; bump `ADAPTER_VERSION` when the prompt or schema changes.
 

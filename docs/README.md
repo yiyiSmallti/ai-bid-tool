@@ -24,6 +24,7 @@ kind: readme
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
 - [llm-providers.md](notes/llm-providers.md)：抽取模型调用、批次、错误与计费。
+- [docx-citations.md](notes/docx-citations.md)：Word 按章节、段落、表格单元格引用。
 - [platform-console.md](notes/platform-console.md)：平台运营后台、TOTP、单位启停、模型目录计费。
 - [prepaid-billing.md](notes/prepaid-billing.md)：预付余额、充值卡密、扣费与拦截。
 - [versioned-resources.md](notes/versioned-resources.md)：产品修订与任务快照。
@@ -38,6 +39,7 @@ kind: readme
 
 - [0001 平台运营后台的跨单位访问](adr/0001-platform-console-access.md)（adr）
 - [0002 预付余额与充值卡密](adr/0002-prepaid-billing.md)（adr）
+- [0003 Word 招标文件按文档位置引用](adr/0003-word-structural-citations.md)（adr）
 
 ## 计划与记录
 

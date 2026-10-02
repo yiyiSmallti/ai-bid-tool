@@ -101,15 +101,22 @@ env file or your secret manager.
 2. Set `BID_LLM_INPUT_USD_PER_MTOK` and `BID_LLM_OUTPUT_USD_PER_MTOK` to the
    vendor's prices per million tokens. Without them, usage records store
    tokens but `usd` is `null`.
-3. Restart the API and the worker. `GET /health` reports
+3. Optional tuning: `BID_LLM_BATCH_CHARS` (characters per request, default
+   8000), `BID_LLM_CONCURRENCY` (parallel requests, default 4),
+   `BID_LLM_TIMEOUT_SECONDS` (total deadline per request, default 600), and
+   `BID_LLM_REQUEST_OPTIONS`, a JSON object added to every request body, for
+   example `{"thinking": {"type": "disabled"}}` for models that otherwise
+   think until the output limit.
+4. Restart the API and the worker. `GET /health` reports
    `real_llm_configured: true`. A selected provider with a missing key or
    model stops startup instead of falling back to disabled.
-4. Check the model on a public tender before real use. The script calls the
-   vendor and costs money; it writes every extracted item with a
-   `quote_is_verbatim` flag:
+5. Check the model on a public tender before real use. The script accepts a
+   PDF or Word file, calls the vendor, and costs money; it reports verified
+   citations and ★ recall and writes every item with its position and a
+   `citation_verified` flag:
 
    ```sh
-   uv run python evals/extract_tender.py --pdf PUBLIC_TENDER.pdf --output /tmp/extract-result.json
+   uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --output /tmp/extract-result.json
    ```
 
 Changing the provider, model, or prompt changes the job cache key, so the
