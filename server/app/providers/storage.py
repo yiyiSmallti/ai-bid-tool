@@ -13,6 +13,7 @@ from app.core.errors import ServiceError
 class Storage(Protocol):
     async def put(self, org_id: UUID, key: str, content: bytes) -> None: ...
     async def read(self, org_id: UUID, key: str) -> bytes: ...
+    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes: ...
 
 
 class FileCipher:
@@ -25,6 +26,25 @@ class FileCipher:
 
     def encrypt(self, key: str, content: bytes) -> bytes:
         return self.marker + self.cipher.encrypt(key.encode() + b"\0" + content)
+
+    def stored_limit(self, key: str, max_bytes: int) -> int:
+        if max_bytes < 0:
+            raise ValueError("A nonnegative plaintext limit is required")
+        payload = len(key.encode()) + 1 + max_bytes
+        encrypted = 16 * (payload // 16 + 1)
+        return len(self.marker) + 4 * ((57 + encrypted + 2) // 3)
+
+    def decrypt_bounded(self, key: str, stored: bytes, max_bytes: int) -> bytes:
+        if len(stored) > self.stored_limit(key, max_bytes):
+            raise ServiceError(
+                "file_size_limit", "Stored file exceeds its authorized limit", 413, 4
+            )
+        content = self.decrypt(key, stored)
+        if len(content) > max_bytes:
+            raise ServiceError(
+                "file_size_limit", "Stored file exceeds its authorized limit", 413, 4
+            )
+        return content
 
     def decrypt(self, key: str, stored: bytes) -> bytes:
         try:
@@ -87,6 +107,21 @@ class LocalStorage:
         except FileNotFoundError as exc:
             raise ServiceError("missing_file", "Stored file is unavailable", 404, 4) from exc
 
+    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes:
+        path = self.path(org_id, key)
+        bound = self.cipher.stored_limit(key, max_bytes)
+
+        def read():
+            with path.open("rb") as handle:
+                return self.cipher.decrypt_bounded(key, handle.read(bound + 1), max_bytes)
+
+        try:
+            return await asyncio.to_thread(read)
+        except FileNotFoundError as exc:
+            raise ServiceError("missing_file", "Stored file is unavailable", 404, 4) from exc
+        except OSError as exc:
+            raise ServiceError("storage_unavailable", "Stored file is unavailable", 503, 3) from exc
+
 
 class S3Storage:
     def __init__(self, settings: Settings):
@@ -137,6 +172,32 @@ class S3Storage:
             response = self.client.get_object(Bucket=self.bucket, Key=key)
             try:
                 return self.cipher.decrypt(key, response["Body"].read())
+            finally:
+                response["Body"].close()
+
+        try:
+            return await asyncio.to_thread(read)
+        except ClientError as exc:
+            raise self.failure(exc) from None
+        except BotoCoreError:
+            raise ServiceError(
+                "storage_unavailable", "Object storage is unavailable", 503, 3
+            ) from None
+
+    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes:
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        validate_key(org_id, key)
+        bound = self.cipher.stored_limit(key, max_bytes)
+
+        def read():
+            response = self.client.get_object(Bucket=self.bucket, Key=key)
+            try:
+                if response["ContentLength"] > bound:
+                    raise ServiceError(
+                        "file_size_limit", "Stored file exceeds its authorized limit", 413, 4
+                    )
+                return self.cipher.decrypt_bounded(key, response["Body"].read(bound + 1), max_bytes)
             finally:
                 response["Body"].close()
 

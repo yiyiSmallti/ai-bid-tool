@@ -54,6 +54,7 @@ from app.schemas.response_card_contracts import (
     DraftRequest,
     TaskRedactionSet,
 )
+from app.schemas.sandbox_contracts import PrototypeSpec, VendorSpec
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
@@ -63,6 +64,11 @@ COMMANDS = {
     "provider history": None,
     "provider set": ProviderConfigInput,
     "provider test": ProviderTest,
+    "sandbox render": PrototypeSpec,
+    "sandbox capture": VendorSpec,
+    "sandbox list": None,
+    "sandbox show": None,
+    "sandbox download": None,
     "card list": None,
     "card show": None,
     "card create": CardCreate,

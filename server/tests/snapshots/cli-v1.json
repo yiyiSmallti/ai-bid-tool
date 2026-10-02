@@ -2914,6 +2914,168 @@
       "Template metadata is a declaration; chapter matching and export adaptation have not been verified"
     ]
   },
+  "sandbox capture": {
+    "command": "sandbox capture",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "artifacts": [],
+      "attempt_id": null,
+      "charge": null,
+      "charge_currency": null,
+      "cleanup_state": "not_started",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "issues": [],
+      "job_id": "00000000-0000-0000-0000-000000000001",
+      "metrics": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "policy_revision": "policy-v1",
+      "profile": "capture-v1",
+      "purpose": "vendor_capture",
+      "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "selection_active": true,
+      "state": "queued",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "usage_ids": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "sandbox download": {
+    "command": "sandbox download",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "artifact": {
+        "attempt_id": "00000000-0000-0000-0000-000000000001",
+        "height": null,
+        "id": "00000000-0000-0000-0000-000000000001",
+        "kind": "rendered_html",
+        "media_type": "text/html",
+        "page": null,
+        "parent_artifact_id": null,
+        "provenance_manifest_hash": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "run_id": "00000000-0000-0000-0000-000000000001",
+        "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "size_bytes": 1,
+        "width": null
+      },
+      "output_path": "<download-output>"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "sandbox list": {
+    "command": "sandbox list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "limit": 50,
+      "offset": 0
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "artifacts": [],
+        "attempt_id": null,
+        "charge": null,
+        "charge_currency": null,
+        "cleanup_state": "not_started",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "issues": [],
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "metrics": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "policy_revision": "policy-v1",
+        "profile": "prototype-v1",
+        "purpose": "prototype_offline",
+        "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "selection_active": true,
+        "state": "queued",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "usage_ids": []
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "sandbox render": {
+    "command": "sandbox render",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "artifacts": [],
+      "attempt_id": null,
+      "charge": null,
+      "charge_currency": null,
+      "cleanup_state": "not_started",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "issues": [],
+      "job_id": "00000000-0000-0000-0000-000000000001",
+      "metrics": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "policy_revision": "policy-v1",
+      "profile": "prototype-v1",
+      "purpose": "prototype_offline",
+      "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "selection_active": true,
+      "state": "queued",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "usage_ids": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "sandbox show": {
+    "command": "sandbox show",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "artifacts": [],
+      "attempt_id": null,
+      "charge": null,
+      "charge_currency": null,
+      "cleanup_state": "not_started",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "issues": [],
+      "job_id": "00000000-0000-0000-0000-000000000001",
+      "metrics": null,
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "policy_revision": "policy-v1",
+      "profile": "prototype-v1",
+      "purpose": "prototype_offline",
+      "request_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "selection_active": true,
+      "state": "queued",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "usage_ids": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
   "schema": {
     "command": "schema",
     "cost": {
@@ -10060,6 +10222,460 @@
             "title": "TemplateUpdate",
             "type": "object"
           }
+        },
+        "sandbox capture": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Viewport": {
+                "additionalProperties": false,
+                "properties": {
+                  "device_scale_factor": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Device Scale Factor",
+                    "type": "integer"
+                  },
+                  "height": {
+                    "default": 900,
+                    "maximum": 4096,
+                    "minimum": 240,
+                    "title": "Height",
+                    "type": "integer"
+                  },
+                  "width": {
+                    "default": 1440,
+                    "maximum": 4096,
+                    "minimum": 320,
+                    "title": "Width",
+                    "type": "integer"
+                  }
+                },
+                "title": "Viewport",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "archive": {
+                "default": "manifest",
+                "enum": [
+                  "manifest",
+                  "bundle"
+                ],
+                "title": "Archive",
+                "type": "string"
+              },
+              "capture_key": {
+                "format": "uuid",
+                "title": "Capture Key",
+                "type": "string"
+              },
+              "expected_product_revision_id": {
+                "format": "uuid",
+                "title": "Expected Product Revision Id",
+                "type": "string"
+              },
+              "expected_source_url_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Source Url Sha256",
+                "type": "string"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "format": {
+                "enum": [
+                  "web",
+                  "pdf"
+                ],
+                "title": "Format",
+                "type": "string"
+              },
+              "pdf_pages": {
+                "items": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "maxItems": 10,
+                "title": "Pdf Pages",
+                "type": "array"
+              },
+              "purpose": {
+                "const": "vendor_capture",
+                "title": "Purpose",
+                "type": "string"
+              },
+              "source_field": {
+                "enum": [
+                  "official_url",
+                  "whitepaper_url"
+                ],
+                "title": "Source Field",
+                "type": "string"
+              },
+              "task_resource_id": {
+                "format": "uuid",
+                "title": "Task Resource Id",
+                "type": "string"
+              },
+              "viewport": {
+                "$ref": "#/$defs/Viewport"
+              }
+            },
+            "required": [
+              "purpose",
+              "extraction_job_id",
+              "task_resource_id",
+              "expected_product_revision_id",
+              "source_field",
+              "expected_source_url_sha256",
+              "format",
+              "capture_key"
+            ],
+            "title": "VendorSpec",
+            "type": "object"
+          }
+        },
+        "sandbox download": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "artifact",
+              "options": [
+                "--artifact"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "sandbox list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "0",
+              "multiple": false,
+              "name": "offset",
+              "options": [
+                "--offset"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "sandbox render": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "html",
+              "options": [
+                "--html"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Viewport": {
+                "additionalProperties": false,
+                "properties": {
+                  "device_scale_factor": {
+                    "const": 1,
+                    "default": 1,
+                    "title": "Device Scale Factor",
+                    "type": "integer"
+                  },
+                  "height": {
+                    "default": 900,
+                    "maximum": 4096,
+                    "minimum": 240,
+                    "title": "Height",
+                    "type": "integer"
+                  },
+                  "width": {
+                    "default": 1440,
+                    "maximum": 4096,
+                    "minimum": 320,
+                    "title": "Width",
+                    "type": "integer"
+                  }
+                },
+                "title": "Viewport",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_feature_revision_id": {
+                "format": "uuid",
+                "title": "Expected Feature Revision Id",
+                "type": "string"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "html_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Html Sha256",
+                "type": "string"
+              },
+              "html_size_bytes": {
+                "exclusiveMinimum": 0,
+                "maximum": 4194304,
+                "title": "Html Size Bytes",
+                "type": "integer"
+              },
+              "purpose": {
+                "const": "prototype_offline",
+                "title": "Purpose",
+                "type": "string"
+              },
+              "task_feature_id": {
+                "format": "uuid",
+                "title": "Task Feature Id",
+                "type": "string"
+              },
+              "viewport": {
+                "$ref": "#/$defs/Viewport"
+              }
+            },
+            "required": [
+              "purpose",
+              "extraction_job_id",
+              "task_feature_id",
+              "expected_feature_revision_id",
+              "html_sha256",
+              "html_size_bytes"
+            ],
+            "title": "PrototypeSpec",
+            "type": "object"
+          }
+        },
+        "sandbox show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
         },
         "schema": {
           "cli_parameters": [

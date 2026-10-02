@@ -37,6 +37,9 @@ class Processor:
         self.settings, self.db, self.storage, self.llm, self.ocr = settings, db, storage, llm, ocr
         # Optional coroutine (session) -> LLMProvider choosing the platform default model.
         self.resolve = resolve
+        self.sandbox_browser = None
+        self.sandbox_fetch_transport = None
+        self.sandbox_resolver = None
 
     async def record_usage(
         self,
@@ -66,6 +69,10 @@ class Processor:
 
     async def __call__(self, org: str, job: str):
         org_id, job_id = UUID(org), UUID(job)
+        from app.jobs.sandbox import process_if_sandbox
+
+        if await process_if_sandbox(self, org_id, job_id):
+            return
         async with self.db.transaction(org_id) as session:
             current = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
             if current is None or current.status in {"cancelled", "succeeded", "failed"}:

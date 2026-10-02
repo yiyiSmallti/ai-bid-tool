@@ -26,6 +26,7 @@ from app.api.org_console import create_router as create_org_console_router
 from app.api.platform import create_router as create_platform_router
 from app.api.providers import create_router as create_provider_router
 from app.api.response_cards import create_router as create_response_router
+from app.api.sandbox import create_router as create_sandbox_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
@@ -83,6 +84,7 @@ from app.services import (
 from app.services.auth import SCOPES, authenticate, login, set_actor_context
 from app.services.extraction import EXTRACTION_VERSION, PROMPT_VERSION
 from app.services.parsing import PARSER_VERSION, validate_document
+from app.services.sandbox import guard_job as sandbox_guard_job
 from app.services.template_files import MAX_TEMPLATE_BYTES, validate_template
 from app.services.template_files import WARNINGS as TEMPLATE_WARNINGS
 
@@ -297,6 +299,7 @@ def create_app(
         create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)
     )
     app.include_router(create_export_router(context, db, storage, queue, settings, crypto))
+    app.include_router(create_sandbox_router(context, db, storage, queue, crypto, processor))
 
     @app.get("/health", name="health", response_model=Result)
     async def health():
@@ -1318,10 +1321,13 @@ def create_app(
             from app.services.exports import job_access
 
             await job_access(session, identity, job, storage)
+        await sandbox_guard_job(session, identity, job)
         payload = result(
             "job status",
             serial(job, ("id", "kind", "status", "result", "error", "attempts", "reasoning")),
         )
+        if job.kind == "sandbox" and job.status in {"failed", "cancelled"}:
+            payload["ok"] = False
         if job.kind == "provider_test":
             identity.require("provider:read")
             payload["data"]["result"] = {
@@ -1367,6 +1373,7 @@ def create_app(
             from app.services.exports import job_access
 
             await job_access(session, identity, job, storage, cancel=True)
+        await sandbox_guard_job(session, identity, job, cancel=True)
         if job.status not in {"cancelled", "queued", "running"}:
             raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
         job.status, job.finished_at = "cancelled", datetime.now(UTC)

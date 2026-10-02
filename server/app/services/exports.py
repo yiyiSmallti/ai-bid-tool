@@ -73,6 +73,12 @@ class ExportStorage:
         except OSError as exc:
             raise self.failure(exc) from exc
 
+    async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes:
+        try:
+            return await self.storage.read_bounded(org_id, key, max_bytes)
+        except OSError as exc:
+            raise self.failure(exc) from exc
+
     async def put(self, org_id: UUID, key: str, content: bytes) -> None:
         try:
             await self.storage.put(org_id, key, content)

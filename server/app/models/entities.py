@@ -122,6 +122,7 @@ class Document(Tenant, Base):
     citation_mode: Mapped[str | None] = mapped_column(String(10))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "id", "task_id", name="sandbox_document_task"),
         UniqueConstraint("org_id", "task_id", "sha256"),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
     )

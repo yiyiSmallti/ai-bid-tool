@@ -12,6 +12,9 @@ from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
     "provider:read",
+    "sandbox:read",
+    "sandbox:render",
+    "sandbox:capture",
     "card:read",
     "card:write",
     "card:generate",
@@ -132,9 +135,18 @@ ROLE_SCOPES = {
 
 for _role, _scopes in ROLE_SCOPES.items():
     _scopes.add("provider:read")
-    _scopes.update({"card:read", "draft:read"})
+    _scopes.update({"card:read", "draft:read", "sandbox:read"})
     if _role != "viewer":
-        _scopes.update({"card:write", "card:generate", "draft:run", "evidence:confirm"})
+        _scopes.update(
+            {
+                "card:write",
+                "card:generate",
+                "draft:run",
+                "evidence:confirm",
+                "sandbox:render",
+                "sandbox:capture",
+            }
+        )
 
 
 @dataclass
