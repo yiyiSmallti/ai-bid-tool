@@ -6,6 +6,15 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：沙箱开发节点与真实管道修复
+
+- 在 macOS Colima 专用 VM 上跑通真实沙箱管道：rootless Docker、固定摘要镜像、mTLS 控制通道、
+  渲染容器与独立验证容器，合成 HTML 渲染为 PNG。节点准备脚本、systemd 服务与环境模板见
+  `deploy/sandbox-node/`，步骤见[沙箱运行时指南](guides/sandbox-runtime.md)。
+- 修复 `deploy/sandbox-seccomp.json` 缺少 `chroot`，导致 Chromium 自身沙箱无法启动；
+  Chromium 启动失败现以固定代码 `browser_launch_failed` 报告，不再只显示帧错误。
+- 实测 gVisor 在 rootless Docker 下无法施加 cgroup 限额，运行时组合列为待定决定。
+
 ## 2026-10-02：付费起草的预览绑定与扣款上限
 
 - `CardGenerateRequest` 新增可选 `expected_input_hash` 与 `max_charge`：提交时核对预览哈希（覆盖输入、

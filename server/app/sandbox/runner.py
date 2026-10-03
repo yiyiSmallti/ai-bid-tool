@@ -103,6 +103,9 @@ async def render_pdf(descriptor: RunDescriptor, source: bytes) -> list[ArtifactP
 async def render_web(
     descriptor: RunDescriptor, source: bytes
 ) -> tuple[list[ArtifactPayload], tuple[str, ...]]:
+    from playwright.async_api import (  # pyright: ignore[reportMissingImports]
+        Error as PlaywrightError,
+    )
     from playwright.async_api import async_playwright  # pyright: ignore[reportMissingImports]
 
     offline = descriptor.purpose == "prototype_offline"
@@ -115,19 +118,24 @@ async def render_web(
     fetch_lock = asyncio.Lock()
     redirect_responses: dict[str, tuple[dict[str, Any], bytes]] = {}
     async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch(
-            headless=True,
-            chromium_sandbox=True,
-            args=[
-                "--disable-extensions",
-                "--disable-background-networking",
-                "--disable-sync",
-                "--disable-breakpad",
-                "--disable-crash-reporter",
-                "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
-                "--disable-features=WebRtcHideLocalIpsWithMdns",
-            ],
-        )
+        try:
+            browser = await playwright.chromium.launch(
+                headless=True,
+                chromium_sandbox=True,
+                args=[
+                    "--disable-extensions",
+                    "--disable-background-networking",
+                    "--disable-sync",
+                    "--disable-breakpad",
+                    "--disable-crash-reporter",
+                    "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
+                    "--disable-features=WebRtcHideLocalIpsWithMdns",
+                ],
+            )
+        except PlaywrightError as exc:
+            # A refused Chromium sandbox (seccomp, namespaces) must surface as a fixed code,
+            # not as a silent exit the supervisor can only report as a broken frame.
+            raise SandboxFailure("browser_launch_failed") from exc
         context = await browser.new_context(
             viewport={"width": descriptor.viewport_width, "height": descriptor.viewport_height},
             device_scale_factor=1,

@@ -55,6 +55,7 @@ RUNNER_ERROR_CODES = frozenset(
         "artifact_hash_mismatch",
         "invalid_html",
         "blank_capture",
+        "browser_launch_failed",
     }
 )
 

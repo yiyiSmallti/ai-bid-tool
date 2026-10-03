@@ -1,0 +1,17 @@
+[Unit]
+Description=bid sandbox supervisor (credential-free execution node)
+After=network-online.target user@1000.service
+Requires=user@1000.service
+
+[Service]
+User=bidsbx
+Group=bidsbx
+SupplementaryGroups=bidctl
+EnvironmentFile=/etc/bid-sandbox/supervisor.env
+ExecStart=/opt/bid-supervisor/venv/bin/python /opt/bid-supervisor/sandbox_supervisor.py
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

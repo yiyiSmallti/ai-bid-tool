@@ -17,6 +17,7 @@
         "chmod",
         "chown",
         "chown32",
+        "chroot",
         "clock_getres",
         "clock_gettime",
         "clock_nanosleep",
