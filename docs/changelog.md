@@ -6,6 +6,14 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：沙箱运行时定为专用 VM 内 rootful Docker + runsc
+
+- supervisor 预检改为：runsc 必须运行在 rootful 守护进程上且不得跳过 cgroup，rootless 仅用于 runc
+  合成模式；不满足时以 `sandbox_runsc_cgroups_unenforced` 或 `sandbox_rootless_required` 拒绝接单。
+- 开发 VM 切换到 runsc（带 `--oci-seccomp`）业务模式后，隔离验收子集全部通过：文件与秘密边界、
+  零网络外发（含正向对照）、CPU 死循环与内存炸弹被限额终止、调用方断连与 supervisor 重启后的容器回收。
+  驱动见 `scripts/sandbox_colima_acceptance.py`，决定理由见[沙箱契约](plan/sandbox.md#已定决定)。
+
 ## 2026-10-03：沙箱开发节点与真实管道修复
 
 - 在 macOS Colima 专用 VM 上跑通真实沙箱管道：rootless Docker、固定摘要镜像、mTLS 控制通道、

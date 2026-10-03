@@ -112,6 +112,7 @@ ERROR_CODES = frozenset(
         "sandbox_reaper_failed",
         "sandbox_recovery_unavailable",
         "sandbox_rootless_required",
+        "sandbox_runsc_cgroups_unenforced",
         "sandbox_runtime_failure",
         "sandbox_runtime_not_accepted",
         "sandbox_runtime_unavailable",

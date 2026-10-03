@@ -144,7 +144,17 @@ class DockerBackend:
         ):
             raise SandboxFailure("sandbox_seccomp_mismatch")
         info = json.loads(await self.command("info", "--format", "{{json .}}"))
-        if not any("rootless" in str(option) for option in info.get("SecurityOptions", [])):
+        rootless = any("rootless" in str(option) for option in info.get("SecurityOptions", []))
+        if self.config.runtime == "runsc":
+            # gVisor cannot apply cgroup limits under a rootless daemon, so runsc runs on a
+            # rootful daemon inside the dedicated, credential-free VM, never with cgroups off.
+            arguments = info.get("Runtimes", {}).get("runsc", {}).get("runtimeArgs") or []
+            if rootless or any(
+                str(value).lstrip("-").split("=")[0] in {"ignore-cgroups", "rootless"}
+                for value in arguments
+            ):
+                raise SandboxFailure("sandbox_runsc_cgroups_unenforced")
+        elif not rootless:
             raise SandboxFailure("sandbox_rootless_required")
         if info.get("CgroupVersion") != "2" or not all(
             info.get(field) for field in ("MemoryLimit", "SwapLimit", "CpuCfsQuota", "PidsLimit")
