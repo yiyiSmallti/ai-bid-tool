@@ -12,19 +12,9 @@ kind: plan
 新功能按 [agent.md](../../agent.md#工作方式) 的要求，先提交 Pydantic 模型、
 Provider 接口和 CLI JSON 结构供确认，再实现。
 
-## 首要缺口：切片 1 的完成标准
-
-[agent.md](../../agent.md#当前任务切片-1) 定义的切片 1 完成标准仍未满足：
-
-- 真实服务已在一份 Word 招标文件上完成抽取（见 B02），尚未用公开招标 PDF 跑通端到端
-  抽取。配置密钥后，先运行 [evals/extract_tender.py](../../evals/extract_tender.py)，再走一遍
-  [CLI 招标流程](../guides/cli.md#run-the-tender-workflow)。
-
-后续切片的部分基础（资源库、证书原件、未确认来源）已提前实现，但不改变上述缺口。
-
 ## 已知代码缺陷
 
-来自 2026-10-01 的代码审查，尚未修复：
+来自 2026-10-01 的代码审查，尚未修复。密钥拆分需要迁移与轮换方案，属于高风险变更：
 
 | 位置 | 问题 |
 | --- | --- |
@@ -63,7 +53,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | ID | 现状 | 缺口 | 依赖 |
 | --- | --- | --- | --- |
 | B01 tender parse | PDF 按页文本、扫描页本地 OCR；Word 按段落与表格单元格解析，按文档位置引用 | PDF 段落/表格/坐标结构、OCR 坐标入库；Word 文本框与页眉页脚 | 新大型依赖先说明 |
-| B02 req extract | Anthropic 与 OpenAI 兼容 adapter、并发批次、引用逐条核验、★ 规则并集、缓存、引用不通过逐条拒绝并报告、按官方档位选择推理强度与抽取历史；样例 Word 招标文件实测 446/449 条引用通过 | 要求确认入口；被拒条目的人工补录；单位后台的抽取页面 | 新契约 |
+| B02 req extract | Anthropic 与 OpenAI 兼容 adapter、并发批次、引用逐条核验、★ 规则并集、缓存、引用不通过逐条拒绝并报告、按官方档位选择推理强度与抽取历史；Word 与公开 PDF 招标文件均已用真实模型端到端抽取 | 要求确认入口；被拒条目的人工补录；单位后台的抽取页面 | 新契约 |
 | B03 参数判定 | `condition` 为自由 dict | 类型化 param/op/value/unit、单位换算、模糊表达转人工 | 新契约 |
 | B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认；人工截图入库与 `image_region` 证据；沙箱按允许名单采集厂家网页/PDF，页图经人工入库成为绑定归档的厂家证据，机制见 [screenshot-evidence.md](../notes/screenshot-evidence.md#vendor-captures)；自托管 SearXNG 搜索厂家来源候选，经人选定后写入产品库 | 自动满足判定 | 新契约 |
 | B05 evidence stamp | 截图链的 Rust 遮挡、裁剪、区域框与哈希已实施，不加水印 | 证书页等其他材料的标注；草案见 [annotation.md](annotation.md) | 待批准 |
@@ -126,9 +116,8 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 ## 建议顺序
 
-1. 用公开招标 PDF 完成切片 1 的端到端验收。
-2. 修复上方已知代码缺陷。
-3. 沙箱代理攻防、双单位接口与完整生命周期验收；导出件的 Word/WPS 视觉分页验收（B11）。
-4. 证书页等其他材料的标注（B05），check 首版（B09）。
-5. 看板、卡片状态与 SSE（U01、U02）。
-6. score、agent、记忆、用量与部署。
+1. 修复上方已知代码缺陷。
+2. 沙箱代理攻防、双单位接口与完整生命周期验收；导出件的 Word/WPS 视觉分页验收（B11）。
+3. 证书页等其他材料的标注（B05），check 首版（B09）。
+4. 看板、卡片状态与 SSE（U01、U02）。
+5. score、agent、记忆、用量与部署。
