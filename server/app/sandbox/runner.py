@@ -120,9 +120,15 @@ async def render_web(
     from playwright.async_api import (  # pyright: ignore[reportMissingImports]
         Error as PlaywrightError,
     )
+    from playwright.async_api import (  # pyright: ignore[reportMissingImports]
+        TimeoutError as PlaywrightTimeoutError,
+    )
     from playwright.async_api import async_playwright  # pyright: ignore[reportMissingImports]
 
     offline = descriptor.purpose == "prototype_offline"
+    # The relay serves vendor resources one at a time, so a real page needs most of the
+    # run budget to reach "load"; the remainder covers screenshot, DOM and validation.
+    navigation_ms = 10_000 if offline else max(10_000, descriptor.wall_seconds * 1000 - 40_000)
     denied: list[str] = []
 
     def deny(code: str) -> None:
@@ -209,10 +215,15 @@ async def render_web(
             Object.defineProperty(window, 'RTCPeerConnection', {value: undefined});
             Object.defineProperty(window, 'webkitRTCPeerConnection', {value: undefined});
         """)
-        if offline:
-            await page.set_content(source.decode("utf-8"), wait_until="load")
-        else:
-            await page.goto(source.decode("utf-8"), wait_until="load")
+        try:
+            if offline:
+                await page.set_content(source.decode("utf-8"), wait_until="load")
+            else:
+                await page.goto(source.decode("utf-8"), wait_until="load", timeout=navigation_ms)
+        except PlaywrightTimeoutError:
+            raise SandboxFailure(denied[0] if denied else "source_timeout") from None
+        except PlaywrightError:
+            raise SandboxFailure(denied[0] if denied else "source_navigation_failed") from None
         if denied and not offline:
             raise SandboxFailure(denied[0])
         if (
@@ -353,4 +364,9 @@ if __name__ == "__main__":
     except (ValueError, KeyError, TypeError, OSError, RuntimeError, struct.error):
         # No attacker-controlled exception or traceback is emitted to host logs.
         emit({"type": "error", "code": "sandbox_parser_failure"})
+        raise SystemExit(1) from None
+    except Exception:
+        # Browser-library errors must still end with a fixed code, never a bare stream EOF
+        # that the supervisor could only report as a broken frame.
+        emit({"type": "error", "code": "runner_unexpected_failure"})
         raise SystemExit(1) from None

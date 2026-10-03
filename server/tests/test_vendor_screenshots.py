@@ -20,11 +20,13 @@ real isolation is accepted separately. The Rust renderer is a genuine dependency
 import asyncio
 import hashlib
 import json
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
 import httpx
+import pytest
 from app.api.main import create_app
 from app.core.config import Settings
 from app.models.screenshots import ScreenshotVendorArchive
@@ -111,31 +113,32 @@ class VendorBrowser(FakeBrowser):
 
 
 @asynccontextmanager
-async def vendor_client(tenants, tmp_path: Path, monkeypatch):
+async def vendor_client(tenants, tmp_path: Path, monkeypatch, *, live=False):
     policy = tmp_path / "policy.json"
     rules = [{"url": url, "methods": ["GET", "HEAD"]} for url in (WEB_URL, FINAL_URL, PDF_URL)]
+    exact = {"revision": "synthetic-v1", "main_urls": [WEB_URL, PDF_URL], "rules": rules}
+    opened = {"revision": "dev-open-v1", "open_public_https": True}
     policy.write_text(
-        json.dumps(
-            {
-                "policies": [
-                    {"revision": "synthetic-v1", "main_urls": [WEB_URL, PDF_URL], "rules": rules}
-                ],
-                "revoked_revisions": [],
-            }
-        )
+        json.dumps({"policies": [opened if live else exact], "revoked_revisions": []})
     )
     monkeypatch.setenv("BID_SANDBOX_POLICY_FILE", str(policy))
     monkeypatch.setenv("BID_SANDBOX_FETCH_QUOTA", str(tmp_path / "quota.sqlite"))
     app = create_app(
         Settings(data_dir=tmp_path / "objects"), llm=PhaseOneExtraction(), queue=SandboxQueue()
     )
-    app.state.processor.sandbox_browser = VendorBrowser()
-    app.state.processor.sandbox_fetch_transport = httpx.MockTransport(vendor_response)
+    if live:
+        from app.providers.browser import create_browser_provider
 
-    async def resolver(host):
-        return ("93.184.216.34",)
+        monkeypatch.setenv("BID_SANDBOX_DEV_OPEN_EGRESS", "1")
+        app.state.processor.sandbox_browser = create_browser_provider()
+    else:
+        app.state.processor.sandbox_browser = VendorBrowser()
+        app.state.processor.sandbox_fetch_transport = httpx.MockTransport(vendor_response)
 
-    app.state.processor.sandbox_resolver = resolver
+        async def resolver(host):
+            return ("93.184.216.34",)
+
+        app.state.processor.sandbox_resolver = resolver
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
@@ -147,7 +150,7 @@ async def vendor_client(tenants, tmp_path: Path, monkeypatch):
         yield api, app, headers
 
 
-async def select_product(api, header, task):
+async def select_product(api, header, task, web_url=WEB_URL, pdf_url=PDF_URL):
     product = (
         await api.post(
             "/resources/products",
@@ -157,8 +160,8 @@ async def select_product(api, header, task):
                     "name": "Synthetic M1",
                     "vendor": "Synthetic vendor",
                     "model": "M1",
-                    "official_url": WEB_URL,
-                    "whitepaper_url": PDF_URL,
+                    "official_url": web_url,
+                    "whitepaper_url": pdf_url,
                 }
             },
         )
@@ -172,7 +175,7 @@ async def select_product(api, header, task):
 
 async def capture(api, app, header, task, extraction, product, selection, **spec):
     field = "whitepaper_url" if spec.get("format") == "pdf" else "official_url"
-    url = PDF_URL if field == "whitepaper_url" else WEB_URL
+    url = product["data"][field]
     body = {
         "purpose": "vendor_capture",
         "extraction_job_id": extraction,
@@ -452,4 +455,57 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
                 ensure_ascii=False,
                 indent=2,
             )
+        )
+
+
+@pytest.mark.skipif(
+    os.environ.get("BID_SANDBOX_RUNTIME_TEST") != "1"
+    or not (os.environ.get("BID_VENDOR_LIVE_WEB_URL") or os.environ.get("BID_VENDOR_LIVE_PDF_URL")),
+    reason="requires the sandbox supervisor and an explicit public vendor URL",
+)
+async def test_real_sandbox_captures_a_public_vendor_page_and_pdf(
+    tenants, tmp_path, admin_engine, monkeypatch
+):
+    """Development acceptance over the open egress policy; never runs in CI."""
+    renderer_required()
+    web_url = os.environ.get("BID_VENDOR_LIVE_WEB_URL") or WEB_URL
+    pdf_url = os.environ.get("BID_VENDOR_LIVE_PDF_URL") or PDF_URL
+    async with vendor_client(tenants, tmp_path, monkeypatch, live=True) as (api, app, headers):
+        header = headers[0]
+        task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
+        product, selection = await select_product(api, header, task, web_url, pdf_url)
+        target = Path(os.environ.get("BID_VENDOR_LIVE_DIR", "data/work/vendor-live"))
+        await asyncio.to_thread(target.mkdir, parents=True, exist_ok=True)
+        results = {}
+        specs = [{"archive": "bundle"}] if os.environ.get("BID_VENDOR_LIVE_WEB_URL") else []
+        if os.environ.get("BID_VENDOR_LIVE_PDF_URL"):
+            specs.append({"format": "pdf", "pdf_pages": [1]})
+        for spec in specs:
+            artifacts, run = await capture(
+                api, app, header, task, extraction, product, selection, **spec
+            )
+            page = artifacts.get("capture_png") or artifacts["pdf_page_png"]
+            png = await download(api, header, page)
+            kind = "vendor_pdf" if "pdf_page_png" in artifacts else "vendor_web"
+            archive = artifacts.get("capture_archive") or artifacts["source_pdf"]
+            response = await ingest(
+                api,
+                header,
+                task,
+                UUID(extraction),
+                VendorSource(kind=kind, sandbox_artifact_id=page["id"]),
+                png,
+                ImagePlan(),
+                archive["sha256"],
+            )
+            assert response.status_code == 200, response.text
+            asset = response.json()["data"]["asset"]
+            (target / f"{kind}.png").write_bytes(png)
+            results[kind] = {
+                "vendor_archive": asset["vendor_archive"],
+                "requests": run["metrics"]["request_count"],
+                "network_bytes": run["metrics"]["network_bytes"],
+            }
+        (target / "live-capture.json").write_text(
+            json.dumps(results, ensure_ascii=False, indent=2, sort_keys=True)
         )

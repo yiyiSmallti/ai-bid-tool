@@ -56,6 +56,9 @@ RUNNER_ERROR_CODES = frozenset(
         "invalid_html",
         "blank_capture",
         "browser_launch_failed",
+        "source_timeout",
+        "source_navigation_failed",
+        "runner_unexpected_failure",
     }
 )
 
