@@ -27,7 +27,7 @@ from app.providers.sandbox_runtime import (
     send_frame,
     validate_artifact,
 )
-from app.sandbox.runner import artifact_header
+from app.sandbox.runner import FETCH_SLOTS, artifact_header
 
 RUNNER_ERROR_CODES = frozenset(
     {
@@ -224,6 +224,7 @@ class DockerBackend:
             "PYTHONDONTWRITEBYTECODE=1",
             "--env",
             "PYTHONUNBUFFERED=1",
+            *(["--env", "BID_RUNNER_GVISOR=1"] if self.config.runtime == "runsc" else []),
             "--interactive",
             self.config.image,
             "python",
@@ -432,37 +433,73 @@ class Supervisor:
                     raise SandboxFailure("cpu_limit")
                 await asyncio.sleep(0.2)
 
+        # Up to FETCH_SLOTS numbered fetches may be outstanding. Caller replies are read
+        # only while one is, and each must answer an outstanding id exactly once.
+        inflight: set[int] = set()
+        stdin_lock = asyncio.Lock()
+        relay: asyncio.Task[None] | None = None
+
+        async def relay_replies() -> None:
+            while inflight:
+                reply, body = await read_frame(
+                    reader, min(32 * MIB, 64 * MIB - metrics["network_bytes"])
+                )
+                if reply.get("type") == "error":
+                    raise SandboxFailure("network_denied")
+                identifier = reply.get("id")
+                if (
+                    reply.get("type") != "fetch_result"
+                    or type(identifier) is not int
+                    or identifier not in inflight
+                ):
+                    raise SandboxFailure("invalid_fetch")
+                inflight.discard(identifier)
+                metrics["network_bytes"] += len(body)
+                async with stdin_lock:
+                    await send_frame(stdin, reply, body)
+
+        async def runner_frame() -> tuple[dict[str, Any], bytes]:
+            reading = asyncio.ensure_future(
+                read_frame(stdout, min(40 * MIB, descriptor.output_limit - metrics["output_bytes"]))
+            )
+            try:
+                if relay is not None and not relay.done():
+                    await asyncio.wait({reading, relay}, return_when=asyncio.FIRST_COMPLETED)
+                if relay is not None and relay.done():
+                    relay.result()
+                return await reading
+            finally:
+                if not reading.done():
+                    reading.cancel()
+
         async def exchange() -> None:
+            nonlocal relay
             await send_frame(stdin, {"type": "input", "descriptor": asdict(descriptor)}, source)
             if stage == "validate":
                 for ordinal, artifact in enumerate(artifacts):
                     await send_frame(stdin, artifact_header(artifact, ordinal), artifact.data)
                 await send_frame(stdin, {"type": "end"})
             while True:
-                header, data = await read_frame(
-                    stdout, min(40 * MIB, descriptor.output_limit - metrics["output_bytes"])
-                )
+                header, data = await runner_frame()
                 message = header.get("type")
                 if message == "fetch":
                     if stage != "render" or descriptor.purpose != "vendor_capture" or data:
                         raise SandboxFailure("unexpected_fetch")
-                    if set(header) != {"type", "url", "method", "length"} or header[
+                    if set(header) != {"type", "id", "url", "method", "length"} or header[
                         "method"
                     ] not in ("GET", "HEAD"):
                         raise SandboxFailure("invalid_fetch")
                     if metrics["request_count"] >= 200:
                         raise SandboxFailure("request_limit")
-                    metrics["request_count"] += 1
-                    await send_frame(writer, header)
-                    reply, body = await read_frame(
-                        reader, min(32 * MIB, 64 * MIB - metrics["network_bytes"])
-                    )
-                    if reply.get("type") == "error":
-                        raise SandboxFailure("network_denied")
-                    if reply.get("type") != "fetch_result":
+                    if header["id"] != metrics["request_count"] or len(inflight) >= FETCH_SLOTS:
                         raise SandboxFailure("invalid_fetch")
-                    metrics["network_bytes"] += len(body)
-                    await send_frame(stdin, reply, body)
+                    metrics["request_count"] += 1
+                    inflight.add(header["id"])
+                    await send_frame(writer, header)
+                    if relay is None or relay.done():
+                        if relay is not None:
+                            relay.result()
+                        relay = asyncio.create_task(relay_replies())
                 elif message == "artifact":
                     if len(output) >= 32 or header.get("ordinal") != len(output):
                         raise SandboxFailure("artifact_sequence")
@@ -470,7 +507,7 @@ class Supervisor:
                     output.append(artifact)
                     metrics["output_bytes"] += len(data)
                 elif message == "done":
-                    if data or set(header) != {"type", "versions", "issues", "length"}:
+                    if data or inflight or set(header) != {"type", "versions", "issues", "length"}:
                         raise SandboxFailure("invalid_frame")
                     reported_issues = header["issues"]
                     if reported_issues not in ([], ["offline_resources_blocked"]):
@@ -489,7 +526,8 @@ class Supervisor:
                     if metrics["cpu_ms"] >= descriptor.wall_seconds * 1000:
                         raise SandboxFailure("cpu_limit")
                     self.persist_metrics(group, metrics)
-                    await send_frame(stdin, {"type": "finish"})
+                    async with stdin_lock:
+                        await send_frame(stdin, {"type": "finish"})
                     if await stdout.read(1):
                         raise SandboxFailure("unexpected_output")
                     if await process.wait() != 0:
@@ -518,9 +556,10 @@ class Supervisor:
                     await io_task
             await io_task
         finally:
-            for task in tasks:
+            pending = [*tasks, *([relay] if relay is not None else [])]
+            for task in pending:
                 task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
+            await asyncio.gather(*pending, return_exceptions=True)
             process.stdin.close()
             await self.backend.remove(name)
             if process.returncode is None:

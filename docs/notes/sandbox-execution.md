@@ -89,13 +89,18 @@ not an authentication credential.
   `source_navigation_failed`, or `runner_unexpected_failure`. An uncaught library
   exception previously ended the stream without an error frame, which the supervisor
   could only report as `invalid_frame`.
-- Vendor resources are relayed one request at a time. At roughly one second per
-  resource, a product page with about a hundred resources cannot reach `load` within
-  the 120-second vendor budget. A navigation may use the budget minus 40 seconds.
-- Under gVisor, Chromium's own sandbox crashes the renderer on script-heavy vendor
-  pages (`source_navigation_failed`); the same page does not crash with that inner
-  sandbox disabled or under runc. PDF captures do not use Chromium and are
-  unaffected.
+- Vendor fetches carry sequential ids, and up to four are outstanding at once. The
+  supervisor reads caller replies only while a forwarded id is outstanding and
+  rejects unknown, repeated or out-of-order ids. A navigation may use the run
+  budget minus 40 seconds.
+- Under gVisor, the renderer's seccomp-bpf policy traps `sched_getaffinity` for
+  other threads and crashes script-heavy pages. When the supervisor runs runsc it
+  sets `BID_RUNNER_GVISOR=1`, and vendor captures then launch Chromium with
+  `--disable-seccomp-filter-sandbox`, keeping its namespace sandbox. Prototype
+  rendering keeps the full Chromium sandbox.
+- Any failed resource fails the whole capture. A slow network path, such as a
+  local fake-IP proxy where each request opens a fresh TLS connection, can produce
+  `fetch_timeout` or `fetch_transport_failed` on ordinary resources of a large page.
 
 The fake provider and backend validate integration decisions, not containment.
 Opt-in container runs do not replace packet, escape, resource exhaustion and

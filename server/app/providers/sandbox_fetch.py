@@ -351,8 +351,10 @@ class SQLiteFetchQuota:
     A lease outlives the maximum request timeout; dead processes recover on expiry.
     """
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, *, origin_wait_seconds: float = 15.0):
         self.path = Path(path)
+        # A full origin queues for a lease up to the request timeout; the org rate denies.
+        self.origin_wait_seconds = origin_wait_seconds
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.path, timeout=2, isolation_level=None)
@@ -405,13 +407,21 @@ class SQLiteFetchQuota:
     @asynccontextmanager
     async def acquire(self, org_id: UUID, origin: str) -> AsyncIterator[None]:
         lease_id = uuid4().hex
+        deadline = time.monotonic() + self.origin_wait_seconds
         try:
-            await asyncio.to_thread(
-                self._claim,
-                hashlib.sha256(str(org_id).encode()).hexdigest(),
-                hashlib.sha256(origin.encode()).hexdigest(),
-                lease_id,
-            )
+            while True:
+                try:
+                    await asyncio.to_thread(
+                        self._claim,
+                        hashlib.sha256(str(org_id).encode()).hexdigest(),
+                        hashlib.sha256(origin.encode()).hexdigest(),
+                        lease_id,
+                    )
+                    break
+                except FetchDenied as exc:
+                    if exc.code != "origin_concurrency_limit" or time.monotonic() >= deadline:
+                        raise
+                    await asyncio.sleep(0.1)
             try:
                 yield
             finally:

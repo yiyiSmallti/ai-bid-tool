@@ -6,6 +6,14 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：厂家网页采集并发转发与 gVisor 渲染修复
+
+- 厂家采集的资源请求带顺序编号，最多 4 个同时在途；runner、supervisor 与调用方按编号匹配应答，
+  supervisor 拒绝未知、重复或乱序编号。同一来源的两个连接租约占满时等待释放，不再立即拒绝。
+- 按已批准的决定，runsc 下的厂家采集以 `--disable-seccomp-filter-sandbox` 启动 Chromium（保留命名空间
+  沙箱），修复渲染进程在 gVisor 中因 `sched_getaffinity` 被拦截而崩溃；原型渲染不变。决定见
+  [sandbox.md](plan/sandbox.md#已定决定)。镜像已重建并重新固定摘要。
+
 ## 2026-10-03：开发节点放开厂家取证网络与沙箱 runner 错误码
 
 - 抓取策略新增仅限开发节点的 `open_public_https` 修订：节点设置 `BID_SANDBOX_DEV_OPEN_EGRESS=1` 时允许任意

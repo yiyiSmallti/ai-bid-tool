@@ -75,14 +75,65 @@ def check_dimensions(width: int, height: int) -> None:
         raise SandboxFailure("image_limit")
 
 
+FETCH_SLOTS = 4
+
+
+class Relay:
+    """Up to FETCH_SLOTS numbered requests share stdin/stdout; replies match by id.
+
+    stdin is read only while a request is outstanding, so the final "finish"
+    acknowledgement is never consumed by the reply pump.
+    """
+
+    def __init__(self) -> None:
+        self.next_id = 0
+        self.pending: dict[int, asyncio.Future[tuple[dict[str, Any], bytes]]] = {}
+        self.slots = asyncio.Semaphore(FETCH_SLOTS)
+        self.pump: asyncio.Task[None] | None = None
+
+    async def _pump(self) -> None:
+        while self.pending:
+            response, data = await asyncio.to_thread(receive, 32 * MIB)
+            if response.get("type") == "error":
+                failure = SandboxFailure("network_denied")
+                for future in self.pending.values():
+                    if not future.done():
+                        future.set_exception(failure)
+                self.pending.clear()
+                return
+            identifier = response.get("id")
+            future = self.pending.pop(identifier, None) if type(identifier) is int else None
+            if response.get("type") != "fetch_result" or future is None:
+                raise SandboxFailure("invalid_frame")
+            future.set_result((response, data))
+
+    async def fetch(self, url: str, method: str = "GET") -> tuple[dict[str, Any], bytes]:
+        async with self.slots:
+            identifier = self.next_id
+            self.next_id += 1
+            future: asyncio.Future[tuple[dict[str, Any], bytes]] = (
+                asyncio.get_running_loop().create_future()
+            )
+            self.pending[identifier] = future
+            emit({"type": "fetch", "id": identifier, "url": url, "method": method})
+            if self.pump is None or self.pump.done():
+                self.pump = asyncio.create_task(self._pump())
+            pump = self.pump
+            done, _ = await asyncio.wait({future, pump}, return_when=asyncio.FIRST_COMPLETED)
+            if future not in done:
+                pump.result()  # the reply stream broke before this request was answered
+                raise SandboxFailure("invalid_frame")
+            response, data = future.result()
+        if not 200 <= response["status"] < 300:
+            raise SandboxFailure("source_http_error")
+        return response, data
+
+
+RELAY = Relay()
+
+
 async def fetch(url: str, method: str = "GET") -> tuple[dict[str, Any], bytes]:
-    emit({"type": "fetch", "url": url, "method": method})
-    response, data = await asyncio.to_thread(receive, 32 * MIB)
-    if response.get("type") == "error":
-        raise SandboxFailure("network_denied")
-    if response.get("type") != "fetch_result" or not 200 <= response["status"] < 300:
-        raise SandboxFailure("source_http_error")
-    return response, data
+    return await RELAY.fetch(url, method)
 
 
 async def render_pdf(descriptor: RunDescriptor, source: bytes) -> list[ArtifactPayload]:
@@ -135,14 +186,22 @@ async def render_web(
         if not denied:
             denied.append(code)
 
-    fetch_lock = asyncio.Lock()
     redirect_responses: dict[str, tuple[dict[str, Any], bytes]] = {}
     async with async_playwright() as playwright:
+        # Under gVisor, the renderer's seccomp-bpf policy traps sched_getaffinity for other
+        # threads and crashes script-heavy pages. Vendor captures there keep Chromium's
+        # namespace sandbox but drop that filter; gVisor and the container seccomp remain.
+        relaxed = (
+            ["--disable-seccomp-filter-sandbox"]
+            if not offline and os.environ.get("BID_RUNNER_GVISOR") == "1"
+            else []
+        )
         try:
             browser = await playwright.chromium.launch(
                 headless=True,
                 chromium_sandbox=True,
                 args=[
+                    *relaxed,
                     "--disable-extensions",
                     "--disable-background-networking",
                     "--disable-sync",
@@ -176,25 +235,22 @@ async def render_web(
                 deny("network_denied")
                 await route.abort("blockedbyclient")
                 return
-            async with fetch_lock:
-                try:
-                    cached = redirect_responses.pop(request.url, None)
-                    response, body = (
-                        cached if cached is not None else await fetch(request.url, request.method)
-                    )
-                    if response["url"] != request.url:
-                        redirect_responses[response["url"]] = (response, body)
-                        await route.fulfill(
-                            status=302, headers={"location": response["url"]}, body=b""
-                        )
-                        return
-                    # A fresh context has no credentials; proxy response headers exclude cookies.
-                    await route.fulfill(
-                        status=response["status"], headers=response["headers"], body=body
-                    )
-                except SandboxFailure as exc:
-                    deny(exc.code)
-                    await route.abort("blockedbyclient")
+            try:
+                cached = redirect_responses.pop(request.url, None)
+                response, body = (
+                    cached if cached is not None else await fetch(request.url, request.method)
+                )
+                if response["url"] != request.url:
+                    redirect_responses[response["url"]] = (response, body)
+                    await route.fulfill(status=302, headers={"location": response["url"]}, body=b"")
+                    return
+                # A fresh context has no credentials; proxy response headers exclude cookies.
+                await route.fulfill(
+                    status=response["status"], headers=response["headers"], body=body
+                )
+            except SandboxFailure as exc:
+                deny(exc.code)
+                await route.abort("blockedbyclient")
 
         await context.route("**/*", handle_route)
 
