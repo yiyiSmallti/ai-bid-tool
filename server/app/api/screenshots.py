@@ -26,8 +26,16 @@ from app.schemas.screenshot_contracts import (
     ScreenshotAnnotate,
     ScreenshotIngest,
     ScreenshotWithdraw,
+    VendorSearchAdopt,
+    VendorSearchInput,
 )
-from app.services import prototype_decisions, prototype_generation, screenshot_jobs, screenshots
+from app.services import (
+    prototype_decisions,
+    prototype_generation,
+    screenshot_jobs,
+    screenshots,
+    vendor_search,
+)
 from app.services import response_cards as cards
 from app.services.resources import audit
 
@@ -346,6 +354,41 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         )
         await dispatch(ctx[0], ctx[1], job)
         return result("ui mock", data)
+
+    def search_provider():
+        from app.providers.search import create_search_provider
+
+        return create_search_provider(
+            settings, getattr(processor, "search_transport", None) if processor else None
+        )
+
+    @router.post(
+        "/tasks/{task_id}/screenshot-searches", name="evidence_search", response_model=Result
+    )
+    async def search(
+        task_id: UUID, body: VendorSearchInput, ctx=Depends(context, scope="function")
+    ):
+        data, job = await vendor_search.submit(ctx[0], ctx[1], task_id, body, search_provider())
+        await dispatch(ctx[0], ctx[1], job)
+        return result("evidence search", data)
+
+    @router.get(
+        "/screenshot-searches/{search_id}", name="evidence_search_show", response_model=Result
+    )
+    async def show_search(search_id: UUID, ctx=Depends(context, scope="function")):
+        run = await vendor_search.show(ctx[0], ctx[1], search_id)
+        return result("evidence candidates", await vendor_search.view(ctx[0], run))
+
+    @router.post(
+        "/screenshot-search-candidates/{candidate_id}/adopt",
+        name="evidence_adopt",
+        response_model=Result,
+    )
+    async def adopt_candidate(
+        candidate_id: UUID, body: VendorSearchAdopt, ctx=Depends(context, scope="function")
+    ):
+        data = await vendor_search.adopt(ctx[0], ctx[1], candidate_id, body)
+        return result("evidence adopt", data)
 
     @router.get("/prototype-runs/{prototype_id}", name="prototype_show", response_model=Result)
     async def show_prototype(prototype_id: UUID, ctx=Depends(context, scope="function")):

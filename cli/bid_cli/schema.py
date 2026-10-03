@@ -64,6 +64,8 @@ from app.schemas.screenshot_contracts import (
     ScreenshotIngest,
     ScreenshotPrepareInput,
     ScreenshotWithdraw,
+    VendorSearchAdopt,
+    VendorSearchInput,
 )
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
@@ -178,6 +180,9 @@ COMMANDS = {
     "screenshot withdraw": ScreenshotWithdraw,
     "screenshot analyze": ScreenshotAnalyzeInput,
     "ui mock": PrototypeGenerateInput,
+    "evidence search": VendorSearchInput,
+    "evidence candidates": None,
+    "evidence adopt": VendorSearchAdopt,
     "screenshot suggestions": None,
     "screenshot prototype-decisions preview": PrototypeDecisionPreviewInput,
     "screenshot prototype-decisions apply": PrototypeDecisionBatch,

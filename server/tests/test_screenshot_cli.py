@@ -530,6 +530,11 @@ def screenshot_files(tmp_path: Path) -> dict[str, Path]:
             "requirement_id": IDENTIFIER_2,
             "task_feature_id": IDENTIFIER_3,
         },
+        "evidence-search": {
+            "extraction_job_id": IDENTIFIER,
+            "task_resource_id": IDENTIFIER_2,
+        },
+        "evidence-adopt": {"field": "whitepaper_url", "expected_product_revision": 1},
         "decision-preview": {
             "extraction_job_id": IDENTIFIER,
             "module_label": "Synthetic module",
@@ -574,7 +579,14 @@ def test_screenshot_remote_commands_snapshot(tmp_path, monkeypatch, capsys):
 
     def fake_call(method, path, **kwargs):
         calls.append((method, path, kwargs))
-        if path.endswith(("/renditions", "/screenshot-analyses", "/prototype-generations")):
+        if path.endswith(
+            (
+                "/renditions",
+                "/screenshot-analyses",
+                "/prototype-generations",
+                "/screenshot-searches",
+            )
+        ):
             data = {"dry_run": True, "input_hash": SHA}
         else:
             data = {"path": path, "method": method}
@@ -674,6 +686,24 @@ def test_screenshot_remote_commands_snapshot(tmp_path, monkeypatch, capsys):
             str(paths["ui-mock"]),
             "--dry-run",
         ],
+        "evidence search": [
+            "evidence",
+            "search",
+            "--task",
+            IDENTIFIER,
+            "--input",
+            str(paths["evidence-search"]),
+            "--dry-run",
+        ],
+        "evidence candidates": ["evidence", "candidates", "--search", IDENTIFIER_3],
+        "evidence adopt": [
+            "evidence",
+            "adopt",
+            "--candidate",
+            IDENTIFIER_3,
+            "--input",
+            str(paths["evidence-adopt"]),
+        ],
         "screenshot prototype-decisions preview": [
             "screenshot",
             "prototype-decisions",
@@ -725,6 +755,18 @@ def test_screenshot_remote_commands_snapshot(tmp_path, monkeypatch, capsys):
     }
     assert by_path[("POST", f"/tasks/{IDENTIFIER}/screenshots")]["files"]["file"][2] == "image/png"
     assert by_path[("POST", f"/tasks/{IDENTIFIER}/screenshot-analyses")]["json"]["dry_run"] is True
+    assert by_path[("POST", f"/tasks/{IDENTIFIER}/screenshot-searches")]["json"] == {
+        "extraction_job_id": IDENTIFIER,
+        "task_resource_id": IDENTIFIER_2,
+        "expected_input_hash": None,
+        "dry_run": True,
+        "retry": False,
+    }
+    assert by_path[("POST", f"/screenshot-search-candidates/{IDENTIFIER_3}/adopt")]["json"] == {
+        "field": "whitepaper_url",
+        "expected_product_revision": 1,
+    }
+    assert ("GET", f"/screenshot-searches/{IDENTIFIER_3}") in by_path
     assert by_path[("POST", f"/tasks/{IDENTIFIER}/prototype-generations")]["json"] == {
         "extraction_job_id": IDENTIFIER,
         "requirement_id": IDENTIFIER_2,

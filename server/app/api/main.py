@@ -1340,6 +1340,13 @@ def create_app(
             }
             payload["ok"] = job.result.get("completion") != "partial"
             payload["cost"] = job.result.get("cost", payload["cost"])
+        if job.kind == "screenshot_search":
+            from app.services.vendor_search import check_job_access as search_access
+
+            await search_access(session, identity, job)
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
         if job.kind == "prototype_generate":
             from app.services.prototype_generation import check_job_access as prototype_access
 

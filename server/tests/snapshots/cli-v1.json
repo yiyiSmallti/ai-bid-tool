@@ -5089,6 +5089,207 @@
           ],
           "input": null
         },
+        "evidence adopt": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "candidate",
+              "options": [
+                "--candidate"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_product_revision": {
+                "minimum": 1,
+                "title": "Expected Product Revision",
+                "type": "integer"
+              },
+              "field": {
+                "enum": [
+                  "official_url",
+                  "whitepaper_url"
+                ],
+                "title": "Field",
+                "type": "string"
+              }
+            },
+            "required": [
+              "field",
+              "expected_product_revision"
+            ],
+            "title": "VendorSearchAdopt",
+            "type": "object"
+          }
+        },
+        "evidence candidates": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "search",
+              "options": [
+                "--search"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "evidence search": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Input Hash"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              },
+              "task_resource_id": {
+                "format": "uuid",
+                "title": "Task Resource Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "task_resource_id"
+            ],
+            "title": "VendorSearchInput",
+            "type": "object"
+          }
+        },
         "evidence source add": {
           "cli_parameters": [
             {

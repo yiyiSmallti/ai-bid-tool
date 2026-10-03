@@ -42,6 +42,12 @@ paid run must carry that input hash; its job result is the prototype run.
 applies the same local plan as any upload, and `screenshot add` ingests it as an
 `origin=prototype` asset.
 
+When a product revision lacks a source URL, `evidence search --dry-run` shows the
+queries, only the revision's vendor and model, and returns their input hash. The
+submitted run is a `screenshot_search` job; `evidence candidates` lists its ranked
+candidates. `evidence adopt` records one candidate as the product's `official_url`
+or `whitepaper_url` in a new revision and reselects that revision on the task.
+
 A vendor page starts as a `sandbox capture` of the selected product revision's
 `official_url` or `whitepaper_url`. A web page must use `archive=bundle`; a PDF
 always retains its original bytes. `screenshot prepare --sandbox-artifact`
@@ -197,6 +203,21 @@ incomplete capture adds the `vendor_capture_incomplete` warning
 ([`0026`](../../server/migrations/versions/0026_vendor_incomplete_captures.py)). Later card and export checks reread the archive bytes;
 they do not depend on the node's current fetch policy file.
 
+### Vendor search
+
+[`vendor_search.py`](../../server/app/services/vendor_search.py) fixes the task,
+extraction, product selection and revision, the queries, the search service identity
+and the vendor domains already recorded on this organization's current product
+revisions with the same vendor name. The worker rebuilds those inputs before searching
+and before publishing. [`search.py`](../../server/app/providers/search.py) calls the
+SearXNG JSON endpoint without redirects or environment proxies. Candidates must pass the
+fetch broker's URL canonicalization, so HTTP, credential-bearing and ambiguous URLs are
+dropped; duplicates merge their engines. Known vendor domains rank first, then PDFs.
+The run stores up to 20 candidates with their rank and flags in
+`screenshot_search_runs`/`screenshot_search_candidates`; a search failure is
+retryable and stores nothing. Adoption reuses product update and task selection with
+the expected product revision, so a stale adoption is refused.
+
 ## Pitfalls
 
 - Source hashes establish byte identity, not authenticity. The server cannot
@@ -212,8 +233,14 @@ they do not depend on the node's current fetch policy file.
   [human-section-exports.md](human-section-exports.md).
 - A sandbox render failure after the model call fails the job; a retry pays for a
   new generation.
-- Reserved search records have no producer yet, so a vendor archive refuses a
-  search-candidate link. No client API writes a prototype run, vendor archive or
+- Search results are unverified. A known domain only ranks a candidate; it does
+  not prove the page is the vendor's or describes the model. A vendor archive
+  refuses a search-candidate link; adopted URLs reach captures through the product
+  library.
+- Adopting replaces the task's product selection, which invalidates Evidence bound
+  to the previous revision. Search and adopt before capturing.
+- Free SearXNG engines scrape public search sites and throttle quickly; some vendors'
+  official pages do not appear. A person can still enter the URL directly. No client API writes a prototype run, vendor archive or
   renderer receipt, and archived HTML is never served as an active page.
 - A PDF archive records no document title or page count; reading either would
   require decoding the untrusted PDF in the API process. The archived bytes and
@@ -242,5 +269,6 @@ they do not depend on the node's current fetch policy file.
   [database gates](../../server/tests/test_screenshot_db.py),
   [vision HTTP boundary](../../server/tests/test_screenshot_vision.py),
   [prototype generation](../../server/tests/test_prototype_generation.py),
-  [vendor captures](../../server/tests/test_vendor_screenshots.py) and
+  [vendor captures](../../server/tests/test_vendor_screenshots.py),
+  [vendor search](../../server/tests/test_vendor_search.py) and
   [CLI contract](../../server/tests/test_screenshot_cli.py).

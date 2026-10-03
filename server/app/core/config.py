@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     export_max_expanded_bytes: int = Field(default=1024 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
     export_memory_bytes: int = Field(default=1024 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
     export_deadline_seconds: float = Field(default=900, gt=0, le=900, allow_inf_nan=False)
+    # Operator-run SearXNG base URL for vendor-source search; unset disables search.
+    search_url: str | None = None
     # Built console from web/dist; served under /app when set.
     web_dir: Path | None = None
 
