@@ -26,6 +26,7 @@ from app.providers.sandbox_runtime import (
 ERROR_CODES = frozenset(
     {
         "blank_capture",
+        "browser_launch_failed",
         "archive_byte_limit",
         "artifact_hash_mismatch",
         "artifact_limit",

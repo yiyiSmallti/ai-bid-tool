@@ -34,20 +34,48 @@ The execution node runs [sandbox_supervisor.py](../../scripts/sandbox_supervisor
 
 ## Prepare a macOS Colima development VM
 
-1. Create a dedicated Colima profile with host mounts disabled; the command
-   pattern is in [Run with Docker Compose](development.md#run-with-docker-compose).
-   Use a sandbox-specific profile and leave the business Docker context unchanged.
-2. Provision the supervisor's rootless daemon inside that Linux VM. The default
-   rootful Colima Docker socket does not satisfy this backend's preflight. Keep
-   database, object-store and home-directory mounts out of the VM.
-3. Use the remote mTLS control mode below from the macOS API/worker. Do not expose
-   Docker's socket or an unprotected supervisor port to the host. Restrict the
-   supervisor listener to the intended caller's route and certificate.
-4. Begin with `BID_SANDBOX_SYNTHETIC_ONLY=1` and the opt-in synthetic pipeline.
-   Enable business admission only after the required isolation acceptance; do
-   not treat an ordinary-container synthetic result as production acceptance.
+1. Create a dedicated profile with host mounts disabled. Keep `COLIMA_HOME` on
+   a writable directory whose path stays short: Lima's socket path must be under
+   104 characters, and an unwritable or missing `COLIMA_HOME` makes Colima fall
+   back to `~/.colima`.
+
+   ```sh
+   export COLIMA_HOME=/PATH/TO/data/work/bsx
+   colima start bsx --activate=false --ssh-config=false --vm-type vz --arch aarch64 \
+     --mount none --cpus 4 --memory 4 --disk 40 --root-disk 12 --binfmt=false --runtime docker
+   ```
+
+2. Run [provision-guest.sh](../../deploy/sandbox-node/provision-guest.sh) as root
+   inside the VM (`colima ssh -p bsx -- sudo sh provision-guest.sh`). It creates
+   the `bidsbx` supervisor identity, delegates cgroup controllers to user
+   sessions, installs gVisor `runsc` and the administrator-owned directories.
+3. As `bidsbx`, run `dockerd-rootless-setuptool.sh install` with the user's
+   `XDG_RUNTIME_DIR` and session bus, then register `runsc` in
+   `~/.config/docker/daemon.json`. The default rootful Colima daemon does not
+   satisfy the preflight.
+4. Install the supervisor code under `/opt/bid-supervisor` with a virtual
+   environment containing `httpx`, the server certificate and key, and
+   [supervisor.env.example](../../deploy/sandbox-node/supervisor.env.example)
+   filled in as `/etc/bid-sandbox/supervisor.env`. Enable
+   [bid-sandbox-supervisor.service](../../deploy/sandbox-node/bid-sandbox-supervisor.service),
+   which restarts the supervisor automatically. Lima forwards the guest's
+   `127.0.0.1:8443` to the host, so the macOS API/worker uses mTLS to
+   `127.0.0.1` without exposing Docker's socket.
+5. Begin with `BID_SANDBOX_SYNTHETIC_ONLY=1` and runc. Enable business
+   admission only after the required isolation acceptance.
+
+gVisor cannot enforce cgroup limits under rootless Docker: `runsc` fails with
+`systemd error: Permission denied`, and with `--ignore-cgroups` a 64 MiB
+container allocates 300 MiB. Rootful Docker with `runsc` inside the dedicated
+VM enforces the same limit. Which combination is accepted for business inputs
+is an open decision in [the sandbox contract](../plan/sandbox.md).
 
 ## Build and pin the image
+
+On a development VM without a registry, push the built image to a temporary
+`registry:2` container bound to `127.0.0.1:5000` to obtain an immutable
+`repository@sha256:` reference, then stop the registry; the supervisor never
+pulls.
 
 1. Resolve and verify the immutable, architecture-specific digest of the Playwright Python
    base image matching [sandbox.Dockerfile](../../deploy/sandbox.Dockerfile). Supply the whole
@@ -166,20 +194,6 @@ Readiness and dry-run checks inspect operator configuration and certificate-file
 only. They make no connection and do not perform DNS lookup or TLS negotiation. A readable
 configuration is not evidence that the remote supervisor is reachable or accepted for use.
 Run the real pipeline and transport checks before enabling the production acceptance assertion.
-
-For an isolated development verification, the repeatable manual transport probes use
-short-lived synthetic certificates and remove their private keys afterward:
-
-```sh
-PYTHONPATH=server:cli:server/tests .venv/bin/python data/work/sandbox-verification/runtime/mtls_probe.py
-PYTHONPATH=server:cli:server/tests .venv/bin/python data/work/sandbox-verification/runtime/mtls_memory_probe.py
-```
-
-The loopback probe exercises the real client/supervisor connection with a synthetic container
-backend; if binding is prohibited, it records a skip. The MemoryBIO probe uses actual TLS
-handshakes without network sockets to check certificates, leaf pins, hostnames and protocol
-version. Neither replaces real container or dedicated-node deployment acceptance. Probe
-scripts and outputs are verification artifacts, not installed production entrypoints.
 
 ## Exercise synthetic development mode
 

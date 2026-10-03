@@ -17,7 +17,8 @@ P03 Browser、A01，首先服务 B06 原型渲染和 B04 网页/白皮书采集�
 | 无网络执行、独立验证与清理 | 已实施运行时适配，待真实验收 | Docker CLI 后端与测试假后端；默认关闭。测试开关与部署准备见[运行时指南](../guides/sandbox-runtime.md) |
 | 厂家代理与来源回执 | 已实施 | 精确 URL 允许名单、固定 IP/TLS、持久单节点配额、拒绝摘要与归档；见 [sandbox-fetch.md](../notes/sandbox-fetch.md) |
 | 控制通道 | 已实施，待实际节点验收 | 本地多 UID Unix socket；远程 TLS 1.3 双向证书验证、主机名校验与双端叶证书指纹固定。证书不进入容器 |
-| 真实隔离与攻击验收 | 待执行 | 真实容器测试默认跳过；假后端通过不代表网络/逃逸验收通过 |
+| 真实隔离与攻击验收 | 待执行 | macOS Colima 开发 VM 上 runc 合成模式的真实管道（mTLS、渲染与独立验证容器）已跑通；runsc 组合待下方决定后验收 |
+| 运行时组合（待定） | 待决定 | gVisor 在 rootless Docker 下无法施加 cgroup 限额（报 systemd 权限错误，`--ignore-cgroups` 时 64 MiB 容器可分配 300 MiB）；rootful Docker + runsc 在专用 VM 内可施加限额。需在“rootful + runsc”“rootless + runc”“rootless + runsc 无限额”中选定，见[运行时指南](../guides/sandbox-runtime.md#prepare-a-macos-colima-development-vm) |
 | Evidence/Card、生成模型、agent 编排 | 未实施，沿用相邻契约 | 本流提供已生成 HTML 的渲染和公开来源原始产物，不代行人工确认 |
 
 实施时收敛的决定：
