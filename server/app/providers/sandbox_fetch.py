@@ -7,6 +7,7 @@ import hashlib
 import io
 import ipaddress
 import json
+import os
 import re
 import socket
 import sqlite3
@@ -151,11 +152,27 @@ class URLRule(BaseModel):
         return self
 
 
+# Development nodes only: a policy may admit every public HTTPS URL. Canonicalization,
+# public-address DNS checks, budgets and content rules still apply to each request.
+DEV_OPEN_EGRESS_ENV = "BID_SANDBOX_DEV_OPEN_EGRESS"
+# A local fake-IP proxy answers DNS from the RFC 2544 benchmark range and routes the
+# connection by hostname; only an open development policy accepts these answers.
+_FAKE_IP_RANGE = ipaddress.ip_network("198.18.0.0/15")
+
+
+def _dev_proxy_address(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value) in _FAKE_IP_RANGE
+    except ValueError:
+        return False
+
+
 class FetchPolicy(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
     revision: str = Field(min_length=1, max_length=100, pattern=r"^[a-zA-Z0-9_.-]+$")
-    main_urls: tuple[str, ...] = Field(min_length=1, max_length=200)
-    rules: tuple[URLRule, ...] = Field(min_length=1, max_length=1000)
+    main_urls: tuple[str, ...] = Field(default=(), max_length=200)
+    rules: tuple[URLRule, ...] = Field(default=(), max_length=1000)
+    open_public_https: bool = False
 
     @model_validator(mode="after")
     def normalize(self) -> FetchPolicy:
@@ -163,13 +180,23 @@ class FetchPolicy(BaseModel):
         urls = [rule.url for rule in self.rules]
         if len(set(urls)) != len(urls) or any(url not in urls for url in self.main_urls):
             raise ValueError("invalid policy URL set")
+        if self.open_public_https:
+            if self.main_urls or self.rules:
+                raise ValueError("an open development policy lists no URLs")
+        elif not self.main_urls or not self.rules:
+            raise ValueError("an exact policy needs main URLs and rules")
         return self
 
     @property
     def sha256(self) -> str:
         return hashlib.sha256(self.model_dump_json().encode()).hexdigest()
 
+    def admits_main(self, url: str) -> bool:
+        return self.open_public_https or url in self.main_urls
+
     def allows(self, url: str, method: str) -> bool:
+        if self.open_public_https:
+            return method in {"GET", "HEAD"}
         return any(rule.url == url and method in rule.methods for rule in self.rules)
 
 
@@ -211,6 +238,10 @@ class PolicySource:
             revisions = [policy.revision for policy in result.policies]
             if len(set(revisions)) != len(revisions):
                 raise ValueError
+            if any(policy.open_public_https for policy in result.policies) and (
+                os.environ.get(DEV_OPEN_EGRESS_ENV) != "1"
+            ):
+                raise ValueError
             return result
         except (OSError, ValueError, ValidationError, FetchDenied):
             raise FetchDenied("policy_invalid") from None
@@ -237,6 +268,12 @@ class PolicySource:
             and policy.revision not in value.revoked_revisions
             and (active_revision is None or policy.revision == active_revision)
         ]
+        if not matches and active_revision is None:
+            matches = [
+                policy
+                for policy in value.policies
+                if policy.open_public_https and policy.revision not in value.revoked_revisions
+            ]
         if len(matches) != 1:
             raise FetchDenied("policy_selection_denied")
         return matches[0]
@@ -438,7 +475,7 @@ class FetchBroker:
     def entry_receipt(self, source_url: str) -> FetchReceipt:
         """Prove one completed GET chain for the selected entry, without reopening the run."""
         source = canonical_url(source_url)
-        if source not in self.policy.main_urls or self._denials:
+        if not self.policy.admits_main(source) or self._denials:
             raise FetchDenied("entry_fetch_denied")
         roots = [
             receipt
@@ -572,7 +609,11 @@ class FetchBroker:
     ) -> tuple[FetchPayload, str | None]:
         target = httpx.URL(url)
         answers = await self.resolver(target.host)
-        if not answers or any(not _public_address(answer) for answer in answers):
+        if not answers or any(
+            not _public_address(answer)
+            and not (self.policy.open_public_https and _dev_proxy_address(answer))
+            for answer in answers
+        ):
             raise FetchDenied("dns_denied")
         origin = str(target.copy_with(path="/", query=None)).rstrip("/")
         async with self.quota.acquire(self.org_id, origin):

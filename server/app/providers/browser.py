@@ -25,8 +25,6 @@ from app.providers.sandbox_runtime import (
 
 ERROR_CODES = frozenset(
     {
-        "blank_capture",
-        "browser_launch_failed",
         "archive_byte_limit",
         "artifact_hash_mismatch",
         "artifact_limit",
@@ -34,6 +32,8 @@ ERROR_CODES = frozenset(
         "artifact_sequence",
         "artifact_set_mismatch",
         "authentication_page_denied",
+        "blank_capture",
+        "browser_launch_failed",
         "bundle_not_requested",
         "byte_limit",
         "cleanup_pending",
@@ -91,6 +91,7 @@ ERROR_CODES = frozenset(
         "response_stream_invalid",
         "run_closed",
         "run_concurrency_limit",
+        "runner_unexpected_failure",
         "sandbox_attempt_exists",
         "sandbox_budget_exhausted",
         "sandbox_caller_disconnected",
@@ -125,6 +126,8 @@ ERROR_CODES = frozenset(
         "sandbox_synthetic_only",
         "source_http_error",
         "source_login_or_challenge",
+        "source_navigation_failed",
+        "source_timeout",
         "stream_limit",
         "unexpected_fetch",
         "unexpected_output",

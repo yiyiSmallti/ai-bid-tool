@@ -6,6 +6,18 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：开发节点放开厂家取证网络与沙箱 runner 错误码
+
+- 抓取策略新增仅限开发节点的 `open_public_https` 修订：节点设置 `BID_SANDBOX_DEV_OPEN_EGRESS=1` 时允许任意
+  公网 HTTPS 地址，仍执行 URL 规范化、凭据参数拒绝、公网地址校验与字节预算；另接受本机 fake-IP 代理的
+  `198.18.0.0/15` 应答。未设置该开关时策略文件整体无效。步骤见
+  [sandbox-runtime.md](guides/sandbox-runtime.md#open-vendor-egress-on-a-development-node)。
+- 修复沙箱 runner 遇到浏览器库异常时直接退出、被报告为 `invalid_frame`：导航超时、导航失败与其他未预期
+  异常分别以 `source_timeout`、`source_navigation_failed`、`runner_unexpected_failure` 报告；厂家页面导航
+  期限改为按运行预算计算。镜像已重建并重新固定摘要。
+- 在真实 gVisor 节点上完成新华三官网白皮书 PDF 的采集、入库全链路。网页采集仍受逐个转发请求过慢和
+  gVisor 下 Chromium 自身沙箱崩溃限制，见 [sandbox-execution.md](notes/sandbox-execution.md#pitfalls)。
+
 ## 2026-10-03：厂家网页与白皮书截图证据
 
 - `screenshot prepare --sandbox-artifact` 下载沙箱 `vendor_capture` 运行的网页或 PDF 页图并按本机计划处理；

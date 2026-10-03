@@ -242,6 +242,35 @@ Run the broader attack and lifecycle acceptance in
 production acceptance assertion. Preserve packet counters, runtime identity, resource peaks,
 container inventories, hashes and machine-readable results outside `docs/`.
 
+## Open vendor egress on a development node
+
+A local development node may let vendor captures fetch any public HTTPS URL instead of
+maintaining an exact allow list. Never configure this on a production node.
+
+1. Write a policy file containing only an open revision, readable by the worker alone:
+
+   ```json
+   {"policies": [{"revision": "dev-open-v1", "open_public_https": true}], "revoked_revisions": []}
+   ```
+
+2. Create a private (mode 0700) directory for the quota ledger.
+3. In the worker and API environment, set `BID_SANDBOX_POLICY_FILE` to that file,
+   `BID_SANDBOX_FETCH_QUOTA` to a ledger path inside the directory, and
+   `BID_SANDBOX_DEV_OPEN_EGRESS=1`, then restart both processes. Without the flag, an
+   open revision makes the policy file invalid and every capture fails closed.
+
+Run the opt-in check against a public page and a public PDF of your choice:
+
+```sh
+BID_SANDBOX_RUNTIME_TEST=1 BID_VENDOR_LIVE_PDF_URL=https://... \
+  uv run pytest server/tests/test_vendor_screenshots.py -k real_sandbox
+```
+
+It captures, downloads, prepares and ingests each page through the API and writes the
+page PNGs and archive summary to `data/work/vendor-live`. Set `BID_VENDOR_LIVE_WEB_URL`
+to include a web page; see the pitfalls in
+[sandbox-execution.md](../notes/sandbox-execution.md#pitfalls) for its current limits.
+
 ## Verify lifecycle and accounting
 
 1. Submit a run and inspect the supervisor's dedicated daemon inventory for separate

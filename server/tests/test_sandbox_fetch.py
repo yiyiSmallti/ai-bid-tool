@@ -351,3 +351,88 @@ def test_operator_policy_selection_and_duplicate_revision(tmp_path):
     source.path.write_text(json.dumps(value))
     with pytest.raises(FetchDenied, match="policy_invalid"):
         source.select(MAIN)
+
+
+def open_source(tmp_path):
+    path = tmp_path / "open-policy.json"
+    path.write_text(
+        json.dumps(
+            {
+                "policies": [{"revision": "dev-open-v1", "open_public_https": True}],
+                "revoked_revisions": [],
+            }
+        )
+    )
+    return PolicySource(path)
+
+
+def open_broker(tmp_path, handler, *, resolver=public_dns):
+    source = open_source(tmp_path)
+    return source, FetchBroker(
+        source,
+        "dev-open-v1",
+        uuid4(),
+        quota=SQLiteFetchQuota(tmp_path / "quota.sqlite3"),
+        transport=httpx.MockTransport(handler),
+        resolver=resolver,
+        bundle=True,
+    )
+
+
+async def test_open_development_policy_requires_the_node_flag(tmp_path, monkeypatch):
+    monkeypatch.delenv("BID_SANDBOX_DEV_OPEN_EGRESS", raising=False)
+    source = open_source(tmp_path)
+    with pytest.raises(FetchDenied) as refused:
+        source.select("https://any-vendor.example/page")
+    assert refused.value.code == "policy_invalid"
+    monkeypatch.setenv("BID_SANDBOX_DEV_OPEN_EGRESS", "0")
+    with pytest.raises(FetchDenied):
+        source.check("dev-open-v1")
+
+
+async def test_open_development_policy_keeps_address_and_url_gates(tmp_path, monkeypatch):
+    monkeypatch.setenv("BID_SANDBOX_DEV_OPEN_EGRESS", "1")
+
+    def handler(request):
+        return httpx.Response(
+            200, headers={"content-type": "text/html"}, stream=Chunks([b"<html>public</html>"])
+        )
+
+    source, fetch = open_broker(tmp_path, handler)
+    page = "https://any-vendor.example/page"
+    assert source.select(page).open_public_https
+    result = await fetch.fetch(page)
+    assert result.status == 200 and fetch.entry_receipt(page).status == 200
+    other = await fetch.fetch("https://cdn.other.example/app.css")
+    assert other.status == 200
+    for url in ("http://any-vendor.example/page", page + "?token=canary"):
+        with pytest.raises(FetchDenied):
+            await fetch.fetch(url)
+
+    async def private_dns(host):
+        return ("10.0.0.8",)
+
+    (tmp_path / "private").mkdir()
+    _, private = open_broker(tmp_path / "private", handler, resolver=private_dns)
+    with pytest.raises(FetchDenied):
+        await private.fetch(page)
+
+    async def fake_ip_dns(host):
+        return ("198.18.2.77",)
+
+    (tmp_path / "proxy").mkdir()
+    _, proxied = open_broker(tmp_path / "proxy", handler, resolver=fake_ip_dns)
+    assert (await proxied.fetch(page)).status == 200
+    exact = broker(tmp_path / "proxy", handler, resolver=fake_ip_dns)
+    with pytest.raises(FetchDenied) as denied:
+        await exact.fetch(MAIN)
+    assert denied.value.code == "dns_denied"
+
+    exact = {"revision": "x", "open_public_https": True, "main_urls": [MAIN]}
+    from app.providers.sandbox_fetch import FetchPolicy
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        FetchPolicy.model_validate({**exact, "rules": [{"url": MAIN}]})
+    with pytest.raises(ValidationError):
+        FetchPolicy.model_validate({"revision": "x"})

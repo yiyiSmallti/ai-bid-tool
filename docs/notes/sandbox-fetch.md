@@ -23,7 +23,13 @@ rule contains one complete HTTPS `url` and a `methods` array limited to `GET` an
 ```
 
 Keys are canonicalized by the same URL parser; duplicate canonical keys are
-invalid. Each mapped revision must exist, list that URL as a main URL, and not be
+invalid.
+
+A development node may instead define one revision with `open_public_https: true`
+and no URLs. It admits every canonical public HTTPS URL as a main URL or resource.
+The file is valid only while the node environment sets
+`BID_SANDBOX_DEV_OPEN_EGRESS=1`; otherwise every load fails with `policy_invalid`.
+An exact policy match still takes precedence over the open revision. Each mapped revision must exist, list that URL as a main URL, and not be
 revoked. Without an explicit selection, exactly one non-revoked policy must match.
 This selector is operator configuration and has no client parameter or edit API.
 
@@ -78,7 +84,9 @@ revision; `revoked_revisions` explicitly stops its use. There is no public polic
 editor.
 
 All resolved addresses must be globally routable unicast addresses. Mixed public
-and private answers are denied. The transport connects to a validated numeric IP,
+and private answers are denied. An open development policy additionally accepts
+answers in `198.18.0.0/15`, the range a local fake-IP proxy uses before routing
+the connection by hostname; exact policies never do. The transport connects to a validated numeric IP,
 sets the original `Host` and TLS SNI, verifies the certificate, disables environment
 proxies, and creates no reusable connection pool. HTTP transport performs no retry
 or redirect on its own. Every redirected URL passes the same policy and DNS path.
