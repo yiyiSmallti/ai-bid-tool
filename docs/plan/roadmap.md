@@ -94,7 +94,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | M01 记忆存储 | 未实施 | 四层记忆 CRUD、候选审批、失效 | 全局来源待定 |
 | M02 记忆检索 | 未实施 | 强制 `org_id` 与作用域过滤、优先级 | 向量依赖 Embedding |
 | M03 自动候选 | 未实施 | 驳回/修改生成 candidate、评测样本 | 依赖 B07 |
-| U01 看板 | 单位后台招标任务、解析抽取、响应卡审阅、起草预览与初稿页面；机制见 [org-console.md](../notes/org-console.md) | 付费起草绑定、资源/配置/记忆管理页 | 起草绑定契约 |
+| U01 看板 | 单位后台招标任务、解析抽取、响应卡审阅、起草预览与初稿页面；机制见 [org-console.md](../notes/org-console.md) | 资源/配置/记忆管理页 | 新契约 |
 | U02 卡片/SSE | API/CLI 卡片修订与状态迁移 | 看板交互、SSE | 界面契约 |
 | A01 内置 agent | 未实施 | CLI 工具映射、无确认/导出权限、状态恢复、预算询问；执行环境边界见 [sandbox.md](sandbox.md) | 编排依赖 API |
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记、可选 `mcp serve` | 新接口确认 |

@@ -133,7 +133,9 @@ class JobExecution:
             raise self.stopped
         call_id = uuid4()
         async with self.db.transaction(self.org_id) as session:
-            await self.owned_job(session)
+            job = await self.owned_job(session)
+            submitted_cap = (job.result or {}).get("submission", {}).get("max_charge")
+            user_cap = Decimal(submitted_cap) if submitted_cap is not None else None
             if self.before_admit is not None:
                 await self.before_admit(session)
             count, spent = (
@@ -154,7 +156,12 @@ class JobExecution:
             ).one()
             if count >= self.call_ceiling:
                 raise self.stop("job_call_limit_exceeded", "Job vendor-call ceiling reached")
-            if spent + reserved_charge > self.settings.job_max_charge:
+            if user_cap is not None and user_cap < self.settings.job_max_charge:
+                if spent + reserved_charge > user_cap:
+                    raise self.stop(
+                        "spend_cap_reached", "The requested charge cap cannot cover another call"
+                    )
+            elif spent + reserved_charge > self.settings.job_max_charge:
                 raise self.stop(
                     "job_charge_limit_exceeded", "Job charge ceiling cannot cover another call"
                 )

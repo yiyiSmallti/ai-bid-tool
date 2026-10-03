@@ -2,6 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 import { display, errorText, orgRequest } from "../org.js";
+import JobPanel from "./JobPanel.vue";
 
 const props = defineProps({
   task: { type: Object, required: true },
@@ -23,6 +24,10 @@ const preview = ref(null);
 const warnings = ref([]);
 const error = ref("");
 const redactionOverride = ref(null);
+const capInput = ref("");
+const authorized = ref(false);
+const running = ref(false);
+const runJobId = ref("");
 
 const extractionJobId = computed(() => props.job?.job_id ?? props.job?.id ?? "");
 const documentId = computed(() => props.job?.document_id ?? "");
@@ -58,11 +63,36 @@ const redactionLabels = {
 const blockerLabels = {
   insufficient_balance: "单位余额不足",
   job_charge_limit_exceeded: "估算首批扣款超过单作业上限",
+  spend_cap_below_first_call: "填写的扣款上限低于首个调用的预留金额",
 };
+
+const capValue = computed(() => {
+  const text = capInput.value.trim();
+  if (!/^\d+(\.\d{1,8})?$/.test(text)) return null;
+  return Number(text) > 0 ? text : null;
+});
+const canRunPaid = computed(
+  () =>
+    !!preview.value &&
+    !previewIsStale.value &&
+    !preview.value.admission_blocker &&
+    (preview.value.selected_requirements?.length ?? 0) > 0 &&
+    capValue.value != null &&
+    authorized.value &&
+    canOperate.value &&
+    !running.value,
+);
+
+function defaultCap(estimate) {
+  // Rounded up to whole cents so the default never sits below the first-pass estimate.
+  const value = Number(estimate ?? 0);
+  return (Math.max(0.01, Math.ceil(value * 100) / 100)).toFixed(2);
+}
 
 function invalidatePreview() {
   preview.value = null;
   warnings.value = [];
+  authorized.value = false;
 }
 
 function previewSignature() {
@@ -152,11 +182,44 @@ async function runPreview() {
     }
     preview.value = result.data;
     warnings.value = result.warnings ?? [];
+    capInput.value = defaultCap(result.data.estimated_charge);
   } catch (exc) {
     error.value = errorText(exc);
   } finally {
     previewing.value = false;
   }
+}
+
+async function runPaid() {
+  if (!canRunPaid.value) return;
+  error.value = "";
+  running.value = true;
+  try {
+    const body = {
+      extraction_job_id: extractionJobId.value,
+      expected_input_hash: preview.value.input_hash,
+      max_charge: capValue.value,
+    };
+    if (props.requirementIds != null) body.requirement_ids = [...props.requirementIds];
+    if (reasoning.value) body.reasoning = reasoning.value;
+    const result = await orgRequest("POST", `/tasks/${props.task.id}/cards/generations`, body);
+    runJobId.value = result.data.job_id;
+    invalidatePreview();
+  } catch (exc) {
+    if (exc.code === "generation_input_changed") {
+      invalidatePreview();
+      error.value = "预检后输入、模型或价格已变化，本次未提交也未扣费，请重新预检。";
+    } else {
+      error.value = errorText(exc);
+    }
+  } finally {
+    running.value = false;
+  }
+}
+
+function generationFinished(job) {
+  emit("changed", { kind: "generation", job });
+  window.dispatchEvent(new CustomEvent("bid:task-cards-changed", { detail: { taskId: props.task.id } }));
 }
 
 async function toggleRedaction() {
@@ -338,12 +401,26 @@ defineExpose({ invalidate: invalidatePreview });
       </p>
 
       <div class="paid-gate">
-        <button class="primary" type="button" disabled>付费运行待预览绑定契约</button>
+        <label>
+          本次平台扣款上限（{{ preview.billing_currency }}）
+          <input v-model="capInput" inputmode="decimal" maxlength="20" :disabled="previewIsStale" />
+        </label>
+        <p v-if="capInput && capValue == null" class="error">请输入大于 0、最多 8 位小数的金额。</p>
+        <label class="authorize">
+          <input v-model="authorized" type="checkbox" :disabled="previewIsStale || !!preview.admission_blocker" />
+          我已核对上方外发范围与遮挡结果，授权按本次预检运行
+        </label>
+        <button class="primary" type="button" :disabled="!canRunPaid" @click="runPaid">
+          {{ running ? "提交中…" : "确认并付费运行" }}
+        </button>
         <p class="hint">
-          运行入口须先由服务端绑定 input hash、模型与价格修订及用户可接受的扣款上限。当前预检只提供估算，不能作为付费提交条件。
+          服务端会核对本次预检的输入标识（含输入、模型与价格修订），不一致则拒绝且不扣费。累计扣款达到上限即停止后续调用，已完成部分保存为部分结果。
+          上限只约束平台扣费；单位自带密钥时，厂商账单不受此上限约束。授权运行不会确认任何响应或材料。
         </p>
       </div>
     </div>
+
+    <JobPanel v-if="runJobId" :job-id="runJobId" :writable="canOperate" @finished="generationFinished" />
   </section>
 </template>
 
@@ -373,6 +450,9 @@ h3, h4 { margin: 0 0 4px; }
 .warning-list { color: #865b00; padding-left: 20px; }
 .paid-gate { background: var(--surface); border-radius: 8px; padding: 12px; margin-top: 14px; }
 .paid-gate button { margin-top: 10px; }
+.paid-gate label { display: block; }
+.paid-gate .authorize { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.paid-gate .authorize input { width: auto; }
 .paid-gate p { margin-bottom: 0; }
 details { margin-top: 10px; }
 summary { cursor: pointer; }

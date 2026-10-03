@@ -3881,6 +3881,26 @@
               "type": "text"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "expect_input_hash",
+              "options": [
+                "--expect-input-hash"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "max_charge",
+              "options": [
+                "--max-charge"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "dry_run",
@@ -3939,10 +3959,40 @@
                 "title": "Dry Run",
                 "type": "boolean"
               },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Input Hash"
+              },
               "extraction_job_id": {
                 "format": "uuid",
                 "title": "Extraction Job Id",
                 "type": "string"
+              },
+              "max_charge": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Max Charge"
               },
               "reasoning": {
                 "anyOf": [
