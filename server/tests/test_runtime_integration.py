@@ -878,3 +878,52 @@ async def test_real_background_worker_and_both_cli_modes(
                 await process.wait()
         worker_log.close()
         api_log.close()
+
+
+async def test_unexpected_server_error_is_a_result_in_both_modes(
+    tenants, real_queue_schema, tmp_path, monkeypatch, capsys
+):
+    import app.api.main as api_main
+    from bid_cli.main import main
+
+    async def failing_login(*args, **kwargs):
+        raise RuntimeError("synthetic internal detail")
+
+    monkeypatch.setattr(api_main, "login", failing_login)
+    monkeypatch.setenv("BID_DATA_DIR", str(tmp_path / "files"))
+    monkeypatch.setenv("BID_PASSWORD", PASSWORD)
+    application = api_main.create_app()
+    async with (
+        application.router.lifespan_context(application),
+        httpx.AsyncClient(
+            transport=httpx.ASGITransport(app=application, raise_app_exceptions=False),
+            base_url="http://test",
+        ) as http,
+    ):
+        response = await http.post(
+            "/auth/login",
+            json={
+                "email": "a@example.test",
+                "password": PASSWORD,
+                "org_id": str(tenants["orgs"][0]),
+            },
+        )
+    remote = response.json()
+    assert response.status_code == 500 and "synthetic internal detail" not in response.text
+    assert set(remote) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
+    assert remote["data"]["error"] == {
+        "code": "internal_error",
+        "message": "Unexpected server error",
+        "exit_code": 4,
+    }
+
+    arguments = ["--mode", "local", "--state", str(tmp_path / "local.enc"), "login"]
+    arguments += ["--email", "a@example.test", "--org", str(tenants["orgs"][0]), "--json"]
+    with pytest.raises(SystemExit) as exit_info:
+        await asyncio.to_thread(main, arguments)
+    captured = capsys.readouterr()
+    local = json.loads(captured.out)
+    assert exit_info.value.code == 4 and "Traceback" not in captured.err
+    assert "synthetic internal detail" not in captured.out + captured.err
+    assert local["ok"] is False and local["command"] == "login"
+    assert local["data"]["error"] == remote["data"]["error"]

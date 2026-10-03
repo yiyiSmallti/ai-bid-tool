@@ -272,6 +272,14 @@ def create_app(
             ),
         )
 
+    @app.exception_handler(Exception)
+    async def unexpected_error(request: Request, error: Exception):
+        # Starlette re-raises after this response, so the server log keeps the traceback;
+        # the client only learns that the request failed, never the exception text.
+        return error_response(
+            request, ServiceError("internal_error", "Unexpected server error", 500, 4)
+        )
+
     app.include_router(
         create_platform_router(settings, db, crypto, password_attempts, llm_transport)
     )

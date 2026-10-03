@@ -1502,6 +1502,24 @@ def main(args: list[str] | None = None):
         )
     except KeyboardInterrupt:
         raise SystemExit(3) from None
+    except Exception as exc:
+        # Only the exception type is reported: its text can carry local data.
+        emit(
+            Result(
+                ok=False,
+                command=command_name(arguments),
+                data={
+                    "error": {
+                        "code": "internal_error",
+                        "message": f"Unexpected CLI error ({type(exc).__name__})",
+                        "exit_code": 4,
+                    }
+                },
+            ).model_dump(mode="json"),
+            command_name(arguments),
+            "--json" in arguments,
+            4,
+        )
 
 
 register_screenshot_commands(app)

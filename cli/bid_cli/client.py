@@ -142,7 +142,10 @@ class Client:
             async with (
                 application.router.lifespan_context(application),
                 httpx.AsyncClient(
-                    transport=httpx.ASGITransport(app=application), base_url="http://local"
+                    # Unexpected server errors arrive as the same 500 Result a remote
+                    # server sends instead of propagating into the CLI as a traceback.
+                    transport=httpx.ASGITransport(app=application, raise_app_exceptions=False),
+                    base_url="http://local",
                 ) as client,
             ):
                 yield client
