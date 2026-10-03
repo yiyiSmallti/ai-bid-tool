@@ -28,14 +28,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 | 位置 | 问题 |
 | --- | --- |
-| [parsing.py](../../server/app/services/parsing.py) `read_pdf` | 先把全部扫描页渲染成 PNG 再 OCR，页数上限内可能占用 GB 级内存；`validate_document` 对同一文件执行两次 |
-| [evidence_sources.py](../../server/app/services/evidence_sources.py) `create_source` | 持有任务行锁期间读存储、渲染（最长 20 秒）、写存储；超时线程不会终止 |
-| [cli/bid_cli/main.py](../../cli/bid_cli/main.py) `main` | 本地模式下的未知服务端异常输出 traceback、退出码 1；服务端没有通用异常处理，500 响应不符合 Result 结构 |
 | [security.py](../../server/app/core/security.py) `Secrets` | 一个 Fernet 密钥同时用于会话、下载签名、令牌密文和文件加密，无轮换；ApiToken 另存可解密的 `encrypted_secret` |
-| [conftest.py](../../server/tests/conftest.py) `admin_engine` | 缺 `BID_TEST_ADMIN_URL` 时数据库测试被跳过而非失败 |
-| [auth.py](../../server/app/services/auth.py) `login` | 密码正确但非成员返回 404、密码错误返回 401，可区分密码是否正确；已有[共享认证限速](../notes/platform-console.md#password-admission-and-totp-consumption) |
-| [services/platform.py](../../server/app/services/platform.py) `test_model` | 模型测试在数据库事务内发起真实调用，等待期间占用连接 |
-| [processor.py](../../server/app/jobs/processor.py) 的 extract 分支 | 抽取提交后切换默认模型可能以旧缓存键记录新模型结果；模型卡片起草已固定并核对目录身份 |
 | [api/main.py](../../server/app/api/main.py) | 所有路由在 `create_app` 内，上传、作业、令牌逻辑没有进入 `services/`；五个版本化资源服务高度重复 |
 
 ## 覆盖矩阵：地基、权限和数据模型

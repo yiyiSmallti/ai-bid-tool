@@ -1,7 +1,15 @@
 name: check
-on: [push, pull_request]
+# Pull requests and the protected main branch; a branch push alone does not run twice.
+on:
+  pull_request:
+  push:
+    branches: [main]
 permissions:
   contents: read
+# A newer push to the same pull request supersedes the running check.
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -20,11 +28,27 @@ jobs:
       BID_DATABASE_PASSWORD: synthetic-ci-test-only
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Required checks must still report, so a Markdown-only change succeeds without the suite.
+      - name: Detect changes beyond Markdown
+        id: changes
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if git diff --quiet "$base" HEAD -- . ':(exclude)*.md' 2>/dev/null; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: astral-sh/setup-uv@v6
+        if: steps.changes.outputs.code == 'true'
         with:
           version: "0.11.7"
+          enable-cache: true
       - run: uv sync --frozen --extra dev --python 3.12
+        if: steps.changes.outputs.code == 'true'
       - name: Create ephemeral test encryption configuration
+        if: steps.changes.outputs.code == 'true'
         run: |
           uv run python - <<'PY'
           import os
@@ -34,15 +58,30 @@ jobs:
               handle.write("BID_CLI_KEY=" + Fernet.generate_key().decode() + "\n")
           PY
       - uses: dtolnay/rust-toolchain@stable
+        if: steps.changes.outputs.code == 'true'
         with:
           components: rustfmt, clippy
+      - uses: actions/cache@v4
+        if: steps.changes.outputs.code == 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            data/work/build/screenshot-renderer
+          key: renderer-${{ runner.os }}-${{ hashFiles('stamp/Cargo.lock', 'stamp/Cargo.toml') }}
       - name: Build the screenshot renderer so image tests run instead of skipping
+        if: steps.changes.outputs.code == 'true'
         run: CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" sh scripts/build_screenshot_renderer.sh
       - run: uv run ruff check server cli scripts evals
+        if: steps.changes.outputs.code == 'true'
       - run: uv run ruff format --check server cli scripts evals
+        if: steps.changes.outputs.code == 'true'
       - run: uv run pyright
+        if: steps.changes.outputs.code == 'true'
       - run: uv run pytest -q
+        if: steps.changes.outputs.code == 'true'
       - run: uv build
+        if: steps.changes.outputs.code == 'true'
   web:
     runs-on: ubuntu-latest
     defaults:

@@ -44,7 +44,8 @@ dimensions use the existing audit actor/action/time index. The routes use
 `request.client.host`, never parse `X-Forwarded-For` themselves, and keep the
 account limit when a client address is unavailable. Missing, inactive and
 setup-only accounts follow the same failure and dummy PBKDF2 path. Invalid
-credentials return the same `401 invalid_login`; limits return the same
+credentials, and a correct password for an org the account does not belong
+to, return the same `401 invalid_login`; limits return the same
 `429 too_many_attempts`, without an identity-existence check.
 
 PostgreSQL transaction advisory locks are taken in source-then-account order

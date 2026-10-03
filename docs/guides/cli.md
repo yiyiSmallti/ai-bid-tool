@@ -307,6 +307,9 @@ and exit code meanings are fixed by the CLI contract in
 | 4 | Stop retrying; read the denied, missing, conflict, or integrity error. |
 | 5 | Keep the completed IDs and retry only the unfinished part. |
 
+An unexpected failure in the server or the CLI returns `internal_error` with
+exit 4; the exception text is not included.
+
 `task create --tender` exits 5 when the task is saved but the upload or
 dispatch fails. Reuse the returned task instead of creating another one.
 

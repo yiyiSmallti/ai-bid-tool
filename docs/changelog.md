@@ -6,6 +6,12 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：CI 用时与 main 分支保护
+
+- CI 只在拉取请求和 main 上运行，分支推送不再重复跑一遍；同一拉取请求的新推送取消旧运行。只改 Markdown
+  时两项必需检查照常报告成功但跳过测试与构建。缓存 uv 与 Cargo 下载及渲染器构建。
+- main 设为受保护分支：只能经拉取请求合并，`python` 与 `web` 检查须通过，禁止强推与删除，管理员同样受限。
+
 ## 2026-10-03：自托管厂家来源搜索
 
 - 新增 `bid evidence search`、`evidence candidates`、`evidence adopt`：预检显示只含厂家与型号的检索词及输入

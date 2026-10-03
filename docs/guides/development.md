@@ -38,8 +38,8 @@ uv run python scripts/test_runtime.py stop --root /tmp/ai-bid-test
 a local shell without tracing. Tests refuse any database whose name lacks the
 `bid_test` prefix, and seed only synthetic users and documents.
 
-Without `BID_TEST_ADMIN_URL`, the database-backed tests are skipped rather
-than failed, so a green run without the environment file proves little.
+Without `BID_TEST_ADMIN_URL`, every database-backed test fails; tests that
+need no database still run.
 [.github/workflows/check.yml](../../.github/workflows/check.yml) runs the same
 checks in CI.
 

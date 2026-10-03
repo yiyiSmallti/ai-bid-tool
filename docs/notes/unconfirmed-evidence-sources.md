@@ -17,20 +17,25 @@ same authenticated preview ID; it is never inherited by a new selection.
 
 ## How it works
 
-Lock the task in the same order as certificate selection; validate scope intersections
-and active membership before reading any parent. Join immutable snapshot/revision/
-file identities and check original length/SHA/descriptor. Render the actual whole
-PDF page at150dpi RGB without alpha, preserving rotation, using existing PyMuPDF.
+Validate scope intersections and active membership before reading any parent. Join
+immutable snapshot/revision/file identities and check original length/SHA/
+descriptor. Render the actual whole PDF page at150dpi RGB without alpha, preserving rotation, using existing PyMuPDF.
 Check projected and real dimensions (8192px/side,20M pixels), PNG byte limit (40MiB
 or lower configured limit), and actual output. A pure CPU thread is awaited with a
 20second render deadline; only a successful await reaches any storage/DB work.
+Reading and rendering run without the task lock, at most two renders per process; a
+timed-out render keeps its slot until its thread returns, and a full pool fails with
+retryable `source_render_busy`. The task is then locked in the same order as
+certificate selection and the snapshot and duplicate checks are repeated, so a
+selection replaced during rendering fails with `inactive_snapshot` and writes nothing.
 
 Store encrypted immutable bytes under org/{org_id}/evidence-source/{source_id}/SHA.png
 using existing Storage. Save archive/audit atomically; commit precedes response.
 Task locking plus unique(org,snapshot,page,profile) serializes duplicate requests.
-A repeated source has the same ID and does no object reads/renders/writes or new
-creation audit. New page/new snapshot is independent. UTC output normalizes database
-timezone presentation. Active status is read from the original snapshot, not copied.
+A repeated source has the same ID and no object write or new creation audit; one
+already archived before the request is not read or rendered either. New page/new
+snapshot is independent. UTC output normalizes database timezone presentation.
+Active status is read from the original snapshot, not copied.
 
 Migration0009 adds NOTNULL org_id/FORCERLS and exact composite task/snapshot/certificate/
 revision/file/creator FKs. An invoker page-bounds trigger follows caller RLS; SQL
