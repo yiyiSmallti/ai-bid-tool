@@ -1,6 +1,7 @@
 """Screenshot CLI commands and local, privacy-first preparation."""
 
 import asyncio
+import hashlib
 import os
 from pathlib import Path
 from typing import Annotated, Any
@@ -18,6 +19,8 @@ from app.schemas.screenshot_contracts import (
     PNGDescriptor,
     PrototypeDecisionBatch,
     PrototypeDecisionPreviewInput,
+    PrototypeGenerateInput,
+    PrototypeSource,
     ScreenshotAnalyzeInput,
     ScreenshotAnnotate,
     ScreenshotIngest,
@@ -253,6 +256,52 @@ async def _read_certificate_preview(source_id: UUID) -> bytes:
     return content
 
 
+async def _read_prototype_source(prototype_run_id: UUID) -> bytes:
+    from bid_cli import main as cli
+
+    saved = cli.client().state.load()
+    shown = await cli.client().request("GET", f"/prototype-runs/{prototype_run_id}")
+    try:
+        data = shown["data"]
+        if data["id"] != str(prototype_run_id) or data["org_id"] != saved["org_id"]:
+            raise ValueError
+        expected = str(data["source_image_sha256"])
+    except (KeyError, TypeError, ValueError):
+        raise ServiceError(
+            "invalid_server_response", "Server returned invalid prototype metadata", 502, 4
+        ) from None
+    headers = {"Authorization": f"Bearer {saved['session']}", "X-Org-Id": saved["org_id"]}
+    content = bytearray()
+    try:
+        async with cli.client().transport() as transport:
+            async with transport.stream(
+                "GET",
+                f"/prototype-runs/{prototype_run_id}/source",
+                headers=headers,
+                follow_redirects=False,
+            ) as response:
+                if not response.is_success:
+                    raise ServiceError(
+                        "download_unavailable",
+                        "Prototype image download failed",
+                        response.status_code,
+                        3 if response.status_code >= 502 else 4,
+                    )
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > MAX_IMAGE_BYTES:
+                        raise ServiceError(
+                            "screenshot_integrity", "Prototype image exceeds 40 MiB", 502, 4
+                        )
+    except httpx.TransportError as exc:
+        raise ServiceError("server_unavailable", "Server is unavailable", 503, 3) from exc
+    if hashlib.sha256(content).hexdigest() != expected:
+        raise ServiceError(
+            "screenshot_integrity", "Downloaded prototype image failed integrity checks", 502, 4
+        )
+    return bytes(content)
+
+
 async def _download_rendition(rendition_id: UUID, output: Path) -> dict:
     from bid_cli import main as cli
     from bid_cli.client import new_output_path
@@ -304,8 +353,32 @@ def register(app: typer.Typer) -> None:
 
     screenshot_app = typer.Typer()
     decisions_app = typer.Typer()
+    ui_app = typer.Typer()
     app.add_typer(screenshot_app, name="screenshot")
+    app.add_typer(ui_app, name="ui")
     screenshot_app.add_typer(decisions_app, name="prototype-decisions")
+
+    @ui_app.command("mock")
+    def ui_mock_command(
+        task: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        dry_run: Annotated[bool, typer.Option()] = False,
+        retry: Annotated[bool, typer.Option()] = False,
+        wait: Annotated[bool, typer.Option()] = False,
+        timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 300,
+        json_output: cli.JsonOption = False,
+    ):
+        request = PrototypeGenerateInput.model_validate(
+            cli.input_contract(input, PrototypeGenerateInput)
+        )
+        values = request.model_dump(mode="json")
+        values["dry_run"], values["retry"] = request.dry_run or dry_run, request.retry or retry
+        request = PrototypeGenerateInput.model_validate(values)
+        body = cli.call(
+            "POST", f"/tasks/{task}/prototype-generations", json=request.model_dump(mode="json")
+        )
+        body, exit_code = _job_result(body, wait, request.dry_run, timeout)
+        cli.emit(body, "ui mock", json_output, exit_code)
 
     @screenshot_app.command("prepare")
     def prepare_command(
@@ -314,12 +387,13 @@ def register(app: typer.Typer) -> None:
         receipt: Annotated[Path, typer.Option()],
         file: Annotated[Path | None, typer.Option()] = None,
         source: Annotated[UUID | None, typer.Option()] = None,
+        prototype_run: Annotated[UUID | None, typer.Option()] = None,
         json_output: cli.JsonOption = False,
     ):
         from bid_cli.client import new_output_path
 
-        if (file is None) == (source is None):
-            raise _invalid("Give exactly one of --file or --source")
+        if [file, source, prototype_run].count(None) != 2:
+            raise _invalid("Give exactly one of --file, --source or --prototype-run")
         target, receipt_target = new_output_path(output), new_output_path(receipt)
         if target == receipt_target:
             raise _invalid("PNG and receipt need different new output paths")
@@ -330,6 +404,13 @@ def register(app: typer.Typer) -> None:
             if request.source.kind != "upload":
                 raise _invalid("--file requires an upload source in --input")
             content = _read_bounded(file, MAX_IMAGE_BYTES, "Screenshot input")
+        elif prototype_run is not None:
+            if (
+                not isinstance(request.source, PrototypeSource)
+                or request.source.prototype_run_id != prototype_run
+            ):
+                raise _invalid("--prototype-run must match the prototype source in --input")
+            content = asyncio.run(_read_prototype_source(prototype_run))
         else:
             assert source is not None
             if (

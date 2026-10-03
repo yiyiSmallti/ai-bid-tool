@@ -303,7 +303,7 @@ def create_app(
     from app.api.screenshots import create_router as create_screenshot_router
 
     app.include_router(
-        create_screenshot_router(context, db, storage, queue, settings, llm, resolve)
+        create_screenshot_router(context, db, storage, queue, settings, llm, resolve, processor)
     )
 
     @app.get("/health", name="health", response_model=Result)
@@ -1339,6 +1339,14 @@ def create_app(
                 key: value for key, value in job.result.items() if key != "submission"
             }
             payload["ok"] = job.result.get("completion") != "partial"
+            payload["cost"] = job.result.get("cost", payload["cost"])
+        if job.kind == "prototype_generate":
+            from app.services.prototype_generation import check_job_access as prototype_access
+
+            await prototype_access(session, identity, job)
+            payload["data"]["result"] = {
+                key: value for key, value in job.result.items() if key != "submission"
+            }
             payload["cost"] = job.result.get("cost", payload["cost"])
         if job.kind == "sandbox" and job.status in {"failed", "cancelled"}:
             payload["ok"] = False

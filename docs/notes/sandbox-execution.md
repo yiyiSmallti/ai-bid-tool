@@ -80,6 +80,11 @@ not an authentication credential.
 
 ## Pitfalls
 
+- Under gVisor, writes larger than `PIPE_BUF` to the attached stdout can stall or
+  silently lose a 4 KiB block, which the hash check then reports as
+  `artifact_hash_mismatch`. The runner's `emit` therefore writes frames in
+  4 KiB `os.write` calls; do not replace it with one buffered write.
+
 The fake provider and backend validate integration decisions, not containment.
 Opt-in container runs do not replace packet, escape, resource exhaustion and
 crash acceptance. Ordinary containers are restricted to explicitly synthetic

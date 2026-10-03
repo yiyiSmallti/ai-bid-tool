@@ -35,6 +35,13 @@ redacted text, image hashes, pixel mappings, model identity and image-price
 revision. A non-dry submission must provide the returned input hash. Its
 suggestions remain unreviewed and cannot populate a legacy exact-text quote.
 
+`ui mock --dry-run` fixes one requirement, one selected feature revision, the
+model identity and the prompt version, and prices the single planned call. The
+paid run must carry that input hash; its job result is the prototype run.
+`screenshot prepare --prototype-run` then downloads the run's source PNG and
+applies the same local plan as any upload, and `screenshot add` ingests it as an
+`origin=prototype` asset.
+
 `screenshot prototype-decisions preview` fixes an explicit feature group and
 its current confirmed prototype Evidence. An optional `evidence_ids` subset
 supports an individual decision when one feature appears on several cards.
@@ -137,6 +144,23 @@ unknown refs and invalid regions yield safe reason codes. Wire regions are
 translated from the sent PNG to its content coordinates before persistence.
 Cancellation, ownership loss or accounting failure prevents publication.
 
+### Prototype generation
+
+[`prototype_generation.py`](../../server/app/services/prototype_generation.py)
+sends the redacted requirement quote and the feature's name, description and
+status, nothing else, through
+[`prototyping.py`](../../server/app/providers/prototyping.py) on the same accounted
+call boundary as drafting. The prompt asks for one self-contained page with
+inline CSS/SVG and no visible prototype wording. The worker keeps the job lease
+while the returned HTML is rendered by the offline sandbox `BrowserProvider`,
+then stores HTML and PNG encrypted under `org/<org>/prototypes/<run>/`. The
+`ScreenshotPrototypeRun` binds the generation job, input hash, both hashes and
+the sandbox receipt (descriptor digest plus artifact hashes, runtime versions,
+issues and metrics). Inputs are rebuilt before the admitted call and again
+before publication, so a replaced feature selection stops the job. An
+unavailable sandbox blocks admission. The source PNG is served only to the same
+organization at `GET /prototype-runs/{id}/source`.
+
 ## Pitfalls
 
 - Source hashes establish byte identity, not authenticity. The server cannot
@@ -148,13 +172,13 @@ Cancellation, ownership loss or accounting failure prevents publication.
   This explicit analysis path always masks requirement text before dispatch;
   ordinary text-only card generation does not acquire image input implicitly.
 - A prototype without a valid delivery decision can still enter a confirmed
-  draft. The export integration must call
-  [`export_decision_manifest`](../../server/app/services/prototype_decisions.py)
-  and enforce its issues for formal output; that hook alone does not wire export
-  preparation, release or download.
-- Reserved search, vendor-archive and prototype-run records provide the attachment
-  graph for the [sandbox handoff](../plan/sandbox.md). They do not authorize a
-  client to invent renderer receipts or serve archived HTML as an active page.
+  draft and a review copy; formal export enforces the decision through
+  [human-section-exports.md](human-section-exports.md).
+- A sandbox render failure after the model call fails the job; a retry pays for a
+  new generation.
+- Reserved search and vendor-archive records provide the attachment graph for
+  the [sandbox handoff](../plan/sandbox.md). No client API writes a prototype run
+  or renderer receipt, and archived HTML is never served as an active page.
 - Database unavailability after an object write can leave an inaccessible private
   orphan until its publication status can be checked. Deleting an object after
   an ambiguous commit without that check could destroy published evidence.
@@ -174,5 +198,6 @@ Cancellation, ownership loss or accounting failure prevents publication.
 - [API boundaries](../../server/tests/test_screenshot_api.py),
   [card/draft chain](../../server/tests/test_screenshot_cards.py),
   [database gates](../../server/tests/test_screenshot_db.py),
-  [vision HTTP boundary](../../server/tests/test_screenshot_vision.py) and
+  [vision HTTP boundary](../../server/tests/test_screenshot_vision.py),
+  [prototype generation](../../server/tests/test_prototype_generation.py) and
   [CLI contract](../../server/tests/test_screenshot_cli.py).

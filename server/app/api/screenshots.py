@@ -21,12 +21,13 @@ from app.schemas.contracts import Result
 from app.schemas.screenshot_contracts import (
     PrototypeDecisionBatch,
     PrototypeDecisionPreviewInput,
+    PrototypeGenerateInput,
     ScreenshotAnalyzeInput,
     ScreenshotAnnotate,
     ScreenshotIngest,
     ScreenshotWithdraw,
 )
-from app.services import prototype_decisions, screenshot_jobs, screenshots
+from app.services import prototype_decisions, prototype_generation, screenshot_jobs, screenshots
 from app.services import response_cards as cards
 from app.services.resources import audit
 
@@ -134,7 +135,7 @@ class ScreenshotRoute(APIRoute):
         return bounded
 
 
-def create_router(context, db, storage, queue, settings, llm, resolve):
+def create_router(context, db, storage, queue, settings, llm, resolve, processor=None):
     router = APIRouter(route_class=ScreenshotRoute)
     crypto = Secrets(settings.encryption_key.get_secret_value())
 
@@ -331,6 +332,37 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         )
         await dispatch(ctx[0], ctx[1], job)
         return result("screenshot analyze", data)
+
+    @router.post("/tasks/{task_id}/prototype-generations", name="ui_mock", response_model=Result)
+    async def generate_prototype(
+        task_id: UUID, body: PrototypeGenerateInput, ctx=Depends(context, scope="function")
+    ):
+        from app.services.sandbox import browser_for
+
+        provider = await resolve(ctx[0]) if resolve else llm
+        data, job = await prototype_generation.submit(
+            ctx[0], ctx[1], task_id, body, provider, settings, browser_for(processor)
+        )
+        await dispatch(ctx[0], ctx[1], job)
+        return result("ui mock", data)
+
+    @router.get("/prototype-runs/{prototype_id}", name="prototype_show", response_model=Result)
+    async def show_prototype(prototype_id: UUID, ctx=Depends(context, scope="function")):
+        row = await prototype_generation.show(ctx[0], ctx[1], prototype_id)
+        return result("prototype show", prototype_generation.view(row))
+
+    @router.get("/prototype-runs/{prototype_id}/source", name="prototype_source")
+    async def prototype_source(prototype_id: UUID, ctx=Depends(context, scope="function")):
+        session, actor = ctx
+        row, png = await prototype_generation.source(session, actor, prototype_id, storage)
+        audit(
+            session, actor, "screenshot.prototype.read", row.id, {"sha256": row.source_image_sha256}
+        )
+        return Response(
+            png,
+            media_type="image/png",
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
 
     @router.get(
         "/screenshot-analyses/{analysis_id}/suggestions",

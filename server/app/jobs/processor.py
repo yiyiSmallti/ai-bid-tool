@@ -117,6 +117,7 @@ class Processor:
                     "export_render",
                     "screenshot_render",
                     "screenshot_analyze",
+                    "prototype_generate",
                 }
                 else [
                     dict(
@@ -158,6 +159,7 @@ class Processor:
                     "card_generate",
                     "provider_test",
                     "screenshot_analyze",
+                    "prototype_generate",
                 }:
                     async with self.db.transaction(org_id) as session:
                         llm = await self.resolve(session, current)
@@ -186,6 +188,13 @@ class Processor:
                         await process_render(execution, self.storage)
                     else:
                         await process_analysis(execution, self.storage, llm)
+                    return
+                if kind == "prototype_generate":
+                    from app.services.prototype_generation import process as generate_prototype
+                    from app.services.sandbox import browser_for
+
+                    incremental = True
+                    await generate_prototype(execution, self.storage, llm, browser_for(self))
                     return
                 assert task_id is not None and document_id is not None
                 if kind == "card_generate":

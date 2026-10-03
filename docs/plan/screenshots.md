@@ -1,11 +1,11 @@
 ---
 kind: plan
-status: "部分实施：Phase A 与导出接线；沙盒接入待实施"
+status: "部分实施：Phase A、导出接线与原型生成；厂家采集与搜索待实施"
 ---
 
 # 契约草案：功能截图、原型与厂家证据配图
 
-状态：**部分实施：Phase A 与导出接线；沙盒接入待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
+状态：**部分实施：Phase A、导出接线与原型生成；厂家采集与搜索待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
 水印边界。下文按已批准的推荐选项描述契约，各项选择见[已定决定](#已定决定)。
 
 ## 目标与边界
@@ -1097,7 +1097,8 @@ Provider 使用假实现，不能把合成材料或假调用当作真实取证�
 | PostgreSQL FORCE RLS 与数据库门禁 | 迁移和两单位测试已实施；[`0023`](../../server/migrations/versions/0023_screenshots.py) 接在沙箱迁移 `0022` 之后 |
 | 本机浏览器运行页采集入口 `bid screenshot capture` | 已确认归入 Phase B，未实施；待沙盒分支合并后接入统一回执、脱敏与归档交接，保持客户端本机执行边界 |
 | 厂家搜索候选入口 `bid evidence search` | 已确认归入 Phase B，未实施；与沙盒及厂家网页/PDF 采集管线一起接入，候选仍不直接成为 Evidence |
-| HTML 原型生成/渲染与厂家网页/PDF 采集 | Phase B，未实施；待沙盒分支合并后接入。已预留生成、回执、搜索候选与厂家归档的单位内关系，无客户端伪造生成记录的 API |
+| HTML 原型生成/渲染 | 已实施；`bid ui mock` 与 `screenshot prepare --prototype-run`，见 [screenshot-evidence.md](../notes/screenshot-evidence.md#prototype-generation) |
+| 厂家网页/PDF 采集 | Phase B，未实施；已预留回执、搜索候选与厂家归档的单位内关系 |
 | 正式导出图片消费、决定检查接线和 DOCX 实物验收 | 已实施；见 [human-section-exports.md](../notes/human-section-exports.md)。端到端测试依赖 Rust 渲染器，CI 构建后运行 |
 
 落实的接口决定：
