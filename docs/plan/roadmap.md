@@ -73,7 +73,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B01 tender parse | PDF 按页文本、扫描页本地 OCR；Word 按段落与表格单元格解析，按文档位置引用 | PDF 段落/表格/坐标结构、OCR 坐标入库；Word 文本框与页眉页脚 | 新大型依赖先说明 |
 | B02 req extract | Anthropic 与 OpenAI 兼容 adapter、并发批次、引用逐条核验、★ 规则并集、缓存、引用不通过逐条拒绝并报告、按官方档位选择推理强度与抽取历史；样例 Word 招标文件实测 446/449 条引用通过 | 要求确认入口；被拒条目的人工补录；单位后台的抽取页面 | 新契约 |
 | B03 参数判定 | `condition` 为自由 dict | 类型化 param/op/value/unit、单位换算、模糊表达转人工 | 新契约 |
-| B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认；人工截图入库与 `image_region` 证据；沙箱按允许名单采集厂家网页/PDF 原始产物 | 厂家采集与搜索候选接入截图链（[screenshots.md](screenshots.md) Phase B）、自动满足判定 | 搜索依赖 API |
+| B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认；人工截图入库与 `image_region` 证据；沙箱按允许名单采集厂家网页/PDF，页图经人工入库成为绑定归档的厂家证据，机制见 [screenshot-evidence.md](../notes/screenshot-evidence.md#vendor-captures) | 厂家搜索候选（[screenshots.md](screenshots.md) Phase B）、自动满足判定 | 搜索依赖 API |
 | B05 evidence stamp | 截图链的 Rust 遮挡、裁剪、区域框与哈希已实施，不加水印 | 证书页等其他材料的标注；草案见 [annotation.md](annotation.md) | 待批准 |
 | B06 ui mock | LLM 生成单页 HTML 原型并经沙箱离线截图、入库与逐项保留/替换决定；机制见 [screenshot-evidence.md](../notes/screenshot-evidence.md) | 软件响应表自动编排 | 新契约 |
 | B07 人工确认 | 卡片与 Evidence 按职责人工确认、不可变修订、原子处置、模型提议与消费关口；决定见 [ADR 0005](../adr/0005-human-confirmed-responses.md) | 会签、任务成员与看板交互 | 新契约 |

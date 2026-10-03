@@ -1,7 +1,8 @@
 """Screenshot CLI transport, local file transaction and contract snapshots.
 
 Failure modes covered here:
-- prepare requires exactly one matching local upload or authorized certificate source;
+- prepare requires exactly one matching local upload, authorized certificate source or
+  captured vendor page image;
 - an existing path, symlink, missing parent, duplicate target, renderer mismatch, or failure
   while publishing either file leaves no partial PNG/receipt pair;
 - successful local output and receipt are separate new mode-0600 files and only then emit
@@ -214,6 +215,75 @@ def test_prepare_source_requires_matching_authorized_certificate_preview(
         PreparedScreenshot.model_validate_json(receipt.read_text()).source.kind
         == "certificate_page"
     )
+
+
+@pytest.mark.parametrize("artifact_kind", ["capture_png", "rendered_html"])
+def test_prepare_sandbox_artifact_reads_only_the_named_vendor_page(
+    tmp_path, monkeypatch, capsys, artifact_kind
+):
+    from app.schemas.sandbox_contracts import SandboxArtifactView
+    from bid_cli import sandbox as sandbox_cli
+
+    content = png()
+    artifact_id = UUID(IDENTIFIER_2)
+    request = tmp_path / "prepare-vendor.json"
+    request.write_text(
+        json.dumps(
+            {
+                "source": {"kind": "vendor_web", "sandbox_artifact_id": str(artifact_id)},
+                "plan": ImagePlan().model_dump(),
+            }
+        )
+    )
+    install_fake_prepare(monkeypatch, content)
+    requested = []
+
+    async def fake_fetch(api, value):
+        requested.append(value)
+        view = SandboxArtifactView(
+            id=value,
+            run_id=UUID(IDENTIFIER_3),
+            attempt_id=UUID(IDENTIFIER),
+            kind=artifact_kind,
+            sha256=hashlib.sha256(content).hexdigest(),
+            size_bytes=len(content),
+            media_type="image/png" if artifact_kind == "capture_png" else "text/html",
+            width=4 if artifact_kind == "capture_png" else None,
+            height=3 if artifact_kind == "capture_png" else None,
+            provenance_manifest_hash=SHA,
+        )
+        return view, bytearray(content)
+
+    monkeypatch.setattr(sandbox_cli, "fetch_artifact", fake_fetch)
+    monkeypatch.setattr(cli, "client", lambda: object())
+    arguments = ["--input", str(request), "--output", str(tmp_path / "V.png")]
+    arguments += ["--receipt", str(tmp_path / "V.json")]
+
+    with pytest.raises(SystemExit) as mismatched:
+        cli.main(["screenshot", "prepare", "--sandbox-artifact", IDENTIFIER, *arguments, "--json"])
+    body = json.loads(capsys.readouterr().out)
+    assert mismatched.value.code == 2 and body["data"]["error"]["code"] == "invalid_input"
+    assert requested == []
+
+    if artifact_kind == "rendered_html":
+        with pytest.raises(SystemExit) as refused:
+            cli.main(
+                ["screenshot", "prepare", "--sandbox-artifact", str(artifact_id), *arguments]
+                + ["--json"]
+            )
+        body = json.loads(capsys.readouterr().out)
+        assert refused.value.code == 2 and body["data"]["error"]["code"] == "invalid_input"
+        assert not (tmp_path / "V.png").exists() and not (tmp_path / "V.json").exists()
+        return
+    body = invoke(
+        ["screenshot", "prepare", "--sandbox-artifact", str(artifact_id), *arguments], capsys
+    )
+    assert body["ok"] is True and requested == [artifact_id]
+    receipt = PreparedScreenshot.model_validate_json((tmp_path / "V.json").read_text())
+    assert receipt.source.model_dump(mode="json") == {
+        "kind": "vendor_web",
+        "sandbox_artifact_id": str(artifact_id),
+    }
 
 
 def test_prepare_second_publish_failure_rolls_back_both_files(tmp_path, monkeypatch, capsys):

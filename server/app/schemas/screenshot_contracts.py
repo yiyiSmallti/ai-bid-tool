@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import Field, HttpUrl, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from app.schemas.contracts import Contract as BaseContract
 from app.schemas.contracts import Cost
@@ -99,18 +99,14 @@ class ArchiveDescriptor(Contract):
 
 
 class VendorSource(Contract):
+    """A page image published by a succeeded vendor_capture sandbox run.
+
+    The server resolves the product binding, URLs, capture time and archive from the run;
+    the client only names the PNG artifact it prepared.
+    """
+
     kind: Literal["vendor_web", "vendor_pdf"]
-    task_resource_id: UUID
-    search_candidate_id: UUID | None = None
-    source_url: HttpUrl
-    final_url: HttpUrl
-    title: str = Field(min_length=1, max_length=500)
-    captured_at: datetime
-    content_sha256: Sha256
-    archive: ArchiveDescriptor
-    archive_redaction_plan_sha256: Sha256
-    page_number: int | None = Field(default=None, ge=1)
-    page_count: int | None = Field(default=None, ge=1)
+    sandbox_artifact_id: UUID
 
 
 class PrototypeSource(Contract):
@@ -126,7 +122,8 @@ ScreenshotSource = Annotated[
 
 class ScreenshotPrepareInput(Contract):
     source: Annotated[
-        UploadSource | CertificateSource | PrototypeSource, Field(discriminator="kind")
+        UploadSource | CertificateSource | VendorSource | PrototypeSource,
+        Field(discriminator="kind"),
     ]
     plan: ImagePlan
 
@@ -152,15 +149,6 @@ class VendorSearchInput(Contract):
     expected_input_hash: Sha256 | None = None
     dry_run: bool = False
     retry: bool = False
-
-
-class VendorCaptureInput(Contract):
-    extraction_job_id: UUID
-    task_resource_id: UUID
-    search_candidate_id: UUID | None = None
-    selected_source_url: HttpUrl | None = None
-    page_number: int | None = Field(default=None, ge=1)
-    plan: ImagePlan
 
 
 class PrototypeGenerateInput(Contract):
@@ -251,6 +239,23 @@ class ScreenshotWithdraw(Contract):
     reason: str = Field(min_length=1, max_length=2000)
 
 
+class VendorArchiveView(Contract):
+    id: UUID
+    sandbox_run_id: UUID
+    task_resource_id: UUID
+    product_revision_id: UUID
+    format: Literal["web", "pdf"]
+    source_field: Literal["official_url", "whitepaper_url"]
+    source_url_sha256: Sha256
+    final_url_sha256: Sha256
+    final_origin: str = Field(min_length=1, max_length=300)
+    title: str | None = Field(default=None, max_length=500)
+    captured_at: datetime
+    content_sha256: Sha256
+    archive: ArchiveDescriptor
+    policy_revision: str = Field(min_length=1, max_length=100)
+
+
 class ScreenshotView(Contract):
     id: UUID
     org_id: UUID
@@ -265,6 +270,7 @@ class ScreenshotView(Contract):
     source_hash_assurance: Literal["client_declared", "server_verified"]
     source_archive: EvidenceSourceArchive | None
     vendor_archive_id: UUID | None
+    vendor_archive: VendorArchiveView | None
     prototype_generation: PrototypeGenerationView | None
     received_at: datetime
     active_selection: bool
