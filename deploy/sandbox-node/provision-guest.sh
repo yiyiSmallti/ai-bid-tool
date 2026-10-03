@@ -11,7 +11,7 @@ apt-get install -y uidmap dbus-user-session slirp4netns fuse-overlayfs python3-v
 # Service identities: bidsbx owns the rootless daemon and runs the supervisor.
 getent group bidctl >/dev/null || groupadd --system bidctl
 id bidsbx >/dev/null 2>&1 || useradd --create-home --shell /bin/bash bidsbx
-usermod -aG bidctl bidsbx
+usermod -aG bidctl,docker bidsbx
 grep -q '^bidsbx:' /etc/subuid || echo 'bidsbx:231072:65536' >> /etc/subuid
 grep -q '^bidsbx:' /etc/subgid || echo 'bidsbx:231072:65536' >> /etc/subgid
 

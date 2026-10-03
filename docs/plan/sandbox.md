@@ -1,11 +1,11 @@
 ---
 kind: plan
-status: "已实施，待真实隔离验收"
+status: "已实施，开发节点隔离验收子集已通过"
 ---
 
 # 契约草案：不可信内容与工具执行沙箱
 
-状态：**已实施，待真实隔离验收**。对应[路线图](roadmap.md#覆盖矩阵provider记忆看板agent-与-cli)
+状态：**已实施；macOS 开发节点上的 runsc 隔离验收子集已通过，完整攻击与代理验收待执行**。对应[路线图](roadmap.md#覆盖矩阵provider记忆看板agent-与-cli)
 P03 Browser、A01，首先服务 B06 原型渲染和 B04 网页/白皮书采集。下文按推荐选项定义
 拟实施边界；技术依赖、限额和产品选择集中在[已定决定](#已定决定)，不代表部署授权。
 
@@ -17,8 +17,8 @@ P03 Browser、A01，首先服务 B06 原型渲染和 B04 网页/白皮书采集�
 | 无网络执行、独立验证与清理 | 已实施运行时适配，待真实验收 | Docker CLI 后端与测试假后端；默认关闭。测试开关与部署准备见[运行时指南](../guides/sandbox-runtime.md) |
 | 厂家代理与来源回执 | 已实施 | 精确 URL 允许名单、固定 IP/TLS、持久单节点配额、拒绝摘要与归档；见 [sandbox-fetch.md](../notes/sandbox-fetch.md) |
 | 控制通道 | 已实施，待实际节点验收 | 本地多 UID Unix socket；远程 TLS 1.3 双向证书验证、主机名校验与双端叶证书指纹固定。证书不进入容器 |
-| 真实隔离与攻击验收 | 待执行 | macOS Colima 开发 VM 上 runc 合成模式的真实管道（mTLS、渲染与独立验证容器）已跑通；runsc 组合待下方决定后验收 |
-| 运行时组合（待定） | 待决定 | gVisor 在 rootless Docker 下无法施加 cgroup 限额（报 systemd 权限错误，`--ignore-cgroups` 时 64 MiB 容器可分配 300 MiB）；rootful Docker + runsc 在专用 VM 内可施加限额。需在“rootful + runsc”“rootless + runc”“rootless + runsc 无限额”中选定，见[运行时指南](../guides/sandbox-runtime.md#prepare-a-macos-colima-development-vm) |
+| 真实隔离与攻击验收 | 部分通过 | 开发 VM 上 rootful Docker + runsc 的业务模式管道，以及文件/秘密边界、零网络外发（含正向对照）、CPU 死循环、内存炸弹、调用方断连与 supervisor 重启回收已通过，驱动为 [sandbox_colima_acceptance.py](../../scripts/sandbox_colima_acceptance.py)；代理攻防、双单位接口与完整生命周期注入待执行 |
+| 运行时组合 | 已定 | rootful Docker + runsc，运行在无宿主挂载、无业务凭据的专用 VM 内；runsc 不得带 `--ignore-cgroups`/`--rootless`，rootless 仅用于 runc 合成模式，见[已定决定](#已定决定) |
 | Evidence/Card、生成模型、agent 编排 | 未实施，沿用相邻契约 | 本流提供已生成 HTML 的渲染和公开来源原始产物，不代行人工确认 |
 
 实施时收敛的决定：
@@ -771,6 +771,7 @@ CI 外部模型/计费厂商 Provider 用假实现，本地 BrowserProvider 和�
 | --- | --- | --- |
 | 首批交付范围 | ① 离线 HTML + 公开网页/PDF 原始输入产物；② 先只做离线 HTML，采集另批 | **①**，按依赖分阶段验收，同一执行边界覆盖两个已明确用户；证据消费由 screenshots.md 承接，不同时实现完整 ui mock/evidence fetch/agent |
 | 生产隔离运行时 | ① 独立节点 gVisor；② Firecracker microVM；③ 普通容器仅作合成开发环境 | **①**，保留 OCI 工作流并强化宿主边界；兼容性不过则停止接入并评估②，③不承载生产不可信输入 |
+| 隔离运行时组合 | ① 专用 VM 内 rootful Docker + runsc；② rootless Docker + runc；③ rootless Docker + runsc 跳过 cgroup | **①**（2026-10-03 实测后批准）：gVisor 在 rootless Docker 下无法施加 cgroup 限额，③ 实测 64 MiB 容器可分配 300 MiB；② 失去 gVisor 内核隔离，仅限合成开发。① 的守护进程在 VM 内为 root，以 VM 无宿主挂载、无业务凭据作外层边界；supervisor 预检拒绝 rootless 或跳过 cgroup 的 runsc |
 | macOS 开发路径 | ① 无宿主挂载的专用 Linux VM，真实输入用验收过的 runsc；② 全部委托专用 Linux 执行节点 | **①**便于离线开发；架构/浏览器不兼容时选②，不回退宿主浏览器 |
 | 采集网络形态 | ① 无网沙箱 + 有界 fetch 消息/代理；② 仅能连显式 HTTP 代理的专网沙箱 | **①**，即使绕过浏览器拦截仍无直连；②需追加 CONNECT/TLS/防直连全链验收且不能放宽 URL 策略 |
 | 允许名单维护 | ① 首期受信任维护方发布版本化规则；② 人类单位管理员在平台上界内维护本单位规则 | **①**，不新增策略编辑权限入口；②需单独配置/复合约束/审计契约，agent 两案均不能扩权 |

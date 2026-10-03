@@ -123,7 +123,6 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 | 决定 | 何时需要 |
 | --- | --- |
-| 沙箱运行时组合：rootful + runsc、rootless + runc 或 rootless + runsc 无限额（[sandbox.md](sandbox.md)） | 沙箱接受业务输入之前 |
 | 平台模型的服务商、模型与单价 | 在运营后台配置默认模型时 |
 | 平台默认 Vision/Embedding/Search/OCR，及费用与数据政策 | Provider 配置之前 |
 | 模板公共共享 | 扩大模板读取边界之前 |

@@ -14,12 +14,14 @@ The execution node runs [sandbox_supervisor.py](../../scripts/sandbox_supervisor
 1. Provision a dedicated Linux node or a dedicated Linux VM without home, project, database,
    storage, SSH-agent or cloud-credential mounts. Do not join the business Compose network.
    Keep the node free of business credentials. A macOS host cannot run this supervisor directly.
-2. Provision rootless Docker with cgroup v2 and delegated memory, swap, CPU and PID controllers.
-   Provision and independently validate the `runsc` runtime for the selected CPU architecture.
-   The supervisor checks controller availability and rejects a non-rootless daemon. Do not
-   disable Chromium sandboxing to make a failing architecture work.
-3. Create separate service identities for the supervisor and its caller. The supervisor owns
-   its rootless Docker socket; the caller must not be able to open that socket. Put both
+2. Provision a rootful Docker daemon with cgroup v2 limits on that dedicated node and register
+   the `runsc` runtime for the selected CPU architecture. gVisor cannot enforce cgroup limits
+   under rootless Docker, so the supervisor rejects a rootless daemon, or `--ignore-cgroups` /
+   `--rootless` runtime arguments, when `runsc` is configured; rootless Docker is accepted
+   only for runc synthetic mode. Do not disable Chromium sandboxing to make a failing
+   architecture work.
+3. Create separate service identities for the supervisor and its caller. Only the supervisor
+   identity may open the Docker socket; the caller must not be able to open it. Put both
    identities in a dedicated group used only for the control socket. Give the supervisor
    a private persistent state directory and a dedicated control directory.
 4. Place the fetch broker in a trusted process with an egress policy that has no routes to
@@ -49,10 +51,25 @@ The execution node runs [sandbox_supervisor.py](../../scripts/sandbox_supervisor
    inside the VM (`colima ssh -p bsx -- sudo sh provision-guest.sh`). It creates
    the `bidsbx` supervisor identity, delegates cgroup controllers to user
    sessions, installs gVisor `runsc` and the administrator-owned directories.
-3. As `bidsbx`, run `dockerd-rootless-setuptool.sh install` with the user's
-   `XDG_RUNTIME_DIR` and session bus, then register `runsc` in
-   `~/.config/docker/daemon.json`. The default rootful Colima daemon does not
-   satisfy the preflight.
+3. Register `runsc` with the VM's rootful daemon through the Colima profile, so
+   Colima's regenerated `/etc/docker/daemon.json` keeps it, and add `bidsbx` to
+   the `docker` group. In `$COLIMA_HOME/bsx/colima.yaml`:
+
+   ```yaml
+   docker:
+     runtimes:
+       runsc:
+         path: /usr/bin/runsc
+         runtimeArgs:
+           - --oci-seccomp
+   ```
+
+   `--oci-seccomp` makes gVisor apply the image's seccomp profile inside the
+   sandbox as well. Never add `--ignore-cgroups` or `--rootless`: the supervisor
+   preflight rejects them, and a rootless daemon, because gVisor then enforces no
+   memory, CPU or pids limit. Restart the profile with `colima stop bsx` and
+   `colima start bsx`. A rootless daemon for `bidsbx`
+   (`dockerd-rootless-setuptool.sh install`) is needed only for runc synthetic mode.
 4. Install the supervisor code under `/opt/bid-supervisor` with a virtual
    environment containing `httpx`, the server certificate and key, and
    [supervisor.env.example](../../deploy/sandbox-node/supervisor.env.example)
@@ -61,14 +78,13 @@ The execution node runs [sandbox_supervisor.py](../../scripts/sandbox_supervisor
    which restarts the supervisor automatically. Lima forwards the guest's
    `127.0.0.1:8443` to the host, so the macOS API/worker uses mTLS to
    `127.0.0.1` without exposing Docker's socket.
-5. Begin with `BID_SANDBOX_SYNTHETIC_ONLY=1` and runc. Enable business
-   admission only after the required isolation acceptance.
+5. Load the pinned image into the rootful daemon, set `BID_SANDBOX_RUNTIME=runsc`
+   and `BID_SANDBOX_DOCKER_SOCKET=/var/run/docker.sock`, and run the
+   [acceptance driver](../../scripts/sandbox_colima_acceptance.py) before setting
+   `BID_SANDBOX_RUNTIME_ACCEPTED=1` for business inputs.
 
-gVisor cannot enforce cgroup limits under rootless Docker: `runsc` fails with
-`systemd error: Permission denied`, and with `--ignore-cgroups` a 64 MiB
-container allocates 300 MiB. Rootful Docker with `runsc` inside the dedicated
-VM enforces the same limit. Which combination is accepted for business inputs
-is an open decision in [the sandbox contract](../plan/sandbox.md).
+The runtime combination and its rationale are recorded in
+[the sandbox contract](../plan/sandbox.md#已定决定).
 
 ## Build and pin the image
 
@@ -274,7 +290,7 @@ browser runner rejects HTTP failures, password forms and recognized challenge fr
 those heuristics cannot classify every site-specific soft error page. Successful capture
 remains an unconfirmed input artifact, not authenticity or semantic validation.
 
-Keep rootless Docker/runsc/Chromium compatibility, packet-level zero-egress checks, memory
+Keep runsc/Chromium compatibility, packet-level zero-egress checks, memory
 exhaustion, supervisor restart and cross-instance canary tests as explicit deployment
 acceptance gates. The focused pipeline check above does not cover all of those attacks.
 
