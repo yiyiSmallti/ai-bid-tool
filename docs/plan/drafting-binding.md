@@ -4,7 +4,7 @@ kind: plan
 
 # 契约草案：模型起草的预览绑定与消费上限
 
-状态：**待批准，未实施。** 对应[单位后台契约](org-console.md)的 G3-B 决定：付费起草须先绑定
+状态：**已批准并实施。** 对应[单位后台契约](org-console.md)的 G3-B 决定：付费起草须先绑定
 输入、模型、价格和用户金额上限，单位后台的付费运行按钮在此之前保持禁用。机制背景见
 [model-drafting-redaction.md](../notes/model-drafting-redaction.md) 与
 [prepaid-billing.md](../notes/prepaid-billing.md)。

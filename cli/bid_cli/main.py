@@ -937,6 +937,12 @@ def card_generate(
     reasoning: Annotated[
         str | None, typer.Option(help="One of the model's official reasoning levels")
     ] = None,
+    expect_input_hash: Annotated[
+        str | None, typer.Option(help="input_hash from the dry run this paid run must match")
+    ] = None,
+    max_charge: Annotated[
+        str | None, typer.Option(help="Platform charge cap for this job, in billing currency")
+    ] = None,
     dry_run: Annotated[bool, typer.Option()] = False,
     retry: Annotated[bool, typer.Option()] = False,
     wait: Annotated[bool, typer.Option()] = False,
@@ -949,6 +955,8 @@ def card_generate(
         reasoning=reasoning,
         dry_run=dry_run,
         retry=retry,
+        expected_input_hash=expect_input_hash,
+        max_charge=max_charge,  # pyright: ignore[reportArgumentType]
     )
     body = call("POST", f"/tasks/{task}/cards/generations", json=request.model_dump(mode="json"))
     if wait and not dry_run:

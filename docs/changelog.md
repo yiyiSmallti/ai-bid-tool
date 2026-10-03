@@ -6,6 +6,16 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-02：付费起草的预览绑定与扣款上限
+
+- `CardGenerateRequest` 新增可选 `expected_input_hash` 与 `max_charge`：提交时核对预览哈希（覆盖输入、
+  模型与价格修订），不一致以 `generation_input_changed` 拒绝且不建作业；作业累计平台扣费加下一次预留超过
+  上限即停止准入，以 `spend_cap_reached` 保存部分结果。同键进行中作业的上限更高或缺失时以
+  `generation_cap_conflict` 拒绝，重试按新上限约束累计扣费。预检回显上限并报告
+  `spend_cap_below_first_call`。CLI 增加 `--expect-input-hash`、`--max-charge`。
+- 单位后台启用付费起草：预检后填写扣款上限并勾选授权才能运行，提交携带预览哈希，作业状态在面板内跟踪。
+  契约见 [drafting-binding.md](plan/drafting-binding.md)。
+
 ## 2026-10-02：导出图片证据与原型决定门禁
 
 - 人工导出消费已确认的 `image_region` 证据：固定派生 PNG 字节与哈希作为附件嵌入，所有图片统一标为

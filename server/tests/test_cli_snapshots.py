@@ -736,6 +736,8 @@ async def fake_request(self, method, path, **kwargs):
             "reasoning": "high",
             "dry_run": False,
             "retry": True,
+            "expected_input_hash": "a" * 64,
+            "max_charge": "2.5",
         }
         data = {
             "job_id": IDENTIFIER_2,
@@ -1246,6 +1248,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             "card", "generate", "--task", IDENTIFIER, "--job", IDENTIFIER,
             "--requirement", IDENTIFIER, "--requirement", IDENTIFIER_2,
             "--reasoning", "high", "--retry", "--wait",
+            "--expect-input-hash", "a" * 64, "--max-charge", "2.5",
         ],
         "card update": [
             "card", "update", "--id", IDENTIFIER, "--input", str(card_update_input),

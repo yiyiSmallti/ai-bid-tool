@@ -243,12 +243,20 @@ audit boundary are described in
    cost. Unknown prices remain null. For `page_text_unavailable`, inspect the
    original page manually; this command does not perform OCR.
 
-2. Submit the same scope and wait for the result:
+2. Submit the same scope, bound to the preview and a charge cap, and wait for the result:
 
    ```sh
-   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --reasoning LEVEL --wait --json
-   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --requirement REQUIREMENT_ID_1 --requirement REQUIREMENT_ID_2 --wait --json
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --reasoning LEVEL --expect-input-hash INPUT_HASH --max-charge AMOUNT --wait --json
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --requirement REQUIREMENT_ID_1 --requirement REQUIREMENT_ID_2 --expect-input-hash INPUT_HASH --max-charge AMOUNT --wait --json
    ```
+
+   `--expect-input-hash` takes the preview's `input_hash`, which covers inputs,
+   model and price revision; a mismatch exits 3 with `generation_input_changed`
+   and creates no job. `--max-charge` caps the job's platform charge in the
+   billing currency: once the next call's reservation would exceed it, the job
+   stops with `stop_reason: spend_cap_reached` and keeps valid partial results
+   (exit 5). The cap does not bound a vendor bill paid with the org's own key.
+   Both flags are optional for compatibility; the org console always sends them.
 
    Repeat `--requirement` to limit the selected requirements; omitting it selects
    the complete extraction. The job fixes the task's current selected inputs.

@@ -140,9 +140,30 @@ class SyntheticVendor:
             "condition": None,
         }
 
+    @staticmethod
+    def proposals(sent: dict[str, Any]) -> list[dict[str, Any]]:
+        # Commitment proposals need no material, so they never cite model-chosen text.
+        return [
+            {
+                "requirement_id": requirement["requirement_id"],
+                "response_kind": "commitment",
+                "suggested_disposition": "respond",
+                "response_text": "合成模型提议：按招标要求响应，待人工审阅。",
+                "deviation": "none",
+                "deviation_note": "合成提议，仅用于浏览器验收。",
+                "evidence": [],
+            }
+            for requirement in sent["requirements"]
+        ]
+
     def __call__(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
         prompt = body["messages"][-1]["content"]
+        if prompt.startswith("{"):
+            sent = json.loads(prompt)
+            items = self.proposals(sent)
+            self.calls.append({"kind": "draft", "items": len(items)})
+            return self.reply(items, prompt)
         items = [self.item(ref, text.strip()) for ref, text in self.block.findall(prompt)]
         items.extend(self.item(ref, text.strip()) for ref, text in self.page.findall(prompt))
         self.calls.append(
@@ -152,6 +173,10 @@ class SyntheticVendor:
                 "reasoning_effort": body.get("reasoning_effort"),
             }
         )
+        return self.reply(items, prompt)
+
+    @staticmethod
+    def reply(items: list[dict[str, Any]], prompt: str) -> httpx.Response:
         return httpx.Response(
             200,
             json={

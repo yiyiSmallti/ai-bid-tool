@@ -61,6 +61,6 @@ kind: readme
 - [导出契约](plan/export.md)（plan）：按单位 Word 模板人工导出偏离表与证据附件，部分已实施，待 Word/WPS 视觉分页验收。
 - [截图与证据配图契约](plan/screenshots.md)（plan）：截图与厂家资料取证、脱敏、模型原型与响应证据，Phase A 已实施。
 - [沙盒契约](plan/sandbox.md)（plan）：不可信生成内容与内置 agent 的隔离执行环境，已实施，待真实隔离验收。
-- [单位后台契约](plan/org-console.md)（plan）：网页端招标、抽取与响应卡审阅流程，已实施，付费起草待绑定契约。
-- [起草预览绑定契约草案](plan/drafting-binding.md)（plan）：付费起草绑定预览哈希与用户消费上限，待批准。
+- [单位后台契约](plan/org-console.md)（plan）：网页端招标、抽取与响应卡审阅流程，已实施。
+- [起草预览绑定契约](plan/drafting-binding.md)（plan）：付费起草绑定预览哈希与用户消费上限，已实施。
 - [变更记录](changelog.md)（changelog）：已交付范围。

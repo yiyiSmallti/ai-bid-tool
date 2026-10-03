@@ -99,9 +99,13 @@ keyboard path through review without single-key human decisions.
 
 [GenerationPanel.vue](../../web/src/components/GenerationPanel.vue) reads official
 reasoning choices through extraction dry-run and displays the actual generation
-preview. Changes to scope, settings or selected materials invalidate it. Paid
-model generation stays disabled until the backend contract binds input, model,
-price and a spending cap; a displayed estimate is not a submission condition.
+preview. Changes to scope, settings or selected materials invalidate it and clear
+the authorization. A paid run needs a charge cap (prefilled with the estimate
+rounded up to cents) and an explicit authorization checkbox; it submits the
+preview's `input_hash` and the cap, as defined in
+[drafting-binding.md](../plan/drafting-binding.md). `generation_input_changed`
+discards the preview without retrying, and the job is tracked with
+[JobPanel.vue](../../web/src/components/JobPanel.vue).
 
 [OrgDrafts.vue](../../web/src/views/OrgDrafts.vue) separates deterministic assembly
 preview from submission. It retains partial outcomes and historical snapshots,

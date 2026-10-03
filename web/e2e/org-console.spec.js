@@ -6,8 +6,8 @@
 // - Citations: PDF quotes must be found in the sorted extracted page text and Word
 //   quotes in the cited structural block; tests must not assume PDF space runs.
 // - Cost and jobs: a dry-run must not create a job or vendor call; queued is not
-//   completed, partial is not failure, and the paid generation control must remain
-//   disabled until input/model/price/spending-cap binding exists.
+//   completed, partial is not failure, and the paid generation control must stay
+//   disabled until a human authorizes the exact preview hash and a spending cap.
 // - Review gates: viewers, admins, wrong-domain reviewers, tokens and workers must
 //   not perform human decisions; evidence and warnings need explicit review.
 // - Concurrency: stale revisions must retain local edits, clear old review checks and
@@ -475,7 +475,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     );
   });
 
-  test("review gates, conflict, atomic comply-only, drafts and disabled paid generation", async ({ browser }) => {
+  test("review gates, conflict, atomic comply-only, drafts and the bound paid generation run", async ({ browser }) => {
     const technical = await browser.newPage();
     technical.on("dialog", (dialog) => dialog.accept());
     await login(technical, "technical");
@@ -618,11 +618,11 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(technical.getByRole("heading", { name: "本次预检" })).toBeVisible();
     await expect(technical.getByText("服务商 USD 估算", { exact: true })).toBeVisible();
     await expect(technical.getByText(/USD$/).first()).toBeVisible();
-    const paid = technical.getByRole("button", { name: "付费运行待预览绑定契约" });
+    // The paid run stays disabled until a human authorizes this exact preview and cap.
+    const paid = technical.getByRole("button", { name: "确认并付费运行" });
     await expect(paid).toBeDisabled();
-    await expect(
-      technical.getByText(/绑定 input hash、模型与价格修订及用户可接受的扣款上限/),
-    ).toBeVisible();
+    await expect(technical.getByLabel(/本次平台扣款上限/)).not.toHaveValue("");
+    await expect(technical.getByText(/上限只约束平台扣费/)).toBeVisible();
     expect(paidRequests).toEqual([]);
 
     await technical.goto(`/app/org/tasks/${taskId}/drafts?job=${extractionJobId}`);
@@ -673,6 +673,29 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(viewer.getByRole("button", { name: "预检组表" })).toHaveCount(0);
     await viewer.close();
 
+    // A human-authorized paid run carries the exact preview hash and the chosen cap.
+    await technical.goto(reviewUrl);
+    await technical.getByLabel("类别").selectOption("technical");
+    await technical.getByLabel("状态").selectOption("missing_card");
+    await technical.getByTestId("requirement-row").getByRole("checkbox").first().check();
+    await technical.getByText("模型起草费用预览", { exact: true }).click();
+    await technical.getByRole("button", { name: "预检外发范围与费用" }).click();
+    await expect(technical.getByRole("heading", { name: "本次预检" })).toBeVisible();
+    const inputHash = (await technical.locator(".details-list code").last().textContent()).trim();
+    const runPaid = technical.getByRole("button", { name: "确认并付费运行" });
+    await expect(runPaid).toBeDisabled();
+    await technical.getByLabel(/本次平台扣款上限/).fill("5");
+    await technical.getByLabel(/授权按本次预检运行/).check();
+    await expect(runPaid).toBeEnabled();
+    await runPaid.click();
+    await expect(technical.getByTestId("job-status")).toContainText("作业状态：succeeded", {
+      timeout: 30_000,
+    });
+    expect(paidRequests).toHaveLength(1);
+    expect(paidRequests[0].expected_input_hash).toBe(inputHash);
+    expect(paidRequests[0].max_charge).toBe("5");
+    expect(paidRequests[0].requirement_ids).toHaveLength(1);
+
     const result = sanitized({
       passed: true,
       fixture: fixture.fixture,
@@ -686,7 +709,8 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
         "revision-conflict",
         "atomic-comply-only",
         "partial-stale-drafts",
-        "generation-dry-run-paid-disabled",
+        "generation-dry-run-paid-unauthorized",
+        "generation-paid-bound-run",
       ],
       rerun: {
         command: "cd web && npx playwright test e2e/org-console.spec.js",

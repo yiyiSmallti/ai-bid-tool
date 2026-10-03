@@ -323,6 +323,8 @@ async def submit_generation(
                     blocker = "insufficient_balance"
                 elif reserved > settings.job_max_charge:
                     blocker = "job_charge_limit_exceeded"
+                elif body.max_charge is not None and reserved > body.max_charge:
+                    blocker = "spend_cap_below_first_call"
                 if blocker:
                     warnings.append(blocker)
         return (
@@ -345,11 +347,19 @@ async def submit_generation(
                     "redacted_counts": manifest["redacted_counts"],
                     "billing_currency": settings.billing_currency,
                     "admission_blocker": blocker,
+                    "max_charge": body.max_charge,
                     **estimate(llm, secret),
                 }
             ).model_dump(mode="json"),
             None,
             warnings,
+        )
+    if body.expected_input_hash is not None and body.expected_input_hash != input_hash:
+        raise ServiceError(
+            "generation_input_changed",
+            "Inputs, model or price changed since the preview; preview again",
+            409,
+            3,
         )
     # Repeating a successful generation without a human edit reuses its paid result.
     # A manual edit or a different model/input still makes a new cache key.
@@ -373,12 +383,26 @@ async def submit_generation(
     cached = job is not None
     if job is not None:
         # Do not let a new submitter bypass the original material permissions on cache hits.
-        if body.retry and (
+        requeue = body.retry and (
             job.status in {"failed", "cancelled"}
             or (job.status == "running" and job.lease_until and job.lease_until < datetime.now(UTC))
-        ):
+        )
+        if requeue:
             job.status, job.error, job.queue_id, job.attempts = "queued", None, None, 0
             job.lease_until, job.finished_at, job.run_id = None, None, None
+            if body.max_charge is not None:
+                # The new cap bounds the job's cumulative charge, earlier attempts included.
+                submission = {**job.result["submission"], "max_charge": str(body.max_charge)}
+                job.result = {**job.result, "submission": submission}
+        elif body.max_charge is not None and job.status in {"queued", "running"}:
+            stored = job.result.get("submission", {}).get("max_charge")
+            if stored is None or Decimal(stored) > body.max_charge:
+                raise ServiceError(
+                    "generation_cap_conflict",
+                    "The same generation is already running with a higher or no charge cap",
+                    409,
+                    3,
+                )
     else:
         if selected and billable(llm):
             await billing.require_funds(session, settings.billing_currency)
@@ -407,6 +431,7 @@ async def submit_generation(
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
+                    "max_charge": str(body.max_charge) if body.max_charge is not None else None,
                 }
             },
         )
@@ -426,6 +451,7 @@ async def submit_generation(
                 "redacted_counts": manifest["redacted_counts"],
                 "actor_kind": actor.actor_kind,
                 "correlation_id": str(job.id),
+                "max_charge": str(body.max_charge) if body.max_charge is not None else None,
             },
         )
     await session.flush()
