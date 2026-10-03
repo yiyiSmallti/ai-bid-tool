@@ -16,10 +16,9 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 [agent.md](../../agent.md#当前任务切片-1) 定义的切片 1 完成标准仍未满足：
 
-- 抽取 adapter 已实现，但还没有用真实服务和公开招标 PDF 跑通端到端抽取。配置密钥后，
-  先运行 [evals/extract_tender.py](../../evals/extract_tender.py)，再走一遍
+- 真实服务已在一份 Word 招标文件上完成抽取（见 B02），尚未用公开招标 PDF 跑通端到端
+  抽取。配置密钥后，先运行 [evals/extract_tender.py](../../evals/extract_tender.py)，再走一遍
   [CLI 招标流程](../guides/cli.md#run-the-tender-workflow)。
-- GitHub Actions 工作流从未在远程运行。
 
 后续切片的部分基础（资源库、证书原件、未确认来源）已提前实现，但不改变上述缺口。
 
@@ -49,17 +48,17 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | F04 账号与角色 | 全局 User、Membership、四种角色；平台管理员（配置名单、TOTP、运营后台） | 单位成员管理入口、任务成员、评论权限、OIDC、全局记忆维护 | 新契约；SSO 需授权 |
 | F05 ApiToken | 签发、范围、期限；DB 禁止确认/导出范围 | 吊销入口、令牌列表、签发与吊销审计 | 新接口确认 |
 | F06 Org/Task | 任务名称、编号、截止、预算字段 | 套餐与月度预算、任务成员与归档、预算执行、一次性组合创建 | 计费规则待定 |
-| F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/sandbox/截图作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
+| F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/sandbox/截图/原型生成/厂家搜索作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
 | F08 AuditLog | 资源、卡片人工决策、模型起草、遮挡设置与组表审计 | 登录、令牌、导出、其他配置及 agent 调用审计与查询 | 新契约 |
 | F09 UsageRecord | OCR、抽取和模型起草的逐次用量记录；平台计费调用按售价从预付余额扣除，充值卡密 | 存储计量、任务预算预检、低余额通知、在线支付 | 新契约 |
-| F10 部署与质量 | 本机迁移、Compose、锁定依赖、工作流文件 | 远程 CI、生产对象存储、TLS、备份与密钥轮换、私有化包装 | 推送与生产需授权 |
+| F10 部署与质量 | 本机迁移、Compose（含 SearXNG）、锁定依赖、GitHub Actions 在每个 PR 上运行 | 生产对象存储、TLS、备份与密钥轮换、私有化包装 | 生产需授权 |
 
 ## 覆盖矩阵：资源与任务选择
 
 | ID | 现状 | 缺口 | 依赖 |
 | --- | --- | --- | --- |
 | R01 Template | 单位私有 DOCX、声明类型与章节、不可变修订、任务固定 | 自动章节抽取、章节匹配、公共共享、导出适配 | 新契约 |
-| R02 Product | 型号与来源 URL 元数据、修订、任务固定 | 规格书/白皮书文件、URL 取证、型号精确匹配、截图存档 | 搜索/视觉依赖服务 |
+| R02 Product | 型号与来源 URL、修订、任务固定；来源 URL 经沙箱采集为厂家证据，可由厂家搜索候选写入 | 规格书文件上传、型号精确匹配 | 新契约 |
 | R03 FeatureItem | 描述、声明状态、产品关联 | 真实功能截图、状态核对、`ui mock` 对照、需求文档导入 | 文件链独立；生成依赖 API |
 | R04 Certificate | 声明、日期检查、PDF 原件修订 | 图片与多附件、OCR、真实性核验、到期提醒 | 新契约 |
 | R05 OrgProfile | 文本声明、修订、任务固定 | 业绩合同附件、真实性验证、与资格/业绩表关联 | 新契约 |
@@ -88,7 +87,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | --- | --- | --- | --- |
 | P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身 | check/score/agent 所需的通用结构化调用 | 新契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
-| P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与允许名单采集 | Search、Embedding、本机浏览器采集；沙箱真实隔离验收 | 搜索依赖 API |
+| P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；自托管 SearXNG 搜索 | Embedding、本机浏览器采集、搜索引擎限流下的召回；沙箱代理攻防与完整生命周期验收 | 新契约 |
 | P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；机制见 [provider-config.md](../notes/provider-config.md) | 视觉、搜索等其他能力的单位配置 | 新契约 |
 | P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草部分成功 | 跨能力限流与统一进度 | 新契约 |
 | M01 记忆存储 | 未实施 | 四层记忆 CRUD、候选审批、失效 | 全局来源待定 |
@@ -109,22 +108,24 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | E01 公开测试集 | 未实施 | 公开硬件招标 PDF、人工标注、匹配与指标定义 | 真实指标依赖 API |
 | E02 质量指标 | 未实施 | ★ 召回率等指标的实测 | 依赖 B02、B04、B09 |
 | S01 机密数据 | 对象/起草快照加密、组织隔离、默认外发遮挡与受控开关；机制见 [model-drafting-redaction.md](../notes/model-drafting-redaction.md) | 扩充敏感模式、单位自带模型、磁盘加密、保留与轮换 | 新契约 |
-| S02 真实材料 | 无伪造接口、模型双文本引用校验、人工确认门禁 | 真实截图链、原型水印、导出清单的正向验收 | 依赖对应业务链 |
+| S02 真实材料 | 无伪造接口、模型双文本引用校验、人工确认门禁；真实厂家网页与白皮书经沙箱采集入库 | 导出清单在 Word/WPS 中的正向验收 | 依赖对应业务链 |
 
 ## 真实服务接入范围
 
-接入层支持：要求抽取与响应起草的平台 LLM（Anthropic、OpenAI 兼容）。尚未接入：语义 check/score/agent
-的模型调用、视觉判断、语义向量、付费搜索与云 OCR，以及这些能力的评测。
+接入层支持：要求抽取、响应起草与原型生成的平台 LLM（Anthropic、OpenAI 兼容）、截图多模态分析，
+以及自托管 SearXNG 厂家来源搜索。尚未接入：语义 check/score/agent 的模型调用、语义向量与云 OCR，
+以及这些能力的评测。
 
 不依赖真实服务、可各自立契约推进的是：本地浏览器取证、Rust 标注、
-水印、确定性规则、Vue 界面、记忆 CRUD 与审批、预算机制、公开评测集准备。
+确定性规则、Vue 界面、记忆 CRUD 与审批、预算机制、公开评测集准备。
 
 ## 待定决定
 
 | 决定 | 何时需要 |
 | --- | --- |
 | 平台模型的服务商、模型与单价 | 在运营后台配置默认模型时 |
-| 平台默认 Vision/Embedding/Search/OCR，及费用与数据政策 | Provider 配置之前 |
+| 平台默认 Vision/Embedding/OCR，及费用与数据政策 | Provider 配置之前 |
+| 生产厂家采集的单位每分钟请求上限（现为 60，大页面会被截为不完整） | 生产启用厂家网页采集之前 |
 | 模板公共共享 | 扩大模板读取边界之前 |
 | 计费方式、全局记忆来源与审核人、数据驻留 | 对应范围契约时 |
 | 看板卡片交互与进度展示 | U02 之前；服务状态机见 [response-cards.md](../notes/response-cards.md) |
@@ -132,10 +133,9 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 ## 建议顺序
 
-1. 提交现有代码并跑通远程 CI。
-2. 配置平台模型，用公开招标 PDF 完成切片 1 的端到端验收。
-3. 修复上方已知代码缺陷。
-4. 扩大真实证据取证与标注链（B04、B05）。
-5. 模板导出，或 check 首版（B09、B11）。
-6. 看板、卡片状态与 SSE（U01、U02）。
-7. Provider 配置、score、agent、记忆、用量与部署。
+1. 用公开招标 PDF 完成切片 1 的端到端验收。
+2. 修复上方已知代码缺陷。
+3. 沙箱代理攻防、双单位接口与完整生命周期验收；导出件的 Word/WPS 视觉分页验收（B11）。
+4. 证书页等其他材料的标注（B05），check 首版（B09）。
+5. 看板、卡片状态与 SSE（U01、U02）。
+6. score、agent、记忆、用量与部署。

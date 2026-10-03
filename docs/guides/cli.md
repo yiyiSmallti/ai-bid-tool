@@ -350,7 +350,8 @@ Field definitions are in the Pydantic models
 Every value is a declaration by the user, and each result says that it has
 not been verified. Points specific to each resource:
 
-- **Products**: URLs are stored as metadata and never fetched.
+- **Products**: `official_url` and `whitepaper_url` are the only sources a vendor
+  capture fetches; see [Collect vendor evidence](#collect-vendor-evidence).
 - **Features**: `status` is `planned`, `developing`, or `implemented`.
   Screenshot fields are rejected.
 - **Certificates**: dates may be `null`. Add `--as-of DATE` to `list` to get
@@ -416,6 +417,61 @@ the same page again returns the existing source. Every source has status
 `unconfirmed_source`, `confirmed_by: null`, and
 `eligible_for_draft_export: false`. It is not confirmed evidence and cannot
 reach a draft or export.
+
+## Collect vendor evidence
+
+Vendor web pages and whitepaper PDFs become image evidence through a sandbox
+capture of a selected product revision's `official_url` or `whitepaper_url`.
+Field definitions are in
+[screenshot_contracts.py](../../server/app/schemas/screenshot_contracts.py) and
+[sandbox_contracts.py](../../server/app/schemas/sandbox_contracts.py).
+
+1. **Find the source, if the product has no URL yet.** Search, review the
+   candidates, and adopt one before capturing anything: adopting replaces the
+   task's product selection, which invalidates evidence bound to the old
+   revision. `SEARCH.json` holds `extraction_job_id` and `task_resource_id`;
+   `ADOPT.json` holds `field` and `expected_product_revision`.
+
+   ```sh
+   bid evidence search --task TASK_ID --input SEARCH.json --dry-run --json
+   bid evidence search --task TASK_ID --input SEARCH_WITH_HASH.json --wait --json
+   bid evidence candidates --search SEARCH_ID --json
+   bid evidence adopt --candidate CANDIDATE_ID --input ADOPT.json --json
+   ```
+
+   The real run needs the dry-run's `input_hash` as `expected_input_hash`. Only
+   the vendor and model are sent to the search service. Candidates are
+   unverified; open each one before adopting it.
+2. **Capture.** Write a `VendorSpec` and submit it as described in
+   [Submit and inspect a sandbox run](sandbox-runtime.md#submit-and-inspect-a-sandbox-run).
+   Use `"archive": "bundle"` for a web page; a PDF names its pages in
+   `pdf_pages`. `bid sandbox show --id RUN_ID --json` lists the page images
+   (`capture_png` or `pdf_page_png`) and the archive (`capture_archive` or
+   `source_pdf`) with their SHA-256 values.
+3. **Prepare locally.** `PLAN.json` holds a `source` of kind `vendor_web` or
+   `vendor_pdf` naming the page image's `sandbox_artifact_id`, and an image
+   `plan` with any redactions:
+
+   ```sh
+   bid screenshot prepare --sandbox-artifact ARTIFACT_ID --input PLAN.json --output PAGE.png --receipt PAGE.json --json
+   ```
+
+4. **Release it.** Inspect `PAGE.png`, then write `INGEST.json` with the
+   `extraction_job_id`, the receipt as `prepared`, its image SHA-256 as
+   `reviewed_upload_sha256`, the archive SHA-256 as `reviewed_archive_sha256`,
+   and a new `idempotency_key`. A human session ingests it:
+
+   ```sh
+   bid screenshot add --task TASK_ID --file PAGE.png --input INGEST.json --json
+   ```
+
+   The result's `vendor_archive` shows the capture time, final origin, page title
+   and whether the capture was `incomplete`.
+5. **Use it on a card.** Link an `image_region` with claim scope
+   `hardware_documentation` and an observation of what the region shows, then
+   [submit and confirm the card](#review-responses-and-assemble-a-draft). The
+   reviewer must acknowledge `vendor_model_scope`, and `vendor_capture_incomplete`
+   when some page resources failed.
 
 ## Download files safely
 
