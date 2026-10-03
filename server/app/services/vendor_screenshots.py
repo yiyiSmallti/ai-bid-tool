@@ -15,7 +15,7 @@ from html.parser import HTMLParser
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets
@@ -45,6 +45,9 @@ class VendorCapture:
     archive: SandboxArtifact
     entry: SandboxFetchReceipt
     entry_metadata: dict
+    # Some page resources were denied or failed; the image may lack styling or content.
+    incomplete: bool
+    failed_request_count: int
 
 
 class _Title(HTMLParser):
@@ -160,13 +163,25 @@ async def resolve(session, actor, task_id, extraction_id, source: VendorSource, 
     entry, metadata = await entry_receipt(session, capture_input, attempt.id, crypto)
     if pdf and entry.response_sha256 != archive.plaintext_sha256:
         raise integrity()
+    failed = await session.scalar(
+        select(func.count())
+        .select_from(SandboxFetchReceipt)
+        .where(
+            SandboxFetchReceipt.attempt_record_id == attempt.id,
+            SandboxFetchReceipt.decision_code != "allowed",
+        )
+    )
+    reported = any(item.get("code") == "vendor_resources_incomplete" for item in attempt.issues)
     bindings = {
         "task_resource_id": selection.id,
         "product_revision_id": selection.product_revision_id,
         "origin": "vendor",
         "image_kind": "vendor_page",
     }
-    return bindings, selection, VendorCapture(run, capture_input, image, archive, entry, metadata)
+    capture = VendorCapture(
+        run, capture_input, image, archive, entry, metadata, bool(failed) or reported, failed or 0
+    )
+    return bindings, selection, capture
 
 
 async def _read(storage: Storage, artifact: SandboxArtifact) -> bytes:
@@ -260,6 +275,8 @@ async def record(
             "captured_at": capture.entry.ended_at.astimezone(UTC).isoformat(),
             "policy_revision": capture.run.policy_revision,
             "provenance_manifest_hash": capture.archive.provenance_manifest_hash,
+            "incomplete": capture.incomplete,
+            "failed_request_count": capture.failed_request_count,
         },
         sandbox_run_id=capture.run.id,
         archive_artifact_id=capture.archive.id,
@@ -286,6 +303,8 @@ def view(row: ScreenshotVendorArchive) -> dict:
         "content_sha256": row.content_sha256,
         "archive": row.descriptor,
         "policy_revision": row.provenance["policy_revision"],
+        "incomplete": row.provenance["incomplete"],
+        "failed_request_count": row.provenance["failed_request_count"],
     }
 
 

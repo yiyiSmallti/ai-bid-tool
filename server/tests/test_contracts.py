@@ -26,7 +26,7 @@ def test_schema_tracks_actual_commands():
     visit(root)
     assert actual == set(COMMANDS)
     discovered = command_schema(app)
-    assert discovered["version"] == "2.1"
+    assert discovered["version"] == "2.2"
     for name in actual:
         assert discovered["commands"][name]["cli_parameters"]
 

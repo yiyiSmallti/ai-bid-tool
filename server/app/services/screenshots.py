@@ -769,6 +769,11 @@ async def review_warnings(session, evidence):
         warnings.add("image_source_claim")
     if asset.origin == "vendor":
         warnings.add("vendor_model_scope")
+        archive_row = await session.get(ScreenshotVendorArchive, asset.vendor_archive_id)
+        if archive_row is None:
+            fail("vendor_provenance_integrity", "Vendor capture provenance changed", 409, 4)
+        if archive_row.provenance.get("incomplete"):
+            warnings.add("vendor_capture_incomplete")
     if asset.source.get("environment") in {"test", "development"}:
         warnings.add("image_test_environment")
     if asset.image_kind == "diagram":

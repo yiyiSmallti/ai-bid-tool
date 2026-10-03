@@ -29,7 +29,8 @@ A development node may instead define one revision with `open_public_https: true
 and no URLs. It admits every canonical public HTTPS URL as a main URL or resource.
 The file is valid only while the node environment sets
 `BID_SANDBOX_DEV_OPEN_EGRESS=1`; otherwise every load fails with `policy_invalid`.
-An exact policy match still takes precedence over the open revision. Each mapped revision must exist, list that URL as a main URL, and not be
+An exact policy match still takes precedence over the open revision. Requests under
+the open revision skip the organization minute window; origin leases still apply. Each mapped revision must exist, list that URL as a main URL, and not be
 revoked. Without an explicit selection, exactly one non-revoked policy must match.
 This selector is operator configuration and has no client parameter or edit API.
 
@@ -44,8 +45,10 @@ cannot expand its rules.
 `await broker.fetch(url, method="GET")` returns `FetchPayload` with `url`, `status`,
 `headers`, and decoded `body`. It accepts no supplied headers, cookies, request
 body, credentials, proxy settings, or TLS options. `broker.close()` revokes further
-requests. `FetchDenied.code` is the only diagnostic value that callers should log;
-failures must terminate the capture rather than silently omit resources.
+requests. `FetchDenied.code` is the only diagnostic value that callers should log.
+A denied resource is recorded and leaves the run open, so the capture can continue
+and be reported incomplete. `RUN_FATAL_FETCH_CODES` (policy changes, revocation,
+a closed run, an unavailable ledger, the manifest limit) close the run.
 
 `broker.receipts` and `broker.manifest_bytes()` provide trusted request records.
 `broker.denials` separately records every rejected fetch attempt, including failures
@@ -120,8 +123,9 @@ remain subject to the persistent organization window.
   enabling additional nodes.
 - The file and its parent directory must remain operator-controlled. The policy
   reader cannot establish filesystem ownership or deployment trust by itself.
-- Unsupported assets or authentication challenges make capture fail. They do not
-  authorize automatic policy expansion, login, or a relaxed TLS/network path.
+- Unsupported assets are omitted and make the capture incomplete; an unusable
+  entry document or an authentication challenge fails it. Neither authorizes
+  automatic policy expansion, login, or a relaxed TLS/network path.
 - Request manifests describe proxy-observed bytes. Rendered DOM and screenshots
   still require the separate sandbox validation and provenance pipeline.
 - Test transport injection is an internal constructor seam. Public configuration

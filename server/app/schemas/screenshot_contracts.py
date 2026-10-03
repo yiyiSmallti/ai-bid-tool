@@ -254,6 +254,8 @@ class VendorArchiveView(Contract):
     content_sha256: Sha256
     archive: ArchiveDescriptor
     policy_revision: str = Field(min_length=1, max_length=100)
+    incomplete: bool
+    failed_request_count: int = Field(strict=True, ge=0)
 
 
 class ScreenshotView(Contract):

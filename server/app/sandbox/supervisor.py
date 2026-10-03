@@ -58,6 +58,7 @@ RUNNER_ERROR_CODES = frozenset(
         "browser_launch_failed",
         "source_timeout",
         "source_navigation_failed",
+        "source_fetch_failed",
         "runner_unexpected_failure",
     }
 )
@@ -448,9 +449,13 @@ class Supervisor:
                     raise SandboxFailure("network_denied")
                 identifier = reply.get("id")
                 if (
-                    reply.get("type") != "fetch_result"
+                    reply.get("type") not in ("fetch_result", "fetch_failed")
                     or type(identifier) is not int
                     or identifier not in inflight
+                ):
+                    raise SandboxFailure("invalid_fetch")
+                if reply["type"] == "fetch_failed" and (
+                    body or set(reply) != {"type", "id", "length"}
                 ):
                     raise SandboxFailure("invalid_fetch")
                 inflight.discard(identifier)
@@ -510,11 +515,14 @@ class Supervisor:
                     if data or inflight or set(header) != {"type", "versions", "issues", "length"}:
                         raise SandboxFailure("invalid_frame")
                     reported_issues = header["issues"]
-                    if reported_issues not in ([], ["offline_resources_blocked"]):
+                    allowed_issue = (
+                        "offline_resources_blocked"
+                        if descriptor.purpose == "prototype_offline"
+                        else "vendor_resources_incomplete"
+                    )
+                    if reported_issues not in ([], [allowed_issue]):
                         raise SandboxFailure("invalid_frame")
-                    if reported_issues and (
-                        stage != "render" or descriptor.purpose != "prototype_offline"
-                    ):
+                    if reported_issues and stage != "render":
                         raise SandboxFailure("invalid_frame")
                     if issues is not None:
                         issues.extend(reported_issues)

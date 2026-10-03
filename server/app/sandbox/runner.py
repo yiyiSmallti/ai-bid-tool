@@ -7,6 +7,7 @@ import json
 import os
 import struct
 import sys
+import time
 import zlib
 from typing import Any
 
@@ -103,9 +104,19 @@ class Relay:
                 return
             identifier = response.get("id")
             future = self.pending.pop(identifier, None) if type(identifier) is int else None
-            if response.get("type") != "fetch_result" or future is None:
+            if response.get("type") not in ("fetch_result", "fetch_failed") or future is None:
                 raise SandboxFailure("invalid_frame")
-            future.set_result((response, data))
+            if response["type"] == "fetch_failed":
+                future.set_exception(SandboxFailure("source_fetch_failed"))
+            else:
+                future.set_result((response, data))
+
+    async def drain(self) -> None:
+        """Wait for every outstanding reply so the supervisor never sees "done" early."""
+        while self.pump is not None and not self.pump.done():
+            await asyncio.wait({self.pump})
+        if self.pump is not None:
+            self.pump.result()
 
     async def fetch(self, url: str, method: str = "GET") -> tuple[dict[str, Any], bytes]:
         async with self.slots:
@@ -186,7 +197,18 @@ async def render_web(
         if not denied:
             denied.append(code)
 
+    # A vendor page stays usable when some resources fail; the capture is reported as
+    # incomplete. The main document's own failure still fails navigation.
+    missing: list[str] = []
+
+    def skip(code: str) -> None:
+        if offline:
+            deny(code)
+        else:
+            missing.append(code)
+
     redirect_responses: dict[str, tuple[dict[str, Any], bytes]] = {}
+    closing = False
     async with async_playwright() as playwright:
         # Under gVisor, the renderer's seccomp-bpf policy traps sched_getaffinity for other
         # threads and crashes script-heavy pages. Vendor captures there keep Chromium's
@@ -227,12 +249,16 @@ async def render_web(
 
         async def handle_route(route):
             request = route.request
+            if closing:
+                skip("capture_closed")
+                await route.abort("blockedbyclient")
+                return
             if (
                 offline
                 or request.method not in ("GET", "HEAD")
                 or not request.url.startswith("https://")
             ):
-                deny("network_denied")
+                skip("network_denied")
                 await route.abort("blockedbyclient")
                 return
             try:
@@ -249,24 +275,24 @@ async def render_web(
                     status=response["status"], headers=response["headers"], body=body
                 )
             except SandboxFailure as exc:
-                deny(exc.code)
+                skip(exc.code)
                 await route.abort("blockedbyclient")
 
         await context.route("**/*", handle_route)
 
         async def block_websocket(socket):
-            deny("network_denied")
+            skip("network_denied")
             await socket.close()
 
         await context.route_web_socket("**/*", block_websocket)
         page = await context.new_page()
 
         async def reject_popup(popup):
-            deny("popup_denied")
+            skip("popup_denied")
             await popup.close()
 
         page.on("popup", reject_popup)
-        page.on("download", lambda _: deny("download_denied"))
+        page.on("download", lambda _: skip("download_denied"))
         await page.add_init_script("""
             Object.defineProperty(window, 'RTCPeerConnection', {value: undefined});
             Object.defineProperty(window, 'webkitRTCPeerConnection', {value: undefined});
@@ -275,13 +301,22 @@ async def render_web(
             if offline:
                 await page.set_content(source.decode("utf-8"), wait_until="load")
             else:
-                await page.goto(source.decode("utf-8"), wait_until="load", timeout=navigation_ms)
+                started = time.monotonic()
+                await page.goto(
+                    source.decode("utf-8"), wait_until="domcontentloaded", timeout=navigation_ms
+                )
+                # The document is usable; slow resources only make the capture incomplete.
+                remaining = navigation_ms - int((time.monotonic() - started) * 1000)
+                try:
+                    if remaining < 1000:
+                        raise PlaywrightTimeoutError("navigation budget spent")
+                    await page.wait_for_load_state("load", timeout=remaining)
+                except PlaywrightTimeoutError:
+                    skip("load_timeout")
         except PlaywrightTimeoutError:
-            raise SandboxFailure(denied[0] if denied else "source_timeout") from None
+            raise SandboxFailure("source_timeout") from None
         except PlaywrightError:
-            raise SandboxFailure(denied[0] if denied else "source_navigation_failed") from None
-        if denied and not offline:
-            raise SandboxFailure(denied[0])
+            raise SandboxFailure("source_navigation_failed") from None
         if (
             not offline
             and await page.locator(
@@ -294,8 +329,8 @@ async def render_web(
             type="png", full_page=False, animations="disabled", timeout=10_000
         )
         dom = (await page.content()).encode("utf-8")
-        if denied and not offline:
-            raise SandboxFailure(denied[0])
+        closing = True
+        await RELAY.drain()
         await context.close()
         await browser.close()
     return [
@@ -306,7 +341,13 @@ async def render_web(
             descriptor.viewport_height,
         ),
         ArtifactPayload("rendered_html", dom),
-    ], (("offline_resources_blocked",) if denied else ())
+    ], (
+        ("offline_resources_blocked",)
+        if denied
+        else ("vendor_resources_incomplete",)
+        if missing
+        else ()
+    )
 
 
 def validate_png_chunks(data: bytes) -> None:

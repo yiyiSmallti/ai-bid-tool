@@ -191,7 +191,10 @@ rejects an archive whose run, attempt, bytes, storage key or entry response
 differ from the capture, and an asset whose page image belongs to another
 attempt or capture format. Vendor images support only `hardware_documentation`,
 and card confirmation must acknowledge `vendor_model_scope` in addition to the
-general image warnings. Later card and export checks reread the archive bytes;
+general image warnings. An archive also records whether its capture was incomplete
+and how many requests the proxy denied; both must match the sandbox receipts, and an
+incomplete capture adds the `vendor_capture_incomplete` warning
+([`0026`](../../server/migrations/versions/0026_vendor_incomplete_captures.py)). Later card and export checks reread the archive bytes;
 they do not depend on the node's current fetch policy file.
 
 ## Pitfalls

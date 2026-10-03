@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CONTRACT_VERSION = "2.1"
+CONTRACT_VERSION = "2.2"
 
 
 class Contract(BaseModel):

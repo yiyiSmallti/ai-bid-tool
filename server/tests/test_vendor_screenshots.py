@@ -22,6 +22,7 @@ import hashlib
 import json
 import os
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -31,6 +32,7 @@ from app.api.main import create_app
 from app.core.config import Settings
 from app.models.screenshots import ScreenshotVendorArchive
 from app.providers.browser import ArtifactPayload, ExecutionResult
+from app.providers.sandbox_fetch import FetchDenied
 from app.schemas.screenshot_contracts import (
     ImagePlan,
     PixelRect,
@@ -57,6 +59,7 @@ from test_screenshot_renderer import _rgb_png  # pyright: ignore[reportMissingIm
 WEB_URL = "https://vendor.example/m1"
 FINAL_URL = "https://www.vendor.example/products/m1"
 PDF_URL = "https://vendor.example/m1-whitepaper.pdf"
+MISSING_URL = "https://vendor.example/missing.css"
 PAGE = (
     b"<!doctype html><html><head><meta charset='utf-8'>"
     b"<title>Synthetic M1 \xe8\xa7\x84\xe6\xa0\xbc</title></head>"
@@ -84,6 +87,12 @@ class VendorBrowser(FakeBrowser):
         self.calls += 1
         fetched = await fetcher.fetch(source_url)  # the broker follows redirects itself
         if descriptor.format == "web":
+            # A failed stylesheet makes the capture incomplete, not unusable.
+            try:
+                await fetcher.fetch(MISSING_URL)
+            except FetchDenied:
+                result = self.output("capture_png", fetched.body, descriptor)
+                return replace(result, issues=("vendor_resources_incomplete",))
             return self.output("capture_png", fetched.body, descriptor)
         pages = tuple(
             ArtifactPayload(
@@ -115,7 +124,8 @@ class VendorBrowser(FakeBrowser):
 @asynccontextmanager
 async def vendor_client(tenants, tmp_path: Path, monkeypatch, *, live=False):
     policy = tmp_path / "policy.json"
-    rules = [{"url": url, "methods": ["GET", "HEAD"]} for url in (WEB_URL, FINAL_URL, PDF_URL)]
+    urls = (WEB_URL, FINAL_URL, PDF_URL, MISSING_URL)
+    rules = [{"url": url, "methods": ["GET", "HEAD"]} for url in urls]
     exact = {"revision": "synthetic-v1", "main_urls": [WEB_URL, PDF_URL], "rules": rules}
     opened = {"revision": "dev-open-v1", "open_public_https": True}
     policy.write_text(
@@ -327,6 +337,7 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
         assert archive["content_sha256"] == hashlib.sha256(PAGE).hexdigest()
         assert archive["archive"]["sha256"] == archive_sha
         assert archive["archive"]["media_type"] == "application/zip"
+        assert archive["incomplete"] is True and archive["failed_request_count"] == 1
         assert "vendor.example/m1" not in json.dumps(asset)
         rendition = accepted.json()["data"]["rendition"]
         assert rendition["profile"] == "screenshot-markup-v1"
@@ -353,6 +364,7 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
         assert page_ids[1]["vendor_archive_id"] == page_ids[2]["vendor_archive_id"]
         whitepaper = page_ids[2]["vendor_archive"]
         assert whitepaper["format"] == "pdf" and whitepaper["title"] is None
+        assert whitepaper["incomplete"] is False and whitepaper["failed_request_count"] == 0
         assert whitepaper["archive"]["media_type"] == "application/pdf"
         assert whitepaper["content_sha256"] == hashlib.sha256(WHITEPAPER).hexdigest()
         async with app.state.db.transaction(org) as session:
@@ -389,7 +401,7 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
         card = await create_card(api, header, task, extraction, requirements[2], content)
         set_role(admin_engine, org, tenants["users"][0], "technical")
         pending = await require_action(api, header, card, "submit")
-        assert "vendor_model_scope" in pending["warning_codes"]
+        assert {"vendor_model_scope", "vendor_capture_incomplete"} <= set(pending["warning_codes"])
         confirmed = await require_action(
             api,
             header,

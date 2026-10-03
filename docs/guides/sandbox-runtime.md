@@ -257,7 +257,8 @@ maintaining an exact allow list. Never configure this on a production node.
 3. In the worker and API environment, set `BID_SANDBOX_POLICY_FILE` to that file,
    `BID_SANDBOX_FETCH_QUOTA` to a ledger path inside the directory, and
    `BID_SANDBOX_DEV_OPEN_EGRESS=1`, then restart both processes. Without the flag, an
-   open revision makes the policy file invalid and every capture fails closed.
+   open revision makes the policy file invalid and every capture fails closed. The open
+   revision also skips the organization's 60-requests-per-minute window.
 
 Run the opt-in check against a public page and a public PDF of your choice:
 
@@ -310,8 +311,9 @@ The adapter validates fixed framing, declared dimensions, header magic and byte 
 the trusted side. PNG/PDF decoding occurs only in the isolated validator. The validator checks complete
 static PNG framing and CRCs and rejects a uniform vendor screenshot; blank prototype
 and explicitly selected PDF pages remain valid. Blocked offline prototype resources produce
-the fixed `offline_resources_blocked` warning when the full output set is produced. Vendor
-capture keeps the whole-run failure behavior for a denied request. A digest-pinned
+the fixed `offline_resources_blocked` warning when the full output set is produced. A vendor
+capture with denied resources completes with `vendor_resources_incomplete` as long as its
+entry document loads. A digest-pinned
 image and a validator success do not prove the image/kernel cannot be compromised.
 
 Verify login/challenge and error-page handling against approved synthetic sites. The fixed
