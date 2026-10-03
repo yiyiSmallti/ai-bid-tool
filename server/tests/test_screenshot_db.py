@@ -14,7 +14,9 @@ Failure modes covered before implementation:
   rendition, image hash, HTML hash, feature revision, batch selection, or
   previous decision while retaining an otherwise plausible row;
 * append-only screenshot provenance can be updated or deleted through the
-  runtime role even when a statement matches no rows.
+  runtime role even when a statement matches no rows;
+* a vendor archive names bytes, a run or an entry response that differs from
+  the succeeded sandbox capture it claims to retain.
 
 The fixture uses only synthetic rows and the real migration triggers.  It does
 not call a renderer, model, browser, vendor, or object store.  The suite needs
@@ -22,6 +24,7 @@ an isolated PostgreSQL database supplied by ``BID_TEST_ADMIN_URL``; absence of
 that database is reported by the shared fixture as a skipped integration test.
 """
 
+import hashlib
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -44,6 +47,13 @@ from app.models.response_cards import (
     Evidence,
     ResponseCard,
     ResponseCardRevision,
+)
+from app.models.sandbox import (
+    SandboxArtifact,
+    SandboxAttempt,
+    SandboxFetchReceipt,
+    SandboxInput,
+    SandboxRun,
 )
 from app.models.screenshots import (
     PrototypeDecisionBatch,
@@ -124,6 +134,189 @@ def clone_revision(previous, user, **changes):
     )
     values.update(changes)
     return ResponseCardRevision(**values)
+
+
+def synthetic_vendor_capture(session, org, user, task_id, extraction, selection):
+    """A succeeded bundle capture written through the real sandbox gates; no network."""
+    url = "https://vendor.example.invalid/product"
+    url_sha256 = hashlib.sha256(url.encode()).hexdigest()
+    job = Job(
+        id=uuid4(),
+        org_id=org,
+        task_id=task_id,
+        document_id=extraction.document_id,
+        kind="sandbox",
+        cache_key=uuid4().hex * 2,
+        status="queued",
+    )
+    session.add(job)
+    session.flush()
+    capture_input = SandboxInput(
+        id=uuid4(),
+        org_id=org,
+        task_id=task_id,
+        document_id=extraction.document_id,
+        extraction_job_id=extraction.id,
+        purpose="vendor_capture",
+        task_resource_id=selection.id,
+        product_revision_id=selection.product_revision_id,
+        source_field="official_url",
+        source_url_sha256=url_sha256,
+        encrypted_source_url="synthetic-ciphertext",
+        spec={
+            "purpose": "vendor_capture",
+            "extraction_job_id": str(extraction.id),
+            "task_resource_id": str(selection.id),
+            "expected_product_revision_id": str(selection.product_revision_id),
+            "source_field": "official_url",
+            "expected_source_url_sha256": url_sha256,
+            "format": "web",
+            "pdf_pages": [],
+            "viewport": {"width": 1440, "height": 900, "device_scale_factor": 1},
+            "archive": "bundle",
+            "capture_key": str(uuid4()),
+        },
+    )
+    session.add(capture_input)
+    session.flush()
+    run = SandboxRun(
+        id=uuid4(),
+        org_id=org,
+        input_id=capture_input.id,
+        task_id=task_id,
+        document_id=extraction.document_id,
+        job_id=job.id,
+        request_hash=uuid4().hex * 2,
+        profile="vendor-capture-v1",
+        policy_revision="synthetic-v1",
+        policy_sha256="d" * 64,
+        runtime_profile_digest="e" * 64,
+        requested_by=user,
+        actor_kind="session",
+        scope_snapshot=[
+            "sandbox:read",
+            "sandbox:capture",
+            "task:read",
+            "resource:read",
+            "job:read",
+        ],
+        capture_key=uuid4(),
+    )
+    session.add(run)
+    session.flush()
+    attempt_id = uuid4()
+    job.status, job.run_id = "running", attempt_id
+    job.lease_until = datetime.now(UTC) + timedelta(hours=1)
+    session.flush()
+    attempt = SandboxAttempt(
+        id=uuid4(),
+        org_id=org,
+        sandbox_run_id=run.id,
+        input_id=capture_input.id,
+        task_id=task_id,
+        job_id=job.id,
+        attempt_id=attempt_id,
+        instance_group_ref_hash="f" * 64,
+        descriptor={},
+        started_at=datetime.now(UTC),
+    )
+    session.add(attempt)
+    session.flush()
+    attempt.ended_at = datetime.now(UTC)
+    attempt.termination_code, attempt.cleanup_state = "succeeded", "complete"
+    job.status = "succeeded"
+    session.flush()
+    body = b"<html><title>Synthetic vendor page</title></html>"
+    artifacts = {}
+    for ordinal, kind in enumerate(
+        ("capture_png", "rendered_html", "request_manifest", "capture_archive")
+    ):
+        identifier, digest = uuid4(), hashlib.sha256(kind.encode()).hexdigest()
+        artifacts[kind] = SandboxArtifact(
+            id=identifier,
+            org_id=org,
+            sandbox_run_id=run.id,
+            attempt_record_id=attempt.id,
+            input_id=capture_input.id,
+            task_id=task_id,
+            kind=kind,
+            ordinal=ordinal,
+            plaintext_sha256=digest,
+            size_bytes=100,
+            media_type="image/png" if kind == "capture_png" else "application/octet-stream",
+            object_key=f"org/{org}/sandbox-artifacts/{run.id}/{attempt_id}/{identifier}/{digest}",
+            provenance_manifest_hash="c" * 64,
+            origin="public_web_capture",
+            width=1440 if kind == "capture_png" else None,
+            height=900 if kind == "capture_png" else None,
+        )
+    manifest_id = uuid4()
+    artifacts["provenance_manifest"] = SandboxArtifact(
+        id=manifest_id,
+        org_id=org,
+        sandbox_run_id=run.id,
+        attempt_record_id=attempt.id,
+        input_id=capture_input.id,
+        task_id=task_id,
+        kind="provenance_manifest",
+        ordinal=4,
+        plaintext_sha256="c" * 64,
+        size_bytes=100,
+        media_type="application/octet-stream",
+        object_key=f"org/{org}/sandbox-artifacts/{run.id}/{attempt_id}/{manifest_id}/{'c' * 64}",
+        provenance_manifest_hash="c" * 64,
+        origin="public_web_capture",
+    )
+    session.add_all(artifacts.values())
+    session.flush()
+    entry = SandboxFetchReceipt(
+        id=uuid4(),
+        org_id=org,
+        sandbox_run_id=run.id,
+        attempt_record_id=attempt.id,
+        input_id=capture_input.id,
+        task_id=task_id,
+        request_ordinal=0,
+        url_sha256=url_sha256,
+        encrypted_request_metadata="synthetic-ciphertext",
+        response_sha256=hashlib.sha256(body).hexdigest(),
+        response_bytes=len(body),
+        status_code=200,
+        decision_code="allowed",
+        policy_revision="synthetic-v1",
+        started_at=attempt.started_at,
+        ended_at=attempt.ended_at,
+        bundle_artifact_id=artifacts["capture_archive"].id,
+    )
+    session.add(entry)
+    session.flush()
+    return run, artifacts, entry
+
+
+def vendor_archive_row(org, task_id, extraction, selection, run, artifacts, entry, **changes):
+    archive = artifacts["capture_archive"]
+    values = {
+        "id": uuid4(),
+        "org_id": org,
+        "task_id": task_id,
+        "extraction_job_id": extraction.id,
+        "task_resource_id": selection.id,
+        "product_revision_id": selection.product_revision_id,
+        "content_sha256": entry.response_sha256,
+        "archive_sha256": archive.plaintext_sha256,
+        "storage_key": archive.object_key,
+        "descriptor": {
+            "sha256": archive.plaintext_sha256,
+            "size_bytes": archive.size_bytes,
+            "media_type": "application/zip",
+        },
+        "provenance": {"title": "Synthetic vendor page"},
+        "sandbox_run_id": run.id,
+        "archive_artifact_id": archive.id,
+        "entry_receipt_id": entry.id,
+    }
+    values.update(changes)
+    return ScreenshotVendorArchive(**values)
 
 
 @pytest.fixture
@@ -217,20 +410,8 @@ def screenshot_rows(seeded, admin_engine):
             )
             session.add(candidate)
             session.flush()
-            archive = ScreenshotVendorArchive(
-                id=uuid4(),
-                org_id=org,
-                task_id=task_id,
-                extraction_job_id=extraction.id,
-                task_resource_id=selection.id,
-                product_revision_id=selection.product_revision_id,
-                search_candidate_id=candidate.id,
-                content_sha256="3" * 64,
-                archive_sha256="4" * 64,
-                storage_key=f"org/{org}/synthetic/vendor.zip",
-                descriptor={"media_type": "application/zip", "size_bytes": 100},
-                provenance={"title": "Synthetic vendor source"},
-            )
+            capture = synthetic_vendor_capture(session, org, user, task_id, extraction, selection)
+            archive = vendor_archive_row(org, task_id, extraction, selection, *capture)
             session.add(archive)
 
             feature = Feature(id=uuid4(), org_id=org, created_by=user, current_revision=1)
@@ -938,3 +1119,60 @@ async def test_selection_cannot_reactivate_old_prototype_decisions(screenshot_ro
         assert db_sqlstate(rejected.value) == "42501"
     finally:
         await db.engine.dispose()
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "archive_sha256",
+        "content_sha256",
+        "storage_key",
+        "archive_artifact",
+        "entry_receipt",
+        "search_candidate",
+        "token_actor",
+        None,
+    ],
+)
+def test_direct_sql_binds_vendor_archives_to_their_capture(mutation, screenshot_rows, admin_engine):
+    org, user = screenshot_rows["orgs"][0], screenshot_rows["users"][0]
+    with Session(admin_engine) as session, session.begin():
+        actor_context(session, org, user)
+        task_id = screenshot_rows["ids"][org]["task"]
+        extraction = session.scalar(
+            select(Job).where(Job.org_id == org, Job.task_id == task_id, Job.kind == "extract")
+        )
+        selection = session.get(TaskResource, screenshot_rows["ids"][org]["selection"])
+        assert extraction is not None and selection is not None
+        run, artifacts, entry = synthetic_vendor_capture(
+            session, org, user, task_id, extraction, selection
+        )
+        candidate = session.scalar(
+            select(ScreenshotSearchCandidate.id).where(ScreenshotSearchCandidate.org_id == org)
+        )
+        changes = {
+            "archive_sha256": {"archive_sha256": "0" * 64},
+            "content_sha256": {"content_sha256": "0" * 64},
+            "storage_key": {"storage_key": f"org/{org}/synthetic/other.zip"},
+            "archive_artifact": {"archive_artifact_id": artifacts["capture_png"].id},
+            "entry_receipt": {"entry_receipt_id": uuid4()},
+            "search_candidate": {"search_candidate_id": candidate},
+        }.get(mutation or "", {})
+        if mutation == "archive_artifact":
+            png = artifacts["capture_png"]
+            changes.update(archive_sha256=png.plaintext_sha256, storage_key=png.object_key)
+            changes["descriptor"] = {"sha256": png.plaintext_sha256, "size_bytes": 100}
+        if mutation == "token_actor":
+            actor_context(session, org, user, kind="token", token=uuid4())
+        row = vendor_archive_row(
+            org, task_id, extraction, selection, run, artifacts, entry, **changes
+        )
+        if mutation is None:
+            session.add(row)
+            session.flush()
+            return
+        with pytest.raises(DBAPIError) as error:
+            with session.begin_nested():
+                session.add(row)
+                session.flush()
+        assert db_sqlstate(error.value) in {"23514", "23503", "42501"}

@@ -184,6 +184,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
                 storage,
                 staged,
                 max_bytes=settings.max_upload_bytes,
+                crypto=crypto,
             )
             await ctx[0].commit()
         except (ServiceError, ProviderFailure, SQLAlchemyError, OSError):

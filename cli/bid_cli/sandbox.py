@@ -16,6 +16,7 @@ from app.core.errors import ServiceError
 from app.schemas.contracts import Result
 from app.schemas.sandbox_contracts import (
     PrototypeSpec,
+    SandboxArtifactView,
     SandboxDownloadLink,
     SandboxDownloadReceipt,
     SandboxPreview,
@@ -373,77 +374,83 @@ async def wait_and_refresh(api: Client, body: dict, wait_seconds: float) -> dict
     return validated_result(refreshed, data_model=SandboxRunView)
 
 
+async def fetch_artifact(api: Client, artifact_id: UUID) -> tuple[SandboxArtifactView, bytearray]:
+    """Follow the signed same-origin link and verify length and SHA-256 in memory."""
+    path = f"/sandbox-artifacts/{artifact_id}/download"
+    link_body = validated_result(
+        await api.request("GET", path + "-link"), data_model=SandboxDownloadLink
+    )
+    link = SandboxDownloadLink.model_validate(link_body["data"])
+    if link.artifact.id != artifact_id:
+        raise invalid_server_response()
+    try:
+        url = urlsplit(link.url)
+        query = parse_qs(url.query, strict_parsing=True)
+        if (
+            url.scheme
+            or url.netloc
+            or url.fragment
+            or url.path != path
+            or set(query) != {"token"}
+            or len(query["token"]) != 1
+            or not 0 < len(query["token"][0]) <= 4096
+        ):
+            raise ValueError("unsafe link")
+    except (TypeError, ValueError):
+        raise ServiceError(
+            "invalid_download_link", "Server returned an unsafe download link", 502, 4
+        ) from None
+
+    saved = api.state.load()
+    headers = {
+        "Authorization": f"Bearer {saved['session']}",
+        "X-Org-Id": saved["org_id"],
+    }
+    content = bytearray()
+    try:
+        async with api.transport() as http:
+            async with http.stream(
+                "GET", path, params=query, headers=headers, follow_redirects=False
+            ) as response:
+                if not response.is_success:
+                    raise ServiceError(
+                        "download_unavailable",
+                        "Sandbox artifact download failed",
+                        response.status_code,
+                        3 if response.status_code in {429, 502, 503, 504} else 4,
+                    )
+                async for chunk in response.aiter_bytes():
+                    content.extend(chunk)
+                    if len(content) > link.artifact.size_bytes:
+                        raise ServiceError(
+                            "sandbox_artifact_integrity",
+                            "Downloaded artifact failed integrity checks",
+                            502,
+                            4,
+                        )
+    except httpx.TransportError as exc:
+        raise ServiceError(
+            "network_unavailable", "Server is unavailable or timed out", 503, 3
+        ) from exc
+    if (
+        len(content) != link.artifact.size_bytes
+        or hashlib.sha256(content).hexdigest() != link.artifact.sha256
+    ):
+        raise ServiceError(
+            "sandbox_artifact_integrity",
+            "Downloaded artifact failed integrity checks",
+            502,
+            4,
+        )
+    return link.artifact, content
+
+
 async def download_artifact(api: Client, artifact_id: UUID, output: Path) -> dict:
     # Anchor the destination before any network wait can give another process time
     # to replace a checked directory with a symlink.
     target = SandboxOutput.prepare(output)
     try:
-        path = f"/sandbox-artifacts/{artifact_id}/download"
-        link_body = validated_result(
-            await api.request("GET", path + "-link"), data_model=SandboxDownloadLink
-        )
-        link = SandboxDownloadLink.model_validate(link_body["data"])
-        if link.artifact.id != artifact_id:
-            raise invalid_server_response()
-        try:
-            url = urlsplit(link.url)
-            query = parse_qs(url.query, strict_parsing=True)
-            if (
-                url.scheme
-                or url.netloc
-                or url.fragment
-                or url.path != path
-                or set(query) != {"token"}
-                or len(query["token"]) != 1
-                or not 0 < len(query["token"][0]) <= 4096
-            ):
-                raise ValueError("unsafe link")
-        except (TypeError, ValueError):
-            raise ServiceError(
-                "invalid_download_link", "Server returned an unsafe download link", 502, 4
-            ) from None
-
-        saved = api.state.load()
-        headers = {
-            "Authorization": f"Bearer {saved['session']}",
-            "X-Org-Id": saved["org_id"],
-        }
-        content = bytearray()
-        try:
-            async with api.transport() as http:
-                async with http.stream(
-                    "GET", path, params=query, headers=headers, follow_redirects=False
-                ) as response:
-                    if not response.is_success:
-                        raise ServiceError(
-                            "download_unavailable",
-                            "Sandbox artifact download failed",
-                            response.status_code,
-                            3 if response.status_code in {429, 502, 503, 504} else 4,
-                        )
-                    async for chunk in response.aiter_bytes():
-                        content.extend(chunk)
-                        if len(content) > link.artifact.size_bytes:
-                            raise ServiceError(
-                                "sandbox_artifact_integrity",
-                                "Downloaded artifact failed integrity checks",
-                                502,
-                                4,
-                            )
-        except httpx.TransportError as exc:
-            raise ServiceError(
-                "network_unavailable", "Server is unavailable or timed out", 503, 3
-            ) from exc
-        if (
-            len(content) != link.artifact.size_bytes
-            or hashlib.sha256(content).hexdigest() != link.artifact.sha256
-        ):
-            raise ServiceError(
-                "sandbox_artifact_integrity",
-                "Downloaded artifact failed integrity checks",
-                502,
-                4,
-            )
+        artifact, content = await fetch_artifact(api, artifact_id)
         saving = asyncio.create_task(asyncio.to_thread(target.save, content))
         try:
             await asyncio.shield(saving)
@@ -455,7 +462,7 @@ async def download_artifact(api: Client, artifact_id: UUID, output: Path) -> dic
             except ServiceError as failure:
                 raise cancellation from failure
             raise
-        receipt = SandboxDownloadReceipt(artifact=link.artifact, output_path=str(target.path))
+        receipt = SandboxDownloadReceipt(artifact=artifact, output_path=str(target.path))
         return Result(
             ok=True,
             command="sandbox download",

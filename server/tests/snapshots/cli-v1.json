@@ -10979,37 +10979,6 @@
           ],
           "input": {
             "$defs": {
-              "ArchiveDescriptor": {
-                "additionalProperties": false,
-                "properties": {
-                  "media_type": {
-                    "enum": [
-                      "application/pdf",
-                      "application/zip",
-                      "text/html"
-                    ],
-                    "title": "Media Type",
-                    "type": "string"
-                  },
-                  "sha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Sha256",
-                    "type": "string"
-                  },
-                  "size_bytes": {
-                    "exclusiveMinimum": 0,
-                    "title": "Size Bytes",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "sha256",
-                  "size_bytes",
-                  "media_type"
-                ],
-                "title": "ArchiveDescriptor",
-                "type": "object"
-              },
               "BrowserSource": {
                 "additionalProperties": false,
                 "properties": {
@@ -11516,32 +11485,8 @@
               },
               "VendorSource": {
                 "additionalProperties": false,
+                "description": "A page image published by a succeeded vendor_capture sandbox run.\n\nThe server resolves the product binding, URLs, capture time and archive from the run;\nthe client only names the PNG artifact it prepared.",
                 "properties": {
-                  "archive": {
-                    "$ref": "#/$defs/ArchiveDescriptor"
-                  },
-                  "archive_redaction_plan_sha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Archive Redaction Plan Sha256",
-                    "type": "string"
-                  },
-                  "captured_at": {
-                    "format": "date-time",
-                    "title": "Captured At",
-                    "type": "string"
-                  },
-                  "content_sha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "title": "Content Sha256",
-                    "type": "string"
-                  },
-                  "final_url": {
-                    "format": "uri",
-                    "maxLength": 2083,
-                    "minLength": 1,
-                    "title": "Final Url",
-                    "type": "string"
-                  },
                   "kind": {
                     "enum": [
                       "vendor_web",
@@ -11550,74 +11495,15 @@
                     "title": "Kind",
                     "type": "string"
                   },
-                  "page_count": {
-                    "anyOf": [
-                      {
-                        "minimum": 1,
-                        "type": "integer"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Page Count"
-                  },
-                  "page_number": {
-                    "anyOf": [
-                      {
-                        "minimum": 1,
-                        "type": "integer"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Page Number"
-                  },
-                  "search_candidate_id": {
-                    "anyOf": [
-                      {
-                        "format": "uuid",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Search Candidate Id"
-                  },
-                  "source_url": {
-                    "format": "uri",
-                    "maxLength": 2083,
-                    "minLength": 1,
-                    "title": "Source Url",
-                    "type": "string"
-                  },
-                  "task_resource_id": {
+                  "sandbox_artifact_id": {
                     "format": "uuid",
-                    "title": "Task Resource Id",
-                    "type": "string"
-                  },
-                  "title": {
-                    "maxLength": 500,
-                    "minLength": 1,
-                    "title": "Title",
+                    "title": "Sandbox Artifact Id",
                     "type": "string"
                   }
                 },
                 "required": [
                   "kind",
-                  "task_resource_id",
-                  "source_url",
-                  "final_url",
-                  "title",
-                  "captured_at",
-                  "content_sha256",
-                  "archive",
-                  "archive_redaction_plan_sha256"
+                  "sandbox_artifact_id"
                 ],
                 "title": "VendorSource",
                 "type": "object"
@@ -12150,6 +12036,16 @@
               "type": "uuid"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "sandbox_artifact",
+              "options": [
+                "--sandbox-artifact"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "json_output",
@@ -12357,6 +12253,31 @@
                 ],
                 "title": "UploadSource",
                 "type": "object"
+              },
+              "VendorSource": {
+                "additionalProperties": false,
+                "description": "A page image published by a succeeded vendor_capture sandbox run.\n\nThe server resolves the product binding, URLs, capture time and archive from the run;\nthe client only names the PNG artifact it prepared.",
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "vendor_web",
+                      "vendor_pdf"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "sandbox_artifact_id": {
+                    "format": "uuid",
+                    "title": "Sandbox Artifact Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "sandbox_artifact_id"
+                ],
+                "title": "VendorSource",
+                "type": "object"
               }
             },
             "additionalProperties": false,
@@ -12369,7 +12290,9 @@
                   "mapping": {
                     "certificate_page": "#/$defs/CertificateSource",
                     "prototype_render": "#/$defs/PrototypeSource",
-                    "upload": "#/$defs/UploadSource"
+                    "upload": "#/$defs/UploadSource",
+                    "vendor_pdf": "#/$defs/VendorSource",
+                    "vendor_web": "#/$defs/VendorSource"
                   },
                   "propertyName": "kind"
                 },
@@ -12379,6 +12302,9 @@
                   },
                   {
                     "$ref": "#/$defs/CertificateSource"
+                  },
+                  {
+                    "$ref": "#/$defs/VendorSource"
                   },
                   {
                     "$ref": "#/$defs/PrototypeSource"
@@ -14127,7 +14053,7 @@
         "title": "Result",
         "type": "object"
       },
-      "version": "2.0"
+      "version": "2.1"
     },
     "duration_ms": 0,
     "items": [],

@@ -81,6 +81,10 @@ class ScreenshotVendorArchive(Scoped, Tenant, Base):
     storage_key: Mapped[str] = mapped_column(Text)
     descriptor: Mapped[dict] = mapped_column(JSONB)
     provenance: Mapped[dict] = mapped_column(JSONB)
+    # The sandbox capture that observed the bytes; one archive record per run.
+    sandbox_run_id: Mapped[UUID] = mapped_column()
+    archive_artifact_id: Mapped[UUID] = mapped_column()
+    entry_receipt_id: Mapped[UUID] = mapped_column()
     __table_args__ = (
         *scope(),
         fk(
@@ -90,6 +94,10 @@ class ScreenshotVendorArchive(Scoped, Tenant, Base):
         ),
         fk(["product_revision_id"], "product_revisions", ["id"]),
         fk(["task_id", "search_candidate_id"], "screenshot_search_candidates", ["task_id", "id"]),
+        fk(["sandbox_run_id"], "sandbox_runs", ["id"]),
+        fk(["archive_artifact_id"], "sandbox_artifacts", ["id"]),
+        fk(["entry_receipt_id"], "sandbox_fetch_receipts", ["id"]),
+        UniqueConstraint("org_id", "sandbox_run_id"),
     )
 
 

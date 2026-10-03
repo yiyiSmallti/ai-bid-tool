@@ -42,6 +42,14 @@ paid run must carry that input hash; its job result is the prototype run.
 applies the same local plan as any upload, and `screenshot add` ingests it as an
 `origin=prototype` asset.
 
+A vendor page starts as a `sandbox capture` of the selected product revision's
+`official_url` or `whitepaper_url`. A web page must use `archive=bundle`; a PDF
+always retains its original bytes. `screenshot prepare --sandbox-artifact`
+downloads one `capture_png` or `pdf_page_png` through the sandbox's signed link
+and applies the local plan. The `screenshot add` input names that page in a
+`vendor_web` or `vendor_pdf` source and must set `reviewed_archive_sha256` to
+the run's `capture_archive` or `source_pdf` hash, as listed by `sandbox show`.
+
 `screenshot prototype-decisions preview` fixes an explicit feature group and
 its current confirmed prototype Evidence. An optional `evidence_ids` subset
 supports an individual decision when one feature appears on several cards.
@@ -161,6 +169,31 @@ before publication, so a replaced feature selection stops the job. An
 unavailable sandbox blocks admission. The source PNG is served only to the same
 organization at `GET /prototype-runs/{id}/source`.
 
+### Vendor captures
+
+[`vendor_screenshots.py`](../../server/app/services/vendor_screenshots.py)
+resolves a vendor source only from a succeeded, cleaned `vendor_capture` run of
+the same task and extraction. It authorizes the page image through the sandbox
+download checks, requires the product selection that the run captured, and
+follows the proxy's allowed fetch receipts from the selected URL through its
+redirects to the single HTTP 200 entry response. Ingest rereads the page PNG and
+the retained archive from storage, rechecks their hashes, replays the local plan
+against the page, and, for a web bundle, recomputes the entry body hash from the
+archive entry named by the receipt.
+
+The first page of a run creates its `ScreenshotVendorArchive`; later pages of the
+same run reuse it. The record keeps the URL hashes, final origin, the first
+`<title>` of the archived entry page, the proxy's capture time, content and
+archive hashes, and foreign keys to the run, archive artifact and entry receipt.
+Exact URLs stay in the encrypted sandbox records. Migration
+[`0025_vendor_screenshots.py`](../../server/migrations/versions/0025_vendor_screenshots.py)
+rejects an archive whose run, attempt, bytes, storage key or entry response
+differ from the capture, and an asset whose page image belongs to another
+attempt or capture format. Vendor images support only `hardware_documentation`,
+and card confirmation must acknowledge `vendor_model_scope` in addition to the
+general image warnings. Later card and export checks reread the archive bytes;
+they do not depend on the node's current fetch policy file.
+
 ## Pitfalls
 
 - Source hashes establish byte identity, not authenticity. The server cannot
@@ -176,9 +209,15 @@ organization at `GET /prototype-runs/{id}/source`.
   [human-section-exports.md](human-section-exports.md).
 - A sandbox render failure after the model call fails the job; a retry pays for a
   new generation.
-- Reserved search and vendor-archive records provide the attachment graph for
-  the [sandbox handoff](../plan/sandbox.md). No client API writes a prototype run
-  or renderer receipt, and archived HTML is never served as an active page.
+- Reserved search records have no producer yet, so a vendor archive refuses a
+  search-candidate link. No client API writes a prototype run, vendor archive or
+  renderer receipt, and archived HTML is never served as an active page.
+- A PDF archive records no document title or page count; reading either would
+  require decoding the untrusted PDF in the API process. The archived bytes and
+  the page number remain the reviewable source.
+- A vendor capture proves which bytes the proxy received from an allowed URL. It
+  does not prove that the page describes the selected model; the reviewer checks
+  the model and page scope on each card.
 - Database unavailability after an object write can leave an inaccessible private
   orphan until its publication status can be checked. Deleting an object after
   an ambiguous commit without that check could destroy published evidence.
@@ -199,5 +238,6 @@ organization at `GET /prototype-runs/{id}/source`.
   [card/draft chain](../../server/tests/test_screenshot_cards.py),
   [database gates](../../server/tests/test_screenshot_db.py),
   [vision HTTP boundary](../../server/tests/test_screenshot_vision.py),
-  [prototype generation](../../server/tests/test_prototype_generation.py) and
+  [prototype generation](../../server/tests/test_prototype_generation.py),
+  [vendor captures](../../server/tests/test_vendor_screenshots.py) and
   [CLI contract](../../server/tests/test_screenshot_cli.py).

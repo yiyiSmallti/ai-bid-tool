@@ -27,6 +27,7 @@ from app.schemas.screenshot_contracts import (
     ScreenshotPrepareInput,
     ScreenshotPreviewLink,
     ScreenshotWithdraw,
+    VendorSource,
 )
 from app.services.evidence_sources import check_png
 from pydantic import ValidationError
@@ -302,6 +303,16 @@ async def _read_prototype_source(prototype_run_id: UUID) -> bytes:
     return bytes(content)
 
 
+async def _read_vendor_page(artifact_id: UUID) -> bytes:
+    from bid_cli import main as cli
+    from bid_cli.sandbox import fetch_artifact
+
+    artifact, content = await fetch_artifact(cli.client(), artifact_id)
+    if artifact.kind not in {"capture_png", "pdf_page_png"}:
+        raise _invalid("--sandbox-artifact must name a captured page image")
+    return bytes(content)
+
+
 async def _download_rendition(rendition_id: UUID, output: Path) -> dict:
     from bid_cli import main as cli
     from bid_cli.client import new_output_path
@@ -388,12 +399,15 @@ def register(app: typer.Typer) -> None:
         file: Annotated[Path | None, typer.Option()] = None,
         source: Annotated[UUID | None, typer.Option()] = None,
         prototype_run: Annotated[UUID | None, typer.Option()] = None,
+        sandbox_artifact: Annotated[UUID | None, typer.Option()] = None,
         json_output: cli.JsonOption = False,
     ):
         from bid_cli.client import new_output_path
 
-        if [file, source, prototype_run].count(None) != 2:
-            raise _invalid("Give exactly one of --file, --source or --prototype-run")
+        if [file, source, prototype_run, sandbox_artifact].count(None) != 3:
+            raise _invalid(
+                "Give exactly one of --file, --source, --prototype-run or --sandbox-artifact"
+            )
         target, receipt_target = new_output_path(output), new_output_path(receipt)
         if target == receipt_target:
             raise _invalid("PNG and receipt need different new output paths")
@@ -411,6 +425,13 @@ def register(app: typer.Typer) -> None:
             ):
                 raise _invalid("--prototype-run must match the prototype source in --input")
             content = asyncio.run(_read_prototype_source(prototype_run))
+        elif sandbox_artifact is not None:
+            if (
+                not isinstance(request.source, VendorSource)
+                or request.source.sandbox_artifact_id != sandbox_artifact
+            ):
+                raise _invalid("--sandbox-artifact must match the vendor source in --input")
+            content = asyncio.run(_read_vendor_page(sandbox_artifact))
         else:
             assert source is not None
             if (

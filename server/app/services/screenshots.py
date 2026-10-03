@@ -3,7 +3,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import NoReturn
+from typing import Any, NoReturn
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -16,6 +16,7 @@ from app.models.screenshots import (
     ScreenshotPrivacyReview,
     ScreenshotPrototypeRun,
     ScreenshotRendition,
+    ScreenshotVendorArchive,
     ScreenshotWithdrawal,
 )
 from app.providers.base import ProviderFailure
@@ -28,6 +29,7 @@ from app.schemas.screenshot_contracts import (
     ScreenshotIngest,
 )
 from app.services import response_cards as cards
+from app.services import vendor_screenshots as vendor
 from app.services.evidence_sources import read_preview, require_source, source_data
 from app.services.resources import audit
 
@@ -44,6 +46,7 @@ INVALID_IMAGE_CODES = frozenset(
         "inactive_selection",
         "prototype_integrity",
         "prototype_provenance_missing",
+        "vendor_provenance_integrity",
         "missing_privacy_review",
         "source_integrity",
     }
@@ -116,8 +119,12 @@ async def prepare(content: bytes, source, plan: ImagePlan):
     return png, receipt
 
 
-async def resolve_source(session, actor, task_id, extraction_id, source):
+async def resolve_source(session, actor, task_id, extraction_id, source, crypto=None):
     await cards.extraction_scope(session, task_id, extraction_id)
+    if source.kind in {"vendor_web", "vendor_pdf"}:
+        if crypto is None:
+            fail("vendor_source_unavailable", "Vendor sources require the server key", 503, 3)
+        return await vendor.resolve(session, actor, task_id, extraction_id, source, crypto)
     if source.kind == "certificate_page":
         archive, selected, original = await require_source(
             session, actor, source.evidence_source_id
@@ -136,7 +143,7 @@ async def resolve_source(session, actor, task_id, extraction_id, source):
             archive,
         )
     if source.kind not in {"upload", "prototype_render"}:
-        fail("phase_b_source_required", "Capture requires the sandbox integration", 400, 4)
+        fail("phase_b_source_required", "Local browser capture is not available", 400, 4)
     prototype_id = source.prototype_run_id
     prototype = None
     if prototype_id:
@@ -255,6 +262,11 @@ async def asset_view(session, actor, asset):
         if asset.prototype_run_id
         else None
     )
+    archive_row = (
+        await session.get(ScreenshotVendorArchive, asset.vendor_archive_id)
+        if asset.vendor_archive_id
+        else None
+    )
     return {
         "id": str(asset.id),
         "org_id": str(asset.org_id),
@@ -269,6 +281,7 @@ async def asset_view(session, actor, asset):
         "source_hash_assurance": asset.source_hash_assurance,
         "source_archive": archive,
         "vendor_archive_id": str(asset.vendor_archive_id) if asset.vendor_archive_id else None,
+        "vendor_archive": vendor.view(archive_row) if archive_row else None,
         "prototype_generation": (
             {
                 "id": str(prototype.id),
@@ -346,6 +359,7 @@ async def ingest(
     staged_objects=None,
     *,
     max_bytes=MAX_BYTES,
+    crypto=None,
 ):
     from app.providers.screenshot_renderer import render, validate_png
 
@@ -380,9 +394,24 @@ async def ingest(
     ):
         fail("invalid_mapping", "Preparation mapping does not match the content")
     bindings, _, fixed = await resolve_source(
-        session, actor, task_id, body.extraction_job_id, prepared.source
+        session, actor, task_id, body.extraction_job_id, prepared.source, crypto
     )
-    if prepared.source.kind == "certificate_page":
+    vendor_entry = None
+    if isinstance(fixed, vendor.VendorCapture):
+        if prepared.source_sha256 != fixed.image.plaintext_sha256:
+            fail("source_image_mismatch", "Vendor page image changed", 409, 4)
+        if body.reviewed_archive_sha256 != fixed.archive.plaintext_sha256:
+            fail("archive_hash_mismatch", "Review must name the archived capture", 409)
+        original = await vendor.source_png(storage, fixed)
+        vendor_entry = await vendor.archived_entry(storage, fixed)
+        expected, expected_receipt = await prepare(original, prepared.source, prepared.plan)
+        if (
+            expected != png
+            or expected_receipt.source_width != prepared.source_width
+            or expected_receipt.source_height != prepared.source_height
+        ):
+            fail("source_image_mismatch", "Prepared image differs from the captured page", 409, 4)
+    elif prepared.source.kind == "certificate_page":
         original, _ = await read_preview(
             session, actor, prepared.source.evidence_source_id, storage
         )
@@ -419,19 +448,26 @@ async def ingest(
         else prepared.source.kind,
         "source_sha256": prepared.source_sha256,
         "plan_sha256": prepared.plan_sha256,
-        "source_time": fixed.rendered_at.astimezone(UTC).isoformat()
-        if prepared.source.kind == "certificate_page" and fixed is not None
-        else prepared.source.model_dump(mode="json").get("captured_at"),
-        "source_time_kind": "rendered"
-        if prepared.source.kind == "certificate_page"
-        else "provider_declared",
-        "page": fixed.page
-        if prepared.source.kind == "certificate_page" and fixed is not None
-        else None,
-        "source_id": str(prepared.source.evidence_source_id)
-        if prepared.source.kind == "certificate_page"
-        else None,
+        "source_time": prepared.source.model_dump(mode="json").get("captured_at"),
+        "source_time_kind": "provider_declared",
+        "page": None,
+        "source_id": None,
     }
+    if isinstance(fixed, vendor.VendorCapture):
+        provenance.update(
+            source_time=fixed.entry.ended_at.astimezone(UTC).isoformat(),
+            source_time_kind="proxy_captured",
+            page=fixed.image.page,
+            source_id=str(fixed.run.id),
+        )
+    elif prepared.source.kind == "certificate_page":
+        archive: Any = fixed
+        provenance.update(
+            source_time=archive.rendered_at.astimezone(UTC).isoformat(),
+            source_time_kind="rendered",
+            page=archive.page,
+            source_id=str(prepared.source.evidence_source_id),
+        )
     stored, rendered = await render(
         png,
         {"plan": ImagePlan().model_dump(mode="json"), "profile": profile, "provenance": provenance},
@@ -447,8 +483,8 @@ async def ingest(
 
     # Rendering finishes before taking the task lock; publication rechecks all mutable inputs.
     await cards.task_lock(session, task_id)
-    bindings, _, _ = await resolve_source(
-        session, actor, task_id, body.extraction_job_id, prepared.source
+    bindings, _, locked = await resolve_source(
+        session, actor, task_id, body.extraction_job_id, prepared.source, crypto
     )
     existing = await session.scalar(
         select(ScreenshotAsset).where(
@@ -461,6 +497,18 @@ async def ingest(
             fail("idempotency_conflict", "Idempotency key has different input", 409)
         view = await show(session, actor, existing.id)
         return {"asset": view["asset"], "rendition": view["renditions"][0], "duplicate": True}
+    if isinstance(locked, vendor.VendorCapture):
+        assert vendor_entry is not None and isinstance(fixed, vendor.VendorCapture)
+        if (locked.image.id, locked.archive.id, locked.entry.id) != (
+            fixed.image.id,
+            fixed.archive.id,
+            fixed.entry.id,
+        ):
+            fail("source_image_mismatch", "Vendor capture changed during ingest", 409, 4)
+        archive_row = await vendor.record(
+            session, actor, task_id, body.extraction_job_id, locked, *vendor_entry
+        )
+        bindings["vendor_archive_id"] = archive_row.id
     asset = ScreenshotAsset(
         id=asset_id,
         org_id=actor.org_id,
@@ -470,7 +518,8 @@ async def ingest(
         **bindings,
         source_sha256=prepared.source_sha256,
         source_hash_assurance="server_verified"
-        if prepared.source.kind in {"certificate_page", "prototype_render"}
+        if prepared.source.kind
+        in {"certificate_page", "prototype_render", "vendor_web", "vendor_pdf"}
         else "client_declared",
         source_width=prepared.source_width,
         source_height=prepared.source_height,
@@ -598,6 +647,11 @@ async def resolve_image_material(
             html = await storage.read(actor.org_id, prototype.html_storage_key)
             if hashlib.sha256(html).hexdigest() != prototype.html_sha256:
                 fail("prototype_integrity", "Prototype HTML failed integrity checks", 409, 4)
+    if asset.vendor_archive_id:
+        archive_row = await session.get(ScreenshotVendorArchive, asset.vendor_archive_id)
+        if archive_row is None:
+            fail("vendor_provenance_integrity", "Vendor capture provenance changed", 409, 4)
+        await vendor.verify(session, storage, archive_row, asset)
     allowed = {
         "screenshot": "functional_observation",
         "prototype": "functional_observation",
@@ -713,6 +767,8 @@ async def review_warnings(session, evidence):
         warnings.add("prototype_delivery_obligation")
     else:
         warnings.add("image_source_claim")
+    if asset.origin == "vendor":
+        warnings.add("vendor_model_scope")
     if asset.source.get("environment") in {"test", "development"}:
         warnings.add("image_test_environment")
     if asset.image_kind == "diagram":

@@ -6,6 +6,17 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：厂家网页与白皮书截图证据
+
+- `screenshot prepare --sandbox-artifact` 下载沙箱 `vendor_capture` 运行的网页或 PDF 页图并按本机计划处理；
+  `screenshot add` 以 `vendor_web`/`vendor_pdf` 来源入库，须复核归档哈希。服务端从运行与代理回执解析
+  URL 哈希、最终来源、入口页标题、抓取时间与内容哈希，重放计划并重验页图与归档字节；网页须
+  `archive=bundle`，同一运行多页共用一条归档记录。
+- 迁移 `0025` 将厂家归档绑定到沙箱运行、归档产物与入口回执，并要求厂家图片是该次采集的页面；
+  厂家图片卡片确认须复核 `vendor_model_scope`。`VendorSource` 改为只含页图产物 ID，删除未实施的
+  `VendorCaptureInput`，对外契约升为 `2.1`。机制见
+  [screenshot-evidence.md](notes/screenshot-evidence.md#vendor-captures)。
+
 ## 2026-10-03：模型生成 HTML 原型（ui mock）
 
 - 新增 `bid ui mock` 与 `POST /tasks/{T}/prototype-generations`：固定一条要求与一个已选功能修订，

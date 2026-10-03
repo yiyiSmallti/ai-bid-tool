@@ -1,11 +1,11 @@
 ---
 kind: plan
-status: "部分实施：Phase A、导出接线与原型生成；厂家采集与搜索待实施"
+status: "部分实施：Phase A、导出接线、原型生成与厂家网页/PDF 采集；厂家搜索与本机浏览器采集待实施"
 ---
 
 # 契约草案：功能截图、原型与厂家证据配图
 
-状态：**部分实施：Phase A、导出接线与原型生成；厂家采集与搜索待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
+状态：**部分实施：Phase A、导出接线、原型生成与厂家网页/PDF 采集；厂家搜索与本机浏览器采集待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
 水印边界。下文按已批准的推荐选项描述契约，各项选择见[已定决定](#已定决定)。
 
 ## 目标与边界
@@ -438,17 +438,7 @@ class ArchiveDescriptor(Contract):
 
 class VendorSource(Contract):
     kind: Literal["vendor_web", "vendor_pdf"]
-    task_resource_id: UUID
-    search_candidate_id: UUID | None = None
-    source_url: HttpUrl
-    final_url: HttpUrl
-    title: str = Field(min_length=1, max_length=500)
-    captured_at: datetime
-    content_sha256: Sha256
-    archive: ArchiveDescriptor
-    archive_redaction_plan_sha256: Sha256
-    page_number: int | None = Field(default=None, ge=1)
-    page_count: int | None = Field(default=None, ge=1)
+    sandbox_artifact_id: UUID  # 沙盒 vendor_capture 运行的 capture_png 或 pdf_page_png
 
 class PrototypeSource(Contract):
     kind: Literal["prototype_render"]
@@ -485,14 +475,6 @@ class VendorSearchInput(Contract):
     expected_input_hash: Sha256 | None = None
     dry_run: bool = False
     retry: bool = False
-
-class VendorCaptureInput(Contract):
-    extraction_job_id: UUID
-    task_resource_id: UUID
-    search_candidate_id: UUID | None = None
-    selected_source_url: HttpUrl | None = None
-    page_number: int | None = Field(default=None, ge=1)
-    plan: ImagePlan
 
 class PrototypeGenerateInput(Contract):
     extraction_job_id: UUID
@@ -726,7 +708,7 @@ class ScreenshotDryRun(Contract):
 输入验证及输出约束：
 
 - prepared 是本机回执，不是已批准来源。API 只接受 multipart 中的 PNG 及
-  ScreenshotIngest，厂家分支另附受限归档副本；重算 upload SHA、尺寸和计划哈希。不得提交 org、确认人、权限、
+  ScreenshotIngest；厂家归档由服务端从沙盒采集产物取得，不接受上传；重算 upload SHA、尺寸和计划哈希。不得提交 org、确认人、权限、
   存储键、自由水印/profile 或服务端解析的资源修订；证书来源全关系与 hash 从 Archive
   重验。服务端以可信 Renderer 生成最后一版，最终 hash 可与上传 hash 不同。
   vendor 分支必须有匹配的 reviewed_archive_sha256，其他分支该值为空；生成来源由
@@ -743,13 +725,12 @@ class ScreenshotDryRun(Contract):
 - `system_origin` 仅 scheme/host/port，不接受 userinfo/path/query/fragment；标签、版本
   等自由文字也须隐私检查。BrowserSource 的采集字段由本机工具生成，用户不通过普通
   upload 参数冒充；API 仍标明其保证等级为 client_declared。
-- VendorCaptureInput 的 search_candidate_id 与 selected_source_url 恰选一个；前者
-  须属于该任务/产品搜索，后者只能来自固定产品修订列明的官方来源。URL 校验除 HttpUrl
-  语法外还执行取证边界；PDF 必须有有效页码/页数且 archive 类型为 application/pdf，
-  网页页码为空、归档为静态快照包。两种来源均须有非空标题；无法取得时不能编造标题。
-  字节包限制、解包大小/数量及 PDF 页数沿来源 profile 校验，拒绝路径穿越、活动预览、
-  嵌套归档或解码炸弹，不把归档正文复制进 Result。原型 html 描述符必须为 text/html
-  且与 html_sha256 一致；HTML 内容只走受权归档读取，不能作为页面直接打开。
+- VendorSource 只指名同任务、同抽取 job 的成功 vendor_capture 运行中的页图；
+  URL、最终地址、采集时间、标题、内容与归档哈希均由服务端从运行与代理回执解析。
+  网页须为 `archive=bundle` 运行，PDF 以原始字节为归档；标题取归档入口页的
+  `<title>`，无法取得时为空，不编造。归档按来源 profile 限长，不把归档正文复制进
+  Result。原型 html 描述符必须为 text/html 且与 html_sha256 一致；HTML 内容只走
+  受权归档读取，不能作为页面直接打开。
 - 本机初次输出与每次服务端派生都保留可逆坐标映射；区域只引用可见内容。限制实际
   解码像素与进程资源，不依靠图片声明或渲染后的检查。prototype 环境须为 prototype
   类型；unknown 环境只能归档待查，不能确认 functional_observation。原型的 origin
@@ -813,10 +794,10 @@ safe_metadata 和 accounted_call，不创建绕开 providers/ 的第二套厂商
 | `bid screenshot prepare --source S --input PLAN --output NEW.png --receipt NEW.json` | 复用既有受权来源预览/读取 | 内存读取固定证书页；与 --file 互斥，保留来源权限交集 |
 | `bid screenshot capture --config PRIVATE.json --input PLAN --output NEW.png --receipt NEW.json` | 无 SaaS 浏览器采集路由 | 本机 capture 后执行相同 prepare；不把配置/凭据放进 Result |
 | `bid evidence search --task T --input FILE [--dry-run] [--retry] [--wait]` | `POST /tasks/{T}/screenshot-searches` | VendorSearchInput → VendorJobPreview / Job；结果为已归属搜索 run 的候选，非 Evidence；screenshot:write、resource:read |
-| `bid screenshot capture-vendor --input FILE --output NEW.png --archive NEW.bin --receipt NEW.json` | 读取受权候选或固定产品来源；本机 BrowserProvider/PDF 取证 | VendorCaptureInput → PreparedScreenshot/归档文件回执；先本机脱敏，不自动入库 |
+| `bid sandbox capture` 后 `bid screenshot prepare --sandbox-artifact A --input PLAN --output NEW.png --receipt NEW.json` | 沙盒采集见 [sandbox.md](sandbox.md#cliapi-与身份)；页图经沙盒签名下载 | VendorSource → PreparedScreenshot；先本机脱敏，不自动入库 |
 | `bid ui mock --task T --input FILE [--dry-run] [--retry] [--wait]` | `POST /tasks/{T}/prototype-generations` | PrototypeGenerateInput → VendorJobPreview / Job → PrototypeGenerationView；screenshot:write、resource:read，生成后仍需本机 prepare 和人工 add |
 | `bid screenshot prepare --prototype-run G --input PLAN --output NEW.png --receipt NEW.json` | 受权读取固定沙盒产物，交接按 sandbox.md | PrototypeSource → PreparedScreenshot；本机脱敏及无标签 profile，不确认证据 |
-| `bid screenshot add --task T --file SAFE.png [--archive SAFE.bin] --input INGEST.json` | `POST /tasks/{T}/screenshots`，multipart | asset/rendition 回执；厂家归档与图同事务关联；screenshot:ingest，仅人类会话 |
+| `bid screenshot add --task T --file SAFE.png --input INGEST.json` | `POST /tasks/{T}/screenshots`，multipart | asset/rendition 回执；厂家归档记录与图同事务建立或复用；screenshot:ingest，仅人类会话 |
 | `bid screenshot list --task T --job J [--history] [--cursor C]` | `GET /tasks/{T}/screenshots?job=J&history=...&cursor=...` | items 为资产摘要，data 含 next_cursor；screenshot:read |
 | `bid screenshot show --id S` | `GET /screenshots/{S}` | 来源、派生图列表及失效原因；screenshot:read |
 | `bid screenshot annotate --id S --input PLAN.json [--dry-run] [--retry] [--wait]` | `POST /screenshots/{S}/renditions` | ScreenshotAnnotate → Job 回执 / ScreenshotDryRun → ScreenshotJobResult；screenshot:write |
@@ -1098,12 +1079,15 @@ Provider 使用假实现，不能把合成材料或假调用当作真实取证�
 | 本机浏览器运行页采集入口 `bid screenshot capture` | 已确认归入 Phase B，未实施；待沙盒分支合并后接入统一回执、脱敏与归档交接，保持客户端本机执行边界 |
 | 厂家搜索候选入口 `bid evidence search` | 已确认归入 Phase B，未实施；与沙盒及厂家网页/PDF 采集管线一起接入，候选仍不直接成为 Evidence |
 | HTML 原型生成/渲染 | 已实施；`bid ui mock` 与 `screenshot prepare --prototype-run`，见 [screenshot-evidence.md](../notes/screenshot-evidence.md#prototype-generation) |
-| 厂家网页/PDF 采集 | Phase B，未实施；已预留回执、搜索候选与厂家归档的单位内关系 |
+| 厂家网页/PDF 采集 | 已实施；沙盒 `vendor_capture` 产物经 `screenshot prepare --sandbox-artifact` 与人工入库成为 vendor 资产，见 [screenshot-evidence.md](../notes/screenshot-evidence.md#vendor-captures)；搜索候选关联待搜索入口实施 |
 | 正式导出图片消费、决定检查接线和 DOCX 实物验收 | 已实施；见 [human-section-exports.md](../notes/human-section-exports.md)。端到端测试依赖 Rust 渲染器，CI 构建后运行 |
 
 落实的接口决定：
 
 - 对外契约升为 `2.0`，保留旧 Evidence 输入分支。新分支、材料枚举及 nullable quote 不伪装为旧严格客户端的兼容改动。
+- 厂家网页/PDF 改由[沙盒契约](sandbox.md#按用途固定网络策略)的 `vendor_capture` 取证，不实施本机 `capture-vendor` 与上传归档：取证网络只经抓取代理，归档字节由服务端持有。`VendorSource` 因此只含页图产物 ID，`VendorCaptureInput` 删除，`ScreenshotView` 增加 `vendor_archive`；该分支在 `2.0` 下没有生产者，对外契约升为 `2.1`。
+- 网页取证须 `archive=bundle`，否则以 `vendor_archive_required` 拒绝；同一运行的多页共用一条归档记录。PDF 不在 API 进程解码，因此不记录文档标题与页数。
+- 厂家图片卡片确认须额外复核 `vendor_model_scope`（型号与页内适用范围），数据库确认关口同步要求。
 - 模块预检与提交增加可选 `evidence_ids` 显式子集，用于同功能被多卡引用时的逐项决定；未指定时仍必须覆盖列明功能集合中的全部有效原型 Evidence。
 - 模块批次保存固定 target manifest，延迟数据库触发器核对每一项目标及数量，不能提交半批决定。
 - 平台选中推理档位的 request_options 中使用服务端 `screenshot_vision` 能力与图片计价规则；未配置可靠规则时拒绝调用，不按 base64 大小推算图片 token。
