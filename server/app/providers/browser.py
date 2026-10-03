@@ -348,6 +348,7 @@ class SocketBrowserProvider:
         if self.config.synthetic_only and not descriptor.synthetic_input:
             raise SandboxFailure("sandbox_synthetic_only")
         writer: asyncio.StreamWriter | None = None
+        serving: set[asyncio.Task[None]] = set()
         try:
             async with asyncio.timeout(descriptor.wall_seconds + 15):
                 reader, writer = await self._connect()
@@ -363,36 +364,66 @@ class SocketBrowserProvider:
                 )
                 artifacts: list[ArtifactPayload] = []
                 total = 0
-                while True:
-                    header, payload = await read_frame(reader, descriptor.output_limit - total)
-                    kind = header.get("type")
-                    if kind == "fetch":
-                        if (
-                            fetcher is None
-                            or payload
-                            or set(header) != {"type", "url", "method", "length"}
-                        ):
-                            raise SandboxFailure("unexpected_fetch")
-                        if not isinstance(header["url"], str) or len(header["url"]) > 8192:
-                            raise SandboxFailure("invalid_fetch")
-                        method = header["method"]
-                        if method not in ("GET", "HEAD"):
-                            raise SandboxFailure("fetch_method_denied")
-                        try:
-                            response = await fetcher.fetch(header["url"], method=method)
-                        except FetchDenied as exc:
+                # Numbered fetches are served concurrently; the broker bounds parallelism.
+                write_lock = asyncio.Lock()
+                denied: asyncio.Future[None] = asyncio.get_running_loop().create_future()
+                expected_id = 0
+
+                async def serve(identifier: int, url: str, method: str) -> None:
+                    assert fetcher is not None and writer is not None
+                    try:
+                        response = await fetcher.fetch(url, method=method)
+                    except FetchDenied as exc:
+                        async with write_lock:
                             await send_frame(writer, {"type": "error", "code": exc.code})
-                            raise SandboxFailure(exc.code) from exc
+                        if not denied.done():
+                            denied.set_exception(SandboxFailure(exc.code))
+                        return
+                    async with write_lock:
                         await send_frame(
                             writer,
                             {
                                 "type": "fetch_result",
+                                "id": identifier,
                                 "status": response.status,
                                 "headers": response.headers,
                                 "url": response.url,
                             },
                             response.body,
                         )
+
+                while True:
+                    reading = asyncio.ensure_future(
+                        read_frame(reader, descriptor.output_limit - total)
+                    )
+                    await asyncio.wait({reading, denied}, return_when=asyncio.FIRST_COMPLETED)
+                    if denied.done():
+                        reading.cancel()
+                        for task in serving:
+                            task.cancel()
+                        denied.result()
+                    header, payload = reading.result()
+                    kind = header.get("type")
+                    if kind == "fetch":
+                        if (
+                            fetcher is None
+                            or payload
+                            or set(header) != {"type", "id", "url", "method", "length"}
+                        ):
+                            raise SandboxFailure("unexpected_fetch")
+                        if (
+                            not isinstance(header["url"], str)
+                            or len(header["url"]) > 8192
+                            or header["id"] != expected_id
+                        ):
+                            raise SandboxFailure("invalid_fetch")
+                        method = header["method"]
+                        if method not in ("GET", "HEAD"):
+                            raise SandboxFailure("fetch_method_denied")
+                        expected_id += 1
+                        task = asyncio.create_task(serve(header["id"], header["url"], method))
+                        serving.add(task)
+                        task.add_done_callback(serving.discard)
                     elif kind == "artifact":
                         if len(artifacts) >= 32 or header.get("ordinal") != len(artifacts):
                             raise SandboxFailure("artifact_sequence")
@@ -465,6 +496,8 @@ class SocketBrowserProvider:
         except (OSError, ConnectionError) as exc:
             raise SandboxFailure("sandbox_supervisor_unavailable") from exc
         finally:
+            for task in serving:
+                task.cancel()
             if writer is not None:
                 writer.close()
                 with suppress(OSError):

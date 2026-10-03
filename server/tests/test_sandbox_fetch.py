@@ -300,11 +300,30 @@ async def test_persistent_org_quota_and_origin_leases(tmp_path):
     with pytest.raises(FetchDenied, match="org_rate_limit"):
         async with SQLiteFetchQuota(path).acquire(org, "https://vendor.example"):
             pass
+    impatient = SQLiteFetchQuota(path, origin_wait_seconds=0.2)
     async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
         async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
             with pytest.raises(FetchDenied, match="origin_concurrency_limit"):
-                async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
+                async with impatient.acquire(uuid4(), "https://vendor.example"):
                     pass
+
+    # A third request for a full origin waits for a released lease instead of failing.
+    order = []
+
+    async def holder():
+        async with SQLiteFetchQuota(path).acquire(uuid4(), "https://other.example"):
+            order.append("held")
+            await asyncio.sleep(0.3)
+        order.append("released")
+
+    async def waiter():
+        await asyncio.sleep(0.05)
+        async with SQLiteFetchQuota(path).acquire(uuid4(), "https://other.example"):
+            order.append("acquired")
+
+    async with SQLiteFetchQuota(path).acquire(uuid4(), "https://other.example"):
+        await asyncio.gather(holder(), waiter())
+    assert order == ["held", "released", "acquired"]
 
 
 async def test_transport_errors_safe_close_and_request_limit(tmp_path):

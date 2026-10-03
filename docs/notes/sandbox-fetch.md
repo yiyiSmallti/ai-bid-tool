@@ -104,7 +104,9 @@ conservative detection, not a general proof that a page is authentic or useful.
 `SQLiteFetchQuota` holds only hashed organization/origin identifiers, timestamps,
 and temporary lease IDs. It is node control state, not a replacement for PostgreSQL
 business records or tenant RLS. SQLite transactions enforce a sliding organization
-request window and origin connection leases across processes and restarts. The
+request window and origin connection leases across processes and restarts. A
+request for an origin whose two leases are taken waits up to the request timeout
+for one to be released; an exhausted organization window is denied at once. The
 ledger parent directory must already exist and be private; every proxy process on
 the dedicated singleton proxy node must use the same local ledger. A crashed
 request lease expires after the bounded request deadline. Per-run request, byte,
