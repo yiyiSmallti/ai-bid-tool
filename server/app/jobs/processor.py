@@ -40,6 +40,8 @@ class Processor:
         self.sandbox_browser = None
         self.sandbox_fetch_transport = None
         self.sandbox_resolver = None
+        # Test seam for the vendor search provider's HTTP transport.
+        self.search_transport = None
 
     async def record_usage(
         self,
@@ -118,6 +120,7 @@ class Processor:
                     "screenshot_render",
                     "screenshot_analyze",
                     "prototype_generate",
+                    "screenshot_search",
                 }
                 else [
                     dict(
@@ -188,6 +191,14 @@ class Processor:
                         await process_render(execution, self.storage)
                     else:
                         await process_analysis(execution, self.storage, llm)
+                    return
+                if kind == "screenshot_search":
+                    from app.providers.search import create_search_provider
+                    from app.services.vendor_search import process as search_vendor
+
+                    await search_vendor(
+                        execution, create_search_provider(self.settings, self.search_transport)
+                    )
                     return
                 if kind == "prototype_generate":
                     from app.services.prototype_generation import process as generate_prototype

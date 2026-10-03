@@ -220,8 +220,9 @@ so run it against a disposable database.
 1. Copy [deploy/.env.example](../../deploy/.env.example) to an ignored env file
    and fill every value. Migration credentials go only to the `migrate` service.
 2. Start the stack from [deploy/docker-compose.yml](../../deploy/docker-compose.yml):
-   PostgreSQL with pgvector, MinIO, and separate migrate, server, and worker
-   containers.
+   PostgreSQL with pgvector, MinIO, SearXNG for vendor-source search, and
+   separate migrate, server, and worker containers. SearXNG publishes no host
+   port; the worker reaches it at `http://searxng:8080`.
 3. Storage defaults to a shared local volume. To use S3, create a private
    bucket first, then set `BID_STORAGE=s3` and `BID_S3_CONTAINER_ENDPOINT`. The
    host endpoint and the container endpoint are different addresses.
@@ -245,6 +246,30 @@ Colima, a separate profile keeps existing contexts untouched; a short
 
 ```sh
 COLIMA_HOME=/tmp/colima-cfg COLIMA_CACHE_HOME=/tmp/colima-cache LIMA_HOME=/tmp/colima-vm DOCKER_CONFIG=/tmp/docker-cfg colima start ai-bid-test --activate=false --ssh-config=false --template=false --mount none --cpus 2 --memory 2 --disk 16 --root-disk 4 --binfmt=false
+```
+
+## Run vendor search locally
+
+Vendor-source search (`bid evidence search`) queries a private SearXNG
+instance configured by
+[deploy/searxng/settings.yml](../../deploy/searxng/settings.yml). Without a
+container daemon, run it from the source revision that the Compose image tag
+names, in its own environment outside the project's:
+
+```sh
+git clone https://github.com/searxng/searxng.git data/work/searxng/src
+git -C data/work/searxng/src checkout 19ffbcd30
+uv venv --python 3.12 data/work/searxng/venv
+VIRTUAL_ENV=data/work/searxng/venv uv pip install setuptools wheel -r data/work/searxng/src/requirements.txt -r data/work/searxng/src/requirements-server.txt
+VIRTUAL_ENV=data/work/searxng/venv uv pip install --no-build-isolation -e data/work/searxng/src
+SEARXNG_SETTINGS_PATH=$PWD/deploy/searxng/settings.yml SEARXNG_SECRET=$(openssl rand -hex 32) data/work/searxng/venv/bin/python -m searx.webapp
+```
+
+It listens on `127.0.0.1:8888`. Set `BID_SEARCH_URL=http://127.0.0.1:8888` for
+the API and worker and restart them. Check it against a real product with:
+
+```sh
+BID_SEARCH_LIVE_URL=http://127.0.0.1:8888 BID_SEARCH_LIVE_PRODUCT='新华三|S5130S-EI' uv run pytest server/tests/test_vendor_search.py -k live
 ```
 
 ## Check local OCR

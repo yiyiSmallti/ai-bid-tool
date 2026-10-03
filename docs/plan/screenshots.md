@@ -1,11 +1,11 @@
 ---
 kind: plan
-status: "部分实施：Phase A、导出接线、原型生成与厂家网页/PDF 采集；厂家搜索与本机浏览器采集待实施"
+status: "部分实施：Phase A、导出接线、原型生成、厂家网页/PDF 采集与厂家搜索；本机浏览器采集待实施"
 ---
 
 # 契约草案：功能截图、原型与厂家证据配图
 
-状态：**部分实施：Phase A、导出接线、原型生成与厂家网页/PDF 采集；厂家搜索与本机浏览器采集待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
+状态：**部分实施：Phase A、导出接线、原型生成、厂家网页/PDF 采集与厂家搜索；本机浏览器采集待实施**。已批准的范围和推荐决定保持有效；实施边界见[Phase A 实施记录](#phase-a-实施记录)。对应[路线图](roadmap.md) B06/B04，涉及 B05 的裁剪、框选与
 水印边界。下文按已批准的推荐选项描述契约，各项选择见[已定决定](#已定决定)。
 
 ## 目标与边界
@@ -793,7 +793,8 @@ safe_metadata 和 accounted_call，不创建绕开 providers/ 的第二套厂商
 | `bid screenshot prepare --file FILE --input PLAN --output NEW.png --receipt NEW.json` | 无远程渲染路由；本机工具 | 上传图的 PreparedScreenshot 与实际文件；不入库、不确认证据 |
 | `bid screenshot prepare --source S --input PLAN --output NEW.png --receipt NEW.json` | 复用既有受权来源预览/读取 | 内存读取固定证书页；与 --file 互斥，保留来源权限交集 |
 | `bid screenshot capture --config PRIVATE.json --input PLAN --output NEW.png --receipt NEW.json` | 无 SaaS 浏览器采集路由 | 本机 capture 后执行相同 prepare；不把配置/凭据放进 Result |
-| `bid evidence search --task T --input FILE [--dry-run] [--retry] [--wait]` | `POST /tasks/{T}/screenshot-searches` | VendorSearchInput → VendorJobPreview / Job；结果为已归属搜索 run 的候选，非 Evidence；screenshot:write、resource:read |
+| `bid evidence search --task T --input FILE [--dry-run] [--retry] [--wait]` | `POST /tasks/{T}/screenshot-searches` | VendorSearchInput → VendorSearchPreview / Job → VendorSearchView；结果为已归属搜索 run 的候选，非 Evidence；screenshot:write、resource:read |
+| `bid evidence candidates --search S`；`bid evidence adopt --candidate C --input FILE` | `GET /screenshot-searches/{S}`；`POST /screenshot-search-candidates/{C}/adopt` | 候选列表；VendorSearchAdopt 把所选 URL 写入产品新修订并改选到任务，需 resource:write、task:resource |
 | `bid sandbox capture` 后 `bid screenshot prepare --sandbox-artifact A --input PLAN --output NEW.png --receipt NEW.json` | 沙盒采集见 [sandbox.md](sandbox.md#cliapi-与身份)；页图经沙盒签名下载 | VendorSource → PreparedScreenshot；先本机脱敏，不自动入库 |
 | `bid ui mock --task T --input FILE [--dry-run] [--retry] [--wait]` | `POST /tasks/{T}/prototype-generations` | PrototypeGenerateInput → VendorJobPreview / Job → PrototypeGenerationView；screenshot:write、resource:read，生成后仍需本机 prepare 和人工 add |
 | `bid screenshot prepare --prototype-run G --input PLAN --output NEW.png --receipt NEW.json` | 受权读取固定沙盒产物，交接按 sandbox.md | PrototypeSource → PreparedScreenshot；本机脱敏及无标签 profile，不确认证据 |
@@ -1061,7 +1062,7 @@ Provider 使用假实现，不能把合成材料或假调用当作真实取证�
 | 与 annotation.md 的关系 | **推荐 A：本草案取代旧的本机副本交付范围，共用一个 Rust 引擎与 screenshot 命令族**；B：先实现旧草案独立本机命令，再另做归档链，需要明确双入口的维护与 profile 转换 |
 | 谁作原型保留/替换决定 | **推荐 A：沿卡片专业职责，由对应负责人决定，软件功能为 technical，bidder 负责 export 发布**；B：由人类 bidder 统一作交付承诺决定，需单独批准该决策范围，仍不能跨专业确认证据。两案均支持模块批量并逐项留痕 |
 | 图片证据是否必须另有本地 OCR 引文 | **推荐 A：多模态读字仅辅助，区域观察 + 人工逐图核对即可**；B：另要求可核验本地 OCR 引文，须增加坐标、误识别纠正及逐字验证契约。两案都保留已定的多模态读字能力，不能将模型读字自动当 quote |
-| 厂家搜索服务与来源确认 | **推荐 A：平台配置一个 SearchProvider，按固定产品来源与人工核对筛选官网/PDF，价格齐备后付费调用**；B：平台维护厂家域名白名单并限定搜索范围，仍由人核对型号与页内容。具体搜索供应商及请求单价在接入前确定，不硬编码到业务层 |
+| 厂家搜索服务与来源确认 | **推荐 A：平台配置一个 SearchProvider，按固定产品来源与人工核对筛选官网/PDF，价格齐备后付费调用**；B：平台维护厂家域名白名单并限定搜索范围，仍由人核对型号与页内容。具体搜索供应商及请求单价在接入前确定，不硬编码到业务层。**实施（2026-10-03）：自托管 SearXNG，免费；只发送厂家与型号，候选经人选定后写入产品库来源字段，再按既有产品来源采集** |
 | 首版能否脱离任务收集截图 | **推荐 A：绑定明确任务和成功抽取 job**，直接复用 Job 的真实 Document 关系与卡片关口；B：建立通用图库，须另定版本选择及无招标文档的作业归属，不能把 Job 约束随意放宽 |
 
 
@@ -1077,7 +1078,7 @@ Provider 使用假实现，不能把合成材料或假调用当作真实取证�
 | 匹配要求、区域建议、读字及调用准入/计费 | 已实施；[`screenshot_vision.py`](../../server/app/providers/screenshot_vision.py)、[`screenshot_jobs.py`](../../server/app/services/screenshot_jobs.py)；只发送已放行派生图，未调用真实厂商 |
 | PostgreSQL FORCE RLS 与数据库门禁 | 迁移和两单位测试已实施；[`0023`](../../server/migrations/versions/0023_screenshots.py) 接在沙箱迁移 `0022` 之后 |
 | 本机浏览器运行页采集入口 `bid screenshot capture` | 已确认归入 Phase B，未实施；待沙盒分支合并后接入统一回执、脱敏与归档交接，保持客户端本机执行边界 |
-| 厂家搜索候选入口 `bid evidence search` | 已确认归入 Phase B，未实施；与沙盒及厂家网页/PDF 采集管线一起接入，候选仍不直接成为 Evidence |
+| 厂家搜索候选入口 `bid evidence search` | 已实施；自托管 SearXNG，候选经 `evidence adopt` 进入产品库后采集，见 [screenshot-evidence.md](../notes/screenshot-evidence.md#vendor-search) |
 | HTML 原型生成/渲染 | 已实施；`bid ui mock` 与 `screenshot prepare --prototype-run`，见 [screenshot-evidence.md](../notes/screenshot-evidence.md#prototype-generation) |
 | 厂家网页/PDF 采集 | 已实施；沙盒 `vendor_capture` 产物经 `screenshot prepare --sandbox-artifact` 与人工入库成为 vendor 资产，见 [screenshot-evidence.md](../notes/screenshot-evidence.md#vendor-captures)；搜索候选关联待搜索入口实施 |
 | 正式导出图片消费、决定检查接线和 DOCX 实物验收 | 已实施；见 [human-section-exports.md](../notes/human-section-exports.md)。端到端测试依赖 Rust 渲染器，CI 构建后运行 |

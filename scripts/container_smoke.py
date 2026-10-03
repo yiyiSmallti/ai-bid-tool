@@ -45,6 +45,7 @@ def main():
         "BID_CLI_KEY": Fernet.generate_key().decode(),
         "BID_S3_ACCESS_KEY": "synthetic-test-" + uuid4().hex[:12],
         "BID_S3_SECRET_KEY": secrets.token_urlsafe(24),
+        "SEARXNG_SECRET": secrets.token_hex(32),
     }
     values["BID_MIGRATION_DATABASE_URL"] = (
         "postgresql+psycopg://bid_owner:"

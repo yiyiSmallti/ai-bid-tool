@@ -6,6 +6,17 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：自托管厂家来源搜索
+
+- 新增 `bid evidence search`、`evidence candidates`、`evidence adopt`：预检显示只含厂家与型号的检索词及输入
+  哈希，提交后由 worker 调用自托管 SearXNG，候选经抓取 URL 规范化过滤（去掉 HTTP、带凭据与歧义地址）、
+  去重合并来源引擎，本单位产品库已记录的同厂家域名优先、PDF 其次，最多 20 条入库。搜索服务不可用时
+  作业可重试且不保存结果。选定候选后写入产品新修订的 `official_url`/`whitepaper_url` 并改选到任务，
+  过期的产品修订被拒绝。
+- `deploy/docker-compose.yml` 新增按摘要固定的 SearXNG 服务（只在内部网络），配置见
+  `deploy/searxng/settings.yml`；本地运行步骤见 [development.md](guides/development.md#run-vendor-search-locally)。
+  机制见 [screenshot-evidence.md](notes/screenshot-evidence.md#vendor-search)。
+
 ## 2026-10-03：厂家网页缺失资源时仍可采集
 
 - 厂家网页的入口文档加载成功即截图：失败资源以逐请求 `fetch_failed` 应答跳过，代理不再因单个资源被拒而

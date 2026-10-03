@@ -2,6 +2,7 @@
 
 import asyncio
 import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Annotated, Any
@@ -27,6 +28,8 @@ from app.schemas.screenshot_contracts import (
     ScreenshotPrepareInput,
     ScreenshotPreviewLink,
     ScreenshotWithdraw,
+    VendorSearchAdopt,
+    VendorSearchInput,
     VendorSource,
 )
 from app.services.evidence_sources import check_png
@@ -368,6 +371,56 @@ def register(app: typer.Typer) -> None:
     app.add_typer(screenshot_app, name="screenshot")
     app.add_typer(ui_app, name="ui")
     screenshot_app.add_typer(decisions_app, name="prototype-decisions")
+
+    @cli.evidence_app.command("search")
+    def evidence_search_command(
+        task: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        dry_run: Annotated[bool, typer.Option()] = False,
+        retry: Annotated[bool, typer.Option()] = False,
+        wait: Annotated[bool, typer.Option()] = False,
+        timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
+        json_output: cli.JsonOption = False,
+    ):
+        raw = _read_bounded(input, 128 * 1024, "Search input")
+        try:
+            values = json.loads(raw)
+        except ValueError:
+            raise _invalid("Search input must be a JSON object") from None
+        if not isinstance(values, dict):
+            raise _invalid("Search input must be a JSON object")
+        # Flags are merged before validation so --dry-run needs no hash in the file.
+        values["dry_run"] = bool(values.get("dry_run")) or dry_run
+        values["retry"] = bool(values.get("retry")) or retry
+        request = VendorSearchInput.model_validate(values)
+        body = cli.call(
+            "POST", f"/tasks/{task}/screenshot-searches", json=request.model_dump(mode="json")
+        )
+        body, exit_code = _job_result(body, wait, request.dry_run, timeout)
+        cli.emit(body, "evidence search", json_output, exit_code)
+
+    @cli.evidence_app.command("candidates")
+    def evidence_candidates_command(
+        search: Annotated[UUID, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call("GET", f"/screenshot-searches/{search}"), "evidence candidates", json_output
+        )
+
+    @cli.evidence_app.command("adopt")
+    def evidence_adopt_command(
+        candidate: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        request = VendorSearchAdopt.model_validate(cli.input_contract(input, VendorSearchAdopt))
+        body = cli.call(
+            "POST",
+            f"/screenshot-search-candidates/{candidate}/adopt",
+            json=request.model_dump(mode="json"),
+        )
+        cli.emit(body, "evidence adopt", json_output)
 
     @ui_app.command("mock")
     def ui_mock_command(

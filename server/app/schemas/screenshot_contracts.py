@@ -145,10 +145,54 @@ class ScreenshotCaptureInput(Contract):
 class VendorSearchInput(Contract):
     extraction_job_id: UUID
     task_resource_id: UUID
-    requirement_ids: list[UUID] = Field(min_length=1, max_length=50)
     expected_input_hash: Sha256 | None = None
     dry_run: bool = False
     retry: bool = False
+
+    @model_validator(mode="after")
+    def preflight(self):
+        if self.dry_run and self.retry:
+            raise ValueError("dry-run cannot retry")
+        if not self.dry_run and self.expected_input_hash is None:
+            raise ValueError("preflight input hash required")
+        return self
+
+
+class VendorSearchPreview(Contract):
+    dry_run: Literal[True] = True
+    input_hash: Sha256
+    queries: list[str]
+    search_identity: str | None
+    admission_blocker: str | None
+
+
+class VendorSearchCandidateView(Contract):
+    id: UUID
+    ref: str
+    url: str
+    title: str
+    host: str
+    engines: list[str]
+    pdf: bool
+    known_vendor_domain: bool
+
+
+class VendorSearchView(Contract):
+    id: UUID
+    task_id: UUID
+    extraction_job_id: UUID
+    task_resource_id: UUID
+    product_revision_id: UUID
+    job_id: UUID
+    input_hash: Sha256
+    queries: list[str]
+    unresponsive_engines: list[str]
+    candidates: list[VendorSearchCandidateView]
+
+
+class VendorSearchAdopt(Contract):
+    field: Literal["official_url", "whitepaper_url"]
+    expected_product_revision: int = Field(strict=True, ge=1)
 
 
 class PrototypeGenerateInput(Contract):

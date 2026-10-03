@@ -1,0 +1,37 @@
+# Private SearXNG for vendor-source search. Only the bid worker queries it; it is not a
+# public instance. The secret comes from SEARXNG_SECRET; no other credential is configured.
+# Engines were chosen by testing Chinese vendor product queries; scrapers break over time,
+# so re-check them when results degrade.
+use_default_settings:
+  engines:
+    keep_only:
+      - 360search
+      - duckduckgo
+      - baidu
+      - brave
+
+general:
+  instance_name: "bid vendor search"
+
+search:
+  safe_search: 0
+  default_lang: "zh-CN"
+  formats:
+    - json
+
+server:
+  bind_address: "127.0.0.1"
+  port: 8888
+  limiter: false
+  public_instance: false
+  image_proxy: false
+
+engines:
+  - name: 360search
+    disabled: false
+  - name: duckduckgo
+    disabled: false
+  - name: baidu
+    disabled: false
+  - name: brave
+    disabled: false
