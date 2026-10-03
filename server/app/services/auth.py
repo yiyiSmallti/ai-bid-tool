@@ -6,7 +6,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
-from app.core.password_attempts import PasswordAttempts
+from app.core.password_attempts import PasswordAttempts, invalid_login
 from app.core.security import Secrets, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
 
@@ -206,7 +206,13 @@ async def login(
 ) -> User:
     user = await attempts.authenticate(email, password, source)
     async with attempts.db.transaction(org_id) as session:
-        await membership(session, user.id, org_id)
+        try:
+            await membership(session, user.id, org_id)
+        except ServiceError as error:
+            # A non-member must look like a wrong password, or the reply confirms the password.
+            if error.code == "not_found":
+                raise invalid_login() from None
+            raise
     return user
 
 
