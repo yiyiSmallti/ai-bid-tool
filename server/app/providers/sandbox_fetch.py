@@ -54,6 +54,21 @@ _CREDENTIAL_KEYS = re.compile(
 )
 
 
+# Authorization or ledger failures end the whole run. Any other denial omits one
+# resource and leaves the capture incomplete.
+RUN_FATAL_FETCH_CODES = frozenset(
+    {
+        "policy_invalid",
+        "policy_missing",
+        "policy_revoked",
+        "policy_changed",
+        "run_closed",
+        "quota_unavailable",
+        "manifest_byte_limit",
+    }
+)
+
+
 class FetchDenied(Exception):
     """Only a fixed reason code may cross diagnostic/audit boundaries."""
 
@@ -341,7 +356,9 @@ class FetchDenial:
 
 
 class FetchQuota(Protocol):
-    def acquire(self, org_id: UUID, origin: str) -> AbstractAsyncContextManager[None]: ...
+    def acquire(
+        self, org_id: UUID, origin: str, *, org_window: bool = True
+    ) -> AbstractAsyncContextManager[None]: ...
 
 
 class SQLiteFetchQuota:
@@ -368,7 +385,7 @@ class SQLiteFetchQuota:
         )
         return connection
 
-    def _claim(self, org_hash: str, origin_hash: str, lease_id: str):
+    def _claim(self, org_hash: str, origin_hash: str, lease_id: str, org_window: bool = True):
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
@@ -376,7 +393,8 @@ class SQLiteFetchQuota:
             connection.execute("DELETE FROM requests WHERE at <= ?", (now - 60,))
             connection.execute("DELETE FROM leases WHERE expires <= ?", (now,))
             if (
-                connection.execute(
+                org_window
+                and connection.execute(
                     "SELECT count(*) FROM requests WHERE org_hash = ?", (org_hash,)
                 ).fetchone()[0]
                 >= 60
@@ -405,7 +423,9 @@ class SQLiteFetchQuota:
             connection.close()
 
     @asynccontextmanager
-    async def acquire(self, org_id: UUID, origin: str) -> AsyncIterator[None]:
+    async def acquire(
+        self, org_id: UUID, origin: str, *, org_window: bool = True
+    ) -> AsyncIterator[None]:
         lease_id = uuid4().hex
         deadline = time.monotonic() + self.origin_wait_seconds
         try:
@@ -416,6 +436,7 @@ class SQLiteFetchQuota:
                         hashlib.sha256(str(org_id).encode()).hexdigest(),
                         hashlib.sha256(origin.encode()).hexdigest(),
                         lease_id,
+                        org_window,
                     )
                     break
                 except FetchDenied as exc:
@@ -485,7 +506,9 @@ class FetchBroker:
     def entry_receipt(self, source_url: str) -> FetchReceipt:
         """Prove one completed GET chain for the selected entry, without reopening the run."""
         source = canonical_url(source_url)
-        if not self.policy.admits_main(source) or self._denials:
+        # Denied subresources make a capture incomplete, not invalid; the entry chain
+        # itself must still consist only of allowed responses.
+        if not self.policy.admits_main(source):
             raise FetchDenied("entry_fetch_denied")
         roots = [
             receipt
@@ -517,7 +540,8 @@ class FetchBroker:
         return ordinal
 
     def _deny(self, ordinal: int, parent: int | None, url: str, code: str) -> None:
-        self.close()
+        if code in RUN_FATAL_FETCH_CODES:
+            self.close()
         digest_input = (
             url.encode("utf-8", errors="surrogatepass")
             if isinstance(url, str)
@@ -626,7 +650,11 @@ class FetchBroker:
         ):
             raise FetchDenied("dns_denied")
         origin = str(target.copy_with(path="/", query=None)).rstrip("/")
-        async with self.quota.acquire(self.org_id, origin):
+        # The per-organization minute window protects named vendors; an open development
+        # policy has no such list, so only the per-origin connection leases apply.
+        async with self.quota.acquire(
+            self.org_id, origin, org_window=not self.policy.open_public_https
+        ):
             self._live()
             # Numeric URL pins the real socket. Host and SNI preserve hostname verification.
             # Each request gets a fresh transport: no pool reuse or implicit DNS retry.

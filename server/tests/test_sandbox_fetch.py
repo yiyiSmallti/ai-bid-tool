@@ -300,6 +300,9 @@ async def test_persistent_org_quota_and_origin_leases(tmp_path):
     with pytest.raises(FetchDenied, match="org_rate_limit"):
         async with SQLiteFetchQuota(path).acquire(org, "https://vendor.example"):
             pass
+    # Only an open development policy skips the organization window.
+    async with SQLiteFetchQuota(path).acquire(org, "https://vendor.example", org_window=False):
+        pass
     impatient = SQLiteFetchQuota(path, origin_wait_seconds=0.2)
     async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
         async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
@@ -455,3 +458,30 @@ async def test_open_development_policy_keeps_address_and_url_gates(tmp_path, mon
         FetchPolicy.model_validate({**exact, "rules": [{"url": MAIN}]})
     with pytest.raises(ValidationError):
         FetchPolicy.model_validate({"revision": "x"})
+
+
+async def test_a_denied_resource_leaves_the_run_open_but_revocation_closes_it(tmp_path):
+    missing = "https://vendor.example/missing.css"
+
+    def handler(request):
+        if request.url.path == "/missing.css":
+            return httpx.Response(404)
+        return httpx.Response(
+            200, headers={"content-type": "text/html"}, stream=Chunks([b"<html>public</html>"])
+        )
+
+    fetch = broker(tmp_path, handler, urls=[MAIN, missing])
+    with pytest.raises(FetchDenied, match="http_status_denied"):
+        await fetch.fetch(missing)
+    assert (await fetch.fetch(MAIN)).status == 200
+    assert fetch.entry_receipt(MAIN).status == 200
+    assert [denial.code for denial in fetch.denials] == ["http_status_denied"]
+
+    path = tmp_path / "policy.json"
+    value = json.loads(path.read_text())
+    value["revoked_revisions"] = ["vendor-v1"]
+    path.write_text(json.dumps(value))
+    with pytest.raises(FetchDenied, match="policy_revoked"):
+        await fetch.fetch(MAIN)
+    with pytest.raises(FetchDenied, match="run_closed"):
+        await fetch.fetch(MAIN)

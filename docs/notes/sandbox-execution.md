@@ -98,9 +98,12 @@ not an authentication credential.
   sets `BID_RUNNER_GVISOR=1`, and vendor captures then launch Chromium with
   `--disable-seccomp-filter-sandbox`, keeping its namespace sandbox. Prototype
   rendering keeps the full Chromium sandbox.
-- Any failed resource fails the whole capture. A slow network path, such as a
-  local fake-IP proxy where each request opens a fresh TLS connection, can produce
-  `fetch_timeout` or `fetch_transport_failed` on ordinary resources of a large page.
+- A failed resource returns a per-request `fetch_failed` reply and the page goes
+  on without it; only the entry document's failure, or a run-fatal broker code,
+  fails the capture. The runner waits for `DOMContentLoaded`, then for `load`
+  within the remaining navigation budget, and screenshots either way. Before
+  reporting it refuses new requests and drains outstanding ones, because the
+  supervisor rejects `done` with fetches in flight.
 
 The fake provider and backend validate integration decisions, not containment.
 Opt-in container runs do not replace packet, escape, resource exhaustion and
@@ -116,8 +119,9 @@ business source of truth. Supervisor recovery requires a service manager to
 restart the supervisor; configure that before enabling production admission.
 
 Source HTML can depend on external assets. Offline requests are blocked; complete
-prototype outputs can carry an internal warning. Vendor network denials fail the
-entire capture. A valid image and HTTP receipt do not certify manufacturer claims
+prototype outputs can carry an internal warning. A vendor capture whose entry
+document loads succeeds even when some resources fail, with the
+`vendor_resources_incomplete` warning. A valid image and HTTP receipt do not certify manufacturer claims
 or detect every login, CAPTCHA or soft error page.
 
 Storage writes precede database publication. Failed transactions may leave

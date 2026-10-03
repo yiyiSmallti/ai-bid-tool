@@ -7,7 +7,7 @@ from contextlib import suppress
 from dataclasses import asdict
 from typing import Any, Protocol
 
-from app.providers.sandbox_fetch import FetchBroker, FetchDenied
+from app.providers.sandbox_fetch import RUN_FATAL_FETCH_CODES, FetchBroker, FetchDenied
 from app.providers.sandbox_runtime import (
     CONTROL_LIMIT,
     MIB,
@@ -124,6 +124,7 @@ ERROR_CODES = frozenset(
         "sandbox_supervisor_already_running",
         "sandbox_supervisor_unavailable",
         "sandbox_synthetic_only",
+        "source_fetch_failed",
         "source_http_error",
         "source_login_or_challenge",
         "source_navigation_failed",
@@ -221,9 +222,12 @@ class SocketBrowserProvider:
             expected.add("code")
         if kind == "complete":
             expected.add("issues")
-            if header.get("issues") not in ([], ["offline_resources_blocked"]):
-                raise SandboxFailure("invalid_cleanup_receipt")
-            if header.get("issues") and descriptor.purpose != "prototype_offline":
+            allowed_issue = (
+                "offline_resources_blocked"
+                if descriptor.purpose == "prototype_offline"
+                else "vendor_resources_incomplete"
+            )
+            if header.get("issues") not in ([], [allowed_issue]):
                 raise SandboxFailure("invalid_cleanup_receipt")
         if set(header) != expected or header.get("length") != 0:
             raise SandboxFailure("invalid_cleanup_receipt")
@@ -374,6 +378,11 @@ class SocketBrowserProvider:
                     try:
                         response = await fetcher.fetch(url, method=method)
                     except FetchDenied as exc:
+                        if exc.code not in RUN_FATAL_FETCH_CODES:
+                            # The broker recorded the denial; the page continues without it.
+                            async with write_lock:
+                                await send_frame(writer, {"type": "fetch_failed", "id": identifier})
+                            return
                         async with write_lock:
                             await send_frame(writer, {"type": "error", "code": exc.code})
                         if not denied.done():

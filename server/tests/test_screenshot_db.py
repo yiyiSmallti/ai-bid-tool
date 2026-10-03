@@ -310,7 +310,11 @@ def vendor_archive_row(org, task_id, extraction, selection, run, artifacts, entr
             "size_bytes": archive.size_bytes,
             "media_type": "application/zip",
         },
-        "provenance": {"title": "Synthetic vendor page"},
+        "provenance": {
+            "title": "Synthetic vendor page",
+            "incomplete": False,
+            "failed_request_count": 0,
+        },
         "sandbox_run_id": run.id,
         "archive_artifact_id": archive.id,
         "entry_receipt_id": entry.id,
@@ -1131,6 +1135,7 @@ async def test_selection_cannot_reactivate_old_prototype_decisions(screenshot_ro
         "entry_receipt",
         "search_candidate",
         "token_actor",
+        "incomplete_mismatch",
         None,
     ],
 )
@@ -1157,6 +1162,7 @@ def test_direct_sql_binds_vendor_archives_to_their_capture(mutation, screenshot_
             "archive_artifact": {"archive_artifact_id": artifacts["capture_png"].id},
             "entry_receipt": {"entry_receipt_id": uuid4()},
             "search_candidate": {"search_candidate_id": candidate},
+            "incomplete_mismatch": {"provenance": {"incomplete": False, "failed_request_count": 1}},
         }.get(mutation or "", {})
         if mutation == "archive_artifact":
             png = artifacts["capture_png"]
