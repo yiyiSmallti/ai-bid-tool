@@ -6,6 +6,18 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：模型生成 HTML 原型（ui mock）
+
+- 新增 `bid ui mock` 与 `POST /tasks/{T}/prototype-generations`：固定一条要求与一个已选功能修订，
+  只外发遮挡后的要求原文与功能声明，预检报价单次调用，付费运行须带预检哈希。worker 持租约调用模型生成
+  单页 HTML，经离线沙箱渲染截图，HTML 与 PNG 加密保存并与沙箱回执一起写入原型记录；功能选择变化或沙箱
+  不可用均在调用前阻断。
+- 修复 gVisor 下大于 64 KiB 的沙箱产物偶发丢失 4 KiB（哈希校验报 `artifact_hash_mismatch`）：
+  runner 改为按 `PIPE_BUF` 原子写出帧；以模型生成的 238 KiB 页面连续 10 次渲染验证。
+- 新增 `GET /prototype-runs/{id}` 与源图读取，`screenshot prepare --prototype-run` 下载源图后按本机
+  计划处理，再经人工入库成为 origin=prototype 资产。机制见
+  [screenshot-evidence.md](notes/screenshot-evidence.md#prototype-generation)。
+
 ## 2026-10-03：沙箱运行时定为专用 VM 内 rootful Docker + runsc
 
 - supervisor 预检改为：runsc 必须运行在 rootful 守护进程上且不得跳过 cgroup，rootless 仅用于 runc

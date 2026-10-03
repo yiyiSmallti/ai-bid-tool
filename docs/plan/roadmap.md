@@ -75,7 +75,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B03 参数判定 | `condition` 为自由 dict | 类型化 param/op/value/unit、单位换算、模糊表达转人工 | 新契约 |
 | B04 evidence fetch | 固定证书 PDF 页来源及响应 Evidence 绑定，来源档案恒未确认；人工截图入库与 `image_region` 证据；沙箱按允许名单采集厂家网页/PDF 原始产物 | 厂家采集与搜索候选接入截图链（[screenshots.md](screenshots.md) Phase B）、自动满足判定 | 搜索依赖 API |
 | B05 evidence stamp | 截图链的 Rust 遮挡、裁剪、区域框与哈希已实施，不加水印 | 证书页等其他材料的标注；草案见 [annotation.md](annotation.md) | 待批准 |
-| B06 ui mock | 原型逐项保留/替换决定；沙箱可离线渲染给定 HTML | LLM 生成 HTML 原型并经沙箱截图；契约见 [screenshots.md](screenshots.md) | 已批准 |
+| B06 ui mock | LLM 生成单页 HTML 原型并经沙箱离线截图、入库与逐项保留/替换决定；机制见 [screenshot-evidence.md](../notes/screenshot-evidence.md) | 软件响应表自动编排 | 新契约 |
 | B07 人工确认 | 卡片与 Evidence 按职责人工确认、不可变修订、原子处置、模型提议与消费关口；决定见 [ADR 0005](../adr/0005-human-confirmed-responses.md) | 会签、任务成员与看板交互 | 新契约 |
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
 | B09 check | 未实施 | 标书与要求对照、废标/扣分风险、误报处理 | 语义校验依赖 LLM |

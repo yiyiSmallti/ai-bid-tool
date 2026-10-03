@@ -38,3 +38,6 @@ dist/
 # Playwright output
 test-results/
 playwright-report/
+
+# Editor swap files
+*.swp

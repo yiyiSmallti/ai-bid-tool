@@ -455,6 +455,11 @@ def screenshot_files(tmp_path: Path) -> dict[str, Path]:
             "purposes": ["match_requirements"],
             "dry_run": True,
         },
+        "ui-mock": {
+            "extraction_job_id": IDENTIFIER,
+            "requirement_id": IDENTIFIER_2,
+            "task_feature_id": IDENTIFIER_3,
+        },
         "decision-preview": {
             "extraction_job_id": IDENTIFIER,
             "module_label": "Synthetic module",
@@ -499,7 +504,7 @@ def test_screenshot_remote_commands_snapshot(tmp_path, monkeypatch, capsys):
 
     def fake_call(method, path, **kwargs):
         calls.append((method, path, kwargs))
-        if path.endswith("/renditions") or path.endswith("/screenshot-analyses"):
+        if path.endswith(("/renditions", "/screenshot-analyses", "/prototype-generations")):
             data = {"dry_run": True, "input_hash": SHA}
         else:
             data = {"path": path, "method": method}
@@ -590,6 +595,15 @@ def test_screenshot_remote_commands_snapshot(tmp_path, monkeypatch, capsys):
             "--cursor",
             IDENTIFIER_2,
         ],
+        "ui mock": [
+            "ui",
+            "mock",
+            "--task",
+            IDENTIFIER,
+            "--input",
+            str(paths["ui-mock"]),
+            "--dry-run",
+        ],
         "screenshot prototype-decisions preview": [
             "screenshot",
             "prototype-decisions",
@@ -641,6 +655,15 @@ def test_screenshot_remote_commands_snapshot(tmp_path, monkeypatch, capsys):
     }
     assert by_path[("POST", f"/tasks/{IDENTIFIER}/screenshots")]["files"]["file"][2] == "image/png"
     assert by_path[("POST", f"/tasks/{IDENTIFIER}/screenshot-analyses")]["json"]["dry_run"] is True
+    assert by_path[("POST", f"/tasks/{IDENTIFIER}/prototype-generations")]["json"] == {
+        "extraction_job_id": IDENTIFIER,
+        "requirement_id": IDENTIFIER_2,
+        "task_feature_id": IDENTIFIER_3,
+        "expected_input_hash": None,
+        "reasoning": None,
+        "dry_run": True,
+        "retry": False,
+    }
 
 
 def test_add_mismatch_and_annotate_dry_retry_do_not_dispatch(tmp_path, monkeypatch, capsys):

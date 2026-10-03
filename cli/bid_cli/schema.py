@@ -58,6 +58,7 @@ from app.schemas.sandbox_contracts import PrototypeSpec, VendorSpec
 from app.schemas.screenshot_contracts import (
     PrototypeDecisionBatch,
     PrototypeDecisionPreviewInput,
+    PrototypeGenerateInput,
     ScreenshotAnalyzeInput,
     ScreenshotAnnotate,
     ScreenshotIngest,
@@ -176,6 +177,7 @@ COMMANDS = {
     "screenshot preview": None,
     "screenshot withdraw": ScreenshotWithdraw,
     "screenshot analyze": ScreenshotAnalyzeInput,
+    "ui mock": PrototypeGenerateInput,
     "screenshot suggestions": None,
     "screenshot prototype-decisions preview": PrototypeDecisionPreviewInput,
     "screenshot prototype-decisions apply": PrototypeDecisionBatch,

@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import importlib.metadata
 import json
+import os
 import struct
 import sys
 import zlib
@@ -35,13 +36,26 @@ def receive(limit: int) -> tuple[dict[str, Any], bytes]:
     return header, data
 
 
+# Under gVisor, writes larger than PIPE_BUF to the attached stdout can stall or report more
+# bytes than were delivered (a 4 KiB block went missing from a 238 KiB PNG). Writes of at
+# most PIPE_BUF are atomic on a pipe, so the stream is emitted in such writes.
+WRITE_CHUNK = 4096
+
+
+def write_all(data: bytes) -> None:
+    view = memoryview(data)
+    while view:
+        written = os.write(1, view[:WRITE_CHUNK])
+        view = view[written:]
+
+
 def emit(header: dict[str, Any], data: bytes = b"") -> None:
     raw = canonical({**header, "length": len(data)}) + b"\n"
     if len(raw) > CONTROL_LIMIT:
         raise SandboxFailure("control_limit")
-    sys.stdout.buffer.write(raw)
-    sys.stdout.buffer.write(data)
-    sys.stdout.buffer.flush()
+    sys.stdout.flush()
+    write_all(raw)
+    write_all(data)
 
 
 def artifact_header(artifact: ArtifactPayload, ordinal: int) -> dict[str, Any]:
