@@ -4,6 +4,7 @@ import asyncio
 import hashlib
 import math
 import struct
+import threading
 from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
@@ -26,6 +27,7 @@ from app.services.resources import audit
 
 RENDER_PROFILE = "pdf-page-preview-v1"
 RENDER_SECONDS = 20.0
+RENDER_SLOTS = threading.BoundedSemaphore(2)
 MAX_PREVIEW_BYTES = 40 * 1024 * 1024
 WARNINGS = [
     "Source is an unconfirmed user-supplied PDF page; authenticity and eligibility are not verified; never eligible for draft/export"
@@ -160,24 +162,14 @@ def joined_sources():
     )
 
 
-async def create_source(
-    session: AsyncSession,
-    actor: Identity,
-    task_id: UUID,
-    body: EvidenceSourceCreate,
-    storage: Storage,
-    max_bytes: int,
-) -> dict:
-    require_access(actor, "evidence:source:write")
-    # Existing certificate selection locks the task first. The fixed parent rows
-    # are immutable; no mutable certificate current pointer is consulted here.
-    task = await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
-    if task is None:
-        raise not_found()
+async def source_inputs(
+    session: AsyncSession, task_id: UUID, body: EvidenceSourceCreate
+) -> tuple[TaskCertificate, CertificateFile, EvidenceSource | None]:
     snapshot = await session.scalar(
-        select(TaskCertificate).where(
-            TaskCertificate.id == body.task_certificate_id, TaskCertificate.task_id == task_id
-        )
+        select(TaskCertificate)
+        .where(TaskCertificate.id == body.task_certificate_id, TaskCertificate.task_id == task_id)
+        # The re-check after locking must see committed changes, not the identity map.
+        .execution_options(populate_existing=True)
     )
     if snapshot is None:
         raise not_found()
@@ -201,23 +193,57 @@ async def create_source(
             EvidenceSource.render_profile == RENDER_PROFILE,
         )
     )
+    return snapshot, original, existing
+
+
+def bounded_render(*args) -> tuple[bytes, EvidenceSourcePreview, datetime]:
+    # A timed-out render keeps its thread until it returns, so the slot is held
+    # by the thread itself; stalled renders cannot accumulate past the limit.
+    if not RENDER_SLOTS.acquire(blocking=False):
+        raise ServiceError("source_render_busy", "Page rendering is busy; try again", 503, 3)
+    try:
+        return render_page(*args)
+    finally:
+        RENDER_SLOTS.release()
+
+
+async def create_source(
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    body: EvidenceSourceCreate,
+    storage: Storage,
+    max_bytes: int,
+) -> dict:
+    require_access(actor, "evidence:source:write")
+    if await session.get(Task, task_id) is None:
+        raise not_found()
+    snapshot, original, existing = await source_inputs(session, task_id, body)
     if existing is not None:
         return {"source": source_data(existing, snapshot, original), "duplicate": True}
     descriptor = CertificateScanFile.model_validate(original.file)
     if body.page > descriptor.page_count:
         raise ServiceError("invalid_source_page", "Page is outside original PDF", 400, 2)
+    # The original revision is immutable, so reading and rendering it needs no task lock.
     content = await storage.read(actor.org_id, original.storage_key)
     identifier = uuid4()
     name = f"source-{identifier}-page-{body.page}.png"
     try:
         png, preview, rendered_at = await asyncio.wait_for(
-            asyncio.to_thread(render_page, content, descriptor, body.page, name, max_bytes),
+            asyncio.to_thread(bounded_render, content, descriptor, body.page, name, max_bytes),
             timeout=RENDER_SECONDS,
         )
     except TimeoutError as exc:
         # The renderer is pure and may finish late; late results cannot reach any
         # DB/object writes because those only follow this successful await.
         raise ServiceError("source_render_timeout", "Page rendering timed out", 503, 3) from exc
+    # Certificate selection locks the task first; after taking the same lock, re-read
+    # what selection or a concurrent archive may have changed during rendering.
+    if await session.scalar(select(Task).where(Task.id == task_id).with_for_update()) is None:
+        raise not_found()
+    snapshot, original, existing = await source_inputs(session, task_id, body)
+    if existing is not None:
+        return {"source": source_data(existing, snapshot, original), "duplicate": True}
     key = f"org/{actor.org_id}/evidence-source/{identifier}/{preview.sha256}.png"
     await storage.put(actor.org_id, key, png)
     row = EvidenceSource(

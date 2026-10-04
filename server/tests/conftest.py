@@ -33,7 +33,8 @@ def no_retry_waits(monkeypatch):
 def admin_engine():
     url = os.environ.get("BID_TEST_ADMIN_URL")
     if not url:
-        pytest.skip("An isolated PostgreSQL test runtime is required")
+        # Failing instead of skipping keeps a run without the database from looking green.
+        pytest.fail("BID_TEST_ADMIN_URL must point at an isolated PostgreSQL test runtime")
     if not (make_url(url).database or "").startswith("bid_test"):
         raise RuntimeError("Tests refuse to mutate a database without the bid_test prefix")
     engine = create_engine(url, hide_parameters=True)

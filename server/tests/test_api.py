@@ -40,7 +40,9 @@ async def test_login_errors_and_switching(api, headers, tenants):
         "/auth/login",
         json={"email": "a@example.test", "password": PASSWORD, "org_id": str(tenants["orgs"][1])},
     )
-    assert wrong_org.status_code == 404
+    # A correct password for another org reads exactly like a wrong password.
+    assert wrong_org.status_code == 401
+    assert wrong_org.json()["data"] == invalid.json()["data"]
     response = await api.get(
         "/org/current", headers={**headers[0], "X-Org-Id": str(tenants["orgs"][1])}
     )

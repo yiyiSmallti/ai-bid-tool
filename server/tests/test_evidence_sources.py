@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import json
+import threading
 import time
 from datetime import UTC
 from pathlib import Path
@@ -385,6 +386,38 @@ async def test_concurrent_sources_store_once(api, headers, pdf_bytes, applicatio
     assert len({r.json()["data"]["source"]["id"] for r in replies}) == 1 and sorted(
         r.json()["data"]["duplicate"] for r in replies
     ) == [False, True]
+
+
+async def test_render_runs_outside_task_lock_and_rechecks_selection(
+    api, headers, pdf_bytes, application, monkeypatch, tenants
+):
+    certificate, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
+    rendering, release = threading.Event(), threading.Event()
+    original_render = services.render_page
+
+    def gated(*args):
+        rendering.set()
+        assert release.wait(10)
+        return original_render(*args)
+
+    monkeypatch.setattr(services, "render_page", gated)
+    pending = asyncio.create_task(add(api, headers[0], task, choice["id"]))
+    try:
+        assert await asyncio.to_thread(rendering.wait, 10)
+        # Replacing the selection takes the task lock while the page is still rendering.
+        assert (
+            await upload(api, headers[0], certificate, pdf_bytes, expected=2)
+        ).status_code == 200
+        replaced = await asyncio.wait_for(select_version(api, headers[0], certificate, task), 5)
+        assert replaced.status_code == 200, replaced.text
+    finally:
+        release.set()
+    response = await pending
+    assert response.status_code == 409
+    assert response.json()["data"]["error"]["code"] == "inactive_snapshot"
+    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+        assert await session.scalar(select(func.count()).select_from(EvidenceSource)) == 0
+    assert not list(application.state.storage.root.rglob("*.png"))
 
 
 @pytest.mark.parametrize("failure", ["read", "original_hash", "put", "audit", "timeout", "size"])
