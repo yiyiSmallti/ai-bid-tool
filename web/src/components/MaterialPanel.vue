@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { confirmAction, display, downloadOriginal, errorText, orgAccess, orgRequest } from "../org.js";
+import PageViewer from "./PageViewer.vue";
 const props = defineProps({ taskId: String, editable: Boolean });
 const emit = defineEmits(["add", "changed"]);
 // These are the scalar fields in RESOURCE_FIELD_PATHS, never a user-supplied path.
@@ -14,7 +15,9 @@ const selections = ref([]), sources = ref([]), files = ref([]), loaded = ref(fal
 const chosen = ref(""), field = ref(""), quote = ref(""), pageSource = ref(""), pageQuote = ref("");
 const sourceImage = ref(null), previewName = ref(""), previewBusy = ref(false);
 const libraryKind = ref("product"), library = ref([]), libraryChoice = ref(""), lot = ref("");
-const certificate = ref(""), page = ref(1), open = ref([]);
+const certificate = ref(""), page = ref(1), open = ref([]), viewing = ref(null), viewerOpen = ref(false);
+function view(file) { viewing.value = file; viewerOpen.value = true; }
+const loadCertificatePage = (pageNumber, zoom) => orgRequest("GET", `/resources/certificates/revisions/${viewing.value.certificate_revision_id}/file/pages/${pageNumber}/preview?zoom=${zoom}`, undefined, { binary: true });
 let previewEpoch = 0;
 const selection = computed(() => selections.value.find(s => s.id === chosen.value));
 const allowedFields = computed(() => selection.value ? kinds[selection.value.kind].fields.filter(key => typeof selection.value.data[key] === "string") : []);
@@ -104,7 +107,7 @@ onMounted(load);
         </el-form>
       </el-collapse-item>
       <el-collapse-item name="pages" :title="`证书原件与页来源（${files.length} 份证书 · ${sources.length} 个页来源）`">
-        <ul class="plain-list"><li v-for="file in files" :key="file.id"><span>{{ file.data.name }} · 固定修订 {{ file.revision }} · {{ file.file?.name ?? "没有原件" }}</span><el-button v-if="file.file" size="small" link type="primary" @click="original(file)">下载证书 PDF</el-button></li></ul>
+        <ul class="plain-list"><li v-for="file in files" :key="file.id"><span>{{ file.data.name }} · 固定修订 {{ file.revision }} · {{ file.file?.name ?? "没有原件" }}</span><span v-if="file.file" class="file-actions"><el-button size="small" link type="primary" @click="view(file)">在线预览</el-button><el-button size="small" link type="primary" @click="original(file)">下载证书 PDF</el-button></span></li></ul>
         <el-form v-if="writable" label-position="top" @submit.prevent="archivePage">
           <div class="grid">
             <el-form-item label="固定证书"><el-select v-model="certificate" placeholder="请选择"><el-option v-for="file in files.filter(f => f.file)" :key="file.id" :value="file.id" :label="`${file.data.name}（${file.file.page_count} 页）`" /></el-select></el-form-item>
@@ -122,6 +125,7 @@ onMounted(load);
       </el-collapse-item>
     </el-collapse>
     <p v-if="previewBusy" class="hint" role="status">正在读取受权预览…</p>
+    <PageViewer v-if="viewing" v-model="viewerOpen" :title="`${viewing.data.name} · ${viewing.file.name}`" :page-count="viewing.file.page_count" :load="loadCertificatePage" />
     <figure v-if="sourceImage" class="preview"><figcaption class="preview-head"><span>{{ previewName }}</span><span class="actions"><a :href="sourceImage" :download="`${previewName}.png`">下载本页图片以放大核对</a><el-button size="small" @click="closePreview">关闭预览</el-button></span></figcaption><img :src="sourceImage" :alt="previewName" /></figure>
   </section>
 </template>

@@ -2,6 +2,7 @@
 import { ArrowRight, Close, Download, Refresh, Tickets, View } from "@element-plus/icons-vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { actorKinds, confirmAction, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, mine, orgAccess, orgRequest, quoteChecks, responseKinds, states, statusTag } from "../org.js";
+import DocumentPreview from "./DocumentPreview.vue";
 import MaterialPanel from "./MaterialPanel.vue";
 import SourcePreview from "./SourcePreview.vue";
 const props = defineProps({ row: Object, taskId: String, jobId: String, documentName: String });
@@ -141,7 +142,7 @@ onMounted(async () => {
       <p class="hint">{{ locationLabel(displayedSource, documentName) }}</p>
       <blockquote class="quote">{{ displayedSource.quote }}</blockquote>
       <details v-if="props.row.model_quote"><summary>模型原样引文（仅供追溯，不是招标原文）</summary><blockquote class="quote">{{ props.row.model_quote }}</blockquote></details>
-      <div class="actions"><el-button size="small" :icon="View" @click="source">对照原文块</el-button><el-button size="small" :icon="Download" @click="download">下载招标原件</el-button></div>
+      <div class="actions"><DocumentPreview :document-id="displayedSource.document_id" :name="documentName ?? '招标原件'" :page="displayedSource.page" :block="displayedSource.location?.block_id ?? ''" label="在线查看原文位置" size="small" /><el-button size="small" :icon="View" @click="source">对照原文块</el-button><el-button size="small" :icon="Download" @click="download">下载招标原件</el-button></div>
       <details v-if="sourceChunk" open><summary>所指原文块</summary><pre>{{ sourceChunk.text }}</pre><p v-for="block in sourceChunk.blocks" :key="block.block_id" class="hint">{{ block.label }}：{{ block.text }}</p></details>
       <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>

@@ -33,6 +33,10 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.exports import job_access
 
         await job_access(session, identity, job, storage)
+    if job.kind == "export_preview":
+        from app.services.page_previews import job_access as preview_access
+
+        await preview_access(session, identity, job)
     await sandbox_guard_job(session, identity, job)
     payload = Result(
         ok=True,
@@ -66,6 +70,14 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
     if job.kind == "export_render":
         payload["data"]["result"] = _public_result(job)
         return payload
+    if job.kind == "export_preview":
+        # The stored PDF location is served only through the export preview routes.
+        preview = job.result.get("preview")
+        payload["data"]["result"] = {
+            **_public_result(job),
+            "preview": {"page_count": preview["page_count"]} if preview else None,
+        }
+        return payload
     if job.kind in {"draft", "card_generate"}:
         identity.require("draft:read" if job.kind == "draft" else "card:read")
         identity.require("task:read")
@@ -96,6 +108,10 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.exports import job_access
 
         await job_access(session, identity, job, storage, cancel=True)
+    if job.kind == "export_preview":
+        from app.services.page_previews import job_access as preview_access
+
+        await preview_access(session, identity, job)
     await sandbox_guard_job(session, identity, job, cancel=True)
     if job.status not in {"cancelled", "queued", "running"}:
         raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)

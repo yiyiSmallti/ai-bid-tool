@@ -8,7 +8,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import ValidationError
 
@@ -38,6 +38,7 @@ from app.services import (
     certificates,
     evidence_sources,
     features,
+    page_previews,
     profiles,
     resources,
     templates,
@@ -390,6 +391,20 @@ def create_router(
             session, actor, revision_id, storage
         )
         return attachment(content, descriptor.media_type, descriptor.name)
+
+    @router.get(
+        "/resources/certificates/revisions/{revision_id}/file/pages/{page}/preview",
+        name="resource_certificate_file_page_preview",
+    )
+    async def certificate_file_page_preview(
+        revision_id: UUID,
+        page: int,
+        zoom: int = Query(1, ge=1, le=2),
+        ctx=Depends(context, scope="function"),
+    ):
+        session, actor = ctx
+        png = await page_previews.certificate_page(session, actor, revision_id, page, zoom, storage)
+        return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     async def template_upload(metadata, file, model):
         if len(metadata.encode("utf-8")) > 128 * 1024:

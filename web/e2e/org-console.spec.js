@@ -762,4 +762,73 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     writeFileSync(join(output, "org-console-result.json"), JSON.stringify(result, null, 2));
     await technical.close();
   });
+
+  test("online previews of tender, certificate and export pages", async ({ browser }) => {
+    const previews = fixture.previews;
+    const pdfName = previews.documents.pdf.name;
+    const wordName = previews.documents.word.name;
+    const exportName = previews.export.file.name;
+    const bidder = await browser.newPage();
+    const consoleErrors = [];
+    bidder.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    await login(bidder, "bidder");
+    const firstPage = async (title) => {
+      const dialog = bidder.getByRole("dialog", { name: title });
+      await expect(dialog).toBeVisible();
+      const image = dialog.getByRole("img", { name: `${title} 第 1 页` });
+      await expect(image).toBeVisible({ timeout: 60_000 });
+      expect(await image.evaluate((element) => element.naturalWidth)).toBeGreaterThan(300);
+      return dialog;
+    };
+    const close = async (title) => {
+      await bidder.keyboard.press("Escape");
+      await expect(bidder.getByRole("dialog", { name: title })).toBeHidden();
+    };
+
+    await bidder.goto(`/app/org/tasks/${previews.task.id}`);
+    await expect(bidder.getByText(/状态：已解析/)).toBeVisible();
+    // The automatic extraction dry run disables the document select until it returns.
+    await expect(bidder.getByText(/预检结果：/)).toBeVisible();
+    await choose(bidder, "文档", new RegExp(pdfName));
+    await bidder.getByRole("button", { name: `在线预览：${pdfName}` }).click();
+    const pdfDialog = await firstPage(pdfName);
+    await expect(pdfDialog).toContainText("/ 3 页");
+    await close(pdfName);
+    await expect(bidder.getByText(/预检结果：/)).toBeVisible();
+    await choose(bidder, "文档", new RegExp(wordName));
+    await bidder.getByRole("button", { name: `在线预览：${wordName}` }).click();
+    const wordDialog = bidder.getByRole("dialog", { name: wordName });
+    await expect(wordDialog.getByText(/合成条款 C-0001/)).toBeVisible();
+    await close(wordName);
+
+    const exportTable = bidder.getByRole("table", { name: "已发布的导出文件" });
+    await exportTable.getByRole("button", { name: `在线预览：${exportName}` }).click();
+    const exportDialog = await firstPage(exportName);
+    await bidder.screenshot({ path: join(output, "preview-export.png") });
+    await expect(exportDialog).toContainText(/\/ \d+ 页/);
+    await close(exportName);
+
+    await bidder.goto(
+      `/app/org/tasks/${previews.task.id}/review?job=${previews.extraction_id}&requirement=${previews.card_requirement_id}`,
+    );
+    await bidder.getByRole("button", { name: `在线查看原文位置：${pdfName}` }).click();
+    await firstPage(pdfName);
+    await close(pdfName);
+    await bidder.getByText(/证书原件与页来源/).click();
+    const certificate = bidder.getByRole("region", { name: "固定材料" });
+    await certificate.getByRole("button", { name: "在线预览" }).first().click();
+    await firstPage(`${previews.certificate.name} · synthetic-certificate.pdf`);
+    await bidder.screenshot({ path: join(output, "preview-certificate.png") });
+    expect(consoleErrors).toEqual([]);
+    await bidder.close();
+
+    const viewer = await browser.newPage();
+    await login(viewer, "viewer");
+    await viewer.goto(`/app/org/tasks/${previews.task.id}`);
+    await expect(viewer.getByRole("heading", { name: previews.task.name })).toBeVisible();
+    await expect(viewer.getByRole("table", { name: "已发布的导出文件" })).toHaveCount(0);
+    await viewer.close();
+  });
 });

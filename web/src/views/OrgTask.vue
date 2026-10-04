@@ -3,9 +3,11 @@ import { Download, Search, Upload } from "@element-plus/icons-vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { citationModes, display, documentStatuses, downloadOriginal, errorText, formatTime, jobStatuses, jobTag, label, orgAccess, orgRequest, recalled, remember, warningText } from "../org.js";
+import DocumentPreview from "../components/DocumentPreview.vue";
+import ExportPreview from "../components/ExportPreview.vue";
 import JobPanel from "../components/JobPanel.vue";
 const route = useRoute(), taskId = route.params.taskId;
-const task = ref(null), documents = ref([]), history = ref([]), parseJobs = ref([]), selected = ref("");
+const task = ref(null), documents = ref([]), history = ref([]), parseJobs = ref([]), selected = ref(""), exportList = ref(null);
 const file = ref(null), fileInput = ref(null), preview = ref(null), reasoning = ref(""), warnings = ref([]), error = ref(""), busy = ref(false), receipt = ref(null);
 const reasoningLevels = ref([]);
 const jobId = ref(recalled(`task.${taskId}`)?.jobId ?? null);
@@ -52,7 +54,22 @@ async function run(kind, dry = false, retry = false) {
 async function download() { try { await downloadOriginal(`/documents/${selected.value}/download-link`, currentDocument.value.name); } catch (exc) { error.value = errorText(exc); } }
 function changeDocument() { preview.value = null; reasoning.value = ""; reasoningLevels.value = []; warnings.value = []; rememberIds(); if (writable.value) run("extract", true); }
 const documentName = (id) => documents.value.find(d => d.id === id)?.name ?? id;
-onMounted(async () => { await load(); if (writable.value && selected.value) await run("extract", true); });
+// Released exports are visible to commercial reviewers only; other roles see no export card.
+async function loadExports() {
+  try { exportList.value = (await orgRequest("GET", `/tasks/${taskId}/exports`)).items; }
+  catch (exc) { exportList.value = null; if (exc.status !== 403) error.value = errorText(exc); }
+}
+async function downloadExport(item) {
+  try {
+    const signed = await orgRequest("GET", `/exports/${item.id}/download-link`);
+    const blob = await orgRequest("GET", signed.data.url, undefined, { binary: true });
+    const url = URL.createObjectURL(blob);
+    const anchor = window.document.createElement("a"); anchor.href = url; anchor.download = item.file.name ?? `export-${item.id}.docx`; anchor.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (exc) { error.value = errorText(exc); }
+}
+const exportModes = { review_copy: "审阅件", final_section: "正式件" };
+onMounted(async () => { await load(); loadExports(); if (writable.value && selected.value) await run("extract", true); });
 </script>
 <template>
   <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><span>{{ task?.name ?? "任务" }}</span></nav>
@@ -86,6 +103,7 @@ onMounted(async () => { await load(); if (writable.value && selected.value) awai
       </el-form>
       <p v-if="currentDocument" class="doc-meta">状态：{{ label(documentStatuses, currentDocument.status) }} · 页数 {{ display(currentDocument.page_count) }} · 引用方式 {{ label(citationModes, currentDocument.citation_mode) }}</p>
       <div v-if="selected" class="actions">
+        <DocumentPreview :key="selected" :document-id="selected" :name="currentDocument?.name ?? '招标原件'" />
         <el-button :icon="Download" @click="download">下载招标原件</el-button>
         <template v-if="writable"><el-button type="primary" plain :disabled="busy" @click="run('parse')">开始解析</el-button><el-button :disabled="busy" @click="run('parse', false, true)">显式重试解析</el-button></template>
       </div>
@@ -113,6 +131,22 @@ onMounted(async () => { await load(); if (writable.value && selected.value) awai
     </el-card>
   </div>
   <JobPanel :job-id="jobId" :writable="writable" @finished="load" />
+  <el-card v-if="exportList" class="section" shadow="never" body-class="flush">
+    <template #header><div class="section-title"><h3>导出文件</h3><span class="hint">在线预览按 Word 版式转换成页面，转换只在第一次打开时进行</span></div></template>
+    <div class="table-scroll flat"><table class="data-table"><caption class="sr-only">已发布的导出文件</caption>
+      <thead><tr><th>导出文件</th><th>类型</th><th>状态</th><th>发布时间</th><th>操作</th></tr></thead>
+      <tbody>
+        <tr v-for="item in exportList" :key="item.id">
+          <td>{{ item.file.name ?? "导出文件" }}<div class="hint mono">{{ item.id }}</div></td>
+          <td><span class="tag" :class="item.mode === 'final_section' ? 'primary' : ''">{{ exportModes[item.mode] ?? item.mode }}</span></td>
+          <td><span class="tag" :class="item.validity === 'current' ? 'success' : 'danger'">{{ item.validity === "current" ? "当前有效" : "已失效" }}</span></td>
+          <td class="hint">{{ formatTime(item.released_at) }}</td>
+          <td><div class="row-actions"><ExportPreview v-if="item.validity === 'current'" :export-id="item.id" :title="item.file.name ?? '导出文件'" /><el-button size="small" link type="primary" :disabled="item.validity !== 'current'" @click="downloadExport(item)">下载</el-button></div></td>
+        </tr>
+        <tr v-if="!exportList.length"><td colspan="5" class="empty">还没有发布的导出文件。</td></tr>
+      </tbody>
+    </table></div>
+  </el-card>
   <el-card class="section" shadow="never" body-class="flush">
     <template #header><div class="section-title"><h3>抽取历史</h3><span class="hint">选择成功的抽取进入审阅与初稿</span></div></template>
     <div class="table-scroll flat" tabindex="0"><table class="data-table"><caption class="sr-only">抽取历史：选择成功的固定 job 进入审阅</caption>
