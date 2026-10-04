@@ -325,6 +325,18 @@ Keep runsc/Chromium compatibility, packet-level zero-egress checks, memory
 exhaustion, supervisor restart and cross-instance canary tests as explicit deployment
 acceptance gates. The focused pipeline check above does not cover all of those attacks.
 
+Check the trusted proxy against attack origins. The driver needs no VM, network
+access or privileges: it starts synthetic HTTPS servers on loopback with a throwaway
+CA, runs the production broker and host relay against them, and writes
+`results.json` with every case and the requests each target received:
+
+```sh
+PYTHONPATH=server .venv/bin/python scripts/sandbox_proxy_acceptance.py
+```
+
+It exits 1 when any case fails. Kernel-level egress filtering on the proxy node and
+real DNS resolution stay deployment checks.
+
 ## Submit and inspect a sandbox run
 
 1. Create a task, upload and parse its tender, complete extraction, and select a

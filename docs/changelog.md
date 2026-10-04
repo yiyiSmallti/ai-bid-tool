@@ -6,6 +6,14 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：沙箱代理攻防验收驱动
+
+- 新增 [sandbox_proxy_acceptance.py](../scripts/sandbox_proxy_acceptance.py)：生产代码中的 `FetchBroker` 与
+  `SocketBrowserProvider` 对回环上的真实 TLS 合成源运行，各目标统计实际收到的请求。覆盖恶意 query/path、
+  userinfo、编码 IP、内网与元数据目标、混合 A/AAAA、DNS 重绑定、跨域与 HTTPS 降级跳转、无限跳转、
+  不受信证书、Cookie、POST、压缩炸弹和超大 chunk，以及伪造 supervisor 直接发送的 fetch 帧；违规目标收到
+  零请求，每次连接都使用校验过的地址。代理节点的内核级出网过滤与真实 DNS 不在其内。
+
 ## 2026-10-03：CI 用时与 main 分支保护
 
 - CI 只在拉取请求和 main 上运行，分支推送不再重复跑一遍；同一拉取请求的新推送取消旧运行。只改 Markdown
