@@ -195,7 +195,6 @@ async def test_revision_isolation_and_database_gates(tenants, tmp_path):
                         user_id=tenants["users"][0],
                         name="forged",
                         digest=uuid4().hex,
-                        encrypted_secret="synthetic",
                         scopes=["provider:write"],
                         expires_at=datetime.now(UTC) + timedelta(days=1),
                     )

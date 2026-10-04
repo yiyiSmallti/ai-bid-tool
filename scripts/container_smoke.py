@@ -42,6 +42,7 @@ def main():
         "BID_OWNER_PASSWORD": secrets.token_urlsafe(24),
         "BID_DATABASE_PASSWORD": secrets.token_urlsafe(24),
         "BID_ENCRYPTION_KEY": key,
+        "BID_TOKEN_KEY": Fernet.generate_key().decode(),
         "BID_CLI_KEY": Fernet.generate_key().decode(),
         "BID_S3_ACCESS_KEY": "synthetic-test-" + uuid4().hex[:12],
         "BID_S3_SECRET_KEY": secrets.token_urlsafe(24),

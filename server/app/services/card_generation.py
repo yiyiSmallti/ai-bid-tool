@@ -406,7 +406,7 @@ async def submit_generation(
     else:
         if selected and billable(llm):
             await billing.require_funds(session, settings.billing_currency)
-        crypto = Secrets(settings.encryption_key.get_secret_value())
+        crypto = Secrets.for_data(settings)
         job = Job(
             id=uuid4(),
             org_id=actor.org_id,
@@ -528,11 +528,7 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
             or manifest["redaction_rule_version"] != redaction.RULE_VERSION
         ):
             cards.fail("generation_rules_changed", "Drafting rules changed; submit again", 409, 3)
-        secret = json.loads(
-            Secrets(settings.encryption_key.get_secret_value()).decrypt(
-                submitted["encrypted_input"]
-            )
-        )
+        secret = json.loads(Secrets.for_data(settings).decrypt(submitted["encrypted_input"]))
 
     async def before_admit(session):
         # Recheck grants and the switch for retries/halves as well as the first call.

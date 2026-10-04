@@ -1,10 +1,11 @@
 import asyncio
 import os
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol
 from uuid import UUID, uuid4
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 
 from app.core.config import Settings
 from app.core.errors import ServiceError
@@ -21,11 +22,29 @@ class FileCipher:
 
     marker = b"BIDFILE1\n"
 
-    def __init__(self, key: str):
-        self.cipher = Fernet(key.encode())
+    def __init__(self, key: str, previous: Sequence[str] = ()):
+        self.current = Fernet(key.encode())
+        self.cipher = MultiFernet([self.current, *(Fernet(item.encode()) for item in previous)])
+
+    @classmethod
+    def for_data(cls, settings: Settings) -> "FileCipher":
+        return cls(
+            settings.encryption_key.get_secret_value(),
+            [item.get_secret_value() for item in settings.encryption_key_previous],
+        )
 
     def encrypt(self, key: str, content: bytes) -> bytes:
         return self.marker + self.cipher.encrypt(key.encode() + b"\0" + content)
+
+    def rewrap(self, key: str, stored: bytes) -> bytes | None:
+        """The object re-encrypted under the current key, or None if it already is."""
+        self.decrypt(key, stored)
+        token = stored[len(self.marker) :]
+        try:
+            self.current.decrypt(token)
+            return None
+        except InvalidToken:
+            return self.marker + self.cipher.rotate(token)
 
     def stored_limit(self, key: str, max_bytes: int) -> int:
         if max_bytes < 0:
@@ -67,9 +86,9 @@ def validate_key(org_id: UUID, key: str) -> None:
 
 
 class LocalStorage:
-    def __init__(self, root: Path, encryption_key: str):
+    def __init__(self, root: Path, encryption_key: str, previous: Sequence[str] = ()):
         self.root = root.resolve()
-        self.cipher = FileCipher(encryption_key)
+        self.cipher = FileCipher(encryption_key, previous)
 
     def path(self, org_id: UUID, key: str) -> Path:
         validate_key(org_id, key)
@@ -107,6 +126,34 @@ class LocalStorage:
         except FileNotFoundError as exc:
             raise ServiceError("missing_file", "Stored file is unavailable", 404, 4) from exc
 
+    async def rotate(self, org_id: UUID) -> tuple[int, int]:
+        """Re-encrypt this org's objects under the current key: (checked, rewritten)."""
+        base = self.path(org_id, f"org/{org_id}/")
+
+        def run():
+            checked = rewritten = 0
+            for path in sorted(base.rglob("*")) if base.is_dir() else []:
+                if not path.is_file() or path.name.endswith(".tmp"):
+                    continue
+                key = path.relative_to(self.root).as_posix()
+                checked += 1
+                stored = self.cipher.rewrap(key, path.read_bytes())
+                if stored is None:
+                    continue
+                temporary = path.with_name(path.name + "." + uuid4().hex + ".tmp")
+                try:
+                    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    with os.fdopen(fd, "wb") as handle:
+                        handle.write(stored)
+                    # Same plaintext under a new key; readers see either complete file.
+                    os.replace(temporary, path)
+                finally:
+                    temporary.unlink(missing_ok=True)
+                rewritten += 1
+            return checked, rewritten
+
+        return await asyncio.to_thread(run)
+
     async def read_bounded(self, org_id: UUID, key: str, max_bytes: int) -> bytes:
         path = self.path(org_id, key)
         bound = self.cipher.stored_limit(key, max_bytes)
@@ -130,7 +177,7 @@ class S3Storage:
         if not settings.s3_access_key or not settings.s3_secret_key:
             raise ValueError("S3 credentials are required for S3 mode")
         self.bucket = settings.s3_bucket
-        self.cipher = FileCipher(settings.encryption_key.get_secret_value())
+        self.cipher = FileCipher.for_data(settings)
         self.client = boto3.client(
             "s3",
             endpoint_url=settings.s3_endpoint,
@@ -210,6 +257,34 @@ class S3Storage:
                 "storage_unavailable", "Object storage is unavailable", 503, 3
             ) from None
 
+    async def rotate(self, org_id: UUID) -> tuple[int, int]:
+        """Re-encrypt this org's objects under the current key: (checked, rewritten)."""
+
+        def run():
+            checked = rewritten = 0
+            pages = self.client.get_paginator("list_objects_v2").paginate(
+                Bucket=self.bucket, Prefix=f"org/{org_id}/"
+            )
+            for page in pages:
+                for item in page.get("Contents", []):
+                    key = item["Key"]
+                    validate_key(org_id, key)
+                    response = self.client.get_object(Bucket=self.bucket, Key=key)
+                    try:
+                        stored = self.cipher.rewrap(key, response["Body"].read())
+                    finally:
+                        response["Body"].close()
+                    checked += 1
+                    if stored is None:
+                        continue
+                    # Objects are immutable by content, so an overwrite carries the
+                    # same plaintext as any concurrent writer of this key.
+                    self.client.put_object(Bucket=self.bucket, Key=key, Body=stored)
+                    rewritten += 1
+            return checked, rewritten
+
+        return await asyncio.to_thread(run)
+
     @staticmethod
     def failure(error) -> ServiceError:
         code = error.response["Error"]["Code"]
@@ -228,9 +303,13 @@ class S3Storage:
         return ServiceError("storage_failure", "Object storage request failed", 503, 4)
 
 
-def create_storage(settings: Settings) -> Storage:
+def create_storage(settings: Settings) -> "LocalStorage | S3Storage":
     return (
         S3Storage(settings)
         if settings.storage == "s3"
-        else LocalStorage(settings.data_dir, settings.encryption_key.get_secret_value())
+        else LocalStorage(
+            settings.data_dir,
+            settings.encryption_key.get_secret_value(),
+            [item.get_secret_value() for item in settings.encryption_key_previous],
+        )
     )

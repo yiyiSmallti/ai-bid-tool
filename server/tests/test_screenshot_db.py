@@ -812,7 +812,6 @@ def screenshot_rows(seeded, admin_engine):
                 user_id=user,
                 name="synthetic screenshot token",
                 digest=("3" if index == 0 else "4") * 64,
-                encrypted_secret="synthetic-only",
                 scopes=["screenshot:read"],
                 expires_at=datetime.now(UTC) + timedelta(hours=1),
             )

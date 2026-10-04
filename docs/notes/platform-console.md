@@ -22,7 +22,7 @@ Operators are the emails in `BID_PLATFORM_ADMIN_EMAILS`; each needs an entry in
 `BID_PLATFORM_TOTP_SECRETS`, or startup fails. `python -m app.admin platform-totp`
 prints a new secret and its provisioning URI. Sign-in checks the password and
 an RFC 6238 code with one step of drift. The shared password admission and
-atomic TOTP consumption rules are described below. A platform session is a Fernet token of
+atomic TOTP consumption rules are described below. A platform session is a Fernet token under `BID_TOKEN_KEY` of
 kind `platform`, valid for 30 minutes and re-checked against the configured
 list on every request. Org routes accept only `session` tokens and `bid_`
 API tokens, so the two kinds never cross.

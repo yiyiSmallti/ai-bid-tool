@@ -55,6 +55,7 @@ jobs:
           from cryptography.fernet import Fernet
           with open(os.environ["GITHUB_ENV"], "a") as handle:
               handle.write("BID_ENCRYPTION_KEY=" + Fernet.generate_key().decode() + "\n")
+              handle.write("BID_TOKEN_KEY=" + Fernet.generate_key().decode() + "\n")
               handle.write("BID_CLI_KEY=" + Fernet.generate_key().decode() + "\n")
           PY
       - uses: dtolnay/rust-toolchain@stable

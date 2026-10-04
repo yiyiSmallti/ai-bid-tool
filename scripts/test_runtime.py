@@ -67,6 +67,7 @@ def main():
         "BID_MIGRATION_DATABASE_URL": f"postgresql+psycopg://bid_test_admin@/bid_test?host={socket}&port=55439",
         "BID_DATABASE_URL": f"postgresql+psycopg://bid_app@/bid_test?host={socket}&port=55439",
         "BID_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+        "BID_TOKEN_KEY": Fernet.generate_key().decode(),
         "BID_CLI_KEY": Fernet.generate_key().decode(),
         "BID_DATA_DIR": str(root / "files"),
         "BID_PASSWORD": secrets.token_urlsafe(24),

@@ -10,7 +10,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
 from app.core.password_attempts import PasswordAttempts
-from app.core.security import Secrets
+from app.core.security import TokenSigner
 from app.schemas.contracts import Result
 from app.schemas.platform_contracts import (
     OrgLookup,
@@ -32,7 +32,11 @@ def result(command: str, data=None, items=None) -> dict:
 
 
 def create_router(
-    settings: Settings, db: Database, crypto: Secrets, attempts: PasswordAttempts, transport=None
+    settings: Settings,
+    db: Database,
+    crypto: TokenSigner,
+    attempts: PasswordAttempts,
+    transport=None,
 ) -> APIRouter:
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False)

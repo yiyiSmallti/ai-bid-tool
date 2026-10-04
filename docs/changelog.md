@@ -12,6 +12,17 @@ kind: changelog
   时两项必需检查照常报告成功但跳过测试与构建。缓存 uv 与 Cargo 下载及渲染器构建。
 - main 设为受保护分支：只能经拉取请求合并，`python` 与 `web` 检查须通过，禁止强推与删除，管理员同样受限。
 
+## 2026-10-03：独立令牌密钥与数据密钥轮换
+
+- 会话、平台会话、密码设置链接和各类签名下载链接改用新的必填 `BID_TOKEN_KEY`，与 `BID_ENCRYPTION_KEY`、
+  `BID_SECRETS_KEY` 及已退役的数据密钥都必须不同，否则启动失败。升级时须先配置该变量；部署后现有会话和
+  链接全部失效一次。
+- 数据密钥可轮换：`BID_ENCRYPTION_KEY_PREVIOUS` 中的退役密钥只用于解密，`python -m app.admin
+  rotate-encryption` 逐单位把加密字段和存储对象改写到当前密钥，可重复执行。步骤见
+  [development.md](guides/development.md#keys-and-storage)。
+- 迁移 `0027` 删除 `api_tokens.encrypted_secret`：令牌只保存摘要，不再保存可解密的副本。回退迁移只恢复空列，
+  已删除的密文不可恢复。
+
 ## 2026-10-03：切片 1 公开 PDF 验收与审查缺陷修复
 
 - 用公开的硬件招标 PDF（德邦基金信创交换机项目招标文件）经 CLI 远程模式走完登录、建任务上传、解析、

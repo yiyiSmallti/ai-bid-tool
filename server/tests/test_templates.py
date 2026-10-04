@@ -175,9 +175,9 @@ async def test_template_signature_binding_expiry_revoked_membership_and_integrit
 ):
     row = await template(api, headers[0], docx_bytes)
     other = await template(api, headers[0], docx_bytes)
-    from app.core.security import Secrets
+    from app.core.security import TokenSigner
 
-    crypto = Secrets(application.state.processor.settings.encryption_key.get_secret_value())
+    crypto = TokenSigner.for_tokens(application.state.processor.settings)
     path = f"/resources/templates/revisions/{row['id']}/download"
     for patch in [
         {"kind": "download"},

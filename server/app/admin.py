@@ -6,6 +6,7 @@ credentials are separate from application credentials; secrets stay in env.
 
 import argparse
 import asyncio
+import json
 import os
 from uuid import uuid4
 
@@ -104,6 +105,69 @@ def bootstrap(org_name: str, email: str):
     print("New organization id:", org_id)
 
 
+# Every column written with Secrets.encrypt. A new encrypted column must be added here.
+ENCRYPTED_COLUMNS = (
+    ("card_generation_runs", "encrypted_input"),
+    ("sandbox_inputs", "encrypted_source_url"),
+    ("sandbox_fetch_receipts", "encrypted_request_metadata"),
+)
+
+
+def rotate_encryption() -> dict:
+    """Rewrite data encrypted under BID_ENCRYPTION_KEY_PREVIOUS with BID_ENCRYPTION_KEY.
+
+    Runs as the migration owner, one org at a time: row security binds an owner without
+    BYPASSRLS, and the explicit org filter keeps the same scope for one that has it. Values already under the current key are left alone, so an
+    interrupted run can simply be repeated.
+    """
+    from app.core.config import Settings
+    from app.core.security import Secrets
+    from app.providers.storage import create_storage
+
+    settings = Settings.load()
+    if not settings.encryption_key_previous:
+        raise ValueError("Set BID_ENCRYPTION_KEY_PREVIOUS to the retired keys first")
+    data, storage = Secrets.for_data(settings), create_storage(settings)
+    engine = create_engine(os.environ["BID_MIGRATION_DATABASE_URL"], hide_parameters=True)
+    report = {"orgs": 0, "fields_checked": 0, "fields_rewritten": 0}
+    report |= {"objects_checked": 0, "objects_rewritten": 0}
+    with engine.connect() as connection:
+        orgs = connection.scalars(text("SELECT id FROM platform_org_summaries()")).all()
+    for org_id in orgs:
+        with engine.begin() as connection:
+            connection.execute(
+                text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org_id)}
+            )
+            for table, column in ENCRYPTED_COLUMNS:
+                rows = connection.execute(
+                    text(
+                        sql.SQL("SELECT id, {} FROM {} WHERE org_id = :org AND {} IS NOT NULL")
+                        .format(
+                            sql.Identifier(column), sql.Identifier(table), sql.Identifier(column)
+                        )
+                        .as_string()
+                    ),
+                    {"org": org_id},
+                ).all()
+                update = text(
+                    sql.SQL("UPDATE {} SET {} = :value WHERE org_id = :org AND id = :id")
+                    .format(sql.Identifier(table), sql.Identifier(column))
+                    .as_string()
+                )
+                for row_id, value in rows:
+                    report["fields_checked"] += 1
+                    rotated = data.rotate(value)
+                    if rotated is not None:
+                        connection.execute(update, {"value": rotated, "org": org_id, "id": row_id})
+                        report["fields_rewritten"] += 1
+        checked, rewritten = asyncio.run(storage.rotate(org_id))
+        report["objects_checked"] += checked
+        report["objects_rewritten"] += rewritten
+        report["orgs"] += 1
+    engine.dispose()
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -111,12 +175,15 @@ def main():
     create = commands.add_parser("bootstrap")
     create.add_argument("--org-name", required=True)
     create.add_argument("--email", required=True)
+    commands.add_parser("rotate-encryption")
     totp_parser = commands.add_parser("platform-totp")
     totp_parser.add_argument("--email", required=True)
     args = parser.parse_args()
     if args.command == "init-db":
         initialize_database()
         print("Selected development database initialized; runtime role is restricted")
+    elif args.command == "rotate-encryption":
+        print(json.dumps(rotate_encryption()))
     elif args.command == "platform-totp":
         platform_totp(args.email)
     else:

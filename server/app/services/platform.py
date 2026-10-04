@@ -15,7 +15,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
 from app.core.password_attempts import PasswordAttempts, invalid_login
-from app.core.security import Secrets, hash_password
+from app.core.security import TokenSigner, hash_password
 from app.core.totp import matching_counter
 from app.models.entities import PlatformAuditLog, PlatformCard, PlatformModel, User
 from app.providers.base import ProviderFailure
@@ -59,7 +59,7 @@ def audit(
 async def login(
     attempts: PasswordAttempts,
     settings: Settings,
-    crypto: Secrets,
+    crypto: TokenSigner,
     email: str,
     password: str,
     code: str,
@@ -95,7 +95,7 @@ async def login(
     }
 
 
-def identify(settings: Settings, crypto: Secrets, bearer: str) -> PlatformIdentity:
+def identify(settings: Settings, crypto: TokenSigner, bearer: str) -> PlatformIdentity:
     payload = crypto.open(bearer)
     email = payload.get("email")
     # Removing an operator from the deployment config revokes their sessions at once.
@@ -108,7 +108,7 @@ def fingerprint(password_hash: str) -> str:
     return hashlib.sha256(password_hash.encode()).hexdigest()[:32]
 
 
-def setup_token(crypto: Secrets, user_id: UUID, password_hash: str) -> str:
+def setup_token(crypto: TokenSigner, user_id: UUID, password_hash: str) -> str:
     # Bound to the current hash, so the link stops working once a password is set.
     return crypto.issue(
         {"kind": "password-setup", "user_id": str(user_id), "fp": fingerprint(password_hash)},
@@ -116,7 +116,7 @@ def setup_token(crypto: Secrets, user_id: UUID, password_hash: str) -> str:
     )
 
 
-async def setup_password(db: Database, crypto: Secrets, token: str, password: str) -> None:
+async def setup_password(db: Database, crypto: TokenSigner, token: str, password: str) -> None:
     invalid = ServiceError("invalid_setup_link", "Setup link is invalid or expired", 400, 4)
     try:
         payload = crypto.open(token)
@@ -152,7 +152,7 @@ async def list_orgs(session: AsyncSession) -> list[dict]:
 
 
 async def create_org(
-    session: AsyncSession, crypto: Secrets, actor: PlatformIdentity, name: str, admin_email: str
+    session: AsyncSession, crypto: TokenSigner, actor: PlatformIdentity, name: str, admin_email: str
 ) -> dict:
     created = (
         await session.execute(

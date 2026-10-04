@@ -75,10 +75,10 @@ async def test_docs_declare_bearer_security_and_missing_credentials_fail_closed(
 
 async def test_expired_credentials_and_revoked_membership(api, headers, tenants, admin_engine):
     from app.core.config import Settings
-    from app.core.security import Secrets
+    from app.core.security import TokenSigner
     from sqlalchemy import text
 
-    expired = Secrets(Settings().encryption_key.get_secret_value()).issue(
+    expired = TokenSigner.for_tokens(Settings()).issue(
         {"kind": "session", "user_id": str(tenants["users"][0])}, -1
     )
     assert (
