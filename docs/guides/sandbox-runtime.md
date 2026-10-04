@@ -337,6 +337,20 @@ PYTHONPATH=server .venv/bin/python scripts/sandbox_proxy_acceptance.py
 It exits 1 when any case fails. Kernel-level egress filtering on the proxy node and
 real DNS resolution stay deployment checks.
 
+Check two-org isolation and lifecycle faults on a running development instance with
+two synthetic orgs. Org A needs a task with a succeeded extraction and a selected
+feature; pass their IDs and both orgs' credentials through the environment variables
+listed in [sandbox_two_org_acceptance.py](../../scripts/sandbox_two_org_acceptance.py):
+
+```sh
+PYTHONPATH=server .venv/bin/python scripts/sandbox_two_org_acceptance.py --worker-command data/dev-runtime/run-worker.sh
+```
+
+It renders prototypes as A, probes A's runs, jobs and signed links as B, reads and
+writes across org context with the runtime database role, cancels one run and SIGKILLs
+the worker during another, then restarts the worker. Run it only against a development
+instance.
+
 ## Submit and inspect a sandbox run
 
 1. Create a task, upload and parse its tender, complete extraction, and select a

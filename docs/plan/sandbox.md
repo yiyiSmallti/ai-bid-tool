@@ -17,7 +17,7 @@ P03 Browser、A01，首先服务 B06 原型渲染和 B04 网页/白皮书采集�
 | 无网络执行、独立验证与清理 | 已实施运行时适配，待真实验收 | Docker CLI 后端与测试假后端；默认关闭。测试开关与部署准备见[运行时指南](../guides/sandbox-runtime.md) |
 | 厂家代理与来源回执 | 已实施 | 精确 URL 允许名单、固定 IP/TLS、持久单节点配额、拒绝摘要与归档；见 [sandbox-fetch.md](../notes/sandbox-fetch.md) |
 | 控制通道 | 已实施，待实际节点验收 | 本地多 UID Unix socket；远程 TLS 1.3 双向证书验证、主机名校验与双端叶证书指纹固定。证书不进入容器 |
-| 真实隔离与攻击验收 | 部分通过 | 开发 VM 上 rootful Docker + runsc 的业务模式管道，以及文件/秘密边界、零网络外发（含正向对照）、CPU 死循环、内存炸弹、调用方断连与 supervisor 重启回收已通过，驱动为 [sandbox_colima_acceptance.py](../../scripts/sandbox_colima_acceptance.py)；真实厂家网页与白皮书 PDF 经开发开放策略采集入库已通过；代理攻防（第 5 项）在回环真实 TLS 合成源上已通过，含伪造 supervisor 直接发送 fetch 帧，驱动为 [sandbox_proxy_acceptance.py](../../scripts/sandbox_proxy_acceptance.py)，代理节点的内核级出网过滤与真实 DNS 不在其内；双单位接口与完整生命周期注入待执行 |
+| 真实隔离与攻击验收 | 部分通过 | 开发 VM 上 rootful Docker + runsc 的业务模式管道，以及文件/秘密边界、零网络外发（含正向对照）、CPU 死循环、内存炸弹、调用方断连与 supervisor 重启回收已通过，驱动为 [sandbox_colima_acceptance.py](../../scripts/sandbox_colima_acceptance.py)；真实厂家网页与白皮书 PDF 经开发开放策略采集入库已通过；代理攻防（第 5 项）在回环真实 TLS 合成源上已通过，含伪造 supervisor 直接发送 fetch 帧，驱动为 [sandbox_proxy_acceptance.py](../../scripts/sandbox_proxy_acceptance.py)，代理节点的内核级出网过滤与真实 DNS 不在其内；双单位接口（第 2 项）与运行中取消、worker SIGKILL 两项生命周期注入（第 7 项）在开发实例上以两个合成单位通过，驱动为 [sandbox_two_org_acceptance.py](../../scripts/sandbox_two_org_acceptance.py)；租约过期接管、数据库/控制网络断连和存储/归档失败注入待执行 |
 | 运行时组合 | 已定 | rootful Docker + runsc，运行在无宿主挂载、无业务凭据的专用 VM 内；runsc 不得带 `--ignore-cgroups`/`--rootless`，rootless 仅用于 runc 合成模式，见[已定决定](#已定决定) |
 | Evidence/Card、生成模型、agent 编排 | 未实施，沿用相邻契约 | 本流提供已生成 HTML 的渲染和公开来源原始产物，不代行人工确认 |
 
