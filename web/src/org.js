@@ -64,6 +64,17 @@ export const domainFor = (row) => row.card ? row.card.review_domain : (row.categ
 export const mine = (domain) => (orgAccess.role === "bidder" && domain === "commercial") || (orgAccess.role === "technical" && domain === "technical");
 export function remember(key, value) { const org = orgSession.get(); if (org) sessionStorage.setItem(`bid.org.context.${org.orgId}.${key}`, JSON.stringify(value)); }
 export function recalled(key) { const org = orgSession.get(); return org ? JSON.parse(sessionStorage.getItem(`bid.org.context.${org.orgId}.${key}`) ?? "null") : null; }
+// Selection IDs of simulated materials per task; refreshed whenever materials change.
+const simulated = new Map();
+window.addEventListener("bid:task-materials-changed", (event) => simulated.delete(event.detail?.taskId));
+window.addEventListener("bid:org-reset", () => simulated.clear());
+export function simulatedSelections(taskId) {
+  if (!simulated.has(taskId)) {
+    const pending = orgRequest("GET", `/tasks/${taskId}/simulated-resources`).then((result) => new Set(result.data.selection_ids)).catch((exc) => { simulated.delete(taskId); throw exc; });
+    simulated.set(taskId, pending);
+  }
+  return simulated.get(taskId);
+}
 export async function downloadOriginal(linkPath, name) {
   const signed = await orgRequest("GET", linkPath);
   const blob = await orgRequest("GET", signed.data.url, undefined, { binary: true });

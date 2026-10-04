@@ -16,7 +16,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
@@ -25,6 +25,7 @@ from app.models.entities import (
     Job,
     Membership,
     Org,
+    SimulatedResource,
     Task,
     TaskTemplate,
     Template,
@@ -699,6 +700,27 @@ async def build_manifest(
                             "export_evidence_integrity", "Declared material is missing", 500, 4
                         )
                     material["title"] = material_title(declared.data)
+                    root = getattr(declared, "product_id", None) or getattr(
+                        declared, "feature_id", None
+                    )
+                    # A simulated product or statement is a demonstration, never deliverable.
+                    if root is not None and await session.scalar(
+                        select(SimulatedResource.id).where(
+                            or_(
+                                SimulatedResource.product_id == root,
+                                SimulatedResource.feature_id == root,
+                            )
+                        )
+                    ):
+                        issues.append(
+                            issue(
+                                "export_simulated_material",
+                                "block" if body.mode == "final_section" else "acknowledge",
+                                requirements=[row.requirement_id],
+                                evidence=[evidence.id],
+                                revision=material["resource_revision_id"],
+                            )
+                        )
                     issues.append(
                         issue(
                             "export_declaration_material",

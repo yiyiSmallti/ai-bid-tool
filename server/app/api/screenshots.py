@@ -29,7 +29,9 @@ from app.schemas.screenshot_contracts import (
     VendorSearchAdopt,
     VendorSearchInput,
 )
+from app.schemas.simulation_contracts import ProductSimulationInput
 from app.services import (
+    product_simulation,
     prototype_decisions,
     prototype_generation,
     screenshot_jobs,
@@ -371,6 +373,31 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         data, job = await vendor_search.submit(ctx[0], ctx[1], task_id, body, search_provider())
         await dispatch(ctx[0], ctx[1], job)
         return result("evidence search", data)
+
+    @router.post(
+        "/tasks/{task_id}/product-simulations", name="product_simulation", response_model=Result
+    )
+    async def simulate_products(
+        task_id: UUID, body: ProductSimulationInput, ctx=Depends(context, scope="function")
+    ):
+        data, job = await product_simulation.submit(
+            ctx[0], ctx[1], task_id, body, search_provider(), settings
+        )
+        await dispatch(ctx[0], ctx[1], job)
+        if job is not None:
+            data = {"job_id": str(job.id), "status": job.status}
+        return result("product simulate", data)
+
+    @router.get(
+        "/tasks/{task_id}/simulated-resources",
+        name="simulated_resources",
+        response_model=Result,
+    )
+    async def simulated_resources(task_id: UUID, ctx=Depends(context, scope="function")):
+        return result(
+            "simulated resources",
+            await product_simulation.task_marks(ctx[0], ctx[1], task_id),
+        )
 
     @router.get(
         "/screenshot-searches/{search_id}", name="evidence_search_show", response_model=Result

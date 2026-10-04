@@ -360,6 +360,27 @@ class AuditLog(Tenant, Base):
     )
 
 
+class SimulatedResource(Tenant, Base):
+    """A product or feature created by a product simulation; the mark covers every revision."""
+
+    __tablename__ = "simulated_resources"
+    job_id: Mapped[UUID] = mapped_column()
+    product_id: Mapped[UUID | None] = mapped_column()
+    feature_id: Mapped[UUID | None] = mapped_column()
+    source_url: Mapped[str | None] = mapped_column(Text)
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "product_id"),
+        UniqueConstraint("org_id", "feature_id"),
+        ForeignKeyConstraint(["org_id", "job_id"], ["jobs.org_id", "jobs.id"]),
+        ForeignKeyConstraint(["org_id", "product_id"], ["products.org_id", "products.id"]),
+        ForeignKeyConstraint(["org_id", "feature_id"], ["features.org_id", "features.id"]),
+        CheckConstraint(
+            "(product_id IS NULL) <> (feature_id IS NULL)", name="simulated_one_resource"
+        ),
+    )
+
+
 class Feature(Tenant, Base):
     __tablename__ = "features"
     created_by: Mapped[UUID] = mapped_column()

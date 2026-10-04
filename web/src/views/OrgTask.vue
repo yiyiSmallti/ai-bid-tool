@@ -6,6 +6,7 @@ import { citationModes, display, documentStatuses, downloadOriginal, errorText, 
 import DocumentPreview from "../components/DocumentPreview.vue";
 import ExportPreview from "../components/ExportPreview.vue";
 import JobPanel from "../components/JobPanel.vue";
+import SimulationPanel from "../components/SimulationPanel.vue";
 const route = useRoute(), taskId = route.params.taskId;
 const task = ref(null), documents = ref([]), history = ref([]), parseJobs = ref([]), selected = ref(""), exportList = ref(null);
 const file = ref(null), fileInput = ref(null), preview = ref(null), reasoning = ref(""), warnings = ref([]), error = ref(""), busy = ref(false), receipt = ref(null);
@@ -160,6 +161,7 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
         </tbody>
       </table></div>
     </el-card>
+    <SimulationPanel v-if="['admin', 'technical'].includes(orgAccess.role)" :task-id="taskId" :extractions="history" @changed="load" />
     <el-card v-if="exportList" class="section" shadow="never" body-class="flush">
       <template #header><div class="section-title"><h3>导出文件</h3><span class="hint">在线预览按 Word 版式转换成页面，转换只在第一次打开时进行</span></div></template>
       <div class="table-scroll flat"><table class="data-table"><caption class="sr-only">已发布的导出文件</caption>
