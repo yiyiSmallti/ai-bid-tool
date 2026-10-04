@@ -310,9 +310,11 @@ async def test_password_capacity_is_shared_across_apps(clients, tenants, monkeyp
                 for i in range(password_attempts.PASSWORD_WORKERS)
             ]
             await eventually(lambda: entered() == password_attempts.PASSWORD_WORKERS)
+            # Stalled requests never finish before release, so any bound that tolerates a
+            # busy CI machine still shows the second app refusing instead of queueing.
             for path in PATHS:
                 error(
-                    await asyncio.wait_for(second.post(path, json=payload(path, tenants)), 0.5),
+                    await asyncio.wait_for(second.post(path, json=payload(path, tenants)), 5),
                     503,
                     "auth_busy",
                 )

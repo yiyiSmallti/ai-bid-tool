@@ -1,4 +1,7 @@
+import base64
+import hashlib
 import os
+import secrets
 from uuid import uuid4
 
 import httpx
@@ -7,7 +10,6 @@ from alembic import command
 from alembic.config import Config
 from app.api.main import create_app
 from app.core.config import Settings
-from app.core.security import hash_password
 from app.core.totp import generate_secret
 from app.models.entities import Membership, Org, User
 from app.providers.llm import HTTPExtractor
@@ -16,7 +18,20 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 PASSWORD = "synthetic-test-password-only"
-PASSWORD_HASH = hash_password(PASSWORD)
+
+
+def cheap_password_hash(password: str) -> str:
+    """A hash in the production format with few rounds; verification reads them from it.
+
+    Production's 600,000 PBKDF2 rounds per login dominated the suite on CI's CPUs, and
+    no test depends on the work factor stored for these synthetic users.
+    """
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 1000)
+    return f"pbkdf2$1000${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
+
+
+PASSWORD_HASH = cheap_password_hash(PASSWORD)
 OPERATOR = "ops@example.test"
 OPERATOR_PASSWORD = "synthetic-operator-password"
 OPERATOR_SECRET = generate_secret()
@@ -203,6 +218,6 @@ def operator(tenants, admin_engine):
     """A platform operator identity; settings must list OPERATOR with OPERATOR_SECRET."""
     with Session(admin_engine) as session, session.begin():
         session.add(
-            User(id=uuid4(), email=OPERATOR, password_hash=hash_password(OPERATOR_PASSWORD))
+            User(id=uuid4(), email=OPERATOR, password_hash=cheap_password_hash(OPERATOR_PASSWORD))
         )
     return OPERATOR
