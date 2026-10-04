@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     export_deadline_seconds: float = Field(default=900, gt=0, le=900, allow_inf_nan=False)
     # Operator-run SearXNG base URL for vendor-source search; unset disables search.
     search_url: str | None = None
+    # Perplexity Search API key; when set, vendor search uses it instead of SearXNG.
+    perplexity_api_key: SecretStr | None = None
     # Private Gotenberg (LibreOffice) base URL for export page previews; unset disables them.
     converter_url: str | None = None
     converter_timeout_seconds: float = Field(default=180, gt=0, le=600, allow_inf_nan=False)

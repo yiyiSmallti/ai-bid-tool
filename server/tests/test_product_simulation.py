@@ -9,6 +9,9 @@ Failure modes enumerated before implementation:
   contains; a product name the page does not contain is never stored, so the item gets no
   product; software and service items never get one.
 - A malformed proposal batch is split and retried instead of failing the run.
+- With Perplexity configured, search is narrowed to the proposed domain and carries the
+  key only to that service; a page that cannot be fetched is read from the search extract,
+  quotes are checked against that extract, and the outcome names it as the source.
 - A model quote that is not verbatim in the fetched page is dropped before storage.
 - Kept products and statements are selected on the task and registered as simulated; a
   later human revision keeps the mark.
@@ -20,9 +23,11 @@ Failure modes enumerated before implementation:
 import io
 import json
 from decimal import Decimal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 import httpx
+import pytest
 from app.api.main import create_app
 from app.models.entities import BalanceEntry, OrgBalance, SimulatedResource
 from app.providers.llm import OpenAICompatibleExtractor
@@ -182,6 +187,34 @@ def search_handler(request: httpx.Request) -> httpx.Response:
     )
 
 
+# Perplexity extracts the page our own fetch cannot reach.
+EXTRACTS = {
+    "https://bad.example/terminal": "SP-100 智能打印终端规格\n内存：8GB DDR4\n打印：支持A4双面自动打印\n"
+    + "产品适用于校园自助打印与文印服务场景，" * 12
+}
+PERPLEXITY_REQUESTS: list[dict] = []
+
+
+def perplexity_handler(request: httpx.Request) -> httpx.Response:
+    assert str(request.url) == "https://api.perplexity.ai/search"
+    assert request.headers["authorization"] == "Bearer synthetic-pplx-key"
+    body = json.loads(request.content)
+    PERPLEXITY_REQUESTS.append(body)
+    urls = next((rows for name, rows in SEARCH_RESULTS.items() if name in body["query"]), [])
+    domains = body.get("search_domain_filter")
+    if domains:
+        urls = [url for url in urls if urlsplit(url).hostname in domains]
+    return httpx.Response(
+        200,
+        json={
+            "results": [
+                {"url": url, "title": body["query"], "snippet": EXTRACTS.get(url, "")}
+                for url in urls
+            ]
+        },
+    )
+
+
 def fetch_handler(request: httpx.Request) -> httpx.Response:
     FETCHED.append(request.headers["host"] + request.url.path)
     if request.headers["host"] == "bad.example":
@@ -196,9 +229,12 @@ async def public_dns(host):
     return ("93.184.216.34",)
 
 
+@pytest.mark.parametrize("provider", ["searxng", "perplexity"])
 async def test_simulation_records_only_verbatim_marked_parameters(
-    tenants, tmp_path, admin_engine, monkeypatch
+    tenants, tmp_path, admin_engine, monkeypatch, provider
 ):
+    FETCHED.clear()
+    PERPLEXITY_REQUESTS.clear()
     policy = tmp_path / "open-policy.json"
     policy.write_text(
         json.dumps(
@@ -212,7 +248,12 @@ async def test_simulation_records_only_verbatim_marked_parameters(
     monkeypatch.setenv("BID_SANDBOX_DEV_OPEN_EGRESS", "1")
     monkeypatch.setenv("BID_SANDBOX_FETCH_QUOTA", str(tmp_path / "quota.sqlite3"))
     vendor = Vendor()
-    settings = settings_for(tmp_path, "openai", search_url="https://search.test")
+    search = (
+        {"search_url": "https://search.test"}
+        if provider == "searxng"
+        else {"perplexity_api_key": "synthetic-pplx-key"}
+    )
+    settings = settings_for(tmp_path, "openai", **search)
     llm = OpenAICompatibleExtractor(
         settings,
         httpx.MockTransport(vendor),
@@ -221,7 +262,9 @@ async def test_simulation_records_only_verbatim_marked_parameters(
     )
     llm.model_revision = 1
     app = create_app(settings, llm=llm, queue=FakeQueue())
-    app.state.processor.search_transport = httpx.MockTransport(search_handler)
+    app.state.processor.search_transport = httpx.MockTransport(
+        search_handler if provider == "searxng" else perplexity_handler
+    )
     app.state.processor.sandbox_fetch_transport = httpx.MockTransport(fetch_handler)
     app.state.processor.sandbox_resolver = public_dns
     async with (
@@ -319,13 +362,29 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         assert printer["status"] == "quoted" and printer["parameters"] == [
             {"label": "内存", "quote": "内存：8GB DDR4"}
         ]
-        assert (printer["vendor"], printer["model"]) == ("SynVendor", "SP-100")
-        assert [(row["url"], row["result"]) for row in printer["tried"]] == [
-            ("https://bad.example/terminal", "http_status_denied"),
-            ("https://vendor.example/catalog", "no_product"),
-            ("https://vendor.example/sp100", "quoted"),
-        ]
-        assert printer["url"] == "https://vendor.example/sp100"
+        tried = [(row["url"], row["source"], row["result"]) for row in printer["tried"]]
+        if provider == "searxng":
+            assert (printer["vendor"], printer["model"], printer["source"]) == (
+                "SynVendor",
+                "SP-100",
+                "page",
+            )
+            assert tried == [
+                ("https://bad.example/terminal", "page", "http_status_denied"),
+                ("https://vendor.example/catalog", "page", "no_product"),
+                ("https://vendor.example/sp100", "page", "quoted"),
+            ]
+            assert printer["url"] == "https://vendor.example/sp100"
+        else:
+            assert (printer["vendor"], printer["source"]) == ("BadVendor", "search_extract")
+            assert tried == [("https://bad.example/terminal", "search_extract", "quoted")]
+            assert printer["tried"][0]["fetch"] == "http_status_denied"
+            assert [
+                (row["query"], row.get("search_domain_filter")) for row in PERPLEXITY_REQUESTS
+            ] == [
+                ("BadVendor 打印终端", ["bad.example"]),
+                ("SynNet 交换机", ["net.example"]),
+            ]
         assert not any(url.startswith("market.example") or "invented" in url for url in FETCHED)
         assert vendor.kinds.count("propose") == 3
 

@@ -39,7 +39,7 @@ function finished(job) {
 <template>
   <el-card class="section" shadow="never">
     <template #header><div class="section-title"><h3>模拟拟投（演示）</h3><el-tag type="warning" effect="plain">模拟材料不能进入正式件</el-tag></div></template>
-    <p class="hint">按招标表格中的采购项，由模型为硬件提出候选厂商，搜索并抓取厂商官网页面，从页面读取产品型号，只保留页面上逐字出现的型号和参数，录入资源库并固定到本任务，之后即可起草响应。软件开发和服务类项目不拟投产品。</p>
+    <p class="hint">按招标表格中的采购项，由模型为硬件提出候选厂商，搜索并抓取厂商官网页面（抓不到时使用搜索服务的页面摘录），从页面读取产品型号，只保留页面上逐字出现的型号和参数，录入资源库并固定到本任务，之后即可起草响应。软件开发和服务类项目不拟投产品。</p>
     <el-form label-position="top" class="sim-row" @submit.prevent="check">
       <el-form-item label="抽取记录" class="sim-extraction">
         <el-select v-model="extraction" placeholder="选择成功的抽取" :disabled="busy" @change="preview = null">
@@ -64,11 +64,11 @@ function finished(job) {
             <td>{{ item.name }}</td>
             <td>{{ kinds[item.kind] ?? item.kind }}</td>
             <td>{{ item.model ? `${item.vendor} ${item.model}` : "—" }}</td>
-            <td><span class="tag" :class="statusTag[item.status]">{{ statuses[item.status] ?? item.status }}</span></td>
+            <td><span class="tag" :class="statusTag[item.status]">{{ statuses[item.status] ?? item.status }}</span><span v-if="item.source === 'search_extract'" class="tag warning" title="官网页面无法直接抓取，参数取自搜索服务对该页面的摘录">搜索摘录</span></td>
             <td class="num">{{ item.parameters?.length ?? 0 }}</td>
             <td class="source">
               <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
-              <ul v-else-if="item.tried?.length" class="tried"><li v-for="attempt in item.tried" :key="attempt.url">{{ attempt.vendor }}：{{ attempts[attempt.result] ?? attempt.result }}</li></ul>
+              <ul v-else-if="item.tried?.length" class="tried"><li v-for="attempt in item.tried" :key="attempt.url">{{ attempt.vendor }}：{{ attempts[attempt.result] ?? attempt.result }}{{ attempt.source === "search_extract" ? "（搜索摘录）" : "" }}</li></ul>
               <span v-else class="hint">—</span>
             </td>
           </tr>
