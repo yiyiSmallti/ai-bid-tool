@@ -12,7 +12,8 @@ B11，依赖 R01、B07、B08。批准范围按[已定决定](#已定决定)执�
 | --- | --- |
 | 人类模板绑定、预检、prepare → worker 候选 → release → 下载、正式件/审阅件、证书页附件、加密、审计、限额与哈希 | **已实施**；机制和代码入口见 [human-section-exports.md](../notes/human-section-exports.md) |
 | 图片证据附件与 `prototype_decision_required`、`prototype_replacement_pending`、`prototype_decision_stale` | **已实施**；见 [human-section-exports.md](../notes/human-section-exports.md) 的图片附件与原型门禁说明 |
-| Word/WPS 视觉分页及隔离 S3 完整下载验收 | 保留为验收项；DOCX 解包/重开和合成工件验证不能替代此项 |
+| Word 视觉分页 | 已在 macOS Microsoft Word 中打开合成长响应（150 条要求、130 页已确认附件）验收：表格可编辑、无文档保护、图片为独立内嵌图、书签与附件一一对应、每份附件一页；步骤见 [development.md](../guides/development.md#check-an-export-in-word) |
+| WPS 视觉分页及隔离 S3 完整下载验收 | 保留为验收项；DOCX 解包/重开和合成工件验证不能替代此项 |
 
 ## 目标与边界
 

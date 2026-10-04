@@ -81,8 +81,12 @@ GAP_LABELS = {
     "needs_reconfirmation": "引用修复后待重新确认",
 }
 ADAPTER_VERSION = "docx-template-adapter-v1"
+# Page height kept for an attachment caption in the template heading style. Its
+# revision, hashes and requirement ids take three or four heading lines in Word;
+# one inch pushed every page image onto a page of its own.
+CAPTION_RESERVE = 2 * 914_400
 RENDERER_PROFILE = (
-    "docx-export-v1"
+    "docx-export-v2"
     f";implementation={platform.python_implementation()}"
     f";python={platform.python_version()}"
     f";platform={platform.system()}-{platform.machine()}"
@@ -1257,7 +1261,7 @@ def _section_geometry(document: DocumentObject, section_index: int) -> tuple[int
     )
     available_width = page_width - left_margin - right_margin
     available_height = page_height - top_margin - bottom_margin
-    if available_width <= 0 or available_height <= 914_400:
+    if available_width <= 0 or available_height <= CAPTION_RESERVE:
         _fail("unsupported_template", "Template section has no usable page area")
     return available_width, available_height
 
@@ -1272,7 +1276,7 @@ def _render_attachments(
     available_width: int,
     available_height: int,
 ) -> None:
-    image_height = available_height - 914_400
+    image_height = available_height - CAPTION_RESERVE
     for attachment in attachments:
         ordinal = int(attachment["ordinal"])
         label = str(attachment["label"])
@@ -1288,6 +1292,8 @@ def _render_attachments(
         title = document.add_paragraph()
         _set_paragraph_style_id(title, str(binding["heading_style_id"]))
         title.paragraph_format.page_break_before = True
+        # The caption never ends a page apart from its image.
+        title.paragraph_format.keep_with_next = True
         requirements = ", ".join(attachment["requirement_ids"])
         title.add_run(
             f"{label} 证据图片｜SHA-256 {attachment['png_sha256']}｜要求 {requirements}"
@@ -1301,6 +1307,8 @@ def _render_attachments(
         _bookmark(title, f"bid_{label}", ordinal)
         anchor._p.addprevious(title._p)
         image_paragraph = document.add_paragraph()
+        image_paragraph.paragraph_format.space_before = Pt(0)
+        image_paragraph.paragraph_format.space_after = Pt(0)
         width = int(attachment["width"])
         height = int(attachment["height"])
         scale = min(available_width / width, image_height / height)
