@@ -245,9 +245,10 @@ its image in the PDF.
 1. Copy [deploy/.env.example](../../deploy/.env.example) to an ignored env file
    and fill every value. Migration credentials go only to the `migrate` service.
 2. Start the stack from [deploy/docker-compose.yml](../../deploy/docker-compose.yml):
-   PostgreSQL with pgvector, MinIO, SearXNG for vendor-source search, and
-   separate migrate, server, and worker containers. SearXNG publishes no host
-   port; the worker reaches it at `http://searxng:8080`.
+   PostgreSQL with pgvector, MinIO, SearXNG for vendor-source search, Gotenberg
+   for export page previews, and separate migrate, server, and worker
+   containers. SearXNG and Gotenberg publish no host port; the worker reaches
+   them at `http://searxng:8080` and `http://converter:3000`.
 3. Storage defaults to a shared local volume. To use S3, create a private
    bucket first, then set `BID_STORAGE=s3` and `BID_S3_CONTAINER_ENDPOINT`. The
    host endpoint and the container endpoint are different addresses.
@@ -271,6 +272,23 @@ Colima, a separate profile keeps existing contexts untouched; a short
 
 ```sh
 COLIMA_HOME=/tmp/colima-cfg COLIMA_CACHE_HOME=/tmp/colima-cache LIMA_HOME=/tmp/colima-vm DOCKER_CONFIG=/tmp/docker-cfg colima start ai-bid-test --activate=false --ssh-config=false --template=false --mount none --cpus 2 --memory 2 --disk 16 --root-disk 4 --binfmt=false
+```
+
+## Run export previews locally
+
+Export page previews convert the released DOCX with the Gotenberg image that
+[deploy/docker-compose.yml](../../deploy/docker-compose.yml) pins. On a local
+Docker daemon, publish it on the loopback address only:
+
+```sh
+docker run -d --name bid-gotenberg -p 127.0.0.1:3300:3000 gotenberg/gotenberg:8.37.0 gotenberg --chromium-disable-routes=true --webhook-disable=true --api-timeout=180s
+```
+
+Set `BID_CONVERTER_URL=http://127.0.0.1:3300` for the API and worker and restart
+them. Check a real conversion with:
+
+```sh
+BID_CONVERTER_LIVE_URL=http://127.0.0.1:3300 uv run pytest -q server/tests/test_page_previews.py
 ```
 
 ## Run vendor search locally

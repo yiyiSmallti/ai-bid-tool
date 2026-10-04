@@ -4,7 +4,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy import select
 
@@ -16,7 +16,7 @@ from app.models.entities import Chunk
 from app.providers.storage import Storage
 from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import JobAction, Result, TaskCreate
-from app.services import citation_repair, documents, requirements, tender_jobs
+from app.services import citation_repair, documents, page_previews, requirements, tender_jobs
 
 CHUNK_FIELDS = ("id", "document_id", "seq", "page", "text", "ocr", "citation_verified", "blocks")
 
@@ -106,6 +106,17 @@ def create_router(
             await storage.read(identity.org_id, document.storage_key),
             media_type=document.media_type,
         )
+
+    @router.get("/documents/{document_id}/pages/{page}/preview", name="document_page_preview")
+    async def page_preview(
+        document_id: UUID,
+        page: int,
+        zoom: int = Query(1, ge=1, le=2),
+        ctx=Depends(context, scope="function"),
+    ):
+        session, identity = ctx
+        png = await page_previews.document_page(session, identity, document_id, page, zoom, storage)
+        return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     async def start_job(document_id: UUID, kind: str, body: JobAction, ctx):
         session, identity = ctx

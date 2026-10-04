@@ -41,6 +41,7 @@ kind: readme
 - [provider-config.md](notes/provider-config.md)：单位模型修订、独立密钥加密、模型解析、调用计费与厂商余量。
 - [human-section-exports.md](notes/human-section-exports.md)：人工 Word 响应章节导出、固定清单、候选与发布关口、证据页附件及签名下载。
 - [org-console.md](notes/org-console.md)：单位端任务恢复、解析抽取、响应卡人工审阅、起草费用预览与初稿缺口控制台。
+- [page-previews.md](notes/page-previews.md)：招标原件、证书原件与导出件的在线按页预览和导出件转换。
 - [sandbox-execution.md](notes/sandbox-execution.md)：隔离执行、作业授权、产物溯源、清理与下载。
 - [sandbox-fetch.md](notes/sandbox-fetch.md)：允许名单与开发开放策略、DNS/IP 固定、抓取配额、单资源拒绝与可信请求回执。
 - [screenshot-evidence.md](notes/screenshot-evidence.md)：截图像素脱敏与隐私放行、厂家网页/PDF 采集与归档、厂家来源搜索、响应卡图片证据、原型交付决定、分析准入计费及失效重算。

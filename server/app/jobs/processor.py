@@ -40,8 +40,9 @@ class Processor:
         self.sandbox_browser = None
         self.sandbox_fetch_transport = None
         self.sandbox_resolver = None
-        # Test seam for the vendor search provider's HTTP transport.
+        # Test seams for the vendor search and document converter HTTP transports.
         self.search_transport = None
+        self.converter_transport = None
 
     async def record_usage(
         self,
@@ -117,6 +118,7 @@ class Processor:
                     "card_generate",
                     "provider_test",
                     "export_render",
+                    "export_preview",
                     "screenshot_render",
                     "screenshot_analyze",
                     "prototype_generate",
@@ -182,6 +184,13 @@ class Processor:
                         raise ServiceError(
                             "export_render_timeout", "Export job deadline exceeded", 503, 3
                         ) from exc
+                    return
+                if kind == "export_preview":
+                    from app.providers.converter import create_converter
+                    from app.services.page_previews import convert
+
+                    converter = create_converter(self.settings, self.converter_transport)
+                    await convert(execution, self.storage, converter, self.settings)
                     return
                 if kind in {"screenshot_render", "screenshot_analyze"}:
                     from app.services.screenshot_jobs import process_analysis, process_render

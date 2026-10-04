@@ -843,6 +843,242 @@ async def create_review_fixture(
     }
 
 
+EXPORT_SECTIONS = (
+    "substantive",
+    "commercial",
+    "technical",
+    "comply_only",
+    "gaps",
+    "evidence_appendix",
+)
+DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+
+
+def export_template() -> bytes:
+    document = WordDocument()
+    # Register only style IDs actually present in the package.
+    document.add_table(rows=1, cols=1).style = "Table Grid"
+    document.tables[0]._element.getparent().remove(document.tables[0]._element)
+    document.add_heading("", level=1)
+    for section in EXPORT_SECTIONS:
+        document.add_paragraph("{{bid." + section + "}}")
+    stream = io.BytesIO()
+    document.save(stream)
+    return stream.getvalue()
+
+
+async def create_export_fixture(
+    client: httpx.AsyncClient, app: Any, org: dict[str, Any], headers: dict[str, dict[str, str]]
+) -> dict[str, Any]:
+    """A small task with a confirmed certificate page and a released review copy to preview."""
+    data = await create_task_documents(client, app, headers["admin"], "c", 12)
+    task_id = data["task"]["id"]
+    extraction = data["extractions"]["pdf"]["id"]
+    requirement = data["pdf_requirements"][0]
+
+    certificate_data = {
+        "kind": "qualification",
+        "name": "合成资质证书",
+        "number": "SYN-CERT-2026",
+        "valid_from": "2026-01-01",
+        "valid_until": "2028-01-01",
+    }
+    certificate = await response_json(
+        client,
+        "POST",
+        "/resources/certificates",
+        headers=headers["admin"],
+        json={"data": certificate_data},
+    )
+    certificate_pdf = pdf_fixture(2, "CERT")
+    revision = await response_json(
+        client,
+        "POST",
+        f"/resources/certificates/{certificate['data']['certificate_id']}/file-revisions",
+        headers=headers["admin"],
+        data={"metadata": json.dumps({"expected_revision": 1, "data": certificate_data})},
+        files={"file": ("synthetic-certificate.pdf", certificate_pdf, "application/pdf")},
+    )
+    selected = await response_json(
+        client,
+        "POST",
+        f"/tasks/{task_id}/certificates",
+        headers=headers["admin"],
+        json={"certificate_id": certificate["data"]["certificate_id"]},
+    )
+    source = await response_json(
+        client,
+        "POST",
+        f"/tasks/{task_id}/evidence-sources",
+        headers=headers["admin"],
+        json={"task_certificate_id": selected["data"]["id"], "page": 1},
+    )
+    source = source["data"]["source"]
+    with pymupdf.open(stream=certificate_pdf, filetype="pdf") as pdf:
+        page_quote = pdf[0].get_text().strip().splitlines()[0]
+    card = await create_card(
+        client,
+        headers["admin"],
+        task_id,
+        extraction,
+        requirement["id"],
+        {
+            "response_kind": "evidence",
+            "response_text": "合成资质证书原件第 1 页载明该记录。",
+            "deviation": "none",
+            "deviation_note": "证书页原文与招标要求的记录编号一致。",
+            "evidence": [
+                {
+                    "kind": "certificate_pdf_page",
+                    "evidence_source_id": source["id"],
+                    "quote": page_quote,
+                }
+            ],
+        },
+    )
+    if card["review_domain"] is None:
+        card = (
+            await response_json(
+                client,
+                "POST",
+                f"/cards/{card['id']}/classification",
+                headers=headers["admin"],
+                json={
+                    "expected_revision": card["revision"],
+                    "review_domain": "commercial",
+                    "reason": "合成导出：资质证书由商务审核。",
+                },
+            )
+        )["data"]
+    reviewer = "bidder" if card["review_domain"] == "commercial" else "technical"
+    card = await card_action(client, headers["admin"], card, "submit")
+    card = await card_action(
+        client,
+        headers[reviewer],
+        card,
+        "confirm",
+        reviewed_evidence_ids=[item["id"] for item in card["evidence"]],
+        reviewed_warning_codes=card["warning_codes"],
+        reason="合成导出：已核对证书原页。" if card["warning_codes"] else None,
+    )
+
+    draft_receipt = await response_json(
+        client,
+        "POST",
+        f"/tasks/{task_id}/drafts",
+        headers=headers["admin"],
+        json={"extraction_job_id": extraction},
+    )
+    await app.state.processor(org["id"], draft_receipt["data"]["job_id"])
+    draft_status = await response_json(
+        client, "GET", f"/jobs/{draft_receipt['data']['job_id']}", headers=headers["admin"]
+    )
+    draft_id = draft_status["data"]["result"]["draft_id"]
+
+    template = await response_json(
+        client,
+        "POST",
+        "/resources/templates",
+        headers=headers["admin"],
+        data={"metadata": json.dumps({"data": {"name": "合成导出版式", "chapters": []}})},
+        files={"file": ("synthetic-export.docx", export_template(), DOCX_MEDIA_TYPE)},
+    )
+    selection = await response_json(
+        client,
+        "POST",
+        f"/tasks/{task_id}/templates",
+        headers=headers["admin"],
+        json={"template_id": template["data"]["template_id"]},
+    )
+    binding_body = {
+        "template_revision_id": template["data"]["id"],
+        "expected_template_sha256": template["data"]["file"]["sha256"],
+        "sections": [
+            {
+                "section": section,
+                "heading_style_id": "Heading1",
+                "table_style_id": "TableGrid",
+                "columns": [
+                    {"key": key, "width_percent": width}
+                    for key, width in zip(
+                        ("ordinal", "requirement", "response", "compliance"),
+                        (6, 36, 44, 14),
+                        strict=True,
+                    )
+                ]
+                if index < 3
+                else [],
+            }
+            for index, section in enumerate(EXPORT_SECTIONS)
+        ],
+        "dry_run": True,
+    }
+    binding_preview = await response_json(
+        client, "POST", "/export-template-bindings", headers=headers["admin"], json=binding_body
+    )
+    binding = await response_json(
+        client,
+        "POST",
+        "/export-template-bindings",
+        headers=headers["admin"],
+        json={
+            **binding_body,
+            "dry_run": False,
+            "expected_static_content_hash": binding_preview["data"]["static_content_hash"],
+        },
+    )
+    run_body = {
+        "draft_id": draft_id,
+        "task_template_id": selection["data"]["id"],
+        "binding_id": binding["data"]["id"],
+        "mode": "review_copy",
+    }
+    run_preview = await response_json(
+        client,
+        "POST",
+        f"/tasks/{task_id}/export-runs",
+        headers=headers["bidder"],
+        json={**run_body, "dry_run": True},
+    )
+    run = await response_json(
+        client,
+        "POST",
+        f"/tasks/{task_id}/export-runs",
+        headers=headers["bidder"],
+        json={
+            **run_body,
+            "expected_input_hash": run_preview["data"]["input_hash"],
+            "acknowledged_issue_ids": [
+                issue["issue_id"]
+                for issue in run_preview["data"]["issues"]
+                if issue["severity"] == "acknowledge"
+            ],
+        },
+    )
+    await app.state.processor(org["id"], run["data"]["render_job_id"])
+    ready = await response_json(
+        client, "GET", f"/export-runs/{run['data']['id']}", headers=headers["bidder"]
+    )
+    released = await response_json(
+        client,
+        "POST",
+        f"/export-runs/{run['data']['id']}/release",
+        headers=headers["bidder"],
+        json={
+            "expected_input_hash": ready["data"]["input_hash"],
+            "expected_candidate_sha256": ready["data"]["candidate_sha256"],
+        },
+    )
+    return {
+        "task": data["task"],
+        "documents": data["documents"],
+        "extraction_id": extraction,
+        "card_requirement_id": requirement["id"],
+        "certificate": {"revision_id": revision["data"]["id"], "name": certificate_data["name"]},
+        "export": released["data"],
+    }
+
+
 def public_task_data(value: dict[str, Any]) -> dict[str, Any]:
     return {
         "task": value["task"],
@@ -886,6 +1122,7 @@ async def provision(output: Path) -> Path:
         )
         task_b = await create_task_documents(client, app, headers["b"]["admin"], "b", 12)
         review = await create_review_fixture(client, app, identities["a"], headers["a"], task_a)
+        previews = await create_export_fixture(client, app, identities["a"], headers["a"])
 
         # Prove the three G1 discovery routes and their tenant boundary in the fixture itself.
         task_b_id = task_b["task"]["id"]
@@ -907,6 +1144,7 @@ async def provision(output: Path) -> Path:
         "orgs": identities,
         "tasks": {"a": public_task_data(task_a), "b": public_task_data(task_b)},
         "review": review,
+        "previews": previews,
         "browser_materials": browser_materials,
         "expectations": {
             "large_requirement_count": WORD_REQUIREMENTS,

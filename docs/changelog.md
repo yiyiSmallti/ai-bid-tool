@@ -6,6 +6,15 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-04：在线预览招标原件、证书原件和导出件
+
+- 单位后台可在线按页查看 PDF 招标原件和证书原件；审阅详情的“在线查看原文位置”直接打开引文所在页。Word 招标原件
+  按解析出的段落和表格展示并高亮引文所在段落或单元格。
+- 任务页新增“导出文件”，商务审核可在线预览已发布的导出件：首次打开时 worker 通过私有 Gotenberg（LibreOffice）把
+  DOCX 转成 PDF，之后按页显示，同一文件只转换一次。预览与下载适用同一关卡，打开记审计 `export.preview_opened`；
+  转换失败不保存任何结果，需显式重试。新增 `BID_CONVERTER_URL`、`BID_PREVIEW_MAX_PAGES` 和 Compose 服务 `converter`，
+  迁移 `0028` 登记新的审计事件。机制见 [page-previews.md](notes/page-previews.md)。
+
 ## 2026-10-04：控制台改用 Element Plus 重新设计
 
 - 单位后台和平台后台改用 Element Plus（按需引入、中文语言包）：深色侧边导航、顶栏显示单位和中文角色名，
