@@ -41,7 +41,8 @@ a local shell without tracing. Tests refuse any database whose name lacks the
 Without `BID_TEST_ADMIN_URL`, every database-backed test fails; tests that
 need no database still run.
 [.github/workflows/check.yml](../../.github/workflows/check.yml) runs the same
-checks in CI.
+checks in CI on pull requests only; it skips the suite whose files a pull request
+leaves unchanged and can be started by hand from the Actions tab.
 
 ## Provision a development database
 

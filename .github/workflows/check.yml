@@ -1,15 +1,16 @@
 name: check
-# Pull requests and the protected main branch; a branch push alone does not run twice.
+# Pull requests only: main accepts changes only through pull requests that passed these
+# checks, so rerunning them on the merge commit would double Actions minutes. Run it by
+# hand from the Actions tab when main needs a fresh check.
 on:
   pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 permissions:
   contents: read
 # A newer push to the same pull request supersedes the running check.
 concurrency:
   group: check-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 jobs:
   python:
     runs-on: ubuntu-latest
@@ -30,16 +31,29 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      # Required checks must still report, so a Markdown-only change succeeds without the suite.
-      - name: Detect changes beyond Markdown
+      # Required checks must still report, so a change only to Markdown or the console
+      # succeeds without the suite. A manual run has no base and checks everything.
+      - name: Detect changes outside Markdown and the console
         id: changes
         run: |
-          base="${{ github.event.pull_request.base.sha || github.event.before }}"
-          if git diff --quiet "$base" HEAD -- . ':(exclude)*.md' 2>/dev/null; then
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- . ':(exclude)*.md' ':(exclude)web/**'; then
             echo "code=false" >> "$GITHUB_OUTPUT"
           else
             echo "code=true" >> "$GITHUB_OUTPUT"
           fi
+      # The service database is discarded after the job; skipping durability removes the
+      # per-commit flushes that dominate the suite's many truncates on runner disks.
+      - name: Turn off durability in the throwaway test database
+        if: steps.changes.outputs.code == 'true'
+        env:
+          PGPASSWORD: synthetic-ci-test-only
+        run: >-
+          psql -h 127.0.0.1 -U postgres -d bid_test -v ON_ERROR_STOP=1
+          -c "ALTER SYSTEM SET fsync = off"
+          -c "ALTER SYSTEM SET synchronous_commit = off"
+          -c "ALTER SYSTEM SET full_page_writes = off"
+          -c "SELECT pg_reload_conf()"
       - uses: astral-sh/setup-uv@v6
         if: steps.changes.outputs.code == 'true'
         with:
@@ -90,11 +104,27 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Same rule as the Python job: report success without building when web/ is unchanged.
+      - name: Detect console changes
+        id: changes
+        working-directory: .
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- web; then
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-node@v4
+        if: steps.changes.outputs.web == 'true'
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
+        if: steps.changes.outputs.web == 'true'
       - run: npm run build
+        if: steps.changes.outputs.web == 'true'
 
