@@ -8,7 +8,7 @@ from typing import Annotated, Literal
 from urllib.parse import parse_qs, urlsplit
 from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, StrictBool, field_validator, model_validator
 
 from app.schemas.contracts import Contract, Cost
 
@@ -22,15 +22,8 @@ SectionKind = Literal[
     "gaps",
     "evidence_appendix",
 ]
-ColumnKind = Literal[
-    "ordinal",
-    "tender_clause",
-    "source_location",
-    "response",
-    "deviation",
-    "deviation_note",
-    "evidence",
-]
+# The four columns of a winning-bid response table; see docs/plan/export.md.
+ColumnKind = Literal["ordinal", "requirement", "response", "compliance"]
 
 SECTION_ORDER = (
     "substantive",
@@ -41,17 +34,7 @@ SECTION_ORDER = (
     "evidence_appendix",
 )
 TABLE_SECTIONS = frozenset({"substantive", "commercial", "technical"})
-COLUMN_KEYS = frozenset(
-    {
-        "ordinal",
-        "tender_clause",
-        "source_location",
-        "response",
-        "deviation",
-        "deviation_note",
-        "evidence",
-    }
-)
+COLUMN_KEYS = frozenset({"ordinal", "requirement", "response", "compliance"})
 DOCX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 MAX_EXPORT_BYTES = 512 * 1024 * 1024
 
@@ -76,7 +59,7 @@ class ExportSectionBinding(Contract):
     section: SectionKind
     heading_style_id: str = Field(min_length=1, max_length=200)
     table_style_id: str = Field(min_length=1, max_length=200)
-    columns: list[ExportColumn] = Field(default_factory=list, max_length=7)
+    columns: list[ExportColumn] = Field(default_factory=list, max_length=4)
 
     @field_validator("heading_style_id", "table_style_id")
     @classmethod
@@ -87,13 +70,46 @@ class ExportSectionBinding(Contract):
     def section_columns(self):
         if self.section in TABLE_SECTIONS:
             keys = [column.key for column in self.columns]
-            if len(keys) != 7 or set(keys) != COLUMN_KEYS:
-                raise ValueError("table sections require each of the seven fixed columns once")
+            if len(keys) != len(COLUMN_KEYS) or set(keys) != COLUMN_KEYS:
+                raise ValueError("table sections require each of the four fixed columns once")
             if sum((column.width_percent for column in self.columns), Decimal()) != Decimal(100):
                 raise ValueError("table column widths must total 100 percent")
         elif self.columns:
             raise ValueError("non-table sections do not accept columns")
         return self
+
+
+# Bindings made before the four-column layout stay listable but cannot export.
+LegacyColumnKind = Literal[
+    "ordinal",
+    "tender_clause",
+    "source_location",
+    "response",
+    "deviation",
+    "deviation_note",
+    "evidence",
+]
+
+
+class LegacyExportColumn(Contract):
+    key: LegacyColumnKind
+    width_percent: Decimal = Field(gt=0, le=100)
+
+
+class LegacyExportSectionBinding(Contract):
+    section: SectionKind
+    heading_style_id: str = Field(min_length=1, max_length=200)
+    table_style_id: str = Field(min_length=1, max_length=200)
+    columns: list[LegacyExportColumn] = Field(default_factory=list, max_length=7)
+
+
+def binding_is_current(sections: Sequence[dict]) -> bool:
+    try:
+        for section in sections:
+            ExportSectionBinding.model_validate(section)
+    except ValueError:
+        return False
+    return True
 
 
 class ExportBindingCreate(Contract):
@@ -120,7 +136,11 @@ class ExportBindingView(Contract):
     binding_hash: Sha256
     static_content_hash: Sha256
     adapter_version: str = Field(min_length=1, max_length=100)
-    sections: list[ExportSectionBinding] = Field(min_length=6, max_length=6)
+    sections: list[ExportSectionBinding | LegacyExportSectionBinding] = Field(
+        min_length=6, max_length=6
+    )
+    # False for a binding of the earlier seven-column layout; it can no longer export.
+    current: StrictBool
     reviewed_by: UUID
     reviewed_at: datetime
 
@@ -405,3 +425,68 @@ class ExportDownloadResult(ExportDownloadReceipt):
             raise ValueError("completion must match the downloaded export mode")
         _unique([issue.issue_id for issue in self.issues], "issues")
         return self
+
+
+class ProvenanceEvidence(Contract):
+    evidence_id: UUID
+    label: str = Field(pattern=r"^[ED]\d{3}$")
+    material_kind: str = Field(min_length=1, max_length=100)
+    selection_id: UUID | None
+    resource_revision_id: UUID | None
+    confirmed_by: UUID
+    confirmed_at: datetime
+
+
+class ProvenanceItem(Contract):
+    """One printed row: its section and number match the Word document."""
+
+    section: Literal["substantive", "commercial", "technical", "comply_only", "gaps"]
+    number: int = Field(ge=1)
+    requirement_id: UUID
+    card_revision_id: UUID | None
+    confirmed_by: UUID | None
+    confirmed_at: datetime | None
+    disposition_by: UUID | None
+    disposition_at: datetime | None
+    quote_sha256: Sha256 | None
+    evidence: list[ProvenanceEvidence]
+    gap_reasons: list[str]
+
+
+class ProvenanceAttachment(Contract):
+    label: str = Field(pattern=r"^E\d{3}$")
+    kind: Literal["certificate_page", "image"]
+    title: str | None
+    page: int | None = Field(default=None, ge=1)
+    certificate_revision_id: UUID | None
+    evidence_source_id: UUID | None
+    rendition_id: UUID | None
+    original_sha256: Sha256 | None
+    png_sha256: Sha256
+    evidence_ids: list[UUID]
+    requirement_ids: list[UUID]
+
+
+class ExportProvenance(Contract):
+    """Machine-readable record kept out of the printed section."""
+
+    export_id: UUID
+    run_id: UUID
+    mode: ExportMode
+    file: ExportFile
+    renderer_profile: str = Field(min_length=1)
+    input_hash: Sha256
+    manifest_hash: Sha256
+    released_by: UUID
+    released_at: datetime
+    items: list[ProvenanceItem]
+    attachments: list[ProvenanceAttachment]
+
+
+class TemplateSample(Contract):
+    """The built-in starter template written locally, and a binding that fits it."""
+
+    output_path: str
+    sha256: Sha256
+    size_bytes: int = Field(gt=0)
+    binding_sections: list[ExportSectionBinding] = Field(min_length=6, max_length=6)

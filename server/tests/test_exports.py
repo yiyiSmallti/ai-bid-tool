@@ -37,12 +37,9 @@ from test_response_cards import (
 SECTIONS = ("substantive", "commercial", "technical", "comply_only", "gaps", "evidence_appendix")
 COLUMNS = (
     "ordinal",
-    "tender_clause",
-    "source_location",
+    "requirement",
     "response",
-    "deviation",
-    "deviation_note",
-    "evidence",
+    "compliance",
 )
 
 
@@ -91,7 +88,7 @@ async def setup_template(api, header, task):
                 "table_style_id": "TableGrid",
                 "columns": [
                     {"key": key, "width_percent": width}
-                    for key, width in zip(COLUMNS, [5, 25, 10, 25, 10, 15, 10], strict=True)
+                    for key, width in zip(COLUMNS, [6, 36, 44, 14], strict=True)
                 ]
                 if index < 3
                 else [],
@@ -707,3 +704,157 @@ async def test_export_worker_limits_never_publish_a_partial_file(
             and shown["candidate_sha256"] is None
             and shown["export_id"] is None
         )
+
+
+LEGACY_COLUMNS = (
+    "ordinal",
+    "tender_clause",
+    "source_location",
+    "response",
+    "deviation",
+    "deviation_note",
+    "evidence",
+)
+
+
+async def test_starter_template_provenance_and_outdated_binding(tenants, tmp_path, admin_engine):
+    import re
+
+    from app.models.exports import ExportTemplateBinding
+    from app.services.export_template_sample import binding_sections, build
+
+    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+        header = headers[0]
+        task, body, _, page = await complete_inputs(
+            api, app, header, tenants, admin_engine, tmp_path
+        )
+        # The built-in starter template uploads, binds and exports as it is.
+        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
+        uploaded = await api.post(
+            "/resources/templates",
+            headers=header,
+            data={"metadata": json.dumps({"data": {"name": "Starter", "chapters": []}})},
+            files={"file": ("starter.docx", build(), "application/octet-stream")},
+        )
+        assert uploaded.status_code == 200, uploaded.text
+        template = uploaded.json()["data"]
+        selected = (
+            await api.post(
+                f"/tasks/{task}/templates",
+                headers=header,
+                json={"template_id": template["template_id"]},
+            )
+        ).json()["data"]
+        request = {
+            "template_revision_id": template["id"],
+            "expected_template_sha256": template["file"]["sha256"],
+            "sections": binding_sections(),
+            "dry_run": True,
+        }
+        preview = await api.post("/export-template-bindings", headers=header, json=request)
+        assert preview.status_code == 200, preview.text
+        request |= {
+            "dry_run": False,
+            "expected_static_content_hash": preview.json()["data"]["static_content_hash"],
+        }
+        binding = (
+            await api.post("/export-template-bindings", headers=header, json=request)
+        ).json()["data"]
+        assert binding["current"] is True
+
+        # A binding of the earlier seven-column layout lists as outdated and cannot export.
+        from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+
+        org, user = tenants["orgs"][0], tenants["users"][0]
+        async with app.state.db.transaction(org) as session:
+            await set_actor_context(
+                session, Identity(user, org, set(ROLE_SCOPES["admin"]), "admin")
+            )
+            row = await session.get(ExportTemplateBinding, UUID(binding["id"]))
+            assert row is not None
+            legacy_columns = [
+                {"key": key, "width_percent": width}
+                for key, width in zip(LEGACY_COLUMNS, (5, 25, 15, 25, 10, 10, 10), strict=True)
+            ]
+            session.add(
+                ExportTemplateBinding(
+                    org_id=row.org_id,
+                    template_revision_id=row.template_revision_id,
+                    template_sha256=row.template_sha256,
+                    binding_hash="e" * 64,
+                    sections=[
+                        {**section, "columns": legacy_columns if section["columns"] else []}
+                        for section in row.sections
+                    ],
+                    static_content_hash=row.static_content_hash,
+                    adapter_version=row.adapter_version,
+                    reviewed_by=row.reviewed_by,
+                    reviewed_at=row.reviewed_at,
+                )
+            )
+        listed = (
+            await api.get(
+                "/export-template-bindings",
+                headers=header,
+                params={"template_revision_id": template["id"]},
+            )
+        ).json()["items"]
+        assert sorted(item["current"] for item in listed) == [False, True]
+        outdated = next(item for item in listed if not item["current"])
+        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
+        stale = {**body, "task_template_id": selected["id"], "binding_id": outdated["id"]}
+        refused = await api.post(
+            f"/tasks/{task}/export-runs", headers=header, json={**stale, "dry_run": True}
+        )
+        assert refused.status_code == 400, refused.text
+        assert refused.json()["data"]["error"]["code"] == "export_blocked"
+        codes = {issue["code"] for issue in refused.json()["data"]["issues"]}
+        assert "export_binding_outdated" in codes and not refused.json()["data"]["ready"]
+
+        current = {**body, "task_template_id": selected["id"], "binding_id": binding["id"]}
+        run = await prepared(api, app, header, task, current)
+        released = await api.post(
+            f"/export-runs/{run['id']}/release",
+            headers=header,
+            json={
+                "expected_input_hash": run["input_hash"],
+                "expected_candidate_sha256": run["candidate_sha256"],
+            },
+        )
+        assert released.status_code == 200, released.text
+        export = released.json()["data"]
+        link = await api.get(f"/exports/{export['id']}/download-link", headers=header)
+        content = (await api.get(link.json()["data"]["url"], headers=header)).content
+        provenance = await api.get(f"/exports/{export['id']}/provenance", headers=header)
+        assert provenance.status_code == 200, provenance.text
+        record = provenance.json()["data"]
+        # Another org's bidder, who may read its own exports, finds nothing here.
+        set_role(admin_engine, tenants["orgs"][1], tenants["users"][1], "bidder")
+        foreign = await api.get(f"/exports/{export['id']}/provenance", headers=headers[1])
+        assert foreign.status_code == 404
+
+    document = Document(BytesIO(content))
+    section = document.sections[0]
+    assert (round(section.page_width.cm, 1), round(section.page_height.cm, 1)) == (21.0, 29.7)
+    tables = document.tables
+    # The printed numbering is the provenance numbering, table by table.
+    for index, name in enumerate(("substantive", "commercial", "technical")):
+        rows = [r for r in record["items"] if r["section"] == name]
+        printed = [row.cells[0].text for row in tables[index].rows[1:]]
+        if rows:
+            assert printed == [str(r["number"]) for r in rows]
+        assert [cell.text for cell in tables[index].rows[0].cells] == [
+            "序号",
+            "招标文件要求",
+            "投标文件响应内容",
+            "响应情况",
+        ]
+    assert [a["label"] for a in record["attachments"]] == ["E001"]
+    assert record["attachments"][0]["png_sha256"] == page["preview"]["sha256"]
+    assert record["file"]["sha256"] == hashlib.sha256(content).hexdigest()
+    text = "\n".join(p.text for p in document.paragraphs) + "\n".join(
+        cell.text for table in tables for row in table.rows for cell in row.cells
+    )
+    assert "（见附件 E001）" in text and "附件 E001" in text
+    assert not re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", text)
+    assert not re.search(r"\b[0-9a-f]{64}\b", text)

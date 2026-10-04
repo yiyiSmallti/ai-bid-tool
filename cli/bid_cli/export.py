@@ -17,9 +17,11 @@ from app.schemas.export_contracts import (
     ExportBindingView,
     ExportPrepare,
     ExportPreview,
+    ExportProvenance,
     ExportRelease,
     ExportRunView,
     ExportView,
+    TemplateSample,
 )
 from click.core import ParameterSource
 
@@ -305,3 +307,48 @@ def export_download(
     body = asyncio.run(download_export(client(), id, output))
     exit_code = 5 if body.get("data", {}).get("completion") == "partial" else 0
     emit(body, "export download", json_output, exit_code)
+
+
+@app.command("provenance")
+def export_provenance(
+    id: Annotated[UUID, typer.Option("--id")],
+    json_output: JsonOption = False,
+):
+    call, _, emit = _helpers()
+    body = call("GET", f"/exports/{id}/provenance")
+    ExportProvenance.model_validate(body.get("data", {}))
+    emit(body, "export provenance", json_output)
+
+
+@app.command("template-sample")
+def template_sample(
+    output: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    """Write the built-in starter template to a new file; nothing is uploaded."""
+    import hashlib
+    import os
+
+    from app.services.export_template_sample import binding_sections, build
+
+    _, _, emit = _helpers()
+    content = build()
+    try:
+        descriptor = os.open(output, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        raise ServiceError("output_exists", "Output path must be a new file", 400, 2) from None
+    with os.fdopen(descriptor, "wb") as handle:
+        handle.write(content)
+    data = TemplateSample.model_validate(
+        {
+            "output_path": str(output),
+            "sha256": hashlib.sha256(content).hexdigest(),
+            "size_bytes": len(content),
+            "binding_sections": binding_sections(),
+        }
+    ).model_dump(mode="json")
+    emit(
+        Result(ok=True, command="export template-sample", data=data).model_dump(mode="json"),
+        "export template-sample",
+        json_output,
+    )

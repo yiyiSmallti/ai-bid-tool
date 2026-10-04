@@ -40,15 +40,7 @@ SECTIONS = (
     "evidence_appendix",
 )
 TABLE_SECTIONS = frozenset({"substantive", "commercial", "technical"})
-COLUMNS = (
-    "ordinal",
-    "tender_clause",
-    "source_location",
-    "response",
-    "deviation",
-    "deviation_note",
-    "evidence",
-)
+COLUMNS = ("ordinal", "requirement", "response", "compliance")
 ANCHORS = {section: f"{{{{bid.{section}}}}}" for section in SECTIONS}
 METADATA_MARKERS = frozenset({"{{bid.task_name}}", "{{bid.tender_number}}"})
 SECTION_TITLES = {
@@ -61,15 +53,15 @@ SECTION_TITLES = {
 }
 COLUMN_TITLES = {
     "ordinal": "序号",
-    "tender_clause": "招标条款",
-    "source_location": "原文位置",
-    "response": "响应",
-    "deviation": "偏离",
-    "deviation_note": "具体差异",
-    "evidence": "证据索引",
+    "requirement": "招标文件要求",
+    "response": "投标文件响应内容",
+    "compliance": "响应情况",
 }
 DEVIATION_LABELS = {"none": "无偏离", "positive": "正偏离", "negative": "负偏离"}
-RESPONSE_LABELS = {"commitment": "承诺"}
+# Simple tables: column headings and width shares in percent.
+COMPLY_COLUMNS = (("序号", 8), ("招标文件要求", 72), ("响应情况", 20))
+GAP_COLUMNS = (("序号", 8), ("招标文件要求", 62), ("缺口原因", 30))
+INDEX_COLUMNS = (("编号", 10), ("材料", 30), ("内容", 35), ("对应条款", 25))
 GAP_LABELS = {
     "missing_card": "缺少响应卡",
     "unconfirmed": "响应尚未确认",
@@ -86,7 +78,7 @@ ADAPTER_VERSION = "docx-template-adapter-v1"
 # one inch pushed every page image onto a page of its own.
 CAPTION_RESERVE = 2 * 914_400
 RENDERER_PROFILE = (
-    "docx-export-v2"
+    "docx-export-v3"
     f";implementation={platform.python_implementation()}"
     f";python={platform.python_version()}"
     f";platform={platform.system()}-{platform.machine()}"
@@ -548,7 +540,7 @@ def _validated_sections(
         columns = _sequence(section.get("columns", []), f"sections[{index}].columns")
         if name in TABLE_SECTIONS:
             if len(columns) != len(COLUMNS):
-                _fail("unsupported_template_binding", "Response tables require all seven columns")
+                _fail("unsupported_template_binding", "Response tables require all four columns")
             seen: list[str] = []
             total = Decimal(0)
             for column_index, raw_column in enumerate(columns):
@@ -821,6 +813,7 @@ def _validate_manifest(
                     if material_kind in IMAGE_MATERIALS:
                         image_evidence.add(evidence_id)
                 elif material_kind == "declaration":
+                    _text(evidence_item.get("title"), "evidence.title")
                     if attachment_ordinal is not None:
                         _fail(
                             "invalid_export_manifest",
@@ -872,6 +865,7 @@ def _validate_manifest(
         else:
             _sha(attachment.get("original_sha256"), "attachment.original_sha256")
             _integer(attachment.get("page"), "attachment.page", minimum=1)
+            _text(attachment.get("title"), "attachment.title")
         _sha(attachment.get("png_sha256"), "attachment.png_sha256")
         size = _integer(attachment.get("size_bytes"), "attachment.size_bytes", minimum=1)
         width = _integer(attachment.get("width"), "attachment.width", minimum=1)
@@ -1016,39 +1010,79 @@ def _set_fixed_widths(table: Any, widths: Sequence[Decimal], available_width: in
             tc_width.set(qn("w:w"), str(max(1, width // 635)))
 
 
-def _source_clause(item: Mapping[str, Any]) -> str:
+def _requirement_text(item: Mapping[str, Any]) -> str:
     source = _mapping(item.get("source"), "item.source")
     quote = _text(source.get("quote"), "item.source.quote")
-    category = str(item.get("category", ""))
-    starred = "★ " if item.get("starred") is True else ""
-    return f"{starred}[{category}] {quote}"
+    # The tender's own ★/▲ stays as written; a starred requirement always shows one.
+    if item.get("starred") is True and not quote.lstrip().startswith(("★", "▲")):
+        return "★" + quote
+    return quote
 
 
-def _evidence_refs(item: Mapping[str, Any]) -> list[str]:
+def _section_of(item: Mapping[str, Any]) -> str:
+    kind = item.get("kind")
+    return (
+        str(item["table"]) if kind == "row" else "comply_only" if kind == "comply_only" else "gaps"
+    )
+
+
+def table_numbers(items: Sequence[Mapping[str, Any]]) -> dict[str, tuple[str, int]]:
+    """Each requirement's section and its number within that section, in manifest order."""
+    counters: dict[str, int] = {}
+    numbers: dict[str, tuple[str, int]] = {}
+    for item in items:
+        section = _section_of(item)
+        counters[section] = counters.get(section, 0) + 1
+        numbers[str(item["requirement_id"])] = (section, counters[section])
+    return numbers
+
+
+def declaration_labels(items: Sequence[Mapping[str, Any]]) -> dict[str, str]:
+    labels: dict[str, str] = {}
+    for item in items:
+        for raw in _sequence(item.get("evidence", []), "item.evidence"):
+            evidence = _mapping(raw, "item.evidence[]")
+            if evidence.get("material_kind") == "declaration":
+                labels[str(evidence["id"])] = f"D{len(labels) + 1:03d}"
+    return labels
+
+
+def _evidence_refs(item: Mapping[str, Any], declarations: Mapping[str, str]) -> list[str]:
     result: list[str] = []
     for raw in _sequence(item.get("evidence", []), "item.evidence"):
         evidence = _mapping(raw, "item.evidence[]")
         ordinal = evidence.get("attachment_ordinal")
         if ordinal is not None:
             label = f"E{_integer(ordinal, 'evidence.attachment_ordinal', minimum=1):03d}"
-            if label not in result:
-                result.append(label)
-        elif evidence.get("material_kind") == "declaration":
-            evidence_id = _text(evidence.get("id"), "evidence.id")
-            result.append(f"声明:{evidence_id}")
+        else:
+            label = declarations[str(evidence["id"])]
+        if label not in result:
+            result.append(label)
     return result
 
 
-def _response_label(item: Mapping[str, Any]) -> str:
-    if item["response_kind"] == "commitment":
-        return RESPONSE_LABELS["commitment"]
-    evidence = [_mapping(value, "item.evidence[]") for value in item.get("evidence", [])]
-    if evidence and all(value.get("material_kind") == "declaration" for value in evidence):
-        return "声明"
-    return "证据响应"
+def _reference_name(label: str) -> str:
+    return ("附件 " if label.startswith("E") else "声明 ") + label
 
 
-def _add_internal_link(paragraph: Any, label: str) -> None:
+def _compliance(item: Mapping[str, Any], section: str) -> str:
+    deviation = str(item["deviation"])
+    if deviation == "none":
+        return "响应且无负偏离" if section == "substantive" else "响应"
+    return f"{DEVIATION_LABELS[deviation]}：{item['deviation_note']}"
+
+
+def _clause_references(
+    requirement_ids: Sequence[str], numbers: Mapping[str, tuple[str, int]]
+) -> str:
+    return "、".join(
+        f"{SECTION_TITLES[numbers[rid][0]]}第 {numbers[rid][1]} 条"
+        for rid in requirement_ids
+        if rid in numbers
+    )
+
+
+def _add_internal_link(paragraph: Any, label: str, text_value: str | None = None) -> None:
     hyperlink = OxmlElement("w:hyperlink")
     hyperlink.set(qn("w:anchor"), f"bid_{label}")
     run = OxmlElement("w:r")
@@ -1059,7 +1093,7 @@ def _add_internal_link(paragraph: Any, label: str) -> None:
     underline.set(qn("w:val"), "single")
     properties.extend((color, underline))
     text = OxmlElement("w:t")
-    text.text = label
+    text.text = text_value or label
     run.extend((properties, text))
     hyperlink.append(run)
     paragraph._p.append(hyperlink)
@@ -1069,7 +1103,9 @@ def _render_response_table(
     document: DocumentObject,
     anchor: Any,
     binding: Mapping[str, object],
+    section: str,
     items: Sequence[Mapping[str, Any]],
+    declarations: Mapping[str, str],
     available_width: int,
 ) -> None:
     columns = [
@@ -1077,6 +1113,8 @@ def _render_response_table(
         for value in _sequence(binding["columns"], "binding.columns")
     ]
     keys = [str(column["key"]) for column in columns]
+    if sorted(keys) != sorted(COLUMNS):
+        _fail("export_binding_outdated", "Binding columns predate the current table layout")
     table = _before_table(
         document, anchor, max(2, len(items) + 1), len(keys), str(binding["table_style_id"])
     )
@@ -1089,31 +1127,27 @@ def _render_response_table(
         merged = table.rows[1].cells[0].merge(table.rows[1].cells[-1])
         _set_cell_text(merged, "本节无响应条目")
         return
-    for row_index, item in enumerate(items, 1):
-        evidence_refs = _evidence_refs(item)
+    for number, item in enumerate(items, 1):
+        refs = _evidence_refs(item, declarations)
         values = {
-            "ordinal": str(item["ordinal"]),
-            "tender_clause": _source_clause(item),
-            "source_location": str(item["location_label"]),
-            "response": f"{_response_label(item)}：{item['response_text']}",
-            "deviation": DEVIATION_LABELS[str(item["deviation"])],
-            "deviation_note": str(item["deviation_note"]),
-            "evidence": "、".join(evidence_refs) if evidence_refs else "无附件",
+            "ordinal": str(number),
+            "requirement": _requirement_text(item),
+            "compliance": _compliance(item, section),
         }
-        for cell, key in zip(table.rows[row_index].cells, keys, strict=True):
-            if key == "evidence" and evidence_refs:
-                cell.text = ""
-                paragraph = cell.paragraphs[0]
-                for link_index, label in enumerate(evidence_refs):
-                    if link_index:
-                        paragraph.add_run("、")
-                    if label.startswith("E"):
-                        _add_internal_link(paragraph, label)
-                    else:
-                        paragraph.add_run(label)
+        for cell, key in zip(table.rows[number].cells, keys, strict=True):
+            if key == "response":
+                _set_cell_text(cell, str(item["response_text"]))
+                if refs:
+                    paragraph = cell.paragraphs[-1]
+                    paragraph.add_run("（见")
+                    for index, label in enumerate(refs):
+                        if index:
+                            paragraph.add_run("、")
+                        _add_internal_link(paragraph, label, _reference_name(label))
+                    paragraph.add_run("）")
             else:
                 _set_cell_text(
-                    cell, values[key], bold=key == "deviation" and item["deviation"] == "negative"
+                    cell, values[key], bold=key == "compliance" and item["deviation"] == "negative"
                 )
 
 
@@ -1121,11 +1155,13 @@ def _render_simple_table(
     document: DocumentObject,
     anchor: Any,
     binding: Mapping[str, object],
-    headings: Sequence[str],
+    columns: Sequence[tuple[str, int]],
     rows: Sequence[Sequence[str]],
     empty_text: str,
     available_width: int,
+    bookmarks: Sequence[str | None] = (),
 ) -> None:
+    headings = [heading for heading, _ in columns]
     table = _before_table(
         document, anchor, max(2, len(rows) + 1), len(headings), str(binding["table_style_id"])
     )
@@ -1139,9 +1175,11 @@ def _render_simple_table(
         for row_index, values in enumerate(rows, 1):
             for cell, value in zip(table.rows[row_index].cells, values, strict=True):
                 _set_cell_text(cell, value)
-    widths = [Decimal(100) / Decimal(len(headings)) for _ in headings]
-    widths[-1] += Decimal(100) - sum(widths)
-    _set_fixed_widths(table, widths, available_width)
+            name = bookmarks[row_index - 1] if row_index - 1 < len(bookmarks) else None
+            if name is not None:
+                # Response cells link here: the row of a declaration that has no page.
+                _bookmark(table.rows[row_index].cells[0].paragraphs[0], name, 100_000 + row_index)
+    _set_fixed_widths(table, [Decimal(width) for _, width in columns], available_width)
 
 
 def _bookmark(paragraph: Any, name: str, identifier: int) -> None:
@@ -1160,53 +1198,74 @@ def _render_evidence_index(
     binding: Mapping[str, object],
     items: Sequence[Mapping[str, Any]],
     attachments: Sequence[Mapping[str, Any]],
+    declarations: Mapping[str, str],
+    numbers: Mapping[str, tuple[str, int]],
     available_width: int,
 ) -> None:
-    attachment_by_ordinal = {int(value["ordinal"]): value for value in attachments}
-    rows: list[list[str]] = []
-    seen: set[str] = set()
+    observations: dict[int, list[str]] = {}
+    excerpts: dict[int, list[str]] = {}
+    declared: list[tuple[str, Mapping[str, Any], str]] = []
     for item in items:
         for raw in _sequence(item.get("evidence", []), "item.evidence"):
             evidence = _mapping(raw, "item.evidence[]")
-            evidence_id = str(evidence["id"])
-            if evidence_id in seen:
-                continue
-            seen.add(evidence_id)
             ordinal = evidence.get("attachment_ordinal")
-            attachment = attachment_by_ordinal.get(int(ordinal)) if ordinal is not None else None
-            reference = str(attachment["label"]) if attachment else "声明"
-            evidence_input = _mapping(evidence.get("input", {}), "evidence.input")
-            detail = str(evidence_input.get("quote", ""))
-            material = str(evidence.get("material_kind", ""))
-            if attachment and attachment.get("kind") == "image":
-                material = "图片"
-                detail = (
-                    f"所见：{evidence.get('visual_observation', '')}；"
-                    f"PNG SHA-256 {attachment['png_sha256']}"
+            quote = str(_mapping(evidence.get("input", {}), "evidence.input").get("quote", ""))
+            if ordinal is None:
+                declared.append(
+                    (declarations[str(evidence["id"])], evidence, str(item["requirement_id"]))
                 )
-            elif attachment:
-                detail = (
-                    f"摘录：{detail}；原件页 {attachment['page']}；"
-                    f"原件 SHA-256 {attachment['original_sha256']}；"
-                    f"PNG SHA-256 {attachment['png_sha256']}"
-                )
-            rows.append(
-                [
-                    reference,
-                    evidence_id,
-                    f"{evidence['confirmed_by']} / {evidence['confirmed_at']}",
-                    f"{evidence.get('selection_id', '')} / {evidence.get('resource_revision_id', '')}",
-                    f"{material}；{detail}",
-                ]
+                continue
+            seen = (
+                observations if evidence.get("material_kind") in IMAGE_MATERIALS else excerpts
+            ).setdefault(int(ordinal), [])
+            value = (
+                str(evidence.get("visual_observation", ""))
+                if evidence.get("material_kind") in IMAGE_MATERIALS
+                else quote
             )
+            if value and value not in seen:
+                seen.append(value)
+    rows: list[list[str]] = []
+    bookmarks: list[str | None] = []
+    for attachment in attachments:
+        ordinal = int(attachment["ordinal"])
+        if attachment.get("kind") == "image":
+            material = "证据图片"
+            content = "所见：" + "；".join(observations.get(ordinal, []))
+        else:
+            material = str(attachment["title"])
+            content = f"原件第 {attachment['page']} 页"
+            if excerpts.get(ordinal):
+                content += "；摘录：" + "；".join(excerpts[ordinal])
+        rows.append(
+            [
+                str(attachment["label"]),
+                material,
+                content,
+                _clause_references([str(x) for x in attachment["requirement_ids"]], numbers),
+            ]
+        )
+        bookmarks.append(None)
+    for label, evidence, requirement_id in declared:
+        quote = str(_mapping(evidence.get("input", {}), "evidence.input").get("quote", ""))
+        rows.append(
+            [
+                label,
+                f"{evidence['title']}（声明）",
+                f"摘录：{quote}",
+                _clause_references([requirement_id], numbers),
+            ]
+        )
+        bookmarks.append(f"bid_{label}")
     _render_simple_table(
         document,
         anchor,
         binding,
-        ("附件", "Evidence ID", "确认记录", "选择/修订", "材料摘录或原件页"),
+        INDEX_COLUMNS,
         rows,
-        "本次响应无证据索引条目",
+        "本次响应无证据附件",
         available_width,
+        bookmarks,
     )
 
 
@@ -1294,12 +1353,10 @@ def _render_attachments(
         title.paragraph_format.page_break_before = True
         # The caption never ends a page apart from its image.
         title.paragraph_format.keep_with_next = True
-        requirements = ", ".join(attachment["requirement_ids"])
         title.add_run(
-            f"{label} 证据图片｜SHA-256 {attachment['png_sha256']}｜要求 {requirements}"
+            f"附件 {label}　证据图片"
             if attachment.get("kind") == "image"
-            else f"{label} 证据页｜修订 {attachment['revision_id']}｜原件第 {attachment['page']} 页｜"
-            f"SHA-256 {attachment['original_sha256']}｜要求 {requirements}"
+            else f"附件 {label}　{attachment['title']}　原件第 {attachment['page']} 页"
         )
         for run in title.runs:
             run.font.hidden = False
@@ -1321,7 +1378,7 @@ def _render_attachments(
         anchor._p.addprevious(image_paragraph._p)
 
 
-def _set_core_properties(document: DocumentObject) -> None:
+def set_core_properties(document: DocumentObject) -> None:
     properties = document.core_properties
     fixed = datetime(2000, 1, 1, tzinfo=UTC)
     properties.author = "AI Bid Tool"
@@ -1397,7 +1454,7 @@ def _remove_personal_package_parts(files: dict[str, bytes]) -> None:
     )
 
 
-def _deterministic_package(content: bytes, limits: RenderLimits) -> bytes:
+def deterministic_package(content: bytes, limits: RenderLimits) -> bytes:
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as source:
             if sum(entry.file_size for entry in source.infolist()) > limits.max_expanded_bytes:
@@ -1467,6 +1524,8 @@ def render_export_docx(
         anchors = _find_anchor_paragraphs(document)
         _replace_metadata(document, _mapping(manifest.get("task"), "task"))
         by_section = _validated_sections(sections, _style_types(_safe_zip(template_bytes, limits)))
+        numbers = table_numbers(items)
+        declarations = declaration_labels(items)
         for section in TABLE_SECTIONS:
             anchor, section_index = anchors[section]
             available_width, _ = _section_geometry(document, section_index)
@@ -1480,7 +1539,13 @@ def render_export_docx(
                 str(by_section[section]["heading_style_id"]),
             )
             _render_response_table(
-                document, anchor, by_section[section], section_items, available_width
+                document,
+                anchor,
+                by_section[section],
+                section,
+                section_items,
+                declarations,
+                available_width,
             )
         comply = [item for item in items if item.get("kind") == "comply_only"]
         comply_anchor, comply_section_index = anchors["comply_only"]
@@ -1495,15 +1560,10 @@ def render_export_docx(
             document,
             comply_anchor,
             by_section["comply_only"],
-            ("序号", "招标条款", "原文位置", "人工处置"),
+            COMPLY_COLUMNS,
             [
-                [
-                    str(item["ordinal"]),
-                    _source_clause(item),
-                    str(item["location_label"]),
-                    f"须遵守（{item['disposition_by']} / {item['disposition_at']}）",
-                ]
-                for item in comply
+                [str(number), _requirement_text(item), "遵守"]
+                for number, item in enumerate(comply, 1)
             ],
             "本次抽取范围内无须遵守条款",
             comply_width,
@@ -1521,15 +1581,14 @@ def render_export_docx(
             document,
             gaps_anchor,
             by_section["gaps"],
-            ("序号", "招标条款", "原文位置", "缺口原因"),
+            GAP_COLUMNS,
             [
                 [
-                    str(item["ordinal"]),
-                    _source_clause(item),
-                    str(item["location_label"]),
+                    str(number),
+                    _requirement_text(item),
                     "；".join(GAP_LABELS[str(reason)] for reason in item["gap_reasons"]),
                 ]
-                for item in gaps
+                for number, item in enumerate(gaps, 1)
             ],
             "本次抽取范围内无缺口",
             gaps_width,
@@ -1548,6 +1607,8 @@ def render_export_docx(
             by_section["evidence_appendix"],
             items,
             attachments,
+            declarations,
+            numbers,
             evidence_width,
         )
         _render_attachments(
@@ -1564,10 +1625,10 @@ def render_export_docx(
             _add_review_marker(document, bool(gaps))
         for paragraph, _ in anchors.values():
             paragraph._element.getparent().remove(paragraph._element)
-        _set_core_properties(document)
+        set_core_properties(document)
         buffer = io.BytesIO()
         document.save(buffer)
-        content = _deterministic_package(buffer.getvalue(), limits)
+        content = deterministic_package(buffer.getvalue(), limits)
     except ExportRenderError:
         raise
     except Exception as exc:

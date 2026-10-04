@@ -19,6 +19,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import subprocess
 import sys
 import zipfile
@@ -51,15 +52,7 @@ REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"
 
 
 def sections():
-    response_columns = [
-        ("ordinal", 7),
-        ("tender_clause", 23),
-        ("source_location", 12),
-        ("response", 23),
-        ("deviation", 8),
-        ("deviation_note", 17),
-        ("evidence", 10),
-    ]
+    response_columns = [("ordinal", 6), ("requirement", 36), ("response", 44), ("compliance", 14)]
     return [
         {
             "section": section,
@@ -326,6 +319,7 @@ def complete_manifest(template, inspection, png, width, height, *, mode="review_
                 "selection_id": "00000000-0000-0000-0000-000000000203",
                 "revision_id": "00000000-0000-0000-0000-000000000204",
                 "original_sha256": "3" * 64,
+                "title": "Synthetic certificate declaration（QMS-2026）",
                 "page": 1,
                 "png_sha256": hashlib.sha256(png).hexdigest(),
                 "size_bytes": len(png),
@@ -448,7 +442,7 @@ def test_adapter_refuses_static_business_text_unknown_marker_and_bad_columns():
         validate_template(unknown, sections(), [REGISTERED_HEADING])
     bad = sections()
     bad[0]["columns"] = bad[0]["columns"][:-1]
-    with pytest.raises(ExportRenderError, match="seven columns"):
+    with pytest.raises(ExportRenderError, match="four columns"):
         validate_template(template_bytes(), bad, [REGISTERED_HEADING])
 
 
@@ -493,7 +487,7 @@ def test_review_copy_renders_all_sections_deterministically_and_preserves_png(tm
     )
     assert len(rendered.tables) == 6
     for table in rendered.tables[:3]:
-        assert len(table.columns) == 7
+        assert len(table.columns) == 4
         header = table.rows[0]._tr.find(qn("w:trPr")).find(qn("w:tblHeader"))
         assert header is not None
     table_text = "\n".join(
@@ -501,8 +495,13 @@ def test_review_copy_renders_all_sections_deterministically_and_preserves_png(tm
     )
     assert "负偏离" in table_text
     assert "本次抽取范围内无缺口" not in table_text
+    # Provenance stays in the provenance manifest, never in the printed section.
+    printed = all_text + "\n" + table_text
+    assert not re.search(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", printed)
+    assert not re.search(r"\b[0-9a-f]{64}\b", printed)
+    assert not re.search(r"\[(technical|qualification|commercial|scoring|substantive)\]", printed)
     attachment_titles = [
-        paragraph for paragraph in rendered.paragraphs if paragraph.text.startswith("E001 证据页")
+        paragraph for paragraph in rendered.paragraphs if paragraph.text.startswith("附件 E001")
     ]
     assert len(attachment_titles) == 1
     assert attachment_titles[0].paragraph_format.page_break_before is True
@@ -613,6 +612,7 @@ def test_cross_process_126_distinct_pdf_pages_are_deterministic_and_byte_exact(t
                 "selection_id": material["selection_id"],
                 "revision_id": material["resource_revision_id"],
                 "original_sha256": hashlib.sha256(pdf).hexdigest(),
+                "title": "Synthetic certificate declaration（QMS-2026）",
                 "page": number,
                 "png_sha256": hashlib.sha256(png).hexdigest(),
                 "size_bytes": len(png),

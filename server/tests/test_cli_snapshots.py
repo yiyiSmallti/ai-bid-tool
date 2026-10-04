@@ -142,14 +142,11 @@ EXPORT_COLUMNS = [
     for key, width in zip(
         (
             "ordinal",
-            "tender_clause",
-            "source_location",
+            "requirement",
             "response",
-            "deviation",
-            "deviation_note",
-            "evidence",
+            "compliance",
         ),
-        (5, 25, 15, 25, 10, 10, 10),
+        (6, 36, 44, 14),
         strict=True,
     )
 ]
@@ -178,6 +175,7 @@ EXPORT_BINDING = {
     "static_content_hash": "d" * 64,
     "adapter_version": "docx-export-v1",
     "sections": EXPORT_SECTIONS,
+    "current": True,
     "reviewed_by": IDENTIFIER,
     "reviewed_at": "2026-10-01T00:00:00Z",
 }
@@ -199,6 +197,57 @@ EXPORT_FILE = {
     "sha256": "a" * 64,
     "size_bytes": 1,
     "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
+EXPORT_PROVENANCE = {
+    "export_id": IDENTIFIER,
+    "run_id": IDENTIFIER,
+    "mode": "final_section",
+    "file": EXPORT_FILE,
+    "renderer_profile": "docx-export-v3",
+    "input_hash": "a" * 64,
+    "manifest_hash": "b" * 64,
+    "released_by": IDENTIFIER,
+    "released_at": "2026-10-01T00:00:00Z",
+    "items": [
+        {
+            "section": "technical",
+            "number": 1,
+            "requirement_id": IDENTIFIER,
+            "card_revision_id": IDENTIFIER,
+            "confirmed_by": IDENTIFIER,
+            "confirmed_at": "2026-10-01T00:00:00Z",
+            "disposition_by": None,
+            "disposition_at": None,
+            "quote_sha256": "c" * 64,
+            "evidence": [
+                {
+                    "evidence_id": IDENTIFIER,
+                    "label": "E001",
+                    "material_kind": "user_supplied_pdf_page",
+                    "selection_id": IDENTIFIER,
+                    "resource_revision_id": IDENTIFIER,
+                    "confirmed_by": IDENTIFIER,
+                    "confirmed_at": "2026-10-01T00:00:00Z",
+                }
+            ],
+            "gap_reasons": [],
+        }
+    ],
+    "attachments": [
+        {
+            "label": "E001",
+            "kind": "certificate_page",
+            "title": "Synthetic certificate declaration（QMS-2026）",
+            "page": 1,
+            "certificate_revision_id": IDENTIFIER,
+            "evidence_source_id": IDENTIFIER,
+            "rendition_id": None,
+            "original_sha256": "d" * 64,
+            "png_sha256": "e" * 64,
+            "evidence_ids": [IDENTIFIER],
+            "requirement_ids": [IDENTIFIER],
+        }
+    ],
 }
 EXPORT_VIEW = {
     "id": IDENTIFIER,
@@ -717,6 +766,8 @@ async def fake_request(self, method, path, **kwargs):
         data = EXPORT_RUN
     elif path.endswith("/exports"):
         data, items = {"task_id": IDENTIFIER}, [EXPORT_VIEW]
+    elif path.startswith("/exports/") and path.endswith("/provenance"):
+        data = EXPORT_PROVENANCE
     elif path.startswith("/exports/"):
         data = EXPORT_VIEW
     elif path.endswith("/model-redaction"):
@@ -1292,6 +1343,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "export list": ["export", "list", "--task", IDENTIFIER],
         "export show": ["export", "show", "--id", IDENTIFIER],
         "export download": ["export", "download", "--id", IDENTIFIER, "--output", str(tmp_path / "export.docx")],
+        "export provenance": ["export", "provenance", "--id", IDENTIFIER],
+        "export template-sample": ["export", "template-sample", "--output", str(tmp_path / "starter.docx")],
         "resource product add": ["resource", "product", "add", "--input", str(product_input)],
         "resource product list": ["resource", "product", "list"],
         "resource product update": [

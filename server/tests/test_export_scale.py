@@ -24,7 +24,7 @@ from app.schemas.contracts import (
     ProviderUsage,
 )
 from fakes import source_for
-from test_exports import draft, prepared, setup_template
+from test_exports import draft, prepared
 from test_response_cards import (
     create_card,
     labelled_pdf,
@@ -86,6 +86,42 @@ class ScaleExtraction(LLMProvider):
         )
 
 
+async def starter_template(api, header, task):
+    """Upload the built-in starter template and bind it with its recommended columns."""
+    from app.services.export_template_sample import binding_sections, build
+
+    uploaded = await api.post(
+        "/resources/templates",
+        headers=header,
+        data={"metadata": json.dumps({"data": {"name": "标准模板", "chapters": []}})},
+        files={"file": ("starter.docx", build(), "application/octet-stream")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    template = uploaded.json()["data"]
+    selected = (
+        await api.post(
+            f"/tasks/{task}/templates",
+            headers=header,
+            json={"template_id": template["template_id"]},
+        )
+    ).json()["data"]
+    request = {
+        "template_revision_id": template["id"],
+        "expected_template_sha256": template["file"]["sha256"],
+        "sections": binding_sections(),
+        "dry_run": True,
+    }
+    preview = await api.post("/export-template-bindings", headers=header, json=request)
+    assert preview.status_code == 200, preview.text
+    request |= {
+        "dry_run": False,
+        "expected_static_content_hash": preview.json()["data"]["static_content_hash"],
+    }
+    binding = await api.post("/export-template-bindings", headers=header, json=request)
+    assert binding.status_code == 200, binding.text
+    return selected, binding.json()["data"]
+
+
 async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, monkeypatch):
     org, user = tenants["orgs"][0], tenants["users"][0]
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
@@ -114,11 +150,11 @@ async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, mon
             await api.get(f"/tasks/{task}/requirements", headers=header, params={"job": extraction})
         ).json()["items"]
         assert len(requirements) == count
-        selected, binding = await setup_template(api, header, task)
+        selected, binding = await starter_template(api, header, task)
 
         data = {
             "kind": "qualification",
-            "name": "Synthetic scale certificate declaration",
+            "name": "合成测试质量管理体系认证证书",
             "number": "QMS-SCALE",
             "valid_from": "2026-01-01",
             "valid_until": "2027-01-01",
@@ -179,11 +215,13 @@ async def test_large_synthetic_final_export(tenants, tmp_path, admin_engine, mon
                     {
                         "response_kind": "evidence" if evidence else "commitment",
                         "response_text": (
-                            f"Synthetic confirmed response {number}: the offered appliance "
-                            f"meets scale requirement {number} as stated in the tender."
+                            f"完全响应。我单位承诺所投合成测试设备满足第 {number} 项规模要求，"
+                            "并按招标文件约定提供相应服务（合成测试材料）。"
                         ),
                         "deviation": "negative" if number % 25 == 0 else "none",
-                        "deviation_note": f"Synthetic note for requirement {number}.",
+                        "deviation_note": f"合成测试：第 {number} 项的质保期少于要求。"
+                        if number % 25 == 0
+                        else f"合成测试：第 {number} 项按要求响应。",
                         "evidence": evidence,
                     },
                 )
