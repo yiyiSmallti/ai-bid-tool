@@ -157,16 +157,20 @@ to treat supplied text as data, retain negative deviations, distinguish material
 declarations from proof and leave unavailable evidence empty.
 
 `groups` budgets serialized requirements together with the complete material
-text. Whole requirements are processed sequentially; a large single input gets
-its own batch. Truncated or malformed responses halve the requirement batch;
+text. Whole requirements are batched in order; a large single input gets its own
+batch. Up to `BID_LLM_CONCURRENCY` batches run at once, as for extraction; each
+call is still admitted against the job's call ceiling and charge cap before it is
+sent. Completed batches are returned in request order whichever finished first. Truncated or malformed responses halve the requirement batch;
 one requirement is the terminal boundary. No field/page text is spliced, no
 previous response is supplied and no drafting gap-fill pass runs. `plan_calls`
 receives the planned first-pass batch count before any requests, so recursive
 halves and transient retries share the correctly scaled cumulative ceiling.
 
 Each completed batch retains its exact request-local reference map for service
-validation. Later provider/admission failure stops new requests and returns
-completed batches plus a safe error code; the worker applies the partial-result
+validation. A provider/admission failure stops batches that have not started;
+batches already in flight finish, and completed batches return with a safe
+error code. An input change found at admission therefore stops later calls but
+not calls already sent from the authorized snapshot; the worker applies the partial-result
 and review rules in [response-cards.md](response-cards.md#model-proposals).
 Immediate accounting precedes parsing for every HTTP response. Drafting's
 `safe_metadata` mode suppresses arbitrary vendor error strings and untrusted

@@ -182,8 +182,11 @@ async def draft(llm: "HTTPExtractor", requirements: list[dict], materials: list[
     batches = groups(requirements, materials, llm.settings.llm_batch_chars)
     plan_calls(len(batches))
     output = DraftingOutput()
+    limit = asyncio.Semaphore(max(1, llm.settings.llm_concurrency))
+    stopped = asyncio.Event()
+    answered: dict[int, list[AnsweredBatch]] = {}
 
-    async def run(client, batch):
+    async def run(client, batch, sink):
         for delay in (*llm.retry_delays, None):
             try:
                 items = await call(llm, client, batch, materials)
@@ -191,27 +194,43 @@ async def draft(llm: "HTTPExtractor", requirements: list[dict], materials: list[
                 if len(batch) == 1:
                     raise
                 middle = len(batch) // 2
-                await run(client, batch[:middle])
-                await run(client, batch[middle:])
+                await run(client, batch[:middle], sink)
+                await run(client, batch[middle:], sink)
                 return
             except ProviderFailure as exc:
-                if not exc.retryable or delay is None:
+                if not exc.retryable or delay is None or stopped.is_set():
                     raise
                 await asyncio.sleep(delay)
             else:
-                output.batches.append(AnsweredBatch(batch, materials, items))
+                sink.append(AnsweredBatch(batch, materials, items))
                 return
+
+    async def worker(client, index, batch):
+        async with limit:
+            # Once a batch has failed, batches not yet started are never sent; batches
+            # already in flight finish, and their accounted answers are kept.
+            if stopped.is_set():
+                return
+            try:
+                await run(client, batch, answered.setdefault(index, []))
+            except ProviderFailure as exc:
+                stopped.set()
+                output.failure = output.failure or exc
 
     async with httpx.AsyncClient(
         transport=llm.transport,
         timeout=httpx.Timeout(llm.settings.llm_timeout_seconds, connect=10),
         follow_redirects=False,
     ) as client:
-        try:
-            # Sequential batches allow deterministic partial progress without issuing
-            # more calls after a ceiling is reached. Accounting still precedes parsing.
-            for batch in batches:
-                await run(client, batch)
-        except ProviderFailure as exc:
-            output.failure = exc
+        # Each call is admitted against the job's call ceiling and charge cap before it
+        # is sent, so concurrent batches cannot exceed either limit.
+        results = await asyncio.gather(
+            *(worker(client, index, batch) for index, batch in enumerate(batches)),
+            return_exceptions=True,
+        )
+    for result in results:
+        if isinstance(result, BaseException):
+            raise result
+    # Publish in request order regardless of which batch finished first.
+    output.batches = [item for index in sorted(answered) for item in answered[index]]
     return output
