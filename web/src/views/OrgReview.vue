@@ -146,50 +146,45 @@ onMounted(load);
   <el-skeleton v-if="!rows && !error" :rows="6" animated />
   <p v-if="!rows" class="hint">要求全集尚未就绪，统计与操作不可用。</p>
   <template v-else>
-    <div v-if="summary" class="stat-grid">
-      <div class="stat"><span class="label">所选集合</span><span class="value">{{ summary.total }}</span></div>
-      <div class="stat success"><span class="label">已确认</span><span class="value">{{ summary.confirmed }}</span></div>
-      <div class="stat"><span class="label">有效仅需遵守</span><span class="value">{{ summary.comply }}</span></div>
-      <div class="stat"><span class="label">缺口</span><span class="value">{{ summary.gaps }}</span></div>
-      <div class="stat danger"><span class="label">负偏离</span><span class="value">{{ summary.negative }}</span></div>
+    <div v-if="summary" class="stat-strip">
+      <div class="strip-item"><span class="label">所选集合</span><strong>{{ summary.total }}</strong></div>
+      <div class="strip-item success"><span class="label">已确认</span><strong>{{ summary.confirmed }}</strong></div>
+      <div class="strip-item"><span class="label">有效仅需遵守</span><strong>{{ summary.comply }}</strong></div>
+      <div class="strip-item warning"><span class="label">缺口</span><strong>{{ summary.gaps }}</strong></div>
+      <div class="strip-item danger"><span class="label">负偏离</span><strong>{{ summary.negative }}</strong></div>
+      <span class="hint strip-hint">统计只覆盖所选抽取集合，不表示招标文件没有漏抽或完整标书已交付。</span>
     </div>
-    <p class="hint summary-hint">统计只覆盖所选抽取集合，不表示招标文件没有漏抽或完整标书已交付。</p>
     <el-collapse v-if="writable" v-model="generationOpen" class="section generation"><el-collapse-item name="generation" title="模型起草费用预览"><GenerationPanel :task="task" :job="job" :requirement-ids="selected.length ? selected : undefined" :role="orgAccess.role" :material-revision="materialRevision" @changed="taskChanged" /></el-collapse-item></el-collapse>
+    <el-card shadow="never" class="section filters-card">
+      <el-form label-position="top" class="filters" @submit.prevent>
+        <el-form-item label="搜索要求或引文" class="filter-search"><el-input v-model="filters.query" maxlength="200" type="search" clearable :prefix-icon="Search" placeholder="要求文字或招标原文" /></el-form-item>
+        <el-form-item label="类别"><el-select v-model="filters.category" placeholder="全部"><el-option value="" label="全部" /><el-option v-for="(text, key) in categories" :key="key" :value="key" :label="text" /></el-select></el-form-item>
+        <el-form-item label="状态"><el-select v-model="filters.state" placeholder="全部"><el-option value="" label="全部" /><el-option v-for="(text, key) in states" :key="key" :value="key" :label="text" /></el-select></el-form-item>
+        <el-form-item label="职责"><el-select v-model="filters.domain" placeholder="全部"><el-option value="" label="全部" /><el-option value="commercial" label="商务 / 资格" /><el-option value="technical" label="技术" /><el-option value="unclassified" label="待分类" /></el-select></el-form-item>
+        <el-form-item label="处置"><el-select v-model="filters.disposition" placeholder="全部"><el-option value="" label="全部" /><el-option value="respond" label="逐项响应" /><el-option value="comply_only" label="仅需遵守" /><el-option value="undecided" label="尚未决定" /></el-select></el-form-item>
+        <div class="checks"><label class="check"><input v-model="filters.starred" type="checkbox" />只看星标</label><label class="check"><input v-model="filters.mine" type="checkbox" />待我审阅</label><label class="check"><input v-model="filters.gaps" type="checkbox" />只看缺口</label></div>
+      </el-form>
+    </el-card>
     <div class="review-layout" :class="{ detail: selectedRow }">
       <section aria-label="要求列表" class="review-list">
-        <el-card shadow="never" class="section filters-card">
-          <el-form label-position="top" class="filters" @submit.prevent>
-            <el-form-item label="搜索要求或引文" class="filter-search"><el-input v-model="filters.query" maxlength="200" type="search" clearable :prefix-icon="Search" placeholder="要求文字或招标原文" /></el-form-item>
-            <el-form-item label="类别"><el-select v-model="filters.category" placeholder="全部"><el-option value="" label="全部" /><el-option v-for="(text, key) in categories" :key="key" :value="key" :label="text" /></el-select></el-form-item>
-            <el-form-item label="状态"><el-select v-model="filters.state" placeholder="全部"><el-option value="" label="全部" /><el-option v-for="(text, key) in states" :key="key" :value="key" :label="text" /></el-select></el-form-item>
-            <el-form-item label="职责"><el-select v-model="filters.domain" placeholder="全部"><el-option value="" label="全部" /><el-option value="commercial" label="商务 / 资格" /><el-option value="technical" label="技术" /><el-option value="unclassified" label="待分类" /></el-select></el-form-item>
-            <el-form-item label="处置"><el-select v-model="filters.disposition" placeholder="全部"><el-option value="" label="全部" /><el-option value="respond" label="逐项响应" /><el-option value="comply_only" label="仅需遵守" /><el-option value="undecided" label="尚未决定" /></el-select></el-form-item>
-          </el-form>
-          <div class="checks"><label class="check"><input v-model="filters.starred" type="checkbox" />只看星标</label><label class="check"><input v-model="filters.mine" type="checkbox" />待我审阅</label><label class="check"><input v-model="filters.gaps" type="checkbox" />只看缺口</label></div>
-        </el-card>
         <div class="list-bar">
-          <span data-testid="requirement-count" aria-live="polite">匹配 {{ filtered.length }} / 全集 {{ rows.length }}</span>
-          <div v-if="writable" class="actions">
-            <el-button size="small" @click="selectForPreview()">选择本页用于起草预检</el-button><el-button size="small" @click="selectForPreview(true)">选择全部匹配用于起草预检</el-button><el-button size="small" @click="clearSelection">清除选择</el-button>
-          </div>
+          <span class="count" data-testid="requirement-count" aria-live="polite">匹配 {{ filtered.length }} / 全集 {{ rows.length }}</span>
+          <span v-if="writable" class="hint">已选 {{ selected.length }} 项</span>
         </div>
-        <div v-if="['technical', 'bidder'].includes(orgAccess.role)" class="actions batch-bar">
-          <el-button size="small" @click="selectPage">选择本页可处置项</el-button><el-button size="small" @click="selectAll">选择全部匹配可处置项</el-button>
-          <span class="hint">已选 {{ selected.length }} 项</span>
-          <el-button size="small" type="primary" :disabled="!selected.length || dirty" @click="prepareBatch">准备批量处置</el-button>
+        <div v-if="writable" class="tool-groups">
+          <div class="tool-group"><span class="group-label">起草预检范围</span><el-button size="small" @click="selectForPreview()">选择本页用于起草预检</el-button><el-button size="small" @click="selectForPreview(true)">选择全部匹配用于起草预检</el-button><el-button size="small" @click="clearSelection">清除选择</el-button></div>
+          <div v-if="['technical', 'bidder'].includes(orgAccess.role)" class="tool-group"><span class="group-label">批量处置</span><el-button size="small" @click="selectPage">选择本页可处置项</el-button><el-button size="small" @click="selectAll">选择全部匹配可处置项</el-button><el-button size="small" type="primary" :disabled="!selected.length || dirty" @click="prepareBatch">准备批量处置</el-button></div>
         </div>
         <div class="table-scroll" tabindex="0"><table class="data-table review-table"><caption class="sr-only">原文顺序；缺卡片也计入全集</caption>
           <thead><tr><th class="col-check"><span class="sr-only">选择</span></th><th class="col-meta">类别 / 状态</th><th>要求、逐字引文与位置</th><th class="col-open">操作</th></tr></thead>
           <tbody>
             <tr v-for="row in visible" :key="row.id" data-testid="requirement-row" :class="{ selected: selectedRow?.id === row.id }">
               <td><input v-if="writable" v-model="selected" :value="row.id" type="checkbox" :aria-label="`选择要求 ${row.text}`" /></td>
-              <td><div class="tags">
-                <span class="tag">{{ categories[row.category] }}</span><span v-if="row.starred" class="tag star">★ 星标</span>
-                <span class="tag" :class="statusTag[row.status]">{{ states[row.status] }}</span>
-                <span class="tag primary">{{ label(domains, domainFor(row), "待单位管理员分类") }}</span>
-                <span class="tag">{{ label(eligibilities, row.card?.eligibility ?? "missing_card") }}</span>
-                <span v-if="row.card?.content.deviation === 'negative'" class="tag danger">负偏离</span>
-              </div></td>
+              <td class="meta">
+                <div class="tags"><span class="tag" :class="statusTag[row.status]">{{ states[row.status] }}</span><span v-if="row.starred" class="tag star">★ 星标</span><span v-if="row.card?.content.deviation === 'negative'" class="tag danger">负偏离</span></div>
+                <div class="meta-line">{{ categories[row.category] }} · {{ label(domains, domainFor(row), "待分类") }}</div>
+                <div class="meta-line">{{ label(eligibilities, row.card?.eligibility ?? "missing_card") }}</div>
+              </td>
               <td><div class="req-text">{{ row.text }}</div><blockquote class="quote">{{ row.source.quote }}</blockquote><small class="hint">{{ locationLabel(row.source, documentName(row.source.document_id)) }}</small></td>
               <td><el-button size="small" :type="selectedRow?.id === row.id ? 'primary' : 'default'" :aria-label="`打开审阅：${row.text}`" @click="open(row, $event)">打开审阅</el-button></td>
             </tr>
@@ -220,24 +215,36 @@ onMounted(load);
   </el-dialog>
 </template>
 <style scoped>
-.summary-hint { margin: -8px 0 16px; }
+.stat-strip { display: flex; align-items: stretch; gap: 0; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; flex-wrap: wrap; }
+.strip-item { display: flex; flex-direction: column; gap: 2px; padding: 12px 24px; border-right: 1px solid var(--border); min-width: 120px; }
+.strip-item .label { color: var(--muted); font-size: 13px; }
+.strip-item strong { font-size: 22px; line-height: 1.2; }
+.strip-item.success strong { color: var(--success); }
+.strip-item.warning strong { color: var(--el-color-warning); }
+.strip-item.danger strong { color: var(--danger); }
+.strip-hint { align-self: center; padding: 8px 20px; flex: 1 1 260px; }
 .generation { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 0 16px; }
 .review-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
 .review-layout.detail, .review-layout:has(.review-empty) { grid-template-columns: minmax(440px, 3fr) minmax(400px, 2fr); }
 .review-list { min-width: 0; }
 .review-detail { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow: auto; }
 .review-empty { position: sticky; top: 76px; background: var(--surface); border: 1px dashed var(--border); border-radius: 8px; }
-.filters { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.filters { display: flex; flex-wrap: wrap; gap: 0 16px; align-items: flex-end; }
 .filters .el-form-item { margin-bottom: 12px; }
-.filters .filter-search { flex: 1 1 100%; }
-.filters .el-select { width: 140px; }
-.checks { display: flex; gap: 18px; flex-wrap: wrap; }
-.filters-card :deep(.el-card__body) { padding: 14px 16px; }
-.list-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
-.list-bar .actions { margin: 6px 0; }
-.batch-bar { margin-top: 0; }
+.filters .filter-search { flex: 1 1 320px; }
+.filters .el-select { width: 150px; }
+.checks { display: flex; gap: 18px; flex-wrap: wrap; height: 32px; align-items: center; margin-bottom: 12px; }
+.filters-card :deep(.el-card__body) { padding: 14px 20px 2px; }
+.list-bar { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 8px; }
+.list-bar .count { font-weight: 600; }
+.tool-groups { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 10px; }
+.tool-group { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.tool-group .el-button + .el-button { margin-left: 0; }
+.group-label { font-size: 13px; color: var(--muted); margin-right: 4px; }
 .review-table .col-check { width: 36px; }
-.review-table .col-meta { width: 150px; }
+.review-table .col-meta { width: 170px; }
+.review-table .meta .tags { margin-bottom: 6px; }
+.meta-line { font-size: 13px; color: var(--muted); line-height: 1.6; }
 .review-table .col-open { width: 96px; }
 .req-text { font-weight: 500; }
 .pager { margin-top: 12px; justify-content: flex-end; flex-wrap: wrap; row-gap: 8px; }

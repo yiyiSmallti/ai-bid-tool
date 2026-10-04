@@ -8,6 +8,7 @@ import { categories, deviations, display, errorText, formatTime, label, location
 const route = useRoute(), router = useRouter();
 
 const extraction = ref(null);
+const taskName = ref("");
 const drafts = ref([]);
 const selectedDraft = ref(null);
 const preview = ref(null);
@@ -131,6 +132,7 @@ async function loadPage() {
 
   loading.value = true;
   try {
+    orgRequest("GET", `/tasks/${encodeURIComponent(taskId.value)}`).then((result) => { if (sequence === loadSequence) taskName.value = result.data.name; }).catch(() => {});
     const history = await orgRequest(
       "GET",
       `/tasks/${encodeURIComponent(taskId.value)}/extractions`,
@@ -262,7 +264,7 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="draft-page">
-    <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">任务</RouterLink><span>/</span><span>响应表初稿</span></nav>
+    <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">{{ taskName || "任务" }}</RouterLink><span>/</span><span>响应表初稿</span></nav>
     <header class="page-header">
       <div>
         <h2>响应表初稿</h2>
@@ -274,6 +276,7 @@ onBeforeUnmount(() => {
     <el-skeleton v-if="loading" :rows="4" animated aria-label="正在核对抽取记录与历史初稿" />
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
 
+    <div class="draft-top">
     <el-card v-if="jobReady" class="section" shadow="never" aria-labelledby="assemble-title">
       <template #header>
         <div class="section-title">
@@ -301,7 +304,6 @@ onBeforeUnmount(() => {
       <p v-else class="hint">先预检，核对响应行、须遵守、缺口和负偏离数量后再生成。</p>
     </el-card>
 
-    <JobPanel v-if="draftJobId" :job-id="draftJobId" :writable="canWrite" @finished="onDraftFinished" />
 
     <el-card v-if="jobReady" class="section" shadow="never" aria-labelledby="history-title">
       <template #header><div class="section-title"><h3 id="history-title">历史初稿</h3><span class="hint">{{ drafts.length }} 份</span></div></template>
@@ -320,6 +322,8 @@ onBeforeUnmount(() => {
       <el-empty v-else description="这个抽取还没有初稿。先完成响应审阅，再运行组表预检。" :image-size="64" />
     </el-card>
 
+    </div>
+    <JobPanel v-if="draftJobId" :job-id="draftJobId" :writable="canWrite" @finished="onDraftFinished" />
     <p v-for="warning in resultWarnings" :key="warning" class="notice warning">{{ warningText(warning) }}</p>
     <el-card v-if="selectedDraft" class="section draft-detail" shadow="never">
       <template #header>
@@ -407,6 +411,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .draft-page { min-width: 0; }
+.draft-top { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 16px; align-items: start; }
+@media (max-width: 1200px) { .draft-top { grid-template-columns: minmax(0, 1fr); } }
 .draft-preview .tags { margin-bottom: 8px; }
 .history-list { display: grid; gap: 8px; }
 .history-list > button { display: flex; justify-content: space-between; gap: 16px; padding: 12px 14px; text-align: left; font: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
