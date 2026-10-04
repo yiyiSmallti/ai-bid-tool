@@ -2,11 +2,11 @@
 import { onBeforeUnmount, ref } from "vue";
 import { errorText, orgRequest } from "../org.js";
 const props = defineProps({ source: Object });
-const dialog = ref(null), image = ref(null), error = ref("");
+const visible = ref(false), image = ref(null), error = ref("");
 let epoch = 0;
 async function open() {
-  if (dialog.value.open) return;
-  const attempt = ++epoch; error.value = ""; image.value = null; dialog.value.showModal();
+  if (visible.value) return;
+  const attempt = ++epoch; error.value = ""; image.value = null; visible.value = true;
   try {
     const link = await orgRequest("GET", `/evidence-sources/${props.source.id}/preview/download-link`);
     const blob = await orgRequest("GET", link.data.url, undefined, { binary: true });
@@ -16,15 +16,20 @@ async function open() {
     if (attempt === epoch) image.value = value;
   } catch (exc) { if (exc.name !== "AbortError") error.value = errorText(exc); }
 }
-function close() { epoch++; image.value = null; dialog.value?.close(); }
+function close() { epoch++; image.value = null; visible.value = false; }
 window.addEventListener("bid:org-reset", close);
 onBeforeUnmount(() => { close(); window.removeEventListener("bid:org-reset", close); });
 </script>
 <template>
-  <button @click="open">核对材料原页（第 {{ source.page }} 页）</button>
-  <dialog ref="dialog" aria-label="证书原页预览" @close="image = null; epoch++" @cancel="close">
-    <h3>{{ source.original.name }} · 第 {{ source.page }} 页</h3><button autofocus @click="close">关闭原页预览</button>
-    <p v-if="error" role="alert" class="error">{{ error }}</p><p v-else-if="!image" role="status">正在读取受权原页…</p>
+  <el-button size="small" @click="open">核对材料原页（第 {{ source.page }} 页）</el-button>
+  <el-dialog v-model="visible" :title="`${source.original.name} · 第 ${source.page} 页`" width="min(900px, 92vw)" append-to-body aria-label="证书原页预览" @closed="close">
+    <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" />
+    <el-skeleton v-else-if="!image" :rows="6" animated aria-label="正在读取受权原页" />
     <div v-if="image" class="image-scroll" tabindex="0" aria-label="可滚动放大的原页"><img :src="image" :alt="`${source.original.name} 第 ${source.page} 页`" /></div>
-  </dialog>
+    <template #footer><el-button @click="close">关闭原页预览</el-button></template>
+  </el-dialog>
 </template>
+<style scoped>
+.image-scroll { max-height: 65vh; overflow: auto; }
+.image-scroll img { max-width: none; display: block; }
+</style>

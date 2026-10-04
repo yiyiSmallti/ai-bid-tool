@@ -428,7 +428,7 @@ CLI 是对外接口：看板后端、内置 agent 和外部 agent 调用的是�
 | 网页截图 | Playwright（BrowserProvider 的默认实现） | 渲染动态页面并截图 |
 | LLM、视觉、向量、搜索、OCR | 通过接入层配置，平台默认服务待定 | 要求：结构化输出、长上下文、图片理解、不用接口数据训练 |
 | 证据标注 | Rust：clap、serde、image、sha2 | 裁剪、框选、加水印、计算哈希，作为作业里调用的独立可执行文件 |
-| 看板与管理页前端 | Vue 3 + Vite | 看板、资源库、模型配置、记忆管理 |
+| 看板与管理页前端 | Vue 3 + Vite + Element Plus | 看板、资源库、模型配置、记忆管理 |
 | 部署 | Docker Compose，之后可换 Kubernetes | 同一套镜像用于 SaaS 和私有化 |
 | 测试与 CI | pytest、cargo test、GitHub Actions | 单元测试、租户隔离测试、评测脚本 |
 

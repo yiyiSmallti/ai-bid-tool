@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref } from "vue";
+import { Plus } from "@element-plus/icons-vue";
 import { count, money, request } from "../api.js";
 
 const blank = () => ({
@@ -149,99 +150,100 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="toolbar">
-    <h2>模型</h2>
-    <button class="primary" @click="edit(null)">添加模型</button>
+  <div class="page-header">
+    <div><h2>模型</h2><p class="subtitle">设为默认的模型用于所有单位的要求抽取，并按售价计入应收。</p></div>
+    <el-button type="primary" :icon="Plus" @click="edit(null)">添加模型</el-button>
   </div>
-  <p class="hint">
-    服务商密钥只保存在部署环境变量 BID_PLATFORM_CREDENTIAL_&lt;凭据名&gt; 中，页面只显示是否已配置。设为默认的模型用于所有单位的要求抽取，并按售价计入应收。
-  </p>
-  <p v-if="error" class="error" role="alert">{{ error }}</p>
-  <form v-if="form" class="panel" @submit.prevent="save">
-    <div class="grid">
-      <label>标识<input v-model="form.id" :disabled="form.expected_revision !== null" name="model-id" placeholder="opus-standard" /></label>
-      <label>服务商
-        <select v-model="form.provider" name="provider"><option value="anthropic">Anthropic</option><option value="openai">OpenAI 兼容</option></select>
-      </label>
-      <label>模型<input v-model="form.model" name="model" /></label>
-      <label>Base URL（可选，https）<input v-model="form.base_url" name="base-url" /></label>
-      <label>凭据名<input v-model="form.credential" name="credential" placeholder="main" /></label>
-      <span class="hint">凭据名 main 对应环境变量 BID_PLATFORM_CREDENTIAL_MAIN；标识和凭据名只用小写字母、数字、_（标识还可用 -）。</span>
-      <label>成本价 输入（USD/百万 token）<input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></label>
-      <label>成本价 输出<input v-model="form.vendor_output_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-output" /></label>
-      <label>售价 输入（{{ currency }}/百万 token）<input v-model="form.sale_input_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></label>
-      <label>售价 输出（{{ currency }}）<input v-model="form.sale_output_per_mtok" type="number" min="0" step="0.01" name="sale-output" /></label>
-      <label class="inline"><input v-model="form.enabled" type="checkbox" name="enabled" />启用</label>
-      <label class="inline"><input v-model="form.default" type="checkbox" name="default" />设为默认</label>
-    </div>
-    <h3>推理强度</h3>
-    <p class="hint">
-      按服务商文档登记该模型的官方档位，例如智谱 GLM-5.3 的 low、high、max，请求参数写
-      {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}。用户抽取时可选择档位，不选时用默认档位。不登记则不分档。
-    </p>
-    <table v-if="form.levels.length" data-testid="levels">
-      <thead><tr><th>默认</th><th>名称</th><th>说明</th><th>请求参数（JSON）</th><th class="num">每批字数</th><th v-if="form.provider === 'anthropic'">effort</th><th></th></tr></thead>
+  <p class="notice">服务商密钥只保存在部署环境变量 BID_PLATFORM_CREDENTIAL_&lt;凭据名&gt; 中，页面只显示是否已配置。</p>
+  <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
+  <el-card v-if="form" shadow="never" class="section">
+    <template #header><h3 class="card-title">{{ form.expected_revision !== null ? `编辑模型 ${form.id}` : "添加模型" }}</h3></template>
+    <form class="panel el-form el-form--label-top" @submit.prevent="save">
+      <div class="grid three">
+        <el-form-item label="标识"><el-input v-model="form.id" :disabled="form.expected_revision !== null" name="model-id" placeholder="opus-standard" /></el-form-item>
+        <el-form-item label="服务商"><el-select v-model="form.provider" name="provider"><el-option value="anthropic" label="Anthropic" /><el-option value="openai" label="OpenAI 兼容" /></el-select></el-form-item>
+        <el-form-item label="模型"><el-input v-model="form.model" name="model" /></el-form-item>
+        <el-form-item label="Base URL（可选，https）"><el-input v-model="form.base_url" name="base-url" /></el-form-item>
+        <el-form-item label="凭据名"><el-input v-model="form.credential" name="credential" placeholder="main" /></el-form-item>
+        <div class="hint cred-hint">凭据名 main 对应环境变量 BID_PLATFORM_CREDENTIAL_MAIN；标识和凭据名只用小写字母、数字、_（标识还可用 -）。</div>
+      </div>
+      <div class="grid four">
+        <el-form-item label="成本价 输入（USD/百万 token）"><el-input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></el-form-item>
+        <el-form-item label="成本价 输出"><el-input v-model="form.vendor_output_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-output" /></el-form-item>
+        <el-form-item :label="`售价 输入（${currency}/百万 token）`"><el-input v-model="form.sale_input_per_mtok" type="number" min="0" step="0.01" name="sale-input" /></el-form-item>
+        <el-form-item :label="`售价 输出（${currency}）`"><el-input v-model="form.sale_output_per_mtok" type="number" min="0" step="0.01" name="sale-output" /></el-form-item>
+      </div>
+      <div class="actions"><label class="check"><input v-model="form.enabled" type="checkbox" name="enabled" />启用</label><label class="check"><input v-model="form.default" type="checkbox" name="default" />设为默认</label></div>
+      <h4>推理强度</h4>
+      <p class="hint">
+        按服务商文档登记该模型的官方档位，例如智谱 GLM-5.3 的 low、high、max，请求参数写
+        {"thinking": {"type": "enabled"}, "reasoning_effort": "high"}。用户抽取时可选择档位，不选时用默认档位。不登记则不分档。
+      </p>
+      <div v-if="form.levels.length" class="table-scroll">
+        <table class="data-table" data-testid="levels">
+          <thead><tr><th>默认</th><th>名称</th><th>说明</th><th>请求参数（JSON）</th><th class="num">每批字数</th><th v-if="form.provider === 'anthropic'">effort</th><th></th></tr></thead>
+          <tbody>
+            <tr v-for="(level, index) in form.levels" :key="index">
+              <td><input v-model="form.default_reasoning" type="radio" :value="level.name.trim().toLowerCase()" name="default-level" :aria-label="`默认档位 ${index + 1}`" /></td>
+              <td><el-input v-model="level.name" :name="`level-name-${index}`" placeholder="high" class="narrow" /></td>
+              <td><el-input v-model="level.label" :name="`level-label-${index}`" placeholder="增强推理" class="narrow" /></td>
+              <td><el-input v-model="level.options" type="textarea" :name="`level-options-${index}`" :rows="2" class="wide" /></td>
+              <td class="num"><el-input v-model="level.batch_chars" type="number" min="1000" step="1000" :name="`level-batch-${index}`" class="narrow" /></td>
+              <td v-if="form.provider === 'anthropic'"><el-input v-model="level.effort" :name="`level-effort-${index}`" placeholder="high" class="narrow" /></td>
+              <td><el-button size="small" type="danger" link @click="removeLevel(index)">删除</el-button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="actions"><el-button :icon="Plus" @click="addLevel">添加档位</el-button></div>
+      <div class="actions"><el-button type="primary" native-type="submit">保存</el-button><el-button @click="form = null">取消</el-button></div>
+    </form>
+  </el-card>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>标识</th><th>服务商 / 模型</th><th>凭据</th><th class="num">成本价 入/出（USD）</th><th class="num">售价 入/出（{{ currency }}）</th><th>状态</th><th class="num">操作</th></tr></thead>
       <tbody>
-        <tr v-for="(level, index) in form.levels" :key="index">
-          <td><input v-model="form.default_reasoning" type="radio" :value="level.name.trim().toLowerCase()" :name="`default-level`" :aria-label="`默认档位 ${index + 1}`" /></td>
-          <td><input v-model="level.name" :name="`level-name-${index}`" placeholder="high" size="8" /></td>
-          <td><input v-model="level.label" :name="`level-label-${index}`" placeholder="增强推理" size="10" /></td>
-          <td><textarea v-model="level.options" :name="`level-options-${index}`" rows="2" cols="40"></textarea></td>
-          <td class="num"><input v-model="level.batch_chars" type="number" min="1000" step="1000" :name="`level-batch-${index}`" size="7" /></td>
-          <td v-if="form.provider === 'anthropic'"><input v-model="level.effort" :name="`level-effort-${index}`" placeholder="high" size="6" /></td>
-          <td><button type="button" @click="removeLevel(index)">删除</button></td>
+        <tr v-for="model in models" :key="model.id">
+          <td><strong>{{ model.id }}</strong><div class="hint">第 {{ model.revision }} 版 · {{ model.updated_by }}</div></td>
+          <td>
+            {{ model.provider }}<div class="hint">{{ model.model }}</div>
+            <div v-if="model.reasoning?.length" class="hint" data-testid="levels-summary">推理强度：<span v-for="(level, index) in model.reasoning" :key="level.name">{{ index ? " / " : "" }}{{ level.name }}{{ level.name === model.default_reasoning ? "（默认）" : "" }}</span></div>
+          </td>
+          <td>{{ model.credential }} <span class="tag" :class="model.credential_configured ? 'success' : 'danger'">{{ model.credential_configured ? "已配置" : "未配置" }}</span></td>
+          <td class="num">{{ model.vendor_input_usd_per_mtok }} / {{ model.vendor_output_usd_per_mtok }}</td>
+          <td class="num">{{ model.sale_input_per_mtok }} / {{ model.sale_output_per_mtok }}</td>
+          <td><div class="tags"><span v-if="model.default" class="tag success">默认</span><span v-if="!model.enabled" class="tag">已停用</span></div></td>
+          <td class="num">
+            <div class="row-actions"><el-button size="small" @click="edit(model)">编辑</el-button><el-button size="small" @click="test(model)">测试</el-button></div>
+            <div v-if="tests[model.id]" class="hint test-result" data-testid="test-result">
+              <template v-if="tests[model.id].running">测试中…</template>
+              <template v-else-if="tests[model.id].levels">
+                <div v-for="level in tests[model.id].levels" :key="level.reasoning" :data-testid="`level-result-${level.reasoning}`">
+                  {{ level.reasoning }}：<template v-if="level.passed">通过 · {{ count(level.usage.tokens) }} token · {{ money(level.usage.charge, currency) }}</template
+                  ><template v-else-if="level.error.code === 'provider_quota_exhausted'">未通过：服务商额度已用完或套餐不可用（{{ level.error.message }}）</template
+                  ><template v-else>未通过：{{ level.error.code }}（{{ level.error.message }}）</template>
+                </div>
+              </template>
+              <template v-else-if="tests[model.id].passed">通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge, currency) }}</template>
+              <template v-else-if="tests[model.id].error.code === 'provider_quota_exhausted'">未通过：服务商额度已用完或套餐不可用（{{ tests[model.id].error.message }}）</template>
+              <template v-else>未通过：{{ tests[model.id].error.code }}（{{ tests[model.id].error.message }}）</template>
+            </div>
+          </td>
         </tr>
+        <tr v-if="!models.length"><td colspan="7" class="empty">还没有模型。添加一个并设为默认后，单位的要求抽取会使用它。</td></tr>
       </tbody>
     </table>
-    <p><button type="button" @click="addLevel">添加档位</button></p>
-    <p><button class="primary" type="submit">保存</button> <button type="button" @click="form = null">取消</button></p>
-  </form>
-  <table>
-    <thead>
-      <tr><th>标识</th><th>服务商 / 模型</th><th>凭据</th><th class="num">成本价 入/出（USD）</th><th class="num">售价 入/出（{{ currency }}）</th><th>状态</th><th></th></tr>
-    </thead>
-    <tbody>
-      <tr v-for="model in models" :key="model.id">
-        <td>{{ model.id }}<div class="hint">第 {{ model.revision }} 版 · {{ model.updated_by }}</div></td>
-        <td>
-          {{ model.provider }}<div class="hint">{{ model.model }}</div>
-          <div v-if="model.reasoning?.length" class="hint" data-testid="levels-summary">
-            推理强度：<span v-for="(level, index) in model.reasoning" :key="level.name">{{ index ? " / " : "" }}{{ level.name }}{{ level.name === model.default_reasoning ? "（默认）" : "" }}</span>
-          </div>
-        </td>
-        <td>
-          {{ model.credential }}
-          <span :class="['badge', model.credential_configured ? 'ok' : 'bad']">{{ model.credential_configured ? "已配置" : "未配置" }}</span>
-        </td>
-        <td class="num">{{ model.vendor_input_usd_per_mtok }} / {{ model.vendor_output_usd_per_mtok }}</td>
-        <td class="num">{{ model.sale_input_per_mtok }} / {{ model.sale_output_per_mtok }}</td>
-        <td>
-          <span v-if="model.default" class="badge ok">默认</span>
-          <span v-if="!model.enabled" class="badge">已停用</span>
-        </td>
-        <td class="num">
-          <button @click="edit(model)">编辑</button>
-          <button @click="test(model)">测试</button>
-          <div v-if="tests[model.id]" class="hint" data-testid="test-result">
-            <template v-if="tests[model.id].running">测试中…</template>
-            <template v-else-if="tests[model.id].levels">
-              <div v-for="level in tests[model.id].levels" :key="level.reasoning" :data-testid="`level-result-${level.reasoning}`">
-                {{ level.reasoning }}：<template v-if="level.passed">通过 · {{ count(level.usage.tokens) }} token · {{ money(level.usage.charge, currency) }}</template
-                ><template v-else-if="level.error.code === 'provider_quota_exhausted'">未通过：服务商额度已用完或套餐不可用（{{ level.error.message }}）</template
-                ><template v-else>未通过：{{ level.error.code }}（{{ level.error.message }}）</template>
-              </div>
-            </template>
-            <template v-else-if="tests[model.id].passed">
-              通过 · {{ count(tests[model.id].usage.tokens) }} token · {{ money(tests[model.id].usage.charge, currency) }}
-            </template>
-            <template v-else-if="tests[model.id].error.code === 'provider_quota_exhausted'">
-              未通过：服务商额度已用完或套餐不可用（{{ tests[model.id].error.message }}）
-            </template>
-            <template v-else>未通过：{{ tests[model.id].error.code }}（{{ tests[model.id].error.message }}）</template>
-          </div>
-        </td>
-      </tr>
-      <tr v-if="!models.length"><td colspan="7" class="hint">还没有模型。添加一个并设为默认后，单位的要求抽取会使用它。</td></tr>
-    </tbody>
-  </table>
+  </div>
 </template>
+<style scoped>
+.card-title { margin: 0; }
+.grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.cred-hint { align-self: center; }
+.narrow { width: 120px; }
+.wide { min-width: 260px; }
+.row-actions { display: inline-flex; gap: 6px; }
+.row-actions .el-button + .el-button { margin-left: 0; }
+.test-result { margin-top: 6px; text-align: left; }
+@media (max-width: 900px) { .grid.three, .grid.four { grid-template-columns: minmax(0, 1fr); } }
+</style>

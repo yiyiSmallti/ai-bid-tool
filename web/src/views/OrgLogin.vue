@@ -1,4 +1,5 @@
 <script setup>
+import { Coin, OfficeBuilding } from "@element-plus/icons-vue";
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import { orgSession, request } from "../api.js";
@@ -60,25 +61,28 @@ async function enter(org) {
 </script>
 
 <template>
-  <div class="center">
+  <el-card class="auth-card" shadow="always">
+    <div class="auth-brand"><el-icon :size="20"><Coin /></el-icon>AI 标书工具</div>
     <h2>单位登录</h2>
     <p class="hint">平台管理员请使用<RouterLink to="/platform/login">平台后台登录</RouterLink>。</p>
-    <p v-if="retrySeconds" class="notice" role="status">请求受限，请在 {{ retrySeconds }} 秒后重试。</p>
-    <form v-if="!orgs" @submit.prevent="lookup">
-      <label>邮箱<input v-model="email" type="email" autocomplete="username" name="email" /></label>
-      <label>密码<input v-model="password" type="password" autocomplete="current-password" name="password" /></label>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <p v-if="noOrg" class="notice" role="alert">
-        这个账号还没有加入任何单位。平台管理员请从<RouterLink to="/platform/login">平台后台</RouterLink>登录。
-      </p>
-      <button class="primary" type="submit" :disabled="busy || retrySeconds > 0">登录</button>
-    </form>
-    <div v-else class="choices">
+    <el-alert v-if="retrySeconds" :title="`请求受限，请在 ${retrySeconds} 秒后重试。`" type="warning" :closable="false" role="status" />
+    <el-form v-if="!orgs" label-position="top" @submit.prevent="lookup">
+      <el-form-item label="邮箱"><el-input v-model="email" type="email" autocomplete="username" name="email" size="large" /></el-form-item>
+      <el-form-item label="密码"><el-input v-model="password" type="password" autocomplete="current-password" name="password" size="large" show-password /></el-form-item>
+      <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
+      <el-alert v-if="noOrg" type="info" :closable="false" role="alert" class="section">这个账号还没有加入任何单位。平台管理员请从<RouterLink to="/platform/login">平台后台</RouterLink>登录。</el-alert>
+      <el-button type="primary" native-type="submit" size="large" :loading="busy" :disabled="retrySeconds > 0">登录</el-button>
+    </el-form>
+    <div v-else class="stack">
       <p class="hint">选择要进入的单位</p>
-      <button v-for="org in orgs" :key="org.org_id" :disabled="!org.active || busy || retrySeconds > 0" @click="enter(org)">
+      <el-button v-for="org in orgs" :key="org.org_id" class="org-choice" size="large" :icon="OfficeBuilding" :disabled="!org.active || busy || retrySeconds > 0" @click="enter(org)">
         {{ org.name }}<span class="hint">{{ org.active ? "" : "（已停用）" }}</span>
-      </button>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
+      </el-button>
+      <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" />
     </div>
-  </div>
+  </el-card>
 </template>
+
+<style scoped>
+.org-choice { width: 100%; justify-content: flex-start; margin-left: 0 !important; }
+</style>

@@ -1,11 +1,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 
 import JobPanel from "../components/JobPanel.vue";
-import { display, errorText, locationLabel, orgAccess, orgRequest } from "../org.js";
+import { categories, deviations, display, errorText, formatTime, label, locationLabel, orgAccess, orgRequest, responseKinds, warningText } from "../org.js";
 
-const route = useRoute();
+const route = useRoute(), router = useRouter();
 
 const extraction = ref(null);
 const drafts = ref([]);
@@ -262,188 +262,113 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="draft-page">
-    <header class="page-heading">
+    <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">任务</RouterLink><span>/</span><span>响应表初稿</span></nav>
+    <header class="page-header">
       <div>
         <h2>响应表初稿</h2>
-        <p class="hint">固定抽取 job {{ jobId || "未知" }}。初稿不会导出，也不代表整份投标文件已经完成。</p>
+        <p class="subtitle">固定抽取 <code>{{ jobId || "未知" }}</code>。初稿不会导出，也不代表整份投标文件已经完成。</p>
       </div>
-      <RouterLink :to="reviewHref()">返回逐条审阅</RouterLink>
+      <el-button @click="router.push(reviewHref())">返回逐条审阅</el-button>
     </header>
 
-    <p v-if="loading" class="notice" role="status">正在核对抽取记录与历史初稿…</p>
-    <p v-if="error" class="error" role="alert">{{ error }}</p>
+    <el-skeleton v-if="loading" :rows="4" animated aria-label="正在核对抽取记录与历史初稿" />
+    <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
 
-    <section v-if="jobReady" class="panel" aria-labelledby="assemble-title">
-      <div class="section-heading">
-        <div>
-          <h3 id="assemble-title">组表</h3>
-          <p class="hint">组表只复制已经人工确认的内容，不调用模型或 OCR。</p>
+    <el-card v-if="jobReady" class="section" shadow="never" aria-labelledby="assemble-title">
+      <template #header>
+        <div class="section-title">
+          <div><h3 id="assemble-title">组表</h3><p class="hint">组表只复制已经人工确认的内容，不调用模型或 OCR。</p></div>
+          <el-button v-if="canWrite" type="primary" plain :loading="previewing" :disabled="submitting" @click="previewDraft">预检组表</el-button>
+          <span v-else class="hint">当前角色只读</span>
         </div>
-        <button
-          v-if="canWrite"
-          type="button"
-          :disabled="previewing || submitting"
-          @click="previewDraft"
-        >
-          {{ previewing ? "预检中…" : "预检组表" }}
-        </button>
-        <span v-else class="hint">当前角色只读</span>
-      </div>
-
+      </template>
       <div v-if="preview" class="draft-preview">
-        <div class="metric-grid">
-          <div><span>响应行</span><strong>{{ preview.response_requirements }}</strong></div>
-          <div><span>须遵守</span><strong>{{ preview.comply_only_requirements }}</strong></div>
-          <div><span>缺口</span><strong>{{ preview.gap_requirements }}</strong></div>
-          <div class="negative"><span>负偏离</span><strong>{{ preview.negative_deviations }}</strong></div>
+        <div class="stat-grid">
+          <div class="stat"><span class="label">响应行</span><span class="value">{{ preview.response_requirements }}</span></div>
+          <div class="stat"><span class="label">须遵守</span><span class="value">{{ preview.comply_only_requirements }}</span></div>
+          <div class="stat"><span class="label">缺口</span><span class="value">{{ preview.gap_requirements }}</span></div>
+          <div class="stat danger"><span class="label">负偏离</span><span class="value">{{ preview.negative_deviations }}</span></div>
         </div>
-        <div class="table-counts">
-          <span>实质性 {{ preview.table_rows?.substantive ?? 0 }}</span>
-          <span>商务 {{ preview.table_rows?.commercial ?? 0 }}</span>
-          <span>技术 {{ preview.table_rows?.technical ?? 0 }}</span>
-        </div>
+        <div class="tags"><span class="tag">实质性 {{ preview.table_rows?.substantive ?? 0 }}</span><span class="tag">商务 {{ preview.table_rows?.commercial ?? 0 }}</span><span class="tag">技术 {{ preview.table_rows?.technical ?? 0 }}</span></div>
         <details v-if="Object.keys(preview.gap_reasons ?? {}).length">
           <summary>按原因查看缺口</summary>
-          <ul>
-            <li v-for="(count, reason) in preview.gap_reasons" :key="reason">
-              {{ gapLabels[reason] ?? reason }}：{{ count }}
-            </li>
-          </ul>
+          <ul><li v-for="(count, reason) in preview.gap_reasons" :key="reason">{{ gapLabels[reason] ?? reason }}：{{ count }}</li></ul>
         </details>
-        <p class="hint">
-          本次预检实际模型成本为 {{ display(preview.estimated_cost?.usd) }} USD；这是确定性组表的零成本，不抵消此前模型起草费用。
-        </p>
-        <p class="hint">
-          输入标识 <code>{{ preview.input_hash }}</code> · 预计时长
-          {{ preview.estimated_duration_ms == null ? "未知" : `${preview.estimated_duration_ms} ms` }}
-        </p>
-        <label class="inline"><input v-model="retry" type="checkbox" />显式重试已失败或取消的组表作业</label>
-        <button class="primary" type="button" :disabled="submitting" @click="submitDraft">
-          {{ submitting ? "提交中…" : "确认生成初稿" }}
-        </button>
+        <p class="hint">本次预检实际模型成本为 {{ display(preview.estimated_cost?.usd) }} USD；这是确定性组表的零成本，不抵消此前模型起草费用。</p>
+        <p class="hint">输入标识 <code>{{ preview.input_hash }}</code> · 预计时长 {{ preview.estimated_duration_ms == null ? "未知" : `${preview.estimated_duration_ms} ms` }}</p>
+        <div class="actions"><label class="check"><input v-model="retry" type="checkbox" />显式重试已失败或取消的组表作业</label><el-button type="primary" :loading="submitting" @click="submitDraft">确认生成初稿</el-button></div>
       </div>
-    </section>
+      <p v-else class="hint">先预检，核对响应行、须遵守、缺口和负偏离数量后再生成。</p>
+    </el-card>
 
-    <JobPanel
-      v-if="draftJobId"
-      :job-id="draftJobId"
-      :writable="canWrite"
-      @finished="onDraftFinished"
-    />
+    <JobPanel v-if="draftJobId" :job-id="draftJobId" :writable="canWrite" @finished="onDraftFinished" />
 
-    <section v-if="jobReady" aria-labelledby="history-title">
-      <div class="section-heading">
-        <h3 id="history-title">历史初稿</h3>
-        <span class="hint">{{ drafts.length }} 份</span>
-      </div>
+    <el-card v-if="jobReady" class="section" shadow="never" aria-labelledby="history-title">
+      <template #header><div class="section-title"><h3 id="history-title">历史初稿</h3><span class="hint">{{ drafts.length }} 份</span></div></template>
       <div v-if="drafts.length" class="history-list">
-        <button
-          v-for="item in drafts"
-          :key="item.id"
-          type="button"
-          :class="{ selected: selectedDraft?.id === item.id }"
-          @click="showDraft(item.id)"
-        >
-          <span>
-            <strong>{{ item.created_at ? new Date(item.created_at).toLocaleString("zh-CN") : "创建时间未知" }}</strong>
-            <small><code>{{ item.id }}</code></small>
-          </span>
+        <button v-for="item in drafts" :key="item.id" type="button" :class="{ selected: selectedDraft?.id === item.id }" @click="showDraft(item.id)">
+          <span class="history-main"><strong>{{ item.created_at ? formatTime(item.created_at) : "创建时间未知" }}</strong><small class="hint mono">{{ item.id }}</small></span>
           <span class="history-status">
-            <span class="badge" :class="item.completion === 'complete' && item.validity === 'current' ? 'ok' : 'bad'">
-              {{ item.completion === "complete" && item.validity === "stale" ? "历史快照完整" : statusLabels[item.completion] }}
+            <span class="tags">
+              <span class="tag" :class="item.completion === 'complete' && item.validity === 'current' ? 'success' : 'danger'">{{ item.completion === "complete" && item.validity === "stale" ? "历史快照完整" : statusLabels[item.completion] }}</span>
+              <span class="tag" :class="item.validity === 'current' ? 'success' : 'danger'">{{ statusLabels[item.validity] }}</span>
             </span>
-            <span class="badge" :class="item.validity === 'current' ? 'ok' : 'bad'">{{ statusLabels[item.validity] }}</span>
-            <small>行 {{ item.summary.rows }} · 遵守 {{ item.summary.comply_only }} · 缺口 {{ item.summary.gaps }} · 负偏离 {{ item.summary.negative_deviations }}</small>
+            <small class="hint">行 {{ item.summary.rows }} · 遵守 {{ item.summary.comply_only }} · 缺口 {{ item.summary.gaps }} · 负偏离 {{ item.summary.negative_deviations }}</small>
           </span>
         </button>
       </div>
-      <p v-else class="notice">这个抽取 job 还没有初稿。先完成响应审阅，再运行组表预检。</p>
-    </section>
+      <el-empty v-else description="这个抽取还没有初稿。先完成响应审阅，再运行组表预检。" :image-size="64" />
+    </el-card>
 
-    <p v-for="warning in resultWarnings" :key="warning" class="notice">{{ warning }}</p>
-    <article v-if="selectedDraft" class="draft-detail">
-      <header class="detail-heading">
-        <div>
-          <h3>初稿详情</h3>
-          <p class="hint">status={{ selectedDraft.status }} · 输入 job {{ selectedDraft.extraction_job_id }}</p>
+    <p v-for="warning in resultWarnings" :key="warning" class="notice warning">{{ warningText(warning) }}</p>
+    <el-card v-if="selectedDraft" class="section draft-detail" shadow="never">
+      <template #header>
+        <div class="section-title">
+          <div><h3>初稿详情</h3><p class="hint">输入抽取 <code>{{ selectedDraft.extraction_job_id }}</code></p></div>
+          <div class="tags">
+            <el-tag :type="selectedDraft.completion === 'complete' && selectedDraft.validity === 'current' ? 'success' : 'danger'">{{ selectedDraft.completion === "complete" && selectedDraft.validity === "stale" ? "历史快照完整（不可交付）" : statusLabels[selectedDraft.completion] }}</el-tag>
+            <el-tag :type="selectedDraft.validity === 'current' ? 'success' : 'danger'">{{ statusLabels[selectedDraft.validity] }}</el-tag>
+          </div>
         </div>
-        <div class="statuses">
-          <span class="badge" :class="selectedDraft.completion === 'complete' && selectedDraft.validity === 'current' ? 'ok' : 'bad'">
-            {{ selectedDraft.completion === "complete" && selectedDraft.validity === "stale" ? "历史快照完整（不可交付）" : statusLabels[selectedDraft.completion] }}
-          </span>
-          <span class="badge" :class="selectedDraft.validity === 'current' ? 'ok' : 'bad'">
-            {{ statusLabels[selectedDraft.validity] }}
-          </span>
-        </div>
-      </header>
+      </template>
 
-      <div v-if="selectedDraft.validity === 'stale'" class="stale-warning" role="alert">
-        <strong>这份历史快照已经失效。</strong>
-        <span>原内容仍保留，但 {{ selectedDraft.invalidated_requirements.length }} 条要求已受当前卡片、材料或引用变化影响。请返回审阅后重新组表。</span>
+      <el-alert v-if="selectedDraft.validity === 'stale'" type="warning" show-icon :closable="false" role="alert" class="section">
+        <template #title>这份历史快照已经失效。</template>
+        <p>原内容仍保留，但 {{ selectedDraft.invalidated_requirements.length }} 条要求已受当前卡片、材料或引用变化影响。请返回审阅后重新组表。</p>
         <details>
           <summary>查看受影响要求</summary>
-          <ul>
-            <li v-for="requirementId in selectedDraft.invalidated_requirements" :key="requirementId">
-              <RouterLink :to="reviewHref(requirementId)"><code>{{ requirementId }}</code></RouterLink>
-            </li>
-          </ul>
+          <ul><li v-for="requirementId in selectedDraft.invalidated_requirements" :key="requirementId"><RouterLink :to="reviewHref(requirementId)"><code>{{ requirementId }}</code></RouterLink></li></ul>
         </details>
-      </div>
-      <div v-if="negativeRows.length" class="negative-warning">
-        <strong>{{ negativeRows.length }} 条负偏离始终保留在响应表中。</strong>
-        <span>负偏离不是缺口，请在对应表内逐条核对。</span>
-      </div>
+      </el-alert>
+      <p v-if="negativeRows.length" class="notice danger"><strong>{{ negativeRows.length }} 条负偏离始终保留在响应表中。</strong>负偏离不是缺口，请在对应表内逐条核对。</p>
 
-      <nav class="section-tabs" aria-label="初稿分区">
-        <button
-          v-for="section in sections"
-          :key="section.id"
-          type="button"
-          :class="{ active: activeSection === section.id }"
-          @click="activeSection = section.id"
-        >
-          {{ section.label }} <span>{{ section.rows.length }}</span>
-        </button>
-      </nav>
+      <el-tabs v-model="activeSection" class="section-tabs" aria-label="初稿分区">
+        <el-tab-pane v-for="section in sections" :key="section.id" :name="section.id">
+          <template #label>{{ section.label }} <span class="count">{{ section.rows.length }}</span></template>
+        </el-tab-pane>
+      </el-tabs>
 
       <div class="list-toolbar">
-        <label>
-          筛选当前分区
-          <input v-model="query" type="search" placeholder="原文、位置、响应、原因或要求 ID" />
-        </label>
+        <el-input v-model="query" type="search" clearable placeholder="原文、位置、响应、原因或要求 ID" aria-label="筛选当前分区" class="filter" />
         <span class="hint">匹配 {{ filteredRows.length }} / {{ currentSection.rows.length }}</span>
       </div>
 
-      <div class="table-wrap" tabindex="0" aria-label="初稿表格滚动区域">
-        <table v-if="activeSection !== 'comply_only' && activeSection !== 'gaps'">
-          <thead>
-            <tr><th>要求与位置</th><th>响应</th><th>偏离</th><th>证据</th><th>操作</th></tr>
-          </thead>
+      <div class="table-scroll" tabindex="0" aria-label="初稿表格滚动区域">
+        <table v-if="activeSection !== 'comply_only' && activeSection !== 'gaps'" class="data-table">
+          <thead><tr><th>要求与位置</th><th>响应</th><th>偏离</th><th>证据</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="row in visibleRows" :key="row.requirement_id" :class="{ 'negative-row': row.deviation === 'negative' }">
-              <td>
-                <div class="row-meta"><span v-if="row.starred" class="star">★</span>{{ row.category }}</div>
-                <blockquote>{{ row.tender_clause.quote }}</blockquote>
-                <small>{{ sourceLabel(row) }}</small>
+              <td class="col-req">
+                <div class="tags"><span v-if="row.starred" class="tag star">★</span><span class="tag">{{ label(categories, row.category) }}</span></div>
+                <blockquote class="quote">{{ row.tender_clause.quote }}</blockquote>
+                <small class="hint">{{ sourceLabel(row) }}</small>
               </td>
-              <td>
-                <span class="badge">{{ row.response_kind === "commitment" ? "承诺" : "证据响应" }}</span>
-                <p class="response-text">{{ row.response_text }}</p>
-              </td>
-              <td>
-                <strong>{{ row.deviation }}</strong>
-                <p>{{ row.deviation_note }}</p>
-              </td>
+              <td><span class="tag primary">{{ label(responseKinds, row.response_kind) }}</span><p class="response-text">{{ row.response_text }}</p></td>
+              <td><span class="tag" :class="row.deviation === 'negative' ? 'danger' : row.deviation === 'positive' ? 'success' : ''">{{ label(deviations, row.deviation) }}</span><p class="response-text">{{ row.deviation_note }}</p></td>
               <td>
                 <details v-if="row.evidence?.length">
                   <summary>{{ row.evidence.length }} 项已确认材料</summary>
-                  <ul class="evidence-list">
-                    <li v-for="evidence in row.evidence" :key="evidence.id">
-                      <code>{{ evidence.id }}</code>
-                      <span>{{ evidence.input?.kind }} · {{ evidence.input?.field_path ?? `来源 ${display(evidence.input?.evidence_source_id)}` }}</span>
-                      <q>{{ evidence.input?.quote }}</q>
-                    </li>
-                  </ul>
+                  <ul class="evidence-list"><li v-for="evidence in row.evidence" :key="evidence.id"><span class="hint">{{ evidence.input?.kind }} · {{ evidence.input?.field_path ?? `来源 ${display(evidence.input?.evidence_source_id)}` }}</span><q>{{ evidence.input?.quote }}</q></li></ul>
                 </details>
                 <span v-else class="hint">承诺不附证据</span>
               </td>
@@ -451,86 +376,57 @@ onBeforeUnmount(() => {
             </tr>
           </tbody>
         </table>
-
-        <table v-else-if="activeSection === 'comply_only'">
+        <table v-else-if="activeSection === 'comply_only'" class="data-table">
           <thead><tr><th>招标原文</th><th>位置</th><th>人工决定</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="row in visibleRows" :key="row.requirement_id">
-              <td><blockquote>{{ row.tender_clause.quote }}</blockquote></td>
-              <td>{{ sourceLabel(row) }}</td>
-              <td>仅需遵守 · {{ new Date(row.disposition_at).toLocaleString("zh-CN") }}</td>
+              <td><blockquote class="quote">{{ row.tender_clause.quote }}</blockquote></td>
+              <td class="hint">{{ sourceLabel(row) }}</td>
+              <td>仅需遵守 · {{ formatTime(row.disposition_at) }}</td>
               <td><RouterLink :to="reviewHref(row.requirement_id)">回到审阅</RouterLink></td>
             </tr>
           </tbody>
         </table>
-
-        <table v-else>
+        <table v-else class="data-table">
           <thead><tr><th>招标原文</th><th>位置</th><th>缺口原因</th><th>操作</th></tr></thead>
           <tbody>
             <tr v-for="row in visibleRows" :key="row.requirement_id">
-              <td><blockquote>{{ row.tender_clause.quote }}</blockquote></td>
-              <td>{{ sourceLabel(row) }}</td>
-              <td>
-                <ul class="reason-list"><li v-for="reason in row.reasons" :key="reason">{{ gapLabels[reason] ?? reason }}</li></ul>
-              </td>
+              <td><blockquote class="quote">{{ row.tender_clause.quote }}</blockquote></td>
+              <td class="hint">{{ sourceLabel(row) }}</td>
+              <td><div class="tags"><span v-for="reason in row.reasons" :key="reason" class="tag warning">{{ gapLabels[reason] ?? reason }}</span></div></td>
               <td><RouterLink :to="reviewHref(row.requirement_id)">回到审阅</RouterLink></td>
             </tr>
           </tbody>
         </table>
       </div>
-
-      <p v-if="!visibleRows.length" class="notice">当前筛选没有结果。</p>
-      <div v-if="filteredRows.length > pageSize" class="pagination">
-        <button type="button" :disabled="page <= 1" @click="page -= 1">上一页</button>
-        <span>第 {{ page }} / {{ totalPages }} 页</span>
-        <button type="button" :disabled="page >= totalPages" @click="page += 1">下一页</button>
-      </div>
-    </article>
+      <el-empty v-if="!visibleRows.length" description="当前筛选没有结果" :image-size="64" />
+      <el-pagination v-if="filteredRows.length > pageSize" v-model:current-page="page" class="pager" background layout="total, prev, pager, next" :page-size="pageSize" :total="filteredRows.length" />
+    </el-card>
   </div>
 </template>
 
 <style scoped>
 .draft-page { min-width: 0; }
-.page-heading, .section-heading, .detail-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
-h2, h3 { margin: 0 0 4px; }
-.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin: 12px 0; }
-.metric-grid > div { background: var(--surface); border-radius: 8px; padding: 10px 12px; display: flex; flex-direction: column; }
-.metric-grid span, .table-counts { color: var(--muted); font-size: 12px; }
-.metric-grid strong { font-size: 22px; }
-.metric-grid .negative { background: #fff0ef; color: var(--danger); }
-.table-counts { display: flex; gap: 16px; flex-wrap: wrap; }
-.history-list { display: grid; gap: 8px; margin-bottom: 20px; }
-.history-list > button { display: flex; justify-content: space-between; gap: 16px; padding: 10px 12px; text-align: left; }
-.history-list > button.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
-.history-list button > span { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.history-list code { overflow-wrap: anywhere; }
+.draft-preview .tags { margin-bottom: 8px; }
+.history-list { display: grid; gap: 8px; }
+.history-list > button { display: flex; justify-content: space-between; gap: 16px; padding: 12px 14px; text-align: left; font: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; cursor: pointer; }
+.history-list > button:hover { border-color: var(--el-color-primary-light-5); }
+.history-list > button.selected { border-color: var(--el-color-primary); box-shadow: 0 0 0 1px var(--el-color-primary); background: var(--el-color-primary-light-9); }
+.history-main, .history-status { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .history-status { align-items: flex-end; }
-.draft-detail { border-top: 1px solid var(--border); padding-top: 18px; }
-.statuses { display: flex; gap: 6px; }
-.stale-warning, .negative-warning { display: flex; flex-direction: column; gap: 3px; border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; }
-.stale-warning { background: #fff4dc; color: #765000; }
-.negative-warning { background: #fff0ef; color: var(--danger); }
-.section-tabs { display: flex; gap: 6px; overflow-x: auto; margin: 16px 0 12px; padding-bottom: 2px; }
-.section-tabs button { white-space: nowrap; }
-.section-tabs button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.section-tabs button span { opacity: .75; }
-.list-toolbar { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
-.list-toolbar label { flex: 1; max-width: 520px; }
-.table-wrap { overflow-x: auto; }
-.table-wrap table { min-width: 780px; }
-.table-wrap blockquote { margin: 3px 0 7px; white-space: pre-wrap; }
-.row-meta { color: var(--muted); font-size: 12px; }
-.star { color: #b26a00; margin-right: 4px; }
-.response-text, td p { white-space: pre-wrap; margin: 7px 0; }
+.section-tabs .count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 10px; background: var(--surface-muted); color: var(--muted); font-size: 12px; line-height: 18px; text-align: center; }
+.list-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.list-toolbar .filter { max-width: 420px; }
+.data-table { min-width: 780px; }
+.col-req { min-width: 260px; }
+.response-text { white-space: pre-wrap; margin: 6px 0; }
 .negative-row { background: #fff8f7; }
-.negative-row td:nth-child(3) strong { color: var(--danger); }
-.evidence-list, .reason-list { margin: 7px 0; padding-left: 18px; }
+.evidence-list { margin: 6px 0; padding-left: 18px; }
 .evidence-list li { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
 .evidence-list q { white-space: pre-wrap; }
-.pagination { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 14px; }
+.pager { margin-top: 12px; justify-content: center; }
 @media (max-width: 720px) {
-  .page-heading, .section-heading, .detail-heading, .list-toolbar { flex-direction: column; align-items: stretch; }
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .list-toolbar { flex-direction: column; align-items: stretch; }
   .history-list > button { flex-direction: column; }
   .history-status { align-items: flex-start; }
 }

@@ -1,15 +1,16 @@
 <script setup>
+import { Back, Document, Search } from "@element-plus/icons-vue";
 import { computed, nextTick, onMounted, reactive, ref, shallowRef, watch } from "vue";
 import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { orgSession } from "../api.js";
-import { categories, display, domainFor, errorText, locationLabel, mine, orgAccess, orgRequest, recalled, remember, states } from "../org.js";
+import { categories, confirmAction, display, domainFor, domains, eligibilities, errorText, label, locationLabel, mine, orgAccess, orgRequest, recalled, remember, states, statusTag, warningText } from "../org.js";
 import CardEditor from "../components/CardEditor.vue";
 import GenerationPanel from "../components/GenerationPanel.vue";
 const route = useRoute(), router = useRouter(), taskId = route.params.taskId, jobId = String(route.query.job ?? "");
 const task = ref(null), job = ref(null), docs = ref([]), rows = shallowRef(null), selectedRow = ref(null), dirty = ref(false), error = ref(""), notice = ref(""), warnings = ref([]);
 const filters = reactive({ category: "", state: "", domain: "", disposition: "", starred: false, mine: false, gaps: false, query: "" });
-const page = ref(1), pageSize = ref(50), selected = ref([]), batch = ref([]), batchDialog = ref(null), batchBusy = ref(false), batchStale = ref(false), batchError = ref(""), materialRevision = ref(0);
-const title = ref(null), lastTrigger = ref(null);
+const page = ref(1), pageSize = ref(50), selected = ref([]), batch = ref([]), batchOpen = ref(false), batchBusy = ref(false), batchStale = ref(false), batchError = ref(""), materialRevision = ref(0);
+const title = ref(null), lastTrigger = ref(null), generationOpen = ref([]);
 const writable = computed(() => orgAccess.role && orgAccess.role !== "viewer");
 const isGap = (row) => !["eligible", "comply_only"].includes(row.card?.eligibility);
 const filtered = computed(() => (rows.value ?? []).filter(row => {
@@ -19,8 +20,9 @@ const filtered = computed(() => (rows.value ?? []).filter(row => {
 const pages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageSize.value)));
 const visible = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
 const summary = computed(() => rows.value ? { total: rows.value.length, confirmed: rows.value.filter(r => r.card?.state === "confirmed").length, comply: rows.value.filter(r => r.card?.eligibility === "comply_only").length, gaps: rows.value.filter(isGap).length, negative: rows.value.filter(r => r.card?.content.deviation === "negative").length } : null);
+const documentName = (id) => docs.value.find(d => d.id === id)?.name;
 function batchAllowed(row) { return mine(domainFor(row)) && !["pending_review", "confirmed"].includes(row.status); }
-function discard() { return !dirty.value || !orgSession.get() || window.confirm("有未保存的响应编辑。离开将丢弃这些编辑，继续？"); }
+async function discard() { return !dirty.value || !orgSession.get() || await confirmAction("有未保存的响应编辑。离开将丢弃这些编辑，继续？", "放弃未保存的编辑", "放弃编辑", true); }
 onBeforeRouteLeave(discard);
 onBeforeRouteUpdate((to) => (to.query.job !== jobId || to.params.taskId !== taskId || String(to.query.requirement ?? "") !== (selectedRow.value?.id ?? "")) ? discard() : true);
 function storePosition() { remember(`review.${taskId}.${jobId}`, { requirementId: selectedRow.value?.id ?? null, page: page.value, pageSize: pageSize.value, category: filters.category, state: filters.state, domain: filters.domain, disposition: filters.disposition, starred: filters.starred, mine: filters.mine, gaps: filters.gaps }); }
@@ -56,12 +58,13 @@ async function load() {
   } catch (exc) { rows.value = null; error.value = errorText(exc); }
 }
 async function open(row, event) {
-  if (!discard()) return;
-  dirty.value = false; selectedRow.value = row; lastTrigger.value = event?.currentTarget ?? null;
+  const trigger = event?.currentTarget ?? null;
+  if (!(await discard())) return;
+  dirty.value = false; selectedRow.value = row; lastTrigger.value = trigger;
   storePosition(); await router.replace({ query: { job: jobId, requirement: row.id } });
 }
 async function close() {
-  if (!discard()) return; dirty.value = false; selectedRow.value = null; storePosition();
+  if (!(await discard())) return; dirty.value = false; selectedRow.value = null; storePosition();
   await router.replace({ query: { job: jobId } }); await nextTick(); (lastTrigger.value?.isConnected ? lastTrigger.value : title.value)?.focus();
 }
 async function nextMine() {
@@ -75,32 +78,32 @@ function updateCard(card) {
   // Keep the detail instance alive; it owns its freshly read revision.
   dirty.value = false; materialRevision.value++;
 }
-function selectForPreview(all = false) {
+async function selectForPreview(all = false) {
   const candidates = all ? filtered.value : visible.value;
   if (candidates.length > 1000) { error.value = "选中要求超过 1,000 项，请缩小筛选范围"; return; }
-  if (!all || window.confirm(`固定全部匹配的 ${candidates.length} 个要求 ID 用于起草预检？受保护修订由后端报告跳过。`)) selected.value = candidates.map(row => row.id);
+  if (!all || await confirmAction(`固定全部匹配的 ${candidates.length} 个要求 ID 用于起草预检？受保护修订由后端报告跳过。`)) selected.value = candidates.map(row => row.id);
 }
 function selectPage() { selected.value = visible.value.filter(batchAllowed).map(r => r.id); notice.value = `已选择本页职责范围内 ${selected.value.length} 项。`; }
-function selectAll() {
+async function selectAll() {
   const candidates = filtered.value.filter(batchAllowed);
   if (candidates.length > 1000) { error.value = "匹配项超过单批 1,000 项上限，请缩小筛选范围"; return; }
-  if (window.confirm(`全部匹配中职责可处理 ${candidates.length} 项；待审、已确认和其他职责不纳入。固定这些 ID 进入处置批次？`)) selected.value = candidates.map(r => r.id);
+  if (await confirmAction(`全部匹配中职责可处理 ${candidates.length} 项；待审、已确认和其他职责不纳入。固定这些 ID 进入处置批次？`)) selected.value = candidates.map(r => r.id);
 }
-async function prepareBatch() {
+function prepareBatch() {
   batchError.value = ""; batchStale.value = false;
   const ids = new Set(selected.value);
   if (!ids.size || ids.size > 1000 || ids.size !== selected.value.length) { error.value = "批次须有 1 至 1,000 个不重复的要求 ID"; return; }
   const candidates = rows.value.filter(r => ids.has(r.id));
   if (candidates.length !== ids.size || candidates.some(r => !batchAllowed(r))) { error.value = "所选条目包含不可处置范围"; return; }
   batch.value = candidates.map(row => ({ row, expected_revision: row.card?.revision ?? null, disposition: "comply_only", reason: "" }));
-  await nextTick(); batchDialog.value.showModal();
+  batchOpen.value = true;
 }
 async function submitBatch() {
-  if (batchStale.value || batch.value.some(item => !item.reason.trim())) return;
+  if (batchStale.value || batch.value.some(item => !item.reason.trim())) { if (!batchStale.value) batchError.value = "每一项都需要填写逐项理由。"; return; }
   batchBusy.value = true; batchError.value = "";
   try {
     await orgRequest("POST", `/tasks/${taskId}/cards/dispositions`, { extraction_job_id: jobId, items: batch.value.map(item => ({ requirement_id: item.row.id, expected_revision: item.expected_revision, disposition: item.disposition, reason: item.reason })) });
-    selected.value = []; batchDialog.value.close(); await loadRows();
+    selected.value = []; batchOpen.value = false; await loadRows();
     if (selectedRow.value && batch.value.some(item => item.row.id === selectedRow.value.id)) { selectedRow.value = null; dirty.value = false; }
     materialRevision.value++;
     // Announce success only once the reloaded list and revision are in place.
@@ -132,38 +135,120 @@ watch(() => route.query.requirement, async (id) => {
 onMounted(load);
 </script>
 <template>
-  <RouterLink :to="`/org/tasks/${taskId}`">返回任务</RouterLink> · <RouterLink :to="`/org/tasks/${taskId}/drafts?job=${jobId}`">三表与缺口</RouterLink>
-  <h2 ref="title" tabindex="-1">要求与响应审阅</h2><p>任务 {{ task?.name }} · 固定抽取 job <code>{{ jobId }}</code></p>
-  <p v-if="error" role="alert" class="error">{{ error }}</p><p v-if="notice" role="status">{{ notice }}</p><p v-for="warning in warnings" :key="warning" class="notice">{{ warning }}</p>
-  <p v-if="!rows" role="status">要求全集尚未就绪，统计与操作不可用。</p>
+  <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">{{ task?.name ?? "任务" }}</RouterLink><span>/</span><span>要求与响应审阅</span></nav>
+  <div class="page-header">
+    <div><h2 ref="title" tabindex="-1">要求与响应审阅</h2><p class="subtitle">任务 {{ task?.name }} · 固定抽取 <code>{{ jobId }}</code></p></div>
+    <div class="actions"><el-button :icon="Back" @click="router.push(`/org/tasks/${taskId}`)">返回任务</el-button><el-button type="primary" plain :icon="Document" @click="router.push(`/org/tasks/${taskId}/drafts?job=${jobId}`)">三表与缺口</el-button></div>
+  </div>
+  <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
+  <p v-if="notice" class="notice" role="status">{{ notice }}</p>
+  <p v-for="warning in warnings" :key="warning" class="notice warning">{{ warningText(warning) }}</p>
+  <el-skeleton v-if="!rows && !error" :rows="6" animated />
+  <p v-if="!rows" class="hint">要求全集尚未就绪，统计与操作不可用。</p>
   <template v-else>
-    <p v-if="summary" class="notice">所选集合 {{ summary.total }} 项 · 已确认 {{ summary.confirmed }} · 有效仅需遵守 {{ summary.comply }} · 缺口 {{ summary.gaps }} · <strong>负偏离 {{ summary.negative }}</strong>。不表示招标文件没有漏抽或完整标书已交付。</p>
-    <details v-if="writable"><summary>模型起草费用预览</summary><GenerationPanel :task="task" :job="job" :requirement-ids="selected.length ? selected : undefined" :role="orgAccess.role" :material-revision="materialRevision" @changed="taskChanged" /></details>
-    <div class="review-layout">
-      <section aria-label="要求列表">
-        <div class="filters panel">
-          <label>搜索要求或引文<input v-model="filters.query" maxlength="200" type="search" /></label>
-          <label>类别<select v-model="filters.category"><option value="">全部</option><option v-for="(label, key) in categories" :key="key" :value="key">{{ label }}</option></select></label>
-          <label>状态<select v-model="filters.state"><option value="">全部</option><option v-for="(label, key) in states" :key="key" :value="key">{{ label }}</option></select></label>
-          <label>职责<select v-model="filters.domain"><option value="">全部</option><option value="commercial">商务 / 资格</option><option value="technical">技术</option><option value="unclassified">待分类</option></select></label>
-          <label>处置<select v-model="filters.disposition"><option value="">全部</option><option value="respond">逐项响应</option><option value="comply_only">仅需遵守</option><option value="undecided">尚未决定</option></select></label>
-          <label class="inline"><input v-model="filters.starred" type="checkbox" />只看星标</label><label class="inline"><input v-model="filters.mine" type="checkbox" />待我审阅</label><label class="inline"><input v-model="filters.gaps" type="checkbox" />只看缺口</label>
+    <div v-if="summary" class="stat-grid">
+      <div class="stat"><span class="label">所选集合</span><span class="value">{{ summary.total }}</span></div>
+      <div class="stat success"><span class="label">已确认</span><span class="value">{{ summary.confirmed }}</span></div>
+      <div class="stat"><span class="label">有效仅需遵守</span><span class="value">{{ summary.comply }}</span></div>
+      <div class="stat"><span class="label">缺口</span><span class="value">{{ summary.gaps }}</span></div>
+      <div class="stat danger"><span class="label">负偏离</span><span class="value">{{ summary.negative }}</span></div>
+    </div>
+    <p class="hint summary-hint">统计只覆盖所选抽取集合，不表示招标文件没有漏抽或完整标书已交付。</p>
+    <el-collapse v-if="writable" v-model="generationOpen" class="section generation"><el-collapse-item name="generation" title="模型起草费用预览"><GenerationPanel :task="task" :job="job" :requirement-ids="selected.length ? selected : undefined" :role="orgAccess.role" :material-revision="materialRevision" @changed="taskChanged" /></el-collapse-item></el-collapse>
+    <div class="review-layout" :class="{ detail: selectedRow }">
+      <section aria-label="要求列表" class="review-list">
+        <el-card shadow="never" class="section filters-card">
+          <el-form label-position="top" class="filters" @submit.prevent>
+            <el-form-item label="搜索要求或引文" class="filter-search"><el-input v-model="filters.query" maxlength="200" type="search" clearable :prefix-icon="Search" placeholder="要求文字或招标原文" /></el-form-item>
+            <el-form-item label="类别"><el-select v-model="filters.category" placeholder="全部"><el-option value="" label="全部" /><el-option v-for="(text, key) in categories" :key="key" :value="key" :label="text" /></el-select></el-form-item>
+            <el-form-item label="状态"><el-select v-model="filters.state" placeholder="全部"><el-option value="" label="全部" /><el-option v-for="(text, key) in states" :key="key" :value="key" :label="text" /></el-select></el-form-item>
+            <el-form-item label="职责"><el-select v-model="filters.domain" placeholder="全部"><el-option value="" label="全部" /><el-option value="commercial" label="商务 / 资格" /><el-option value="technical" label="技术" /><el-option value="unclassified" label="待分类" /></el-select></el-form-item>
+            <el-form-item label="处置"><el-select v-model="filters.disposition" placeholder="全部"><el-option value="" label="全部" /><el-option value="respond" label="逐项响应" /><el-option value="comply_only" label="仅需遵守" /><el-option value="undecided" label="尚未决定" /></el-select></el-form-item>
+          </el-form>
+          <div class="checks"><label class="check"><input v-model="filters.starred" type="checkbox" />只看星标</label><label class="check"><input v-model="filters.mine" type="checkbox" />待我审阅</label><label class="check"><input v-model="filters.gaps" type="checkbox" />只看缺口</label></div>
+        </el-card>
+        <div class="list-bar">
+          <span data-testid="requirement-count" aria-live="polite">匹配 {{ filtered.length }} / 全集 {{ rows.length }}</span>
+          <div v-if="writable" class="actions">
+            <el-button size="small" @click="selectForPreview()">选择本页用于起草预检</el-button><el-button size="small" @click="selectForPreview(true)">选择全部匹配用于起草预检</el-button><el-button size="small" @click="clearSelection">清除选择</el-button>
+          </div>
         </div>
-        <p data-testid="requirement-count" aria-live="polite">匹配 {{ filtered.length }} / 全集 {{ rows.length }}</p>
-        <div class="actions"><label>每页条数<select v-model.number="pageSize"><option :value="25">25</option><option :value="50">50</option><option :value="100">100</option></select></label><button :disabled="page <= 1" @click="page--">上一页</button><span aria-live="polite">第 {{ page }} / {{ pages }} 页</span><button :disabled="page >= pages" @click="page++">下一页</button></div>
-        <div v-if="writable" class="actions"><button @click="selectForPreview()">选择本页用于起草预检</button><button @click="selectForPreview(true)">选择全部匹配用于起草预检</button><button @click="clearSelection">清除选择</button></div>
-        <div v-if="['technical', 'bidder'].includes(orgAccess.role)" class="actions"><button @click="selectPage">选择本页可处置项</button><button @click="selectAll">选择全部匹配可处置项</button><span>已选 {{ selected.length }} 项</span><button :disabled="!selected.length || dirty" @click="prepareBatch">准备批量处置</button></div>
-        <div class="table-scroll" tabindex="0"><table><caption>原文顺序；缺卡片也计入全集</caption><thead><tr><th>选择</th><th>类别 / 状态</th><th>要求、逐字引文与位置</th><th>操作</th></tr></thead><tbody>
-          <tr v-for="row in visible" :key="row.id" data-testid="requirement-row"><td><input v-if="writable" v-model="selected" :value="row.id" type="checkbox" :aria-label="`选择要求 ${row.text}`" /></td><td>{{ categories[row.category] }}{{ row.starred ? ' · ★ 星标' : '' }}<br />{{ states[row.status] }}<br />{{ domainFor(row) ?? '待单位管理员分类' }}<br />{{ row.card?.eligibility ?? 'missing_card' }}<p v-if="row.card?.content.deviation === 'negative'" class="error">负偏离</p></td><td>{{ row.text }}<blockquote class="quote">{{ row.source.quote }}</blockquote><small>{{ locationLabel(row.source, docs.find(d => d.id === row.source.document_id)?.name) }}</small></td><td><button :aria-label="`打开审阅：${row.text}`" @click="open(row, $event)">打开审阅</button></td></tr>
-        </tbody></table></div>
+        <div v-if="['technical', 'bidder'].includes(orgAccess.role)" class="actions batch-bar">
+          <el-button size="small" @click="selectPage">选择本页可处置项</el-button><el-button size="small" @click="selectAll">选择全部匹配可处置项</el-button>
+          <span class="hint">已选 {{ selected.length }} 项</span>
+          <el-button size="small" type="primary" :disabled="!selected.length || dirty" @click="prepareBatch">准备批量处置</el-button>
+        </div>
+        <div class="table-scroll" tabindex="0"><table class="data-table review-table"><caption class="sr-only">原文顺序；缺卡片也计入全集</caption>
+          <thead><tr><th class="col-check"><span class="sr-only">选择</span></th><th class="col-meta">类别 / 状态</th><th>要求、逐字引文与位置</th><th class="col-open">操作</th></tr></thead>
+          <tbody>
+            <tr v-for="row in visible" :key="row.id" data-testid="requirement-row" :class="{ selected: selectedRow?.id === row.id }">
+              <td><input v-if="writable" v-model="selected" :value="row.id" type="checkbox" :aria-label="`选择要求 ${row.text}`" /></td>
+              <td><div class="tags">
+                <span class="tag">{{ categories[row.category] }}</span><span v-if="row.starred" class="tag star">★ 星标</span>
+                <span class="tag" :class="statusTag[row.status]">{{ states[row.status] }}</span>
+                <span class="tag primary">{{ label(domains, domainFor(row), "待单位管理员分类") }}</span>
+                <span class="tag">{{ label(eligibilities, row.card?.eligibility ?? "missing_card") }}</span>
+                <span v-if="row.card?.content.deviation === 'negative'" class="tag danger">负偏离</span>
+              </div></td>
+              <td><div class="req-text">{{ row.text }}</div><blockquote class="quote">{{ row.source.quote }}</blockquote><small class="hint">{{ locationLabel(row.source, documentName(row.source.document_id)) }}</small></td>
+              <td><el-button size="small" :type="selectedRow?.id === row.id ? 'primary' : 'default'" :aria-label="`打开审阅：${row.text}`" @click="open(row, $event)">打开审阅</el-button></td>
+            </tr>
+            <tr v-if="!visible.length"><td colspan="4" class="empty">当前筛选没有结果</td></tr>
+          </tbody>
+        </table></div>
+        <el-pagination v-model:current-page="page" v-model:page-size="pageSize" class="pager" background layout="total, sizes, prev, pager, next" :page-sizes="[25, 50, 100]" :total="filtered.length" />
       </section>
-      <CardEditor v-if="selectedRow" :key="selectedRow.id" :row="selectedRow" :task-id="taskId" :job-id="jobId" :document-name="docs.find(d => d.id === selectedRow.source.document_id)?.name" @updated="updateCard" @dirty="dirty = $event" @next="nextMine" @close="close" @materials="materialsChanged" />
-      <aside v-else class="panel">从要求列表打开一条要求。可用 Tab、Enter 和空格完成筛选、翻页、编辑与逐项核对。</aside>
+      <CardEditor v-if="selectedRow" :key="selectedRow.id" :row="selectedRow" :task-id="taskId" :job-id="jobId" :document-name="documentName(selectedRow.source.document_id)" class="review-detail" @updated="updateCard" @dirty="dirty = $event" @next="nextMine" @close="close" @materials="materialsChanged" />
+      <aside v-else class="review-empty"><el-empty description="从左侧列表打开一条要求进行审阅" :image-size="80"><p class="hint">可用 Tab、Enter 和空格完成筛选、翻页、编辑与逐项核对。</p></el-empty></aside>
     </div>
   </template>
-  <dialog ref="batchDialog" aria-label="批量处置预检"><h3>逐项处置（整批原子提交）</h3><p>固定 {{ batch.length }} 个要求 ID；单批最多 1,000 项。不会批量确认响应或 Evidence。</p>
-    <form @submit.prevent="submitBatch"><div v-for="(item, index) in batch" :key="item.row.id" class="panel"><h4>{{ index + 1 }} · {{ item.row.text }}</h4><p>职责 {{ domainFor(item.row) }} · 预期修订 {{ display(item.expected_revision) }}</p><blockquote class="quote">{{ item.row.source.quote }}</blockquote><label>处置 {{ index + 1 }}<select v-model="item.disposition"><option value="comply_only">仅需遵守</option><option value="respond">恢复逐项响应</option></select></label><label>逐项理由 {{ index + 1 }}<textarea v-model="item.reason" required maxlength="10000" /></label></div>
-      <p v-if="batchError" role="alert" class="error">{{ batchError }}</p><button type="button" @click="batchDialog.close()">关闭，保留选择</button><button v-if="batchStale" type="button" @click="reloadBatch">重新读取受影响范围</button><button class="primary" :disabled="batchBusy || batchStale">提交整批处置</button>
-    </form>
-  </dialog>
+  <el-dialog v-model="batchOpen" title="批量处置预检" width="760px" :close-on-click-modal="false">
+    <p class="hint">逐项处置，整批原子提交。固定 {{ batch.length }} 个要求 ID；单批最多 1,000 项。不会批量确认响应或 Evidence。</p>
+    <el-form label-position="top" @submit.prevent="submitBatch">
+      <el-card v-for="(item, index) in batch" :key="item.row.id" shadow="never" class="section batch-item">
+        <h4>{{ index + 1 }} · {{ item.row.text }}</h4>
+        <p class="hint">职责 {{ label(domains, domainFor(item.row), "待分类") }} · 预期修订 {{ display(item.expected_revision) }}</p>
+        <blockquote class="quote">{{ item.row.source.quote }}</blockquote>
+        <div class="grid">
+          <el-form-item :label="`处置 ${index + 1}`"><el-select v-model="item.disposition"><el-option value="comply_only" label="仅需遵守" /><el-option value="respond" label="恢复逐项响应" /></el-select></el-form-item>
+        </div>
+        <el-form-item :label="`逐项理由 ${index + 1}`" required><el-input v-model="item.reason" type="textarea" :rows="2" maxlength="10000" /></el-form-item>
+      </el-card>
+      <el-alert v-if="batchError" :title="batchError" type="error" show-icon :closable="false" role="alert" class="section" />
+      <div class="actions dialog-actions"><el-button @click="batchOpen = false">关闭，保留选择</el-button><el-button v-if="batchStale" @click="reloadBatch">重新读取受影响范围</el-button><el-button type="primary" native-type="submit" :loading="batchBusy" :disabled="batchStale">提交整批处置</el-button></div>
+    </el-form>
+  </el-dialog>
 </template>
+<style scoped>
+.summary-hint { margin: -8px 0 16px; }
+.generation { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 0 16px; }
+.review-layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; align-items: start; }
+.review-layout.detail, .review-layout:has(.review-empty) { grid-template-columns: minmax(440px, 3fr) minmax(400px, 2fr); }
+.review-list { min-width: 0; }
+.review-detail { position: sticky; top: 76px; max-height: calc(100vh - 92px); overflow: auto; }
+.review-empty { position: sticky; top: 76px; background: var(--surface); border: 1px dashed var(--border); border-radius: 8px; }
+.filters { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.filters .el-form-item { margin-bottom: 12px; }
+.filters .filter-search { flex: 1 1 100%; }
+.filters .el-select { width: 140px; }
+.checks { display: flex; gap: 18px; flex-wrap: wrap; }
+.filters-card :deep(.el-card__body) { padding: 14px 16px; }
+.list-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.list-bar .actions { margin: 6px 0; }
+.batch-bar { margin-top: 0; }
+.review-table .col-check { width: 36px; }
+.review-table .col-meta { width: 150px; }
+.review-table .col-open { width: 96px; }
+.req-text { font-weight: 500; }
+.pager { margin-top: 12px; justify-content: flex-end; flex-wrap: wrap; row-gap: 8px; }
+.batch-item h4 { margin-top: 0; }
+.dialog-actions { justify-content: flex-end; }
+@media (max-width: 640px) {
+  .review-table thead { display: none; }
+  .review-table tr { display: grid; grid-template-columns: 28px minmax(0, 1fr); border-bottom: 1px solid var(--border); padding: 8px 0; }
+  .review-table td { border: none; padding: 4px 8px; }
+  .review-table td:nth-child(n+3) { grid-column: 2; }
+  .table-scroll:has(.review-table) { overflow: visible; }
+}
+@media (max-width: 1100px) { .review-layout.detail, .review-layout:has(.review-empty) { grid-template-columns: minmax(0, 1fr); } .review-detail, .review-empty { position: static; max-height: none; } }
+</style>

@@ -50,7 +50,7 @@ AI 标书工具：帮投标单位解析招标文件、抽取要求、查证技�
 | 文档处理 | PyMuPDF（PDF）、python-docx（Word） |
 | 网页截图 | Playwright（BrowserProvider 的默认实现） |
 | 证据标注 | Rust（clap、serde、image、sha2），编译为独立可执行文件 |
-| 前端 | Vue 3 + Vite |
+| 前端 | Vue 3 + Vite + Element Plus |
 | 部署 | Docker Compose |
 | 质量 | ruff、pyright、pytest、cargo test、GitHub Actions |
 

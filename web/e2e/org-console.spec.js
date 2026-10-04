@@ -87,6 +87,36 @@ async function login(page, role, org = "a") {
   await expect(page.getByRole("heading", { name: "招标任务" })).toBeVisible();
 }
 
+// Element Plus selects open a listbox; options are chosen by their visible text.
+// The combobox input sits under the selected-value overlay; the click reaches the select through it.
+// Options are read from the listbox this combobox controls, never from another select still closing.
+async function openSelect(page, label) {
+  const input = page.getByLabel(label, { exact: true });
+  await input.click({ force: true });
+  const listbox = page.locator(`[id="${await input.getAttribute("aria-controls")}"]`);
+  await expect(listbox).toBeVisible();
+  return listbox;
+}
+
+async function choose(page, label, option) {
+  const listbox = await openSelect(page, label);
+  await listbox.getByRole("option", { name: option, exact: typeof option === "string" }).click();
+  await expect(listbox).toBeHidden();
+}
+
+async function optionTexts(page, label) {
+  const listbox = await openSelect(page, label);
+  const texts = await listbox.getByRole("option").allTextContents();
+  await page.getByLabel(label, { exact: true }).click({ force: true });
+  await expect(listbox).toBeHidden();
+  return texts.join("\n");
+}
+
+// Confirms the open Element Plus message box.
+async function accept(page) {
+  await page.getByRole("dialog").filter({ visible: true }).getByRole("button", { name: "确定" }).click();
+}
+
 async function browserApi(page, method, path, body) {
   return page.evaluate(
     async ({ requestMethod, requestPath, requestBody }) => {
@@ -266,6 +296,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     const admin = await browser.newPage();
     await login(admin, "admin");
     await expect(admin.getByRole("link", { name: "余额与充值" })).toBeVisible();
+    await admin.getByRole("button", { name: "新建任务" }).click();
     await expect(admin.getByRole("heading", { name: "创建任务" })).toBeVisible();
     for (const label of ["任务名称", "招标编号", "截止时间", "预算记录（USD）"]) {
       await expect(admin.getByLabel(label)).toBeVisible();
@@ -288,27 +319,28 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     const recovered = await browser.newPage();
     await login(recovered, "admin");
     await recovered.goto(`/app/org/tasks/${createdTaskId}`);
-    await expect(recovered.getByLabel("文档")).toContainText("browser-upload-synthetic.pdf");
-    await expect(recovered.getByText(/状态 uploaded/)).toBeVisible();
+    // Documents load after the page; read the options only once the selected document is shown.
+    await expect(recovered.getByText(/状态：已上传/)).toBeVisible();
+    expect(await optionTexts(recovered, "文档")).toContain("browser-upload-synthetic.pdf");
     await recovered.close();
 
     await admin.getByRole("button", { name: "开始解析" }).click();
-    await expect(admin.getByTestId("job-status")).toContainText("作业状态：succeeded", {
+    await expect(admin.getByTestId("job-status")).toContainText("作业状态：已成功", {
       timeout: 30_000,
     });
-    await expect(admin.getByText(/状态 parsed/)).toBeVisible();
+    await expect(admin.getByText(/状态：已解析/)).toBeVisible();
     const beforePreview = await browserApi(
       admin,
       "GET",
       `/tasks/${createdTaskId}/extractions`,
     );
     await admin.getByRole("button", { name: "抽取预检" }).click();
-    const reasoning = admin.getByLabel("官方推理档位");
-    await expect(reasoning).toContainText("轻度推理");
-    await expect(reasoning).toContainText("深度推理");
-    await reasoning.selectOption("high");
+    const levels = await optionTexts(admin, "官方推理档位");
+    expect(levels).toContain("轻度推理");
+    expect(levels).toContain("深度推理");
+    await choose(admin, "官方推理档位", /· high(（默认）)?$/);
     await admin.getByRole("button", { name: "抽取预检" }).click();
-    await expect(admin.getByText(/预检 parsed：true · 档位 high/)).toBeVisible();
+    await expect(admin.getByText(/预检结果：可抽取 · 档位 high/)).toBeVisible();
     const afterPreview = await browserApi(
       admin,
       "GET",
@@ -318,7 +350,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
       beforePreview.payload.items.map((item) => item.job_id),
     );
     await admin.getByRole("button", { name: "开始抽取（可能产生费用）" }).click();
-    await expect(admin.getByTestId("job-status")).toContainText("作业状态：succeeded", {
+    await expect(admin.getByTestId("job-status")).toContainText("作业状态：已成功", {
       timeout: 30_000,
     });
     await expect(admin.getByRole("table", { name: /抽取历史/ })).toContainText("high");
@@ -330,13 +362,15 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
       .getByRole("link", { name: "打开任务" })
       .click();
     await expect(admin.getByRole("heading", { name: taskA.task.name })).toBeVisible();
-    await expect(admin.getByLabel("文档")).toContainText(taskA.documents.word.name);
-    await expect(admin.getByLabel("文档")).toContainText(taskA.documents.pdf.name);
+    await expect(admin.getByText(/状态：已解析/)).toBeVisible();
+    const documentOptions = await optionTexts(admin, "文档");
+    expect(documentOptions).toContain(taskA.documents.word.name);
+    expect(documentOptions).toContain(taskA.documents.pdf.name);
     await expect(admin.getByRole("table", { name: /抽取历史/ })).toContainText("low");
     await expect(admin.getByRole("table", { name: /抽取历史/ })).toContainText("high");
-    await expect(admin.getByText("latest", { exact: false }).first()).toBeVisible();
+    await expect(admin.getByText("最新", { exact: true }).first()).toBeVisible();
     await admin.getByRole("button", { name: /查看作业/ }).first().click();
-    await expect(admin.getByTestId("job-status")).toContainText("作业状态：succeeded");
+    await expect(admin.getByTestId("job-status")).toContainText("作业状态：已成功");
     await admin.close();
 
     const technical = await browser.newPage();
@@ -409,9 +443,9 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await page.keyboard.press("Enter");
     await expect(page.getByTestId("requirement-row")).toHaveCount(50);
 
-    await page.getByLabel("类别").selectOption("technical");
+    await choose(page, "类别", "技术");
     await expect(page.getByTestId("requirement-count")).toContainText("全集 1200");
-    await page.getByLabel("状态").selectOption("missing_card");
+    await choose(page, "状态", "缺卡片");
     await page.getByLabel("待我审阅").check();
     await page.getByLabel("只看缺口").check();
     await page.getByLabel("只看星标").check();
@@ -420,8 +454,8 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await page.getByLabel("只看星标").uncheck();
     await page.getByLabel("只看缺口").uncheck();
     await page.getByLabel("待我审阅").uncheck();
-    await page.getByLabel("状态").selectOption("");
-    await page.getByLabel("类别").selectOption("");
+    await choose(page, "状态", "全部");
+    await choose(page, "类别", "全部");
     await expect(page.getByTestId("requirement-row")).toHaveCount(50);
 
     const open = page.getByRole("button", { name: "打开审阅" }).first();
@@ -495,6 +529,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(technical.getByRole("button", { name: "确认响应" })).toBeDisabled();
     for (const checkbox of await evidenceChecks.all()) await checkbox.check();
     await technical.getByRole("button", { name: "确认响应" }).click();
+    await accept(technical);
     await expect(technical.getByText(/状态：已确认/)).toBeVisible();
 
     const adminReviewer = await browser.newPage();
@@ -512,10 +547,11 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await bidder.goto(
       `${reviewUrl}&requirement=${fixture.review.cards.pending_reject.requirement_id}`,
     );
-    await expect(bidder.getByLabel("响应种类")).toHaveValue("commitment");
+    await expect(bidder.getByRole("radio", { name: "承诺" })).toBeChecked();
     await expect(bidder.getByText("本修订没有 Evidence。承诺不构成证明材料。")).toBeVisible();
     await bidder.getByLabel("操作原因 / 警示处理理由").fill("浏览器商务审阅：承诺文字需重写。");
     await bidder.getByRole("button", { name: "驳回" }).click();
+    await accept(bidder);
     await expect(bidder.getByText(/状态：已驳回/)).toBeVisible();
     await bidder.close();
 
@@ -526,6 +562,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
       .getByLabel("操作原因 / 警示处理理由")
       .fill("浏览器技术审阅：须补充真实交付材料。");
     await technical.getByRole("button", { name: "需补材料" }).click();
+    await accept(technical);
     await expect(technical.getByText(/状态：需补材料/)).toBeVisible();
 
     await technical.goto(
@@ -597,8 +634,8 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     expect(untouched.status).toBe(byRequirement.get(candidates[0]).status);
 
     await technical.goto(reviewUrl);
-    await technical.getByLabel("类别").selectOption("technical");
-    await technical.getByLabel("状态").selectOption("missing_card");
+    await choose(technical, "类别", "技术");
+    await choose(technical, "状态", "缺卡片");
     const selectable = technical.getByTestId("requirement-row").getByRole("checkbox");
     expect(await selectable.count()).toBeGreaterThanOrEqual(3);
     for (let index = 0; index < 3; index += 1) await selectable.nth(index).check();
@@ -633,7 +670,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(technical.getByText("缺口", { exact: true })).toBeVisible();
     await expect(technical.getByText(/本次预检实际模型成本为 0/)).toBeVisible();
     await technical.getByRole("button", { name: "确认生成初稿" }).click();
-    await expect(technical.getByTestId("job-status")).toContainText("作业状态：succeeded", {
+    await expect(technical.getByTestId("job-status")).toContainText("作业状态：已成功", {
       timeout: 30_000,
     });
     await expect(technical.getByText(/份$/).first()).toBeVisible();
@@ -643,7 +680,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await staleHistory.click();
     await expect(technical.getByRole("alert")).toContainText("历史快照已经失效");
     await expect(technical.getByText(/负偏离/).first()).toBeVisible();
-    await technical.getByRole("button", { name: /技术响应/ }).click();
+    await technical.getByRole("tab", { name: /技术响应/ }).click();
     await expect(technical.getByRole("link", { name: "回到审阅" }).first()).toBeVisible();
 
     const draft = await browserApi(
@@ -675,8 +712,8 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
 
     // A human-authorized paid run carries the exact preview hash and the chosen cap.
     await technical.goto(reviewUrl);
-    await technical.getByLabel("类别").selectOption("technical");
-    await technical.getByLabel("状态").selectOption("missing_card");
+    await choose(technical, "类别", "技术");
+    await choose(technical, "状态", "缺卡片");
     await technical.getByTestId("requirement-row").getByRole("checkbox").first().check();
     await technical.getByText("模型起草费用预览", { exact: true }).click();
     await technical.getByRole("button", { name: "预检外发范围与费用" }).click();
@@ -688,7 +725,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await technical.getByLabel(/授权按本次预检运行/).check();
     await expect(runPaid).toBeEnabled();
     await runPaid.click();
-    await expect(technical.getByTestId("job-status")).toContainText("作业状态：succeeded", {
+    await expect(technical.getByTestId("job-status")).toContainText("作业状态：已成功", {
       timeout: 30_000,
     });
     expect(paidRequests).toHaveLength(1);

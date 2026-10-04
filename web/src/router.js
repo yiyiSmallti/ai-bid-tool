@@ -18,20 +18,20 @@ export const router = createRouter({
   history: createWebHistory("/app/"),
   routes: [
     { path: "/", redirect: "/org/tasks" },
-    { path: "/setup-password", component: SetupPassword, meta: { public: true } },
-    { path: "/platform/login", component: Login, meta: { public: true } },
+    { path: "/setup-password", component: SetupPassword, meta: { public: true, title: "设置密码" } },
+    { path: "/platform/login", component: Login, meta: { public: true, title: "平台后台登录" } },
     { path: "/platform", redirect: "/platform/orgs" },
-    { path: "/platform/orgs", component: Orgs, meta: { area: "platform" } },
-    { path: "/platform/models", component: Models, meta: { area: "platform" } },
-    { path: "/platform/cards", component: Cards, meta: { area: "platform" } },
-    { path: "/platform/usage", component: Usage, meta: { area: "platform" } },
-    { path: "/platform/audit", component: Audit, meta: { area: "platform" } },
-    { path: "/org/login", component: OrgLogin, meta: { public: true } },
-    { path: "/org/tasks", component: OrgTasks, meta: { area: "org" } },
-    { path: "/org/tasks/:taskId", component: OrgTask, meta: { area: "org" } },
-    { path: "/org/tasks/:taskId/review", component: OrgReview, meta: { area: "org" } },
-    { path: "/org/tasks/:taskId/drafts", component: OrgDrafts, meta: { area: "org" } },
-    { path: "/org/billing", component: OrgBilling, meta: { area: "org", admin: true } },
+    { path: "/platform/orgs", component: Orgs, meta: { area: "platform", title: "单位", nav: "orgs" } },
+    { path: "/platform/models", component: Models, meta: { area: "platform", title: "模型", nav: "models" } },
+    { path: "/platform/cards", component: Cards, meta: { area: "platform", title: "卡密", nav: "cards" } },
+    { path: "/platform/usage", component: Usage, meta: { area: "platform", title: "用量与账单", nav: "usage" } },
+    { path: "/platform/audit", component: Audit, meta: { area: "platform", title: "审计", nav: "audit" } },
+    { path: "/org/login", component: OrgLogin, meta: { public: true, title: "单位登录" } },
+    { path: "/org/tasks", component: OrgTasks, meta: { area: "org", title: "招标任务", nav: "tasks" } },
+    { path: "/org/tasks/:taskId", component: OrgTask, meta: { area: "org", title: "任务详情", nav: "tasks" } },
+    { path: "/org/tasks/:taskId/review", component: OrgReview, meta: { area: "org", title: "要求与响应审阅", nav: "tasks" } },
+    { path: "/org/tasks/:taskId/drafts", component: OrgDrafts, meta: { area: "org", title: "响应表初稿", nav: "tasks" } },
+    { path: "/org/billing", component: OrgBilling, meta: { area: "org", admin: true, title: "余额与充值", nav: "billing" } },
     { path: "/:rest(.*)", redirect: "/org/tasks" },
   ],
 });
@@ -49,5 +49,9 @@ router.beforeEach(async (to) => {
       if (!orgSession.get()) return "/org/login";
     }
   }
+});
+const consoles = { org: "单位后台", platform: "平台后台" };
+router.afterEach((to) => {
+  document.title = [to.meta.title, consoles[to.meta.area], "AI 标书工具"].filter(Boolean).join(" · ");
 });
 window.addEventListener("bid:signed-out", (event) => router.push(event.detail === "org" ? "/org/login" : "/platform/login"));
