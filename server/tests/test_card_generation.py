@@ -876,7 +876,9 @@ async def test_ceiling_keeps_valid_partial_results_and_cache_does_not_rebill(
             result["completion"] == "partial" and result["stop_reason"] == "job_call_limit_exceeded"
         )
         assert len(result["created_revision_ids"]) == 1 and len(result["usage_record_ids"]) == 2
-        assert len(vendor.drafts) == 2 and result["skipped"][selected[1]] == "generation_stopped"
+        # Both batches start together; whichever met the 503 is the one the ceiling stopped.
+        stopped = [key for key in selected if result["skipped"].get(key) == "generation_stopped"]
+        assert len(vendor.drafts) == 2 and len(stopped) == 1
         repeated = await submit(api, header, task, extraction, requirement_ids=selected, retry=True)
         assert repeated["data"]["job_id"] == receipt["data"]["job_id"]
         await execute(api, app, header, repeated)
@@ -986,9 +988,52 @@ async def test_reasoning_cache_and_changed_configuration_fail_closed(tenants, tm
         assert len(vendor.drafts) == 3
 
 
+async def test_batches_run_concurrently_within_the_limit_and_publish_in_order(tenants, tmp_path):
+    async with drafting_client(tenants, tmp_path, llm_batch_chars=1, llm_concurrency=2) as (
+        api,
+        app,
+        headers,
+        vendor,
+        _,
+    ):
+        header = headers[0]
+        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        flight = {"now": 0, "most": 0}
+        both = asyncio.Event()
+
+        async def response(sent):
+            flight["now"] += 1
+            flight["most"] = max(flight["most"], flight["now"])
+            if flight["now"] == 2:
+                both.set()
+            # The first two calls wait for each other, which only concurrent batches can do.
+            await asyncio.wait_for(both.wait(), 5)
+            await asyncio.sleep(0)
+            flight["now"] -= 1
+            return provider_reply("openai", vendor.proposals(sent))
+
+        vendor.respond = response
+        selected = [row["id"] for row in requirements[2:5]]
+        receipt = await submit(api, header, task, extraction, requirement_ids=selected)
+        terminal = await execute(api, app, header, receipt)
+        assert terminal["data"]["status"] == "succeeded", terminal
+        assert terminal["data"]["result"]["completion"] == "complete"
+        assert flight["most"] == 2 and len(vendor.drafts) == 3
+        cards = await api.get(f"/tasks/{task}/cards", headers=header, params={"job": extraction})
+        revisions = {
+            slot["requirement_id"]: slot["card"]["revision_id"]
+            for slot in cards.json()["items"]
+            if slot["card"]
+        }
+        assert terminal["data"]["result"]["created_revision_ids"] == [
+            revisions[key] for key in selected
+        ]
+
+
 @pytest.mark.parametrize("when", ["before_first_call", "between_batches"])
 async def test_changed_redaction_switch_stops_new_calls(tenants, tmp_path, when):
-    async with drafting_client(tenants, tmp_path, llm_batch_chars=1) as (
+    # One call at a time, so the switch changes strictly between two batches.
+    async with drafting_client(tenants, tmp_path, llm_batch_chars=1, llm_concurrency=1) as (
         api,
         app,
         headers,

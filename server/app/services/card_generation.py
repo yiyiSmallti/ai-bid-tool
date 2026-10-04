@@ -30,6 +30,7 @@ from app.providers.drafting import (
     PROMPT_VERSION,
     SCHEMA_VERSION,
     DraftingOutput,
+    batch_budget,
     groups,
     request_body,
 )
@@ -244,7 +245,7 @@ def estimate(llm, secret: dict) -> dict:
             "cost_basis": "unknown",
             "cost_basis_reason": "model_unavailable",
         }
-    batches = groups(secret["requirements"], secret["materials"], llm.settings.llm_batch_chars)
+    batches = groups(secret["requirements"], secret["materials"], batch_budget(llm.settings))
     bodies = [request_body(llm, batch, secret["materials"]) for batch in batches]
     # A conservative first-pass allowance, not a promise about retries or halving.
     input_tokens = sum(len(json.dumps(body, ensure_ascii=False).encode()) + 4096 for body in bodies)
@@ -310,7 +311,7 @@ async def submit_generation(
                 warnings.append(blocker)
             if blocker is None and isinstance(llm, HTTPExtractor):
                 first = groups(
-                    secret["requirements"], secret["materials"], llm.settings.llm_batch_chars
+                    secret["requirements"], secret["materials"], batch_budget(llm.settings)
                 )[0]
                 reserved = llm.reservation(request_body(llm, first, secret["materials"]))
                 held = await session.scalar(
