@@ -297,6 +297,9 @@ async def test_bounded_queue_fails_fast_and_cancellation_keeps_capacity(
 
 async def test_password_capacity_is_shared_across_apps(clients, tenants, monkeypatch):
     apps, (_, second) = clients
+    # A queued request would wait far longer than the bound below, so passing it still
+    # means an immediate refusal even on a busy CI machine.
+    monkeypatch.setattr(password_attempts, "QUEUE_SECONDS", 30.0)
     async with stalled_passwords(monkeypatch) as (entered, release):
         async with httpx.AsyncClient(
             transport=httpx.ASGITransport(app=apps[0], client=None), base_url="http://test"
@@ -312,7 +315,7 @@ async def test_password_capacity_is_shared_across_apps(clients, tenants, monkeyp
             await eventually(lambda: entered() == password_attempts.PASSWORD_WORKERS)
             for path in PATHS:
                 error(
-                    await asyncio.wait_for(second.post(path, json=payload(path, tenants)), 0.5),
+                    await asyncio.wait_for(second.post(path, json=payload(path, tenants)), 5),
                     503,
                     "auth_busy",
                 )

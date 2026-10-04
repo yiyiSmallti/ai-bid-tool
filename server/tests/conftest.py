@@ -1,4 +1,7 @@
+import base64
+import hashlib
 import os
+import secrets
 from uuid import uuid4
 
 import httpx
@@ -7,7 +10,6 @@ from alembic import command
 from alembic.config import Config
 from app.api.main import create_app
 from app.core.config import Settings
-from app.core.security import hash_password
 from app.core.totp import generate_secret
 from app.models.entities import Membership, Org, User
 from app.providers.llm import HTTPExtractor
@@ -16,25 +18,27 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
 
 PASSWORD = "synthetic-test-password-only"
-PASSWORD_HASH = hash_password(PASSWORD)
+
+
+def cheap_password_hash(password: str) -> str:
+    """A hash in the production format with few rounds; verification reads them from it.
+
+    Production's 600,000 PBKDF2 rounds per login dominated the suite on CI's CPUs, and
+    no test depends on the work factor stored for these synthetic users.
+    """
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 1000)
+    return f"pbkdf2$1000${base64.b64encode(salt).decode()}${base64.b64encode(digest).decode()}"
+
+
+PASSWORD_HASH = cheap_password_hash(PASSWORD)
 OPERATOR = "ops@example.test"
 OPERATOR_PASSWORD = "synthetic-operator-password"
 OPERATOR_SECRET = generate_secret()
 
 
-@pytest.fixture(autouse=True)
-def no_retry_waits(monkeypatch):
-    # Transient-failure retries are covered by their own test; elsewhere one vendor
-    # reply per call keeps scripted responses simple.
-    monkeypatch.setattr(HTTPExtractor, "retry_delays", ())
-
-
-@pytest.fixture(scope="session")
-def admin_engine():
-    url = os.environ.get("BID_TEST_ADMIN_URL")
-    if not url:
-        # Failing instead of skipping keeps a run without the database from looking green.
-        pytest.fail("BID_TEST_ADMIN_URL must point at an isolated PostgreSQL test runtime")
+def prepare_database(url: str) -> None:
+    """Create the application role if missing and migrate the database at `url` to head."""
     if not (make_url(url).database or "").startswith("bid_test"):
         raise RuntimeError("Tests refuse to mutate a database without the bid_test prefix")
     engine = create_engine(url, hide_parameters=True)
@@ -50,8 +54,66 @@ def admin_engine():
                     sql.Literal(os.environ["BID_DATABASE_PASSWORD"])
                 )
             connection.execute(text(statement.as_string()))
+    engine.dispose()
     os.environ["BID_MIGRATION_DATABASE_URL"] = url
     command.upgrade(Config("alembic.ini"), "head")
+
+
+def pytest_configure(config):
+    """Give each pytest-xdist worker a copy of the migrated test database.
+
+    Tests truncate shared tables, so workers cannot share one database. Roles are
+    cluster-wide and migrations create them, so one worker at a time migrates the base
+    database under an advisory lock taken in the maintenance database, then copies it.
+    """
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    admin = os.environ.get("BID_TEST_ADMIN_URL")
+    if not worker or not admin:
+        return
+    base = make_url(admin)
+    name = f"{base.database}_{worker}"
+    maintenance = create_engine(
+        base.set(database="postgres"), isolation_level="AUTOCOMMIT", hide_parameters=True
+    )
+    with maintenance.connect() as connection:
+        connection.execute(text("SELECT pg_advisory_lock(hashtext('bid_test_workers'))"))
+        try:
+            prepare_database(admin)
+            # A database with open sessions cannot be a template; the migration's pool may
+            # still hold one, and no other worker uses the base database under this lock.
+            connection.execute(
+                text(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity"
+                    " WHERE datname = :name AND pid <> pg_backend_pid()"
+                ),
+                {"name": base.database},
+            )
+            connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+            connection.execute(text(f'CREATE DATABASE "{name}" TEMPLATE "{base.database}"'))
+        finally:
+            connection.execute(text("SELECT pg_advisory_unlock(hashtext('bid_test_workers'))"))
+    maintenance.dispose()
+    os.environ["BID_TEST_ADMIN_URL"] = base.set(database=name).render_as_string(hide_password=False)
+    if os.environ.get("BID_DATABASE_URL"):
+        app = make_url(os.environ["BID_DATABASE_URL"]).set(database=name)
+        os.environ["BID_DATABASE_URL"] = app.render_as_string(hide_password=False)
+
+
+@pytest.fixture(autouse=True)
+def no_retry_waits(monkeypatch):
+    # Transient-failure retries are covered by their own test; elsewhere one vendor
+    # reply per call keeps scripted responses simple.
+    monkeypatch.setattr(HTTPExtractor, "retry_delays", ())
+
+
+@pytest.fixture(scope="session")
+def admin_engine():
+    url = os.environ.get("BID_TEST_ADMIN_URL")
+    if not url:
+        # Failing instead of skipping keeps a run without the database from looking green.
+        pytest.fail("BID_TEST_ADMIN_URL must point at an isolated PostgreSQL test runtime")
+    prepare_database(url)
+    engine = create_engine(url, hide_parameters=True)
     yield engine
     engine.dispose()
 
@@ -156,6 +218,6 @@ def operator(tenants, admin_engine):
     """A platform operator identity; settings must list OPERATOR with OPERATOR_SECRET."""
     with Session(admin_engine) as session, session.begin():
         session.add(
-            User(id=uuid4(), email=OPERATOR, password_hash=hash_password(OPERATOR_PASSWORD))
+            User(id=uuid4(), email=OPERATOR, password_hash=cheap_password_hash(OPERATOR_PASSWORD))
         )
     return OPERATOR

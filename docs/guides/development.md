@@ -26,7 +26,7 @@ private Unix socket. The `--root` directory must not exist yet.
 uv sync --frozen --extra dev --python 3.12
 LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8 uv run python scripts/test_runtime.py start --root /tmp/ai-bid-test
 source /tmp/ai-bid-test/environment.sh
-uv run pytest -q
+uv run pytest -q -n 4
 uv run ruff check server cli scripts evals
 uv run ruff format --check server cli scripts evals
 uv run pyright
@@ -42,7 +42,9 @@ Without `BID_TEST_ADMIN_URL`, every database-backed test fails; tests that
 need no database still run.
 [.github/workflows/check.yml](../../.github/workflows/check.yml) runs the same
 checks in CI on pull requests only; it skips the suite whose files a pull request
-leaves unchanged and can be started by hand from the Actions tab.
+leaves unchanged and can be started by hand from the Actions tab. With `-n`, each
+pytest-xdist worker creates and migrates its own `bid_test_gwN` database in the same
+cluster, because tests truncate shared tables.
 
 ## Provision a development database
 

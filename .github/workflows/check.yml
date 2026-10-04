@@ -93,7 +93,9 @@ jobs:
         if: steps.changes.outputs.code == 'true'
       - run: uv run pyright
         if: steps.changes.outputs.code == 'true'
-      - run: uv run pytest -q
+      # Each worker gets its own database (server/tests/conftest.py), so the suite runs one
+      # worker per runner core; the slowest tests are listed to keep the run short.
+      - run: uv run pytest -q -n auto --durations=20
         if: steps.changes.outputs.code == 'true'
       - run: uv build
         if: steps.changes.outputs.code == 'true'
