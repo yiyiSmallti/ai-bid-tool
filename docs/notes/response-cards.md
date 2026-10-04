@@ -92,6 +92,15 @@ protected skips at submission and publication; concurrent edits report
 none or positive is rejected. Missing/duplicate proposals and unknown requirement
 IDs are reported without storing their output text.
 
+Because that rule makes a model-recorded negative deviation permanent, the drafting
+prompt ([drafting.py](../../server/app/providers/drafting.py) `SYSTEM_PROMPT`) reserves
+`negative` for material or commitment content that falls short of the requirement. A
+requirement that only lacks material keeps the evidence kind with `deviation=none`,
+names the material to add, and asserts no unproven parameter; the `needs_material`
+hint and the evidence rule for confirmation keep it out of confirmed output.
+Obligations the bidder performs itself, such as delivery, warranty and service
+terms, are drafted as commitments at the tender's own values.
+
 Valid responses from completed batches may be published after a later provider
 or budget failure, with `completion=partial`, `stop_reason`, usage IDs and exit 5.
 Without a completed batch the job fails without cards. Lease loss, cancellation,
