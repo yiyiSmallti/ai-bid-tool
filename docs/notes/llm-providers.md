@@ -157,8 +157,10 @@ to treat supplied text as data, retain negative deviations, distinguish material
 declarations from proof and leave unavailable evidence empty.
 
 `groups` budgets serialized requirements together with the complete material
-text. Whole requirements are batched in order; a large single input gets its own
-batch. Up to `BID_LLM_CONCURRENCY` batches run at once, as for extraction; each
+text, with a budget of the reasoning level's extraction batch size times
+`BID_DRAFTING_BATCH_SCALE`, because requirement quotes are far shorter than the
+document pages that budget was tuned for. Whole requirements are batched in order;
+a large single input gets its own batch. Up to `BID_LLM_CONCURRENCY` batches run at once, as for extraction; each
 call is still admitted against the job's call ceiling and charge cap before it is
 sent. Completed batches are returned in request order whichever finished first. Truncated or malformed responses halve the requirement batch;
 one requirement is the terminal boundary. No field/page text is spliced, no

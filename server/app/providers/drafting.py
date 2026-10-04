@@ -63,6 +63,11 @@ def wire_schema() -> dict:
 WIRE_SCHEMA = wire_schema()
 
 
+def batch_budget(settings) -> int:
+    """Characters per drafting batch: the level's extraction budget times the drafting scale."""
+    return settings.llm_batch_chars * settings.drafting_batch_scale
+
+
 def groups(requirements: list[dict], materials: list[dict], budget: int) -> list[list[dict]]:
     """Whole requirements and whole fields/pages; an oversized input stands alone."""
     material_size = len(json.dumps(materials, ensure_ascii=False))
@@ -179,7 +184,7 @@ async def draft(llm: "HTTPExtractor", requirements: list[dict], materials: list[
         raise ProviderFailure(
             "Drafting requires an active accounted job", code="drafting_accounting_required"
         )
-    batches = groups(requirements, materials, llm.settings.llm_batch_chars)
+    batches = groups(requirements, materials, batch_budget(llm.settings))
     plan_calls(len(batches))
     output = DraftingOutput()
     limit = asyncio.Semaphore(max(1, llm.settings.llm_concurrency))

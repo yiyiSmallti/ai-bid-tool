@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 600
     llm_batch_chars: int = 8000
     llm_concurrency: int = 4
+    # Drafting sends short requirement quotes, not document pages, so its batches may be
+    # this many times the extraction budget of the reasoning level.
+    drafting_batch_scale: int = Field(default=4, ge=1, le=16)
     llm_effort: str | None = "high"
     llm_anthropic_fallback: bool = True
     llm_json_mode: str = "json_schema"
