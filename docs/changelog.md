@@ -6,6 +6,14 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：导出件的 Word 版面验收
+
+- 在 macOS Microsoft Word 中打开合成长响应正式件（150 条要求、130 页已确认证书附件）：三张响应表合计 150 行、
+  文档未加保护、130 张独立内嵌图与 130 个书签一一对应。发现每份附件的说明独占一页、图片被挤到下一页；渲染器
+  现在为说明预留两英寸并令其与图片同页，附件页数减半。渲染 profile 升为 `docx-export-v2`，旧缓存不复用。
+- 新增可选的规模场景 `server/tests/test_export_scale.py` 与 `scripts/word_inspect.applescript`，步骤见
+  [development.md](guides/development.md#check-an-export-in-word)。
+
 ## 2026-10-03：拆分 API 入口与合并版本化资源服务
 
 - 产品、功能、证书、资质档案和模板共用 `services/versioned.py`：修订锁、修订冲突、任务选择替换与审计只有一份

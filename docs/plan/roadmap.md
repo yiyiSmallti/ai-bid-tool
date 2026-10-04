@@ -53,7 +53,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
 | B09 check | 未实施 | 标书与要求对照、废标/扣分风险、误报处理 | 语义校验依赖 LLM |
 | B10 score | 未实施 | 逐项预估分、失分原因、引用 | 语义评估依赖 LLM |
-| B11 export | 人工 Word 响应章节导出、正式件/审阅件、证书页附件、审计；机制见 [human-section-exports.md](../notes/human-section-exports.md) | Word/WPS 视觉分页验收；契约见 [export.md](export.md) | 已批准 |
+| B11 export | 人工 Word 响应章节导出、正式件/审阅件、证书页附件、审计；机制见 [human-section-exports.md](../notes/human-section-exports.md) | WPS 视觉分页与隔离 S3 下载验收；契约见 [export.md](export.md) | 已批准 |
 
 ## 覆盖矩阵：Provider、记忆、看板、agent 与 CLI
 
@@ -107,7 +107,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 ## 建议顺序
 
-1. 沙箱双单位接口与完整生命周期验收；导出件的 Word/WPS 视觉分页验收（B11），需要装有 Word 或 WPS 的环境。
+1. 沙箱双单位接口与完整生命周期验收；导出件的 WPS 视觉分页验收（B11），需要装有 WPS 的环境。
 2. 证书页等其他材料的标注（B05），check 首版（B09）。
 3. 看板、卡片状态与 SSE（U01、U02）。
 4. score、agent、记忆、用量与部署。

@@ -217,6 +217,29 @@ The check expects an org named 计费演示单位 with platform-billed usage in 
 current month and creates an org, a model named `e2e-model` and recharge cards,
 so run it against a disposable database.
 
+## Check an export in Word
+
+The opt-in scale scenario builds a final section with long synthetic tables and one
+confirmed certificate page per attachment, and writes it to
+`data/work/export-acceptance/scale/`:
+
+```sh
+BID_EXPORT_SCALE_PAGES=130 uv run pytest -q server/tests/test_export_scale.py
+```
+
+Word on macOS asks for file access for every new folder it opens or saves to. Copy the
+DOCX into `~/Library/Containers/com.microsoft.Word/Data/` first, then report its
+pages, tables and rows, inline pictures, bookmarks and protection, and save a PDF next
+to it:
+
+```sh
+osascript scripts/word_inspect.applescript DOCX_PATH PDF_PATH
+```
+
+Check that the table rows add up to the requirements, that pictures and bookmarks
+match the attachment pages, and that every attachment page shows its caption above
+its image in the PDF.
+
 ## Run with Docker Compose
 
 1. Copy [deploy/.env.example](../../deploy/.env.example) to an ignored env file

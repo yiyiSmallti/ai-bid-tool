@@ -65,7 +65,10 @@ limits. The process reads and checks each archived PNG separately, preserves its
 bytes, and embeds only individually confirmed pages.
 
 [export_renderer.py](../../server/app/services/export_renderer.py) builds real Word
-tables and paragraphs, stable evidence bookmarks and page attachments. It fixes
+tables and paragraphs, stable evidence bookmarks and page attachments. Each
+attachment starts a new page; its caption, in the binding's heading style, keeps with
+the image, which is scaled to the usable page area less two inches so both fit on one
+page. It fixes
 ZIP order, timestamps, compression, core properties and XML attribute ordering.
 The renderer profile records the actual runtime and serialization dependencies.
 Reading a retained export compares its inputs against the recorded profile rather
