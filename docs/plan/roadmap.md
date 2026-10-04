@@ -61,7 +61,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | --- | --- | --- | --- |
 | P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身 | check/score/agent 所需的通用结构化调用 | 新契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
-| P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；自托管 SearXNG 搜索 | Embedding、本机浏览器采集、搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱双单位接口与完整生命周期验收 | 新契约 |
+| P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；自托管 SearXNG 搜索 | Embedding、本机浏览器采集、搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱租约接管与断连/存储失败注入验收 | 新契约 |
 | P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；机制见 [provider-config.md](../notes/provider-config.md) | 视觉、搜索等其他能力的单位配置 | 新契约 |
 | P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草部分成功 | 跨能力限流与统一进度 | 新契约 |
 | M01 记忆存储 | 未实施 | 四层记忆 CRUD、候选审批、失效 | 全局来源待定 |
@@ -107,7 +107,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 ## 建议顺序
 
-1. 沙箱双单位接口与完整生命周期验收；导出件的 WPS 视觉分页验收（B11），需要装有 WPS 的环境。
+1. 沙箱租约过期接管与断连、存储失败注入验收；导出件的 WPS 视觉分页验收（B11），需要装有 WPS 的环境。
 2. 证书页等其他材料的标注（B05），check 首版（B09）。
 3. 看板、卡片状态与 SSE（U01、U02）。
 4. score、agent、记忆、用量与部署。
