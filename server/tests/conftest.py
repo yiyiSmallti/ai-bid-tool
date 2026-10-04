@@ -22,6 +22,25 @@ OPERATOR_PASSWORD = "synthetic-operator-password"
 OPERATOR_SECRET = generate_secret()
 
 
+def pytest_configure(config):
+    """Give each pytest-xdist worker its own database, since tests truncate shared tables."""
+    worker = os.environ.get("PYTEST_XDIST_WORKER")
+    admin = os.environ.get("BID_TEST_ADMIN_URL")
+    if not worker or not admin:
+        return
+    base = make_url(admin)
+    name = f"{base.database}_{worker}"
+    engine = create_engine(base, isolation_level="AUTOCOMMIT", hide_parameters=True)
+    with engine.connect() as connection:
+        connection.execute(text(f'DROP DATABASE IF EXISTS "{name}" WITH (FORCE)'))
+        connection.execute(text(f'CREATE DATABASE "{name}"'))
+    engine.dispose()
+    os.environ["BID_TEST_ADMIN_URL"] = base.set(database=name).render_as_string(hide_password=False)
+    if os.environ.get("BID_DATABASE_URL"):
+        app = make_url(os.environ["BID_DATABASE_URL"]).set(database=name)
+        os.environ["BID_DATABASE_URL"] = app.render_as_string(hide_password=False)
+
+
 @pytest.fixture(autouse=True)
 def no_retry_waits(monkeypatch):
     # Transient-failure retries are covered by their own test; elsewhere one vendor
