@@ -20,7 +20,7 @@ source URL and kept parameter quotes. `GET /tasks/{task_id}/simulated-resources`
 returns the task's selection IDs that came from a simulation; the console marks
 them 模拟 in the material panel and on card evidence.
 
-A run needs `BID_SEARCH_URL`, `BID_SANDBOX_POLICY_FILE` and
+A run needs `BID_PERPLEXITY_API_KEY` or `BID_SEARCH_URL`, `BID_SANDBOX_POLICY_FILE` and
 `BID_SANDBOX_FETCH_QUOTA`; the preview reports `search_unavailable` or
 `fetch_unavailable` otherwise.
 
@@ -40,9 +40,14 @@ memory. Software development and services never get a product. A batch whose out
 does not parse is split in half and asked again; an item that still gets no answer is
 reported as not proposed.
 
-For each vendor the worker searches the operator's SearXNG once and fetches up to two
-results through the trusted fetch broker, preferring the proposed domain because the
-model often names the wrong one. The model then reads each page with its URL: when the
+For each vendor the worker searches and fetches up to two results through the trusted
+fetch broker, preferring the proposed domain because the model often names the wrong
+one. Perplexity is first asked for that domain only and searched openly when it finds
+nothing; SearXNG cannot filter by domain and is searched once. When a page cannot be
+fetched, for example because the vendor site is unreachable from the worker or serves
+an incomplete certificate chain, the page text Perplexity extracted is read instead.
+Quotes are then checked against that extract, and the attempt and the outcome record
+`search_extract` as the source; the console tags such items 搜索摘录. The model then reads each page with its URL: when the
 host is the vendor's own site and the page presents one product of the required kind, it
 names the product as written and quotes its parameters; when the page is a catalog, it
 may pick up to two same-site links from that page to read next, one level deep. The

@@ -33,7 +33,13 @@ from app.models.entities import (
 from app.providers import simulation
 from app.providers.base import MalformedOutput, ProviderFailure
 from app.providers.calls import plan_calls
-from app.providers.sandbox_fetch import FetchBroker, FetchDenied, SQLiteFetchQuota, system_resolver
+from app.providers.sandbox_fetch import (
+    FetchBroker,
+    FetchDenied,
+    SQLiteFetchQuota,
+    canonical_url,
+    system_resolver,
+)
 from app.schemas.feature_contracts import FeatureCreate, TaskFeatureSelection
 from app.schemas.resource_contracts import ProductCreate, TaskProductSelection
 from app.schemas.simulation_contracts import ProductSimulationInput
@@ -49,7 +55,7 @@ PROPOSAL_BATCH = 12
 MAX_ITEM_CHARS = 6000
 MIN_PAGE_CHARS = 200
 VENDORS_PER_ITEM = 3
-PAGES_PER_VENDOR = 2
+PAGES_PER_VENDOR = 3
 FOLLOWED_PER_PAGE = 2
 # Every page read is one quoting call: found pages plus the links followed from them.
 QUOTES_PER_ITEM = VENDORS_PER_ITEM * PAGES_PER_VENDOR * (1 + FOLLOWED_PER_PAGE)
@@ -258,19 +264,33 @@ def official_domain(value: str) -> str:
     return registrable(host) if re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", host) else ""
 
 
-async def vendor_pages(search, domain: str, query: str) -> list[str]:
-    """Search once; pages on the proposed domain first, else the top results.
+async def vendor_pages(search, domain: str, query: str) -> list[tuple[str, str]]:
+    """(URL, search extract) of pages on the proposed domain first, else the top results.
 
     Proposed domains are often wrong, so other hosts stay candidates; the quoting step
-    decides from the URL whether a page is the vendor's own site.
+    decides from the URL whether a page is the vendor's own site. A provider that filters
+    by domain is asked for that domain first and searched openly only when it finds none.
     """
+    narrowed = bool(domain) and search.filters_domains
     try:
-        hits = (await search.search(query)).hits
+        hits = (await search.search(query, [domain] if narrowed else ())).hits
+        if narrowed and not hits:
+            hits = (await search.search(query)).hits
     except ProviderFailure:
         return []
-    rows = ranked(hits, [domain] if domain else [])
-    official = [row["url"] for row in rows if row["known_vendor_domain"]]
-    return (official or [row["url"] for row in rows])[:PAGES_PER_VENDOR]
+    extracts: dict[str, str] = {}
+    for hit in hits:
+        try:
+            extracts.setdefault(canonical_url(hit.url), hit.content)
+        except FetchDenied:
+            continue
+    # Keep the search service's relevance order: ranked() puts PDFs first for spec sheets,
+    # but on vendor domains those are mostly annual reports rather than product pages.
+    rows = sorted(ranked(hits, [domain] if domain else []), key=lambda row: row["order"])
+    official = [row for row in rows if row["known_vendor_domain"]]
+    return [(row["url"], extracts.get(row["url"], "")) for row in (official or rows)][
+        :PAGES_PER_VENDOR
+    ]
 
 
 def item_text(item: dict, quotes: dict[str, str]) -> dict:
@@ -284,15 +304,25 @@ def item_text(item: dict, quotes: dict[str, str]) -> dict:
     return {"item_key": item["key"], "name": item["name"], "requirements": lines}
 
 
-async def read_vendor_page(llm, client, item, vendor, url, org_id, processor, limit, tried):
-    """Quote one page; returns (model, kept quotes, url, followable links) and logs the attempt."""
-    attempt = {"vendor": vendor, "url": url}
+async def read_vendor_page(
+    llm, client, item, vendor, url, extract, org_id, processor, limit, tried
+):
+    """Quote one page; returns (model, kept quotes, url, followable links) and logs the attempt.
+
+    When the page cannot be fetched, the search service's extract of it is read instead
+    and the attempt says so; quotes are then checked against that extract.
+    """
+    attempt = {"vendor": vendor, "url": url, "source": "page"}
     tried.append(attempt)
     try:
         page = await fetch_page(org_id, url, processor)
     except FetchDenied as denied:
-        attempt["result"] = denied.code
-        return "", [], url, []
+        text = simulation.normalize(extract)[: simulation.MAX_PAGE_CHARS]
+        if len(text) < MIN_PAGE_CHARS:
+            attempt["result"] = denied.code
+            return "", [], url, []
+        attempt |= {"source": "search_extract", "fetch": denied.code}
+        page = simulation.Page(url=url, text=text, links=[])
     async with limit:
         answer = await simulation.quote(llm, client, item, vendor, page)
     allowed = {row["url"] for row in page.links}
@@ -330,11 +360,12 @@ async def simulate_item(llm, client, item, proposal, quotes, search, processor, 
         query = candidate.query.strip()[:120]
         pages = await vendor_pages(search, official_domain(candidate.domain), query)
         found = found or bool(pages)
-        queue = [(url, True) for url in pages]
+        queue = [(url, extract, True) for url, extract in pages]
         while queue:
-            url, may_follow = queue.pop(0)
+            url, extract, may_follow = queue.pop(0)
+            tried = outcome["tried"]
             model, kept, url, follow = await read_vendor_page(
-                llm, client, text, vendor, url, org_id, processor, limit, outcome["tried"]
+                llm, client, text, vendor, url, extract, org_id, processor, limit, tried
             )
             named = named or bool(model)
             if kept:
@@ -343,10 +374,11 @@ async def simulate_item(llm, client, item, proposal, quotes, search, processor, 
                     "vendor": vendor,
                     "model": model,
                     "url": url,
+                    "source": tried[-1]["source"],
                     "parameters": kept,
                 }
             if may_follow:
-                queue[:0] = [(link, False) for link in follow]
+                queue[:0] = [(link, "", False) for link in follow]
     status = "no_parameters" if named else "no_page" if found else "no_search_result"
     return outcome | {"status": status}
 

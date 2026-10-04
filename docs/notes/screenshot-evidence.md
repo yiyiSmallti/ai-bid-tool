@@ -210,7 +210,8 @@ extraction, product selection and revision, the queries, the search service iden
 and the vendor domains already recorded on this organization's current product
 revisions with the same vendor name. The worker rebuilds those inputs before searching
 and before publishing. [`search.py`](../../server/app/providers/search.py) calls the
-SearXNG JSON endpoint without redirects or environment proxies. Candidates must pass the
+Perplexity Search API when `BID_PERPLEXITY_API_KEY` is set, otherwise the SearXNG JSON
+endpoint, without redirects or environment proxies; the key goes only to Perplexity. Candidates must pass the
 fetch broker's URL canonicalization, so HTTP, credential-bearing and ambiguous URLs are
 dropped; duplicates merge their engines. Known vendor domains rank first, then PDFs.
 The run stores up to 20 candidates with their rank and flags in

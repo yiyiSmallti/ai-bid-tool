@@ -293,8 +293,11 @@ BID_CONVERTER_LIVE_URL=http://127.0.0.1:3300 uv run pytest -q server/tests/test_
 
 ## Run vendor search locally
 
-Vendor-source search (`bid evidence search`) queries a private SearXNG
-instance configured by
+Vendor-source search (`bid evidence search`) and product simulation use the
+Perplexity Search API when `BID_PERPLEXITY_API_KEY` is set in the API and worker
+environment; restart both after setting it. Without a key they query a private
+SearXNG instance. SearXNG scrapes public search engines, which answer a busy
+address with CAPTCHAs or rate limits until they lift the block. It is configured by
 [deploy/searxng/settings.yml](../../deploy/searxng/settings.yml). Without a
 container daemon, run it from the source revision that the Compose image tag
 names, in its own environment outside the project's:
