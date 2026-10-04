@@ -5,6 +5,7 @@
 use_default_settings:
   engines:
     keep_only:
+      - yahoo
       - 360search
       - duckduckgo
       - baidu
@@ -27,6 +28,8 @@ server:
   image_proxy: false
 
 engines:
+  - name: yahoo
+    disabled: false
   - name: 360search
     disabled: false
   - name: duckduckgo

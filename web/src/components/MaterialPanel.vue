@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { confirmAction, display, downloadOriginal, errorText, orgAccess, orgRequest } from "../org.js";
+import { confirmAction, display, downloadOriginal, errorText, orgAccess, orgRequest, simulatedSelections } from "../org.js";
 import PageViewer from "./PageViewer.vue";
 const props = defineProps({ taskId: String, editable: Boolean });
 const emit = defineEmits(["add", "changed"]);
@@ -15,7 +15,7 @@ const selections = ref([]), sources = ref([]), files = ref([]), loaded = ref(fal
 const chosen = ref(""), field = ref(""), quote = ref(""), pageSource = ref(""), pageQuote = ref("");
 const sourceImage = ref(null), previewName = ref(""), previewBusy = ref(false);
 const libraryKind = ref("product"), library = ref([]), libraryChoice = ref(""), lot = ref("");
-const certificate = ref(""), page = ref(1), open = ref([]), viewing = ref(null), viewerOpen = ref(false);
+const certificate = ref(""), page = ref(1), open = ref([]), viewing = ref(null), viewerOpen = ref(false), marks = ref(new Set());
 function view(file) { viewing.value = file; viewerOpen.value = true; }
 const loadCertificatePage = (pageNumber, zoom) => orgRequest("GET", `/resources/certificates/revisions/${viewing.value.certificate_revision_id}/file/pages/${pageNumber}/preview?zoom=${zoom}`, undefined, { binary: true });
 let previewEpoch = 0;
@@ -31,6 +31,7 @@ async function load() {
     });
     const values = await Promise.all([...requests, orgRequest("GET", `/tasks/${props.taskId}/evidence-sources?history=true`), orgRequest("GET", `/tasks/${props.taskId}/certificate-files`)]);
     selections.value = values.slice(0, 4).flat(); sources.value = values[4].items; files.value = values[5].items; loaded.value = true;
+    marks.value = await simulatedSelections(props.taskId);
   } catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
 function addField() {
@@ -94,8 +95,9 @@ onMounted(load);
       </el-collapse-item>
       <el-collapse-item name="fields" :title="`固定选择与字段摘录（${selections.length}）`">
         <el-form label-position="top" @submit.prevent>
-          <el-form-item label="固定选择"><el-select v-model="chosen" placeholder="请选择" @change="field = ''; quote = ''"><el-option v-for="item in selections" :key="item.id" :value="item.id" :label="`${kinds[item.kind].label} · ${item.data.name} · r${item.revision} · ${item.active ? '有效选择' : '已失效'}`" /></el-select></el-form-item>
+          <el-form-item label="固定选择"><el-select v-model="chosen" placeholder="请选择" @change="field = ''; quote = ''"><el-option v-for="item in selections" :key="item.id" :value="item.id" :label="`${marks.has(item.id) ? '【模拟】' : ''}${kinds[item.kind].label} · ${item.data.name} · r${item.revision} · ${item.active ? '有效选择' : '已失效'}`" /></el-select></el-form-item>
           <template v-if="selection">
+            <p v-if="marks.has(selection.id)" class="notice warning">这是模拟拟投生成的材料，只用于演示，引用它的响应不能进入正式件。</p>
             <p class="hint">修订 {{ selection.revision }} · {{ selection.active ? "有效选择" : "非活动选择，不可添加" }}<template v-if="selection.validity"> · 日期检查 {{ display(selection.validity) }}</template></p>
             <el-form-item label="可摘录字段"><el-select v-model="field" placeholder="请选择" @change="quote = ''"><el-option v-for="key in allowedFields" :key="key" :value="key" :label="key" /></el-select></el-form-item>
             <blockquote v-if="field" class="quote">{{ selection.data[field] }}</blockquote>

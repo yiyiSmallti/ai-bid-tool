@@ -119,6 +119,7 @@ class Processor:
                     "provider_test",
                     "export_render",
                     "export_preview",
+                    "product_simulation",
                     "screenshot_render",
                     "screenshot_analyze",
                     "prototype_generate",
@@ -165,6 +166,7 @@ class Processor:
                     "provider_test",
                     "screenshot_analyze",
                     "prototype_generate",
+                    "product_simulation",
                 }:
                     async with self.db.transaction(org_id) as session:
                         llm = await self.resolve(session, current)
@@ -184,6 +186,12 @@ class Processor:
                         raise ServiceError(
                             "export_render_timeout", "Export job deadline exceeded", 503, 3
                         ) from exc
+                    return
+                if kind == "product_simulation":
+                    from app.services.product_simulation import process as simulate
+
+                    incremental = True
+                    await simulate(execution, self, llm)
                     return
                 if kind == "export_preview":
                     from app.providers.converter import create_converter

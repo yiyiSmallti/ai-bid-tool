@@ -50,6 +50,9 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         payload["data"]["result"] = _public_result(job)
         payload["ok"] = job.result.get("completion") != "partial"
         payload["cost"] = job.result.get("cost", payload["cost"])
+    if job.kind == "product_simulation":
+        identity.require("task:read")
+        payload["data"]["result"] = _public_result(job)
     if job.kind == "screenshot_search":
         from app.services.vendor_search import check_job_access as search_access
 

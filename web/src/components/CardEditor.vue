@@ -1,7 +1,7 @@
 <script setup>
 import { ArrowRight, Close, Download, Refresh, Tickets, View } from "@element-plus/icons-vue";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { actorKinds, confirmAction, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, mine, orgAccess, orgRequest, quoteChecks, responseKinds, states, statusTag } from "../org.js";
+import { actorKinds, confirmAction, simulatedSelections, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, mine, orgAccess, orgRequest, quoteChecks, responseKinds, states, statusTag } from "../org.js";
 import DocumentPreview from "./DocumentPreview.vue";
 import MaterialPanel from "./MaterialPanel.vue";
 import SourcePreview from "./SourcePreview.vue";
@@ -9,7 +9,8 @@ const props = defineProps({ row: Object, taskId: String, jobId: String, document
 const emit = defineEmits(["updated", "dirty", "next", "close", "materials"]);
 const card = ref(null), content = ref(emptyContent()), baseline = ref(""), ready = ref(false), busy = ref(false), error = ref(""), notice = ref("");
 const reviewed = ref([]), warnings = ref([]), reason = ref(""), domain = ref("technical"), history = ref(null), sourceChunk = ref(null);
-const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kindKey = ref(0);
+const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kindKey = ref(0), marks = ref(new Set());
+simulatedSelections(props.taskId).then((value) => { marks.value = value; }).catch(() => {});
 let active = true;
 const dirty = computed(() => ready.value && JSON.stringify(content.value) !== baseline.value);
 const displayedSource = computed(() => card.value?.source ?? props.row.source);
@@ -163,7 +164,7 @@ onMounted(async () => {
 
         <h4>本修订实际链接材料</h4>
         <el-card v-for="(evidence, index) in card?.evidence ?? []" :key="evidence.id" shadow="never" class="evidence">
-          <div class="tags"><span class="tag primary">材料 {{ index + 1 }}</span><span class="tag">{{ label(materialKinds, evidence.material_kind) }}</span><span class="tag">{{ label(quoteChecks, evidence.quote_check) }}</span><span class="tag" :class="evidence.active_selection ? 'success' : 'danger'">{{ evidence.active_selection ? "有效选择" : "已失效" }}</span></div>
+          <div class="tags"><span class="tag primary">材料 {{ index + 1 }}</span><span class="tag">{{ label(materialKinds, evidence.material_kind) }}</span><span class="tag">{{ label(quoteChecks, evidence.quote_check) }}</span><span class="tag" :class="evidence.active_selection ? 'success' : 'danger'">{{ evidence.active_selection ? "有效选择" : "已失效" }}</span><span v-if="marks.has(evidence.selection_id)" class="tag warning">模拟材料</span></div>
           <p class="hint mono">{{ evidence.input.field_path ?? `第 ${evidence.source_archive?.page} 页` }} · 选择 {{ evidence.selection_id.slice(0, 8) }} · 资源修订 {{ evidence.resource_revision_id.slice(0, 8) }}</p>
           <blockquote class="quote">{{ evidence.input.quote }}</blockquote>
           <SourcePreview v-if="evidence.source_archive" :source="evidence.source_archive" />
