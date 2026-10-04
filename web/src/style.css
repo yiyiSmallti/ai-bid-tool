@@ -23,7 +23,8 @@
   font-family: var(--el-font-family);
   color: var(--text);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
+  --el-font-size-base: 14px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--page-bg); }
@@ -36,6 +37,8 @@ p { margin: 8px 0; }
 code, .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; overflow-wrap: anywhere; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; background: var(--surface-muted); border-radius: 6px; padding: 10px 12px; margin: 8px 0; }
 :focus-visible { outline: 2px solid var(--el-color-primary); outline-offset: 2px; }
+/* Headings receive focus only to move screen readers; they show no focus ring. */
+[tabindex="-1"]:focus, [tabindex="-1"]:focus-visible { outline: none; }
 .skip-link { position: fixed; top: -80px; left: 12px; z-index: 3000; background: #fff; padding: 10px; border-radius: 6px; }
 .skip-link:focus { top: 8px; }
 
@@ -54,7 +57,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace,
 .org-name, .who { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .org-name strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .who .email { color: var(--muted); font-size: 13px; }
-.app-main { padding: 20px 24px 40px; max-width: 1600px; width: 100%; margin: 0 auto; }
+.app-main { padding: 20px 28px 40px; max-width: 1880px; width: 100%; margin: 0 auto; }
 .app-main:focus { outline: none; }
 
 /* Public pages */
@@ -79,7 +82,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace,
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
 .actions .el-button + .el-button { margin-left: 0; }
 .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
-.hint { color: var(--muted); font-size: 12px; }
+.hint { color: var(--muted); font-size: 13px; line-height: 1.6; }
 .error { color: var(--danger); }
 .notice { background: var(--el-color-primary-light-9); color: var(--text); border-radius: 6px; padding: 10px 14px; margin: 8px 0; overflow-wrap: anywhere; }
 .muted { color: var(--muted); }
@@ -88,7 +91,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace,
 /* Statistics */
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.stat .label { color: var(--muted); font-size: 12px; }
+.stat .label { color: var(--muted); font-size: 13px; }
 .stat .value { font-size: 22px; font-weight: 600; overflow-wrap: anywhere; }
 .stat.danger { background: #fff5f5; border-color: #fcd5d5; }
 .stat.danger .value { color: var(--danger); }
@@ -96,10 +99,11 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace,
 
 /* Native tables styled like Element Plus tables, used where the caption and row semantics matter. */
 .table-scroll { overflow: auto; max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
 .data-table caption { text-align: left; padding: 12px 14px; color: var(--muted); caption-side: top; }
-.data-table th { text-align: left; font-weight: 500; color: var(--muted); background: var(--surface-muted); padding: 10px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; }
-.data-table td { padding: 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.data-table th { text-align: left; font-weight: 600; font-size: 13px; color: #4b5563; background: var(--surface-muted); padding: 10px 14px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.data-table td { padding: 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.data-table td.middle { vertical-align: middle; }
 .data-table tbody tr:hover { background: #f9fafc; }
 .data-table tbody tr:last-child td { border-bottom: none; }
 .data-table td.num, .data-table th.num { text-align: right; }
@@ -107,7 +111,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace,
 .data-table tr.selected { background: var(--el-color-primary-light-9); }
 
 /* Lightweight tags for large lists, matching Element Plus small tags without a component per cell. */
-.tag { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 4px; font-size: 12px; line-height: 1; border: 1px solid var(--el-color-info-light-8); background: var(--el-color-info-light-9); color: var(--el-color-info); white-space: nowrap; }
+.tag { display: inline-flex; align-items: center; height: 22px; padding: 0 8px; border-radius: 4px; font-size: 12px; line-height: 1; border: 1px solid var(--el-color-info-light-8); background: var(--el-color-info-light-9); color: var(--el-color-info); white-space: nowrap; }
 .tag.primary { border-color: var(--el-color-primary-light-8); background: var(--el-color-primary-light-9); color: var(--el-color-primary); }
 .tag.success { border-color: var(--el-color-success-light-8); background: var(--el-color-success-light-9); color: var(--el-color-success); }
 .tag.warning { border-color: var(--el-color-warning-light-8); background: var(--el-color-warning-light-9); color: var(--el-color-warning-dark-2, #b88230); }
@@ -119,7 +123,7 @@ pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace,
 
 /* Source quotes and details */
 .quote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--el-color-primary-light-5); background: var(--surface-muted); border-radius: 0 6px 6px 0; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
-.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 12px; margin: 8px 0; font-size: 13px; }
+.kv { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 12px; margin: 8px 0; font-size: 14px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 details { margin: 8px 0; }
@@ -127,7 +131,7 @@ summary { cursor: pointer; padding: 6px 0; color: var(--el-color-primary); }
 
 /* Native controls that stay native for accessibility. */
 input[type="checkbox"], input[type="radio"] { accent-color: var(--el-color-primary); width: 16px; height: 16px; margin: 0; cursor: pointer; }
-.check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; }
+.check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; }
 .file-picker { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--muted); }
 .file-picker input[type="file"] { padding: 18px; border: 1px dashed var(--el-color-primary-light-5); border-radius: 8px; background: var(--el-color-primary-light-9); color: var(--text); cursor: pointer; }
 .el-form-item { margin-bottom: 16px; }

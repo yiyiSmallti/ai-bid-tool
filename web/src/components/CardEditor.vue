@@ -201,7 +201,8 @@ onMounted(async () => {
             <el-select v-model="domain" aria-label="指定审阅职责" class="domain-select"><el-option value="technical" label="技术" /><el-option value="commercial" label="商务 / 资格" /></el-select>
             <el-button :disabled="busy || dirty || !!conflict" @click="classify">分类并记录理由</el-button>
           </div>
-          <div v-if="card.disposition !== 'comply_only'" class="actions decision">
+          <div v-if="card.disposition !== 'comply_only'" class="decision-bar">
+          <div class="actions decision">
             <el-button v-if="card.state === 'draft'" type="primary" :disabled="busy || dirty || !!conflict" @click="action('submit')">提交审阅</el-button>
             <el-button v-if="card.state === 'pending_review'" :disabled="busy || !!conflict" @click="action('withdraw')">撤回</el-button>
             <template v-if="canDecide && card.state === 'pending_review'">
@@ -212,6 +213,7 @@ onMounted(async () => {
             <el-button v-if="canDecide && card.state === 'confirmed'" :disabled="busy || !!conflict" @click="action('reopen')">重开</el-button>
           </div>
           <p v-if="canDecide && card.state === 'pending_review' && confirmBlocker" id="confirm-blocker" class="hint blocker">暂不能确认：{{ confirmBlocker }}</p>
+          </div>
           <p v-if="card.disposition === 'comply_only'" class="hint">已决定“仅需遵守”，这张卡片不再逐项响应；由负责的审核人改回“逐项响应”后才能编辑。</p>
         </template>
         <p v-if="card?.confirmed_by" class="hint">确认人 {{ card.confirmed_by }} · {{ formatTime(card.confirmed_at) }}</p>
@@ -250,7 +252,10 @@ onMounted(async () => {
 .candidates { padding-left: 20px; }
 .warning-item { margin-bottom: 8px; }
 .classify .domain-select { width: 160px; }
-.decision { padding-top: 4px; }
+/* Decisions stay reachable while the reviewer reads the content above them. */
+.decision-bar { position: sticky; bottom: 0; z-index: 2; background: var(--surface); border-top: 1px solid var(--border); margin: 12px -16px 0; padding: 4px 16px 8px; box-shadow: 0 -4px 10px #0000000a; }
+.decision { margin: 8px 0 4px; }
+.decision-bar .blocker { margin: 0 0 4px; }
 .blocker { color: var(--el-color-warning-dark-2, #b88230); }
 .history { margin-top: 12px; }
 .conflict-actions { justify-content: flex-end; }

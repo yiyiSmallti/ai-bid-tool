@@ -37,7 +37,8 @@ const warningTexts = {
   "The current model has no reasoning levels configured; the level was ignored.": "当前模型未登记推理档位，所选档位已忽略。",
 };
 export const warningText = (warning) => warningTexts[warning] ?? warning;
-export const locationLabel = (source, name = "") => [name, source?.page != null ? `第 ${source.page} 页` : [source?.location?.section_path?.join(" / "), source?.location?.label].filter(Boolean).join(" · ")].filter(Boolean).join(" · ");
+// A Word label already spells out its section path, so the path is only a fallback.
+export const locationLabel = (source, name = "") => [name, source?.page != null ? `第 ${source.page} 页` : source?.location?.label || source?.location?.section_path?.join(" / ")].filter(Boolean).join(" · ");
 
 // Chinese labels for API codes. A code without a label is shown as-is so new values stay visible.
 export const label = (map, value, fallback = "未知") => value === null || value === undefined ? fallback : map[value] ?? String(value);
