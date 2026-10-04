@@ -235,7 +235,7 @@ async def test_policy_reload_rejects_revocation_and_mutation(tmp_path, mutation)
 
 @pytest.mark.parametrize(
     "encoding,body",
-    [("gzip", gzip.compress(b"a" * 2000)), ("br", b"anything"), ("gzip", b"broken")],
+    [("gzip", gzip.compress(b"a" * 2000, mtime=0)), ("br", b"anything"), ("gzip", b"broken")],
 )
 async def test_encoding_and_decompression_bomb(tmp_path, encoding, body):
     stream = Chunks([body])
