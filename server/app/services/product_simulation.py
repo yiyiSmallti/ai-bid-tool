@@ -1,9 +1,11 @@
 """Simulated product proposals for demonstration: propose, search, fetch, quote, record.
 
 Technical requirements are grouped by the tender table row that lists one procurement
-item. For each hardware item the model proposes a real product; the worker searches
-the operator's search service, fetches one public page through the trusted fetch
-broker, and keeps only parameter statements that occur verbatim in that page. Each
+item. For each hardware item the model proposes candidate vendors with their official
+domains; the worker searches the operator's search service, fetches pages on those
+domains through the trusted fetch broker, and keeps a product only when the model
+judges the page to be the vendor's own and its name and parameter statements occur
+verbatim in that page. Each
 kept product and statement is stored as an ordinary declaration and registered in
 `simulated_resources`, so every revision stays marked and final exports refuse it.
 """
@@ -29,7 +31,7 @@ from app.models.entities import (
     TaskResource,
 )
 from app.providers import simulation
-from app.providers.base import ProviderFailure
+from app.providers.base import MalformedOutput, ProviderFailure
 from app.providers.calls import plan_calls
 from app.providers.sandbox_fetch import FetchBroker, FetchDenied, SQLiteFetchQuota, system_resolver
 from app.schemas.feature_contracts import FeatureCreate, TaskFeatureSelection
@@ -40,13 +42,17 @@ from app.services import response_cards as cards
 from app.services import screenshots as images
 from app.services.card_generation import worker
 from app.services.screenshot_jobs import create_job
-from app.services.vendor_search import ranked
+from app.services.vendor_search import host_of, ranked, registrable
 
 JOB_KIND = "product_simulation"
 PROPOSAL_BATCH = 12
 MAX_ITEM_CHARS = 6000
 MIN_PAGE_CHARS = 200
-CANDIDATES_PER_ITEM = 3
+VENDORS_PER_ITEM = 3
+PAGES_PER_VENDOR = 2
+FOLLOWED_PER_PAGE = 2
+# Every page read is one quoting call: found pages plus the links followed from them.
+QUOTES_PER_ITEM = VENDORS_PER_ITEM * PAGES_PER_VENDOR * (1 + FOLLOWED_PER_PAGE)
 
 
 NAME_HEADER = re.compile(r"名称|项目|模块|设备|产品|货物|品目|内容")
@@ -83,7 +89,7 @@ def row_names(chunk: Chunk) -> dict[tuple, str]:
     cells: dict[int, dict[int, dict[int, str]]] = {}
     for block in chunk.blocks or []:
         if block.get("kind") == "cell":
-            table, row, column = block.get("table"), block.get("row"), block.get("column")
+            table, row, column = int(block["table"]), int(block["row"]), int(block["column"])
             cells.setdefault(table, {}).setdefault(row, {})[column] = cell_text(block)
     names: dict[tuple, str] = {}
     for table, rows in cells.items():
@@ -207,15 +213,12 @@ async def submit(session, actor, task_id: UUID, body: ProductSimulationInput, pr
     return await create_job(session, actor, task_id, extraction, JOB_KIND, manifest, body.retry)
 
 
-async def fetch_text(org_id: UUID, url: str, processor) -> tuple[str, str] | None:
-    """Fetch one public page through the trusted broker; (final URL, text) or None."""
+async def fetch_page(org_id: UUID, url: str, processor) -> simulation.Page:
+    """Fetch one public page through the trusted broker, or raise FetchDenied."""
     from app.services.sandbox import policy_source
 
     source = policy_source()
-    try:
-        policy = source.select(url)
-    except FetchDenied:
-        return None
+    policy = source.select(url)
     broker = FetchBroker(
         source,
         policy.revision,
@@ -226,19 +229,48 @@ async def fetch_text(org_id: UUID, url: str, processor) -> tuple[str, str] | Non
     )
     try:
         payload = await broker.fetch(url)
-    except FetchDenied:
-        return None
     finally:
         broker.close()
     if payload.status != 200:
-        return None
+        raise FetchDenied(f"http_{payload.status}")
     try:
-        text = await asyncio.to_thread(
-            simulation.page_text, payload.body, payload.headers.get("content-type", "")
+        page = await asyncio.to_thread(
+            simulation.read_page,
+            payload.body,
+            payload.headers.get("content-type", ""),
+            payload.url,
         )
-    except Exception:
-        return None
-    return (payload.url, text) if len(text) >= MIN_PAGE_CHARS else None
+    except (ValueError, RuntimeError):
+        raise FetchDenied("page_unreadable") from None
+    if len(page.text) < MIN_PAGE_CHARS:
+        raise FetchDenied("page_too_short")
+    host = registrable(host_of(page.url))
+    # Only links on the same site may be followed; the model picks among these.
+    return page.model_copy(
+        update={"links": [row for row in page.links if registrable(host_of(row["url"])) == host]}
+    )
+
+
+def official_domain(value: str) -> str:
+    """Registrable domain of a model-proposed official site, or empty when malformed."""
+    host = value.strip().lower().removeprefix("https://").removeprefix("http://")
+    host = host.split("/", 1)[0].removeprefix("www.")
+    return registrable(host) if re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", host) else ""
+
+
+async def vendor_pages(search, domain: str, query: str) -> list[str]:
+    """Search once; pages on the proposed domain first, else the top results.
+
+    Proposed domains are often wrong, so other hosts stay candidates; the quoting step
+    decides from the URL whether a page is the vendor's own site.
+    """
+    try:
+        hits = (await search.search(query)).hits
+    except ProviderFailure:
+        return []
+    rows = ranked(hits, [domain] if domain else [])
+    official = [row["url"] for row in rows if row["known_vendor_domain"]]
+    return (official or [row["url"] for row in rows])[:PAGES_PER_VENDOR]
 
 
 def item_text(item: dict, quotes: dict[str, str]) -> dict:
@@ -252,50 +284,71 @@ def item_text(item: dict, quotes: dict[str, str]) -> dict:
     return {"item_key": item["key"], "name": item["name"], "requirements": lines}
 
 
+async def read_vendor_page(llm, client, item, vendor, url, org_id, processor, limit, tried):
+    """Quote one page; returns (model, kept quotes, url, followable links) and logs the attempt."""
+    attempt = {"vendor": vendor, "url": url}
+    tried.append(attempt)
+    try:
+        page = await fetch_page(org_id, url, processor)
+    except FetchDenied as denied:
+        attempt["result"] = denied.code
+        return "", [], url, []
+    async with limit:
+        answer = await simulation.quote(llm, client, item, vendor, page)
+    allowed = {row["url"] for row in page.links}
+    follow = [link for link in answer.next_urls if link in allowed][:FOLLOWED_PER_PAGE]
+    model = simulation.normalize(answer.model)[:120]
+    # The product must be named on the page; a remembered model is never stored.
+    if not model or model not in page.text:
+        attempt["result"] = "no_product"
+        return "", [], page.url, follow
+    kept, seen = [], set()
+    for parameter in answer.parameters:
+        statement = simulation.normalize(parameter.quote)
+        if not 4 <= len(statement) <= 300 or statement in seen or statement not in page.text:
+            continue
+        seen.add(statement)
+        kept.append({"label": parameter.label.strip()[:60] or "参数", "quote": statement})
+    attempt["result"] = "quoted" if kept else "no_parameters"
+    return model, kept[:30], page.url, []
+
+
 async def simulate_item(llm, client, item, proposal, quotes, search, processor, org_id, limit):
-    """Search, fetch and quote one hardware item; returns the outcome for the job result."""
-    outcome = {
-        "key": item["key"],
-        "name": item["name"],
-        "kind": proposal.kind,
-        "vendor": proposal.vendor,
-        "model": proposal.model,
-    }
+    """Try each proposed vendor's pages, one link level deep, until one names a product."""
+    outcome = {"key": item["key"], "name": item["name"], "kind": proposal.kind, "tried": []}
     if proposal.item_key != item["key"]:
         return outcome | {"kind": None, "status": "not_proposed"}
-    if proposal.kind != "hardware" or not proposal.vendor.strip() or not proposal.model.strip():
-        return outcome | {"status": "not_hardware" if proposal.kind != "hardware" else "no_product"}
-    hits = []
-    for query in proposal.queries[:2] or [f"{proposal.vendor} {proposal.model}"]:
-        try:
-            hits.extend((await search.search(query)).hits)
-        except ProviderFailure:
-            continue
-    candidates = ranked(hits, [])[:CANDIDATES_PER_ITEM]
-    model_token = proposal.model.strip().lower()
-    matched = False
-    for candidate in candidates:
-        fetched = await fetch_text(org_id, candidate["url"], processor)
-        if fetched is None:
-            continue
-        url, text = fetched
-        # A page that never names the proposed model is not that product's page.
-        if model_token not in text.lower():
-            continue
-        matched = True
-        async with limit:
-            parameters = await simulation.quote(llm, client, item_text(item, quotes), text)
-        kept, seen = [], set()
-        for parameter in parameters:
-            statement = simulation.normalize(parameter.quote)
-            if len(statement) < 4 or statement in seen or statement not in text:
-                continue
-            seen.add(statement)
-            kept.append({"label": parameter.label.strip()[:60] or "参数", "quote": statement})
-        if kept:
-            return outcome | {"status": "quoted", "url": url, "parameters": kept[:30]}
-    status = "no_search_result" if not candidates else "no_parameters" if matched else "no_page"
-    return outcome | {"status": status, "candidates": [row["url"] for row in candidates]}
+    if proposal.kind != "hardware":
+        return outcome | {"status": "not_hardware"}
+    candidates = [row for row in proposal.candidates if row.vendor.strip() and row.query.strip()]
+    if not candidates:
+        return outcome | {"status": "no_product"}
+    text = item_text(item, quotes)
+    found = named = False
+    for candidate in candidates[:VENDORS_PER_ITEM]:
+        vendor = candidate.vendor.strip()[:100]
+        query = candidate.query.strip()[:120]
+        pages = await vendor_pages(search, official_domain(candidate.domain), query)
+        found = found or bool(pages)
+        queue = [(url, True) for url in pages]
+        while queue:
+            url, may_follow = queue.pop(0)
+            model, kept, url, follow = await read_vendor_page(
+                llm, client, text, vendor, url, org_id, processor, limit, outcome["tried"]
+            )
+            named = named or bool(model)
+            if kept:
+                return outcome | {
+                    "status": "quoted",
+                    "vendor": vendor,
+                    "model": model,
+                    "url": url,
+                    "parameters": kept,
+                }
+            if may_follow:
+                queue[:0] = [(link, False) for link in follow]
+    status = "no_parameters" if named else "no_page" if found else "no_search_result"
+    return outcome | {"status": status}
 
 
 async def record(session, actor, task_id: UUID, job_id: UUID, outcome: dict) -> None:
@@ -384,8 +437,7 @@ async def process(execution: JobExecution, processor, llm) -> None:
     batches = [
         items[start : start + PROPOSAL_BATCH] for start in range(0, len(items), PROPOSAL_BATCH)
     ]
-    # Every item may need one quoting call after the proposal batches.
-    plan_calls(len(batches) + len(items))
+    plan_calls(len(batches))
     limit = asyncio.Semaphore(max(1, processor.settings.llm_concurrency))
     async with httpx.AsyncClient(
         transport=llm.transport,
@@ -394,19 +446,27 @@ async def process(execution: JobExecution, processor, llm) -> None:
     ) as client:
 
         async def proposed(batch):
-            async with limit:
-                return await simulation.propose(
-                    llm, client, [item_text(item, quotes) for item in batch]
-                )
+            try:
+                async with limit:
+                    return await simulation.propose(
+                        llm, client, [item_text(item, quotes) for item in batch]
+                    )
+            except MalformedOutput:
+                # A single item the model cannot answer stays visible as not_proposed.
+                if len(batch) == 1:
+                    return []
+                half = len(batch) // 2
+                first, second = await asyncio.gather(proposed(batch[:half]), proposed(batch[half:]))
+                return first + second
 
         proposals = {
             proposal.item_key: proposal
             for answered in await asyncio.gather(*(proposed(batch) for batch in batches))
             for proposal in answered
         }
-        missing = simulation.ItemProposal(
-            item_key="-", kind="service", vendor="", model="", queries=[]
-        )
+        hardware = sum(proposal.kind == "hardware" for proposal in proposals.values())
+        plan_calls(len(batches) + hardware * QUOTES_PER_ITEM)
+        missing = simulation.ItemProposal(item_key="-", kind="service", candidates=[])
         outcomes = await asyncio.gather(
             *(
                 simulate_item(

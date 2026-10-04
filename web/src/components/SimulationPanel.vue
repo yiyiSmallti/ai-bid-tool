@@ -11,7 +11,8 @@ const succeeded = computed(() => props.extractions.filter((entry) => entry.statu
 const extraction = ref(""), preview = ref(null), jobId = ref(""), result = ref(null), busy = ref(false), error = ref("");
 watch(succeeded, (rows) => { if (!extraction.value && rows.length) extraction.value = rows.find((row) => row.latest)?.job_id ?? rows[0].job_id; }, { immediate: true });
 const kinds = { hardware: "硬件", software: "软件", service: "服务" };
-const statuses = { not_proposed: "模型未给出结果", quoted: "已录入", not_hardware: "软件或服务，不拟投产品", no_product: "未给出型号", no_search_result: "未搜到页面", no_page: "未找到该型号的官方页面", no_parameters: "页面没有相关参数" };
+const statuses = { not_proposed: "模型未给出结果", quoted: "已录入", not_hardware: "软件或服务，不拟投产品", no_product: "未给出候选厂商", no_search_result: "未搜到候选厂商的官网页面", no_page: "官网页面打不开或未介绍此类产品", no_parameters: "页面没有相关参数" };
+const attempts = { quoted: "已采用", no_product: "非此类产品页", no_parameters: "无相关参数", fetch_timeout: "超时", fetch_transport_failed: "连接失败", http_status_denied: "页面返回错误", page_too_short: "页面无正文", page_unreadable: "无法解析" };
 const statusTag = { quoted: "success", no_page: "warning", no_parameters: "warning", no_search_result: "warning", no_product: "warning" };
 async function check() {
   busy.value = true; error.value = ""; preview.value = null;
@@ -19,7 +20,7 @@ async function check() {
   catch (exc) { error.value = errorText(exc); } finally { busy.value = false; }
 }
 async function start() {
-  if (!(await confirmAction(`模型将为 ${preview.value.items.length} 个采购项拟定产品，搜索并抓取官方页面，摘取参数后作为“模拟材料”录入资源库并固定到本任务。模拟材料只用于演示，不能进入正式件。继续？`, "开始模拟拟投"))) return;
+  if (!(await confirmAction(`模型将为 ${preview.value.items.length} 个采购项中的硬件提出候选厂商，搜索并抓取官网页面，摘取参数后作为“模拟材料”录入资源库并固定到本任务。模拟材料只用于演示，不能进入正式件。继续？`, "开始模拟拟投"))) return;
   busy.value = true; error.value = ""; result.value = null;
   try {
     const data = (await orgRequest("POST", `/tasks/${props.taskId}/product-simulations`, { extraction_job_id: extraction.value, expected_input_hash: preview.value.input_hash, retry: true })).data;
@@ -38,7 +39,7 @@ function finished(job) {
 <template>
   <el-card class="section" shadow="never">
     <template #header><div class="section-title"><h3>模拟拟投（演示）</h3><el-tag type="warning" effect="plain">模拟材料不能进入正式件</el-tag></div></template>
-    <p class="hint">按招标表格中的采购项，由模型为硬件拟定真实在售的品牌型号，搜索并抓取官方页面，只保留页面上逐字出现的参数，录入资源库并固定到本任务，之后即可起草响应。软件开发和服务类项目不拟投产品。</p>
+    <p class="hint">按招标表格中的采购项，由模型为硬件提出候选厂商，搜索并抓取厂商官网页面，从页面读取产品型号，只保留页面上逐字出现的型号和参数，录入资源库并固定到本任务，之后即可起草响应。软件开发和服务类项目不拟投产品。</p>
     <el-form label-position="top" class="sim-row" @submit.prevent="check">
       <el-form-item label="抽取记录" class="sim-extraction">
         <el-select v-model="extraction" placeholder="选择成功的抽取" :disabled="busy" @change="preview = null">
@@ -62,10 +63,14 @@ function finished(job) {
           <tr v-for="item in result.items" :key="item.key">
             <td>{{ item.name }}</td>
             <td>{{ kinds[item.kind] ?? item.kind }}</td>
-            <td>{{ item.vendor && item.model ? `${item.vendor} ${item.model}` : "—" }}</td>
+            <td>{{ item.model ? `${item.vendor} ${item.model}` : "—" }}</td>
             <td><span class="tag" :class="statusTag[item.status]">{{ statuses[item.status] ?? item.status }}</span></td>
             <td class="num">{{ item.parameters?.length ?? 0 }}</td>
-            <td class="source"><a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.url }}</a><span v-else class="hint">—</span></td>
+            <td class="source">
+              <a v-if="item.url" :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.url }}</a>
+              <ul v-else-if="item.tried?.length" class="tried"><li v-for="attempt in item.tried" :key="attempt.url">{{ attempt.vendor }}：{{ attempts[attempt.result] ?? attempt.result }}</li></ul>
+              <span v-else class="hint">—</span>
+            </td>
           </tr>
         </tbody>
       </table>
@@ -80,4 +85,5 @@ function finished(job) {
 .preview-box { display: flex; flex-direction: column; gap: 4px; background: var(--surface-muted); padding: 10px 14px; border-radius: 6px; margin-top: 14px; }
 .items { margin: 6px 0; padding-left: 20px; columns: 2; }
 .source { max-width: 320px; overflow-wrap: anywhere; font-size: 13px; }
+.tried { margin: 0; padding-left: 16px; color: var(--muted); }
 </style>

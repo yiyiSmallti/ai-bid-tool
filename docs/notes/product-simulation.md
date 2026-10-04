@@ -34,12 +34,20 @@ hash.
 
 The worker asks the model in
 [simulation.py](../../server/app/providers/simulation.py) to classify each item as
-hardware, software or service and to name a real, publicly documented product for
-hardware. Software development and services never get a product. For each
-hardware item it searches the operator's SearXNG, fetches up to three ranked
-candidates through the trusted fetch broker, and accepts only a page whose text
-names the proposed model. The model then quotes parameters from that page text;
-a quote that is not verbatim in the normalized page text is dropped.
+hardware, software or service, and for hardware to name up to three vendors with their
+official domain and a search query. The model never supplies a product model from
+memory. Software development and services never get a product. A batch whose output
+does not parse is split in half and asked again; an item that still gets no answer is
+reported as not proposed.
+
+For each vendor the worker searches the operator's SearXNG once and fetches up to two
+results through the trusted fetch broker, preferring the proposed domain because the
+model often names the wrong one. The model then reads each page with its URL: when the
+host is the vendor's own site and the page presents one product of the required kind, it
+names the product as written and quotes its parameters; when the page is a catalog, it
+may pick up to two same-site links from that page to read next, one level deep. The
+product name and every quote must occur verbatim in the normalized page text, and a link
+must be one the page contains. Each attempt and its result is kept in the job result.
 
 Each item with kept quotes becomes a product named 【模拟】 plus the item name, with
 the page as its official URL, and one feature declaration per quote. All are

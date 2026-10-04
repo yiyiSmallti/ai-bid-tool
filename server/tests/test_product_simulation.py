@@ -4,8 +4,11 @@ Failure modes enumerated before implementation:
 - Only a human with resource:write and task:resource may simulate; tokens, bidders and
   viewers are refused; another org's task is a 404.
 - The dry run sends nothing to the model, search or fetch, and a changed preview is refused.
-- A page that never names the proposed model, a denied fetch or an empty search yields no
+- Pages on a proposed vendor's domain are fetched before others; a failed fetch moves on
+  to the next vendor; a catalog page is followed one level only through links it really
+  contains; a product name the page does not contain is never stored, so the item gets no
   product; software and service items never get one.
+- A malformed proposal batch is split and retried instead of failing the run.
 - A model quote that is not verbatim in the fetched page is dropped before storage.
 - Kept products and statements are selected on the task and registered as simulated; a
   later human revision keeps the mark.
@@ -36,6 +39,11 @@ PAGE = (
     + "<p>"
     + "产品适用于校园自助打印与文印服务场景，" * 12
     + "</p></body></html>"
+)
+CATALOG = (
+    "<html><body><p>"
+    + "终端产品目录，" * 40
+    + '</p><a href="/sp100">SP-100 打印终端</a><a href="/about">关于我们</a></body></html>'
 )
 OTHER_PAGE = "<html><body><p>" + "交换机系列产品介绍，" * 40 + "</p></body></html>"
 
@@ -86,48 +94,53 @@ class Vendor:
         system, user = body["messages"][0]["content"], body["messages"][-1]["content"]
         if "拟投产品的模拟助手" in system:
             self.kinds.append("propose")
+            vendors = {
+                "打印": [
+                    ("BadVendor", "bad.example", "打印终端"),
+                    ("SynVendor", "www.vendor.example", "打印终端"),
+                ],
+                "交换机": [("SynNet", "net.example", "交换机")],
+            }
+            asked = json.loads(user)["items"]
+            if len(asked) > 2:
+                return self.reply({"items": "not a list"})
             items = []
-            for item in json.loads(user)["items"]:
-                name = item["name"]
-                if "打印" in name:
-                    items.append(
-                        {
-                            "item_key": item["item_key"],
-                            "kind": "hardware",
-                            "vendor": "SynVendor",
-                            "model": "SP-100",
-                            "queries": ["SynVendor SP-100 规格"],
-                        }
-                    )
-                elif "交换机" in name:
-                    items.append(
-                        {
-                            "item_key": item["item_key"],
-                            "kind": "hardware",
-                            "vendor": "SynNet",
-                            "model": "SW-24",
-                            "queries": ["SynNet SW-24 规格"],
-                        }
-                    )
-                else:
-                    items.append(
-                        {
-                            "item_key": item["item_key"],
-                            "kind": "software",
-                            "vendor": "",
-                            "model": "",
-                            "queries": [],
-                        }
-                    )
+            for item in asked:
+                found = next((rows for key, rows in vendors.items() if key in item["name"]), [])
+                items.append(
+                    {
+                        "item_key": item["item_key"],
+                        "kind": "hardware" if found else "software",
+                        "candidates": [
+                            {"vendor": name, "domain": domain, "query": f"{name} {query}"}
+                            for name, domain, query in found
+                        ],
+                    }
+                )
             return self.reply({"items": items})
         if "参数摘录助手" in system:
             self.kinds.append("quote")
+            sent = json.loads(user)
+            page = sent["page_text"]
+            if "终端产品目录" in page:
+                # Only a link the page really contains may be followed.
+                links = [row["url"] for row in sent["links"] if "sp100" in row["url"]]
+                return self.reply(
+                    {
+                        "model": "",
+                        "parameters": [],
+                        "next_urls": ["https://vendor.example/invented", *links],
+                    }
+                )
+            # The switch page never names SW-24, so that remembered model must be refused.
             return self.reply(
                 {
+                    "next_urls": [],
+                    "model": "SP-100" if "SP-100" in page else "SW-24",
                     "parameters": [
                         {"label": "内存", "quote": "内存：8GB DDR4"},
                         {"label": "臆造", "quote": "内存：16GB"},
-                    ]
+                    ],
                 }
             )
         self.kinds.append("extract")
@@ -149,20 +162,31 @@ class Vendor:
         return self.reply({"items": items})
 
 
+FETCHED: list[str] = []
+SEARCH_RESULTS = {
+    "BadVendor": ["https://bad.example/terminal"],
+    "SynVendor": ["https://market.example/sp100", "https://vendor.example/catalog"],
+    "SynNet": ["https://net.example/sw24"],
+}
+
+
 def search_handler(request: httpx.Request) -> httpx.Response:
     query = request.url.params["q"]
-    url = "https://vendor.example/sp100" if "SP-100" in query else "https://vendor.example/sw24"
+    urls = next((rows for name, rows in SEARCH_RESULTS.items() if name in query), [])
     return httpx.Response(
         200,
         json={
-            "results": [{"url": url, "title": query, "engines": ["synthetic"]}],
+            "results": [{"url": url, "title": query, "engines": ["synthetic"]} for url in urls],
             "unresponsive_engines": [],
         },
     )
 
 
 def fetch_handler(request: httpx.Request) -> httpx.Response:
-    page = PAGE if request.url.path == "/sp100" else OTHER_PAGE
+    FETCHED.append(request.headers["host"] + request.url.path)
+    if request.headers["host"] == "bad.example":
+        return httpx.Response(503)
+    page = {"/sp100": PAGE, "/catalog": CATALOG}.get(request.url.path, OTHER_PAGE)
     return httpx.Response(
         200, content=page.encode(), headers={"content-type": "text/html; charset=utf-8"}
     )
@@ -288,14 +312,22 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         )
         outcome = {item["name"]: item for item in result["items"]}
         assert outcome["学生管理系统定制开发"]["status"] == "not_hardware"
-        assert (
-            outcome["接入交换机"]["status"] == "no_parameters"
-            or outcome["接入交换机"]["status"] == "no_page"
-        )
+        switch = outcome["接入交换机"]
+        assert switch["status"] == "no_page" and "model" not in switch
+        assert [row["result"] for row in switch["tried"]] == ["no_product"]
         printer = outcome["智能打印终端"]
         assert printer["status"] == "quoted" and printer["parameters"] == [
             {"label": "内存", "quote": "内存：8GB DDR4"}
         ]
+        assert (printer["vendor"], printer["model"]) == ("SynVendor", "SP-100")
+        assert [(row["url"], row["result"]) for row in printer["tried"]] == [
+            ("https://bad.example/terminal", "http_status_denied"),
+            ("https://vendor.example/catalog", "no_product"),
+            ("https://vendor.example/sp100", "quoted"),
+        ]
+        assert printer["url"] == "https://vendor.example/sp100"
+        assert not any(url.startswith("market.example") or "invented" in url for url in FETCHED)
+        assert vendor.kinds.count("propose") == 3
 
         products = (await api.get(f"/tasks/{task}/products", headers=header)).json()["items"]
         features = (await api.get(f"/tasks/{task}/features", headers=header)).json()["items"]
