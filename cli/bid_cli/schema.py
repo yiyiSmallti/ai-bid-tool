@@ -21,9 +21,11 @@ from app.schemas.export_contracts import (
     ExportDownloadResult,
     ExportPrepare,
     ExportPreview,
+    ExportProvenance,
     ExportRelease,
     ExportRunView,
     ExportView,
+    TemplateSample,
 )
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
 from app.schemas.platform_contracts import (
@@ -109,6 +111,8 @@ COMMANDS = {
     "export list": None,
     "export show": None,
     "export download": None,
+    "export provenance": None,
+    "export template-sample": None,
     "login": Login,
     "org use": None,
     "task create": TaskCreate,
@@ -198,6 +202,8 @@ EXPORT_OUTPUTS = {
     "export list": TypeAdapter(ExportView),
     "export show": TypeAdapter(ExportView),
     "export download": TypeAdapter(ExportDownloadResult),
+    "export provenance": TypeAdapter(ExportProvenance),
+    "export template-sample": TypeAdapter(TemplateSample),
 }
 
 

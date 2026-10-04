@@ -100,6 +100,10 @@ def create_router(context, db, storage, queue, settings, crypto):
         actor, row = await exports.get_export(ctx[0], ctx[1], export_id)
         return result("export show", await exports.export_view(ctx[0], actor, row, storage))
 
+    @router.get("/exports/{export_id}/provenance", name="export_provenance", response_model=Result)
+    async def show_provenance(export_id: UUID, ctx=Depends(context, scope="function")):
+        return result("export provenance", await exports.provenance(ctx[0], ctx[1], export_id))
+
     @router.get(
         "/exports/{export_id}/download-link", name="export_download_link", response_model=Result
     )

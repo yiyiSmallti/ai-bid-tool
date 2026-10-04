@@ -144,9 +144,20 @@ SHA-256 和包号。不得接受资源 current 指针、外部 URL 或任意磁�
 未知标记一律报错。元数据不能充当响应或资格证明。
 
 每个映射指定模板内真实的标题/表格样式 ID；三表还指定列顺序和宽度比例。
-列固定为 `ordinal`、`tender_clause`、`source_location`、`response`、`deviation`、
-`deviation_note`、`evidence`，必须各出现一次，宽度为正且总和 100%。允许顺序和宽度适配，
-不能删除字段。`response` 包含响应种类，`tender_clause` 包含类别及 ★。
+三表的列按通行的中标响应表写法固定为四列，必须各出现一次，宽度为正且总和 100%，允许
+顺序和宽度适配：
+
+| 列 | 表头 | 内容 |
+| --- | --- | --- |
+| `ordinal` | 序号 | 本表内从 1 起连续编号 |
+| `requirement` | 招标文件要求 | 招标原文引用逐字照录；★ 标记的要求以 ★ 开头 |
+| `response` | 投标文件响应内容 | 已确认的响应文字逐字照录，末尾附“（见附件 E003、声明 D001）”式内部链接 |
+| `compliance` | 响应情况 | 无偏离：实质性响应一览表写“响应且无负偏离”，其余两表写“响应”；正偏离写“正偏离：”加具体差异；负偏离写加粗的“负偏离：”加具体差异 |
+
+正文不印内部分类标签、原文坐标、卡片或证据 ID、确认人、时间戳和哈希；这些写入随附的
+[留痕清单](#留痕清单)。须遵守条款清单为“序号｜招标文件要求｜响应情况（遵守）”，缺口清单为
+“序号｜招标文件要求｜缺口原因”。旧版七列绑定在预检时以 `export_binding_outdated` 阻止，
+须按当前列新建绑定。
 其他三区域使用固定字段，不支持任意脚本化行模板。标题、缺口警示和负偏离字样由渲染器
 保证可见，不能被空样式、隐藏字体或模板条件吞掉。
 
@@ -163,6 +174,10 @@ SHA-256 和包号。不得接受资源 current 指针、外部 URL 或任意磁�
 不承诺自动目录的最终页码、固定整本页数或不同 Word/WPS 字体环境下的相同分页。
 
 ## 证据索引与 PDF 页附件
+
+证据附件索引为“编号｜材料｜内容｜对应条款”：证书页与图片附件编号 E001 起，资源声明编号
+D001 起；材料写资源名称与编号，内容写“原件第 N 页”、声明摘录或图片所见，对应条款写表名与
+本表序号。每份附件另起一页，说明只写“附件 E007　材料名称　原件第 3 页”或“附件 E008　证据图片”。
 
 只从初稿响应行的固定卡片修订遍历确认后的 Evidence。资源声明的字段摘录、精确选择与
 修订进入证据索引，仍标明声明性质；不能据产品 URL 获取新截图，也不能把功能声明绘成
@@ -254,8 +269,7 @@ Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 ExportMode = Literal["final_section", "review_copy"]
 SectionKind = Literal["substantive", "commercial", "technical", "comply_only",
                       "gaps", "evidence_appendix"]
-ColumnKind = Literal["ordinal", "tender_clause", "source_location", "response",
-                     "deviation", "deviation_note", "evidence"]
+ColumnKind = Literal["ordinal", "requirement", "response", "compliance"]
 
 class ExportColumn(Contract):
     key: ColumnKind
@@ -265,7 +279,7 @@ class ExportSectionBinding(Contract):
     section: SectionKind
     heading_style_id: str = Field(min_length=1, max_length=200)
     table_style_id: str = Field(min_length=1, max_length=200)
-    columns: list[ExportColumn] = Field(default_factory=list, max_length=7)
+    columns: list[ExportColumn] = Field(default_factory=list, max_length=4)
 
 class ExportBindingCreate(Contract):
     template_revision_id: UUID
@@ -381,7 +395,7 @@ class ExportDownloadReceipt(Contract):
 
 字段间验证及返回补充：
 
-- 六个 section 无重复且顺序固定；三表 columns 恰为七列，其余 section 的 columns 为空。
+- 六个 section 无重复且顺序固定；三表 columns 恰为四列，其余 section 的 columns 为空。
   样式必须真实存在且类型匹配，字符串非空白，时间带时区，哈希只接受小写 SHA-256。
   binding dry-run 的 data 返回模板哈希、静态内容哈希、锚点定位、适配版本及 issues，
   不伪造 binding ID/审阅人；创建时必须提交匹配的静态内容哈希。
@@ -560,7 +574,7 @@ worker → 人工发布/下载 → 下列端到端检查。代码实施状态不
    解包文件确认没有未确认候选文字/媒体；全须遵守、全缺口和有效负偏离的结果各自正确，
    负偏离在表中明示，不能因正式模式消失。无效输入不写 exports 或成功发布审计。
 5. **模板绑定和内容泄漏**：上传两个不同修订及映射，检查固定旧选择不追随 current；
-   测试缺/重复/错位标记、跨 run 标记、未知样式、七列遗漏、静态业务内容、隐藏文字、
+   测试缺/重复/错位标记、跨 run 标记、未知样式、四列遗漏、静态业务内容、隐藏文字、
    修订、外链、OLE 和嵌入图片。支持者正确渲染，不支持者明确拒绝且无外部访问。
 6. **证书附件**：一份合成多页 PDF 只确认指定页，产物只含这些页；同页多 Evidence 去重
    图片但保留所有引用与确认记录。逐个提取 DOCX 媒体核对源 PNG 哈希，核对原件 SHA、
@@ -576,7 +590,7 @@ worker → 人工发布/下载 → 下列端到端检查。代码实施状态不
    改模式/映射/确认修订使输入变化，升级 profile 不复用旧缓存。dry-run 零业务写入，
    export 全链零 Provider 调用、零 UsageRecord/模型扣费，历史起草费用不变。
 10. **规模和失败工件**：用标记为合成的长响应材料与 125 页以上已确认页附件测试分页、
-    目录/书签、七列表格及人工可读性，再覆盖批准的附件/字节/内存/deadline 上限。
+    目录/书签、四列表格及人工可读性，再覆盖批准的附件/字节/内存/deadline 上限。
     超限或存储/DB 提交失败无发布记录、无静默删页；不以 663 页真实投标文件冒充已授权
     测试集。CI 不调用真实外部服务，真实材料另经明确授权验证。
 11. **契约与可重复交付物**：上述链路核验 Result 七键、0/2/3/4/5、schema、两模式一致。
@@ -584,6 +598,22 @@ worker → 人工发布/下载 → 下列端到端检查。代码实施状态不
     打开后核验记录到独立验收产物目录，不在 `docs/` 写日志、截图或证据文件；材料须明确
     标为测试合成，不包含真实投标正文、令牌、签名 URL。不能用计划或 worker 状态代替
     实际下载工件。
+
+## 留痕清单
+
+`GET /exports/{id}/provenance`（`bid export provenance --id ID --json`）返回已发布导出件的
+机器可读留痕：文件 SHA-256、模式、渲染 profile、输入与清单哈希、发布人与时间，以及每个表行、
+须遵守与缺口条目的表名、本表序号、要求与卡片修订、确认人与时间、证据 ID、选择与资源修订、
+附件编号、原件页、原件与 PNG 哈希。权限与下载相同，只读、不签发链接，内容取自固定清单，
+与 Word 正文的编号一致。
+
+## 起步模板
+
+`bid export template-sample --output NEW.docx --json` 在本地写出内置标准模板：A4、上下 2.54 cm、
+左右 3.18 cm 页边距，正文宋体小四，标题黑体三号，表格使用 `TableGrid`，页脚居中页码，六个
+锚点依次排列，不含其他静态正文。返回的 `data.binding_sections` 是可直接用于绑定的样式与
+推荐列宽（序号 6%、要求 36%、响应 42%、响应情况 16%）。单位可原样上传，或改样式后上传为
+自己的模板。
 
 ## 明确不在范围内
 

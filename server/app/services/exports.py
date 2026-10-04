@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.models.entities import (
+    CertificateRevision,
     Job,
     Membership,
     Org,
@@ -47,9 +48,11 @@ from app.schemas.export_contracts import (
     ExportIssue,
     ExportPrepare,
     ExportPreview,
+    ExportProvenance,
     ExportRelease,
     ExportRunView,
     ExportView,
+    binding_is_current,
 )
 from app.schemas.response_card_contracts import EvidenceInput
 from app.services import drafts, evidence_sources, prototype_decisions, screenshots, templates
@@ -57,7 +60,7 @@ from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.versioned import audit
 
-MANIFEST_VERSION = "human-export-manifest-v1"
+MANIFEST_VERSION = "human-export-manifest-v2"
 REQUIRED_SCOPES = ("export", "task:read", "draft:read", "card:read", "template:read")
 
 
@@ -108,6 +111,16 @@ def digest(value: Any) -> str:
 
 def timestamp(value: datetime | None) -> str | None:
     return value.astimezone(UTC).isoformat() if value is not None else None
+
+
+def material_title(data: dict) -> str:
+    """How a bid reader names a material: its name, with number or model when declared."""
+    name = str(data.get("name") or "").strip()
+    for field in ("number", "model"):
+        value = str(data.get(field) or "").strip()
+        if value:
+            return f"{name}（{value}）" if name else value
+    return name
 
 
 def issue(code: str, severity: str, *, requirements=(), evidence=(), revision=None) -> dict:
@@ -273,7 +286,16 @@ async def inspect_template(content: bytes, sections: list[dict], registered_head
 
 
 def binding_view(row: ExportTemplateBinding) -> dict:
-    return ExportBindingView.model_validate(row, from_attributes=True).model_dump(mode="json")
+    return ExportBindingView.model_validate(
+        {
+            **{
+                field: getattr(row, field)
+                for field in ExportBindingView.model_fields
+                if field != "current"
+            },
+            "current": binding_is_current(row.sections),
+        }
+    ).model_dump(mode="json")
 
 
 async def create_binding(
@@ -408,6 +430,9 @@ async def build_manifest(
     )
     view = await drafts.show_draft(session, actor, draft.id)
     issues = []
+    current_binding = binding_is_current(binding.sections)
+    if not current_binding:
+        issues.append(issue("export_binding_outdated", "block", revision=str(binding.id)))
     if view["validity"] != "current":
         issues.append(
             issue(
@@ -421,7 +446,8 @@ async def build_manifest(
         issues.append(issue("export_template_replaced", "block", revision=str(selection.id)))
     if len(requirements) > max_requirements:
         issues.append(issue("export_requirement_limit", "block", revision=max_requirements))
-    if verify_files:
+    # An outdated binding is already refused; its columns cannot pass the file check.
+    if verify_files and current_binding:
         content, _ = await templates.read_revision(session, actor, revision.id, storage)
         report = await inspect_template(content, binding.sections, headings(revision.data))
         for field in report.metadata_fields:
@@ -629,9 +655,20 @@ async def build_manifest(
                         }
                     )
                     if page_key not in pages:
+                        certificate = await session.get(
+                            CertificateRevision, archive.certificate_revision_id
+                        )
+                        if certificate is None:
+                            raise ServiceError(
+                                "export_evidence_integrity",
+                                "Certificate revision is missing",
+                                500,
+                                4,
+                            )
                         attachment = {
                             "ordinal": len(attachments) + 1,
                             "label": f"E{len(attachments) + 1:03d}",
+                            "title": material_title(certificate.data),
                             "selection_id": str(selected.id),
                             "revision_id": str(archive.certificate_revision_id),
                             "original_sha256": original.file["sha256"],
@@ -654,6 +691,14 @@ async def build_manifest(
                         attachment["requirement_ids"].append(str(row.requirement_id))
                     material["attachment_ordinal"] = attachment["ordinal"]
                 else:
+                    declared = await session.get(
+                        cards.MATERIALS[evidence.kind][1], material["resource_revision_id"]
+                    )
+                    if declared is None:
+                        raise ServiceError(
+                            "export_evidence_integrity", "Declared material is missing", 500, 4
+                        )
+                    material["title"] = material_title(declared.data)
                     issues.append(
                         issue(
                             "export_declaration_material",
@@ -1155,6 +1200,80 @@ async def get_export(
     if row is None:
         raise not_found()
     return actor, row
+
+
+async def provenance(session: AsyncSession, actor: Identity, export_id: UUID) -> dict:
+    """The released export's provenance, numbered exactly as the printed section."""
+    from app.services.export_renderer import declaration_labels, table_numbers
+
+    actor, row = await get_export(session, actor, export_id)
+    run = await session.get(ExportRun, row.run_id)
+    if run is None:
+        raise not_found()
+    items = run.manifest["items"]
+    numbers, declarations = table_numbers(items), declaration_labels(items)
+    printed = []
+    for item in items:
+        section, number = numbers[item["requirement_id"]]
+        printed.append(
+            {
+                "section": section,
+                "number": number,
+                "requirement_id": item["requirement_id"],
+                "card_revision_id": item.get("card_revision_id"),
+                "confirmed_by": item.get("confirmed_by"),
+                "confirmed_at": item.get("confirmed_at"),
+                "disposition_by": item.get("disposition_by"),
+                "disposition_at": item.get("disposition_at"),
+                "quote_sha256": item.get("quote_sha256"),
+                "evidence": [
+                    {
+                        "evidence_id": evidence["id"],
+                        "label": f"E{evidence['attachment_ordinal']:03d}"
+                        if evidence.get("attachment_ordinal") is not None
+                        else declarations[evidence["id"]],
+                        "material_kind": evidence["material_kind"],
+                        "selection_id": evidence.get("selection_id"),
+                        "resource_revision_id": evidence.get("resource_revision_id"),
+                        "confirmed_by": evidence["confirmed_by"],
+                        "confirmed_at": evidence["confirmed_at"],
+                    }
+                    for evidence in item.get("evidence", [])
+                ],
+                "gap_reasons": item.get("gap_reasons", []),
+            }
+        )
+    attachments = [
+        {
+            "label": attachment["label"],
+            "kind": "image" if attachment.get("kind") == "image" else "certificate_page",
+            "title": attachment.get("title"),
+            "page": attachment.get("page"),
+            "certificate_revision_id": attachment.get("revision_id"),
+            "evidence_source_id": attachment.get("evidence_source_id"),
+            "rendition_id": attachment.get("rendition_id"),
+            "original_sha256": attachment.get("original_sha256"),
+            "png_sha256": attachment["png_sha256"],
+            "evidence_ids": attachment["evidence_ids"],
+            "requirement_ids": attachment["requirement_ids"],
+        }
+        for attachment in run.manifest.get("attachments", [])
+    ]
+    return ExportProvenance.model_validate(
+        {
+            "export_id": row.id,
+            "run_id": run.id,
+            "mode": row.mode,
+            "file": file_view(row),
+            "renderer_profile": run.manifest["renderer_profile"],
+            "input_hash": row.input_hash,
+            "manifest_hash": row.manifest_hash,
+            "released_by": row.released_by,
+            "released_at": row.released_at,
+            "items": printed,
+            "attachments": attachments,
+        }
+    ).model_dump(mode="json")
 
 
 async def checked_content(

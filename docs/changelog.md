@@ -6,6 +6,19 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：导出件改为中标标书的表格版式
+
+- 三张响应表改为“序号｜招标文件要求｜投标文件响应内容｜响应情况”四列，序号按表从 1 起；要求逐字照录原文，
+  ★ 要求以 ★ 开头；响应末尾以可跳转的“（见附件 E003、声明 D001）”引用材料；响应情况写“响应”“响应且无负偏离”，
+  偏离写“正偏离：/负偏离：”加具体差异，负偏离加粗。须遵守与缺口清单、证据附件索引和附件说明不再印内部标签、
+  原文坐标、ID、确认人、时间戳或哈希；索引写材料名称、原件页与摘录和对应的表与序号。渲染 profile 升为
+  `docx-export-v3`，导出清单升为 `human-export-manifest-v2` 并记录材料名称。
+- 新增 `bid export provenance` / `GET /exports/{id}/provenance`：以与正文相同的编号返回确认人、时间、证据与资源
+  修订、附件哈希等留痕。新增 `bid export template-sample`：写出 A4、宋体小四、黑体三号标题、页脚页码并放好
+  六个锚点的起步模板，返回可直接使用的绑定。
+- 绑定列改为 `ordinal`/`requirement`/`response`/`compliance`，对外契约升为 `3.0`。旧的七列绑定仍可列出并标
+  `current: false`，预检以 `export_binding_outdated` 阻止，不再接受新建七列绑定。
+
 ## 2026-10-03：沙箱双单位与生命周期验收
 
 - 新增 [sandbox_two_org_acceptance.py](../scripts/sandbox_two_org_acceptance.py)，在开发实例上以两个合成单位、

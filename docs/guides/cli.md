@@ -383,6 +383,34 @@ Metadata, chapter declarations, and file limits are defined in
 creates a new revision, even with identical bytes. `download` takes the
 revision UUID from `list`, not the integer revision number.
 
+## Export a response section
+
+A human bidder exports the confirmed draft into the org's Word template. Start from
+the built-in template if the org has none, then upload it like any other template:
+
+```sh
+bid export template-sample --output STARTER.docx --json
+bid --mode local --state SESSION_FILE resource template add --input TEMPLATE.json --file STARTER.docx --json
+```
+
+`data.binding_sections` of `template-sample` is a ready binding for that template.
+Put it with the template revision and its SHA-256 into `BINDING.json`
+([ExportBindingCreate](../../server/app/schemas/export_contracts.py)); a dry run
+returns the static content hash that the real request repeats:
+
+```sh
+bid export binding create --input BINDING.json --json
+bid export prepare --task TASK_ID --input PREPARE.json --wait --json
+bid export release --run RUN_ID --input RELEASE.json --json
+bid export download --id EXPORT_ID --output NEW_FILE.docx --json
+bid export provenance --id EXPORT_ID --json
+```
+
+The section prints only the tender requirement, the confirmed response, the
+compliance state and attachment numbers. `provenance` returns who confirmed what,
+the evidence and resource revisions, and the hashes, numbered as in the document.
+A binding with `current: false` predates the four-column layout; create a new one.
+
 ## Attach certificate PDF originals
 
 A file revision carries the complete certificate data, `expected_revision`,

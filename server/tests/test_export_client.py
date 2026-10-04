@@ -281,14 +281,11 @@ def section_bindings():
         for key, width in zip(
             (
                 "ordinal",
-                "tender_clause",
-                "source_location",
+                "requirement",
                 "response",
-                "deviation",
-                "deviation_note",
-                "evidence",
+                "compliance",
             ),
-            (5, 25, 15, 25, 10, 10, 10),
+            (6, 36, 44, 14),
             strict=True,
         )
     ]
@@ -325,7 +322,7 @@ def test_binding_contract_rejects_incomplete_or_ambiguous_mapping(failure):
     elif failure == "columns":
         value["sections"][0]["columns"].pop()
     elif failure == "width":
-        value["sections"][0]["columns"][0]["width_percent"] = 6
+        value["sections"][0]["columns"][0]["width_percent"] = 7
     elif failure == "style":
         value["sections"][0]["heading_style_id"] = " "
     else:

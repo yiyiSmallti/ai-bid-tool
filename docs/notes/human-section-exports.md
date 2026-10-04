@@ -48,7 +48,11 @@ tables retain their tenant RLS; the trusted worker loader restricts actual reads
 the fixed run's authorized inputs.
 
 The template adapter accepts the ordered body anchors and style/column bindings
-specified by the contract. Static headings must match the selected template
+specified by the contract. Response tables have the four columns of a winning bid:
+number within the table, the verbatim tender requirement, the confirmed response with
+links to its attachments and declarations, and the compliance state with any
+deviation. Identifiers, confirmers, timestamps and hashes are not printed; the
+provenance route rebuilds them from the fixed manifest with the same numbering. Static headings must match the selected template
 revision's declared chapter titles. Missing metadata is refused when its marker is
 present. Unsupported fields, hidden content, revisions, media and external
 relations fail adaptation. Template modification requires another retained revision

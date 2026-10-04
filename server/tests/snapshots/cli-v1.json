@@ -1246,6 +1246,7 @@
     "data": {
       "adapter_version": "docx-export-v1",
       "binding_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "current": true,
       "id": "00000000-0000-0000-0000-000000000001",
       "org_id": "00000000-0000-0000-0000-000000000001",
       "reviewed_at": "2026-10-01T00:00:00Z",
@@ -1255,31 +1256,19 @@
           "columns": [
             {
               "key": "ordinal",
-              "width_percent": 5
+              "width_percent": 6
             },
             {
-              "key": "tender_clause",
-              "width_percent": 25
-            },
-            {
-              "key": "source_location",
-              "width_percent": 15
+              "key": "requirement",
+              "width_percent": 36
             },
             {
               "key": "response",
-              "width_percent": 25
+              "width_percent": 44
             },
             {
-              "key": "deviation",
-              "width_percent": 10
-            },
-            {
-              "key": "deviation_note",
-              "width_percent": 10
-            },
-            {
-              "key": "evidence",
-              "width_percent": 10
+              "key": "compliance",
+              "width_percent": 14
             }
           ],
           "heading_style_id": "Heading 1",
@@ -1290,31 +1279,19 @@
           "columns": [
             {
               "key": "ordinal",
-              "width_percent": 5
+              "width_percent": 6
             },
             {
-              "key": "tender_clause",
-              "width_percent": 25
-            },
-            {
-              "key": "source_location",
-              "width_percent": 15
+              "key": "requirement",
+              "width_percent": 36
             },
             {
               "key": "response",
-              "width_percent": 25
+              "width_percent": 44
             },
             {
-              "key": "deviation",
-              "width_percent": 10
-            },
-            {
-              "key": "deviation_note",
-              "width_percent": 10
-            },
-            {
-              "key": "evidence",
-              "width_percent": 10
+              "key": "compliance",
+              "width_percent": 14
             }
           ],
           "heading_style_id": "Heading 1",
@@ -1325,31 +1302,19 @@
           "columns": [
             {
               "key": "ordinal",
-              "width_percent": 5
+              "width_percent": 6
             },
             {
-              "key": "tender_clause",
-              "width_percent": 25
-            },
-            {
-              "key": "source_location",
-              "width_percent": 15
+              "key": "requirement",
+              "width_percent": 36
             },
             {
               "key": "response",
-              "width_percent": 25
+              "width_percent": 44
             },
             {
-              "key": "deviation",
-              "width_percent": 10
-            },
-            {
-              "key": "deviation_note",
-              "width_percent": 10
-            },
-            {
-              "key": "evidence",
-              "width_percent": 10
+              "key": "compliance",
+              "width_percent": 14
             }
           ],
           "heading_style_id": "Heading 1",
@@ -1399,6 +1364,7 @@
       {
         "adapter_version": "docx-export-v1",
         "binding_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "current": true,
         "id": "00000000-0000-0000-0000-000000000001",
         "org_id": "00000000-0000-0000-0000-000000000001",
         "reviewed_at": "2026-10-01T00:00:00Z",
@@ -1408,31 +1374,19 @@
             "columns": [
               {
                 "key": "ordinal",
-                "width_percent": 5
+                "width_percent": 6
               },
               {
-                "key": "tender_clause",
-                "width_percent": 25
-              },
-              {
-                "key": "source_location",
-                "width_percent": 15
+                "key": "requirement",
+                "width_percent": 36
               },
               {
                 "key": "response",
-                "width_percent": 25
+                "width_percent": 44
               },
               {
-                "key": "deviation",
-                "width_percent": 10
-              },
-              {
-                "key": "deviation_note",
-                "width_percent": 10
-              },
-              {
-                "key": "evidence",
-                "width_percent": 10
+                "key": "compliance",
+                "width_percent": 14
               }
             ],
             "heading_style_id": "Heading 1",
@@ -1443,31 +1397,19 @@
             "columns": [
               {
                 "key": "ordinal",
-                "width_percent": 5
+                "width_percent": 6
               },
               {
-                "key": "tender_clause",
-                "width_percent": 25
-              },
-              {
-                "key": "source_location",
-                "width_percent": 15
+                "key": "requirement",
+                "width_percent": 36
               },
               {
                 "key": "response",
-                "width_percent": 25
+                "width_percent": 44
               },
               {
-                "key": "deviation",
-                "width_percent": 10
-              },
-              {
-                "key": "deviation_note",
-                "width_percent": 10
-              },
-              {
-                "key": "evidence",
-                "width_percent": 10
+                "key": "compliance",
+                "width_percent": 14
               }
             ],
             "heading_style_id": "Heading 1",
@@ -1478,31 +1420,19 @@
             "columns": [
               {
                 "key": "ordinal",
-                "width_percent": 5
+                "width_percent": 6
               },
               {
-                "key": "tender_clause",
-                "width_percent": 25
-              },
-              {
-                "key": "source_location",
-                "width_percent": 15
+                "key": "requirement",
+                "width_percent": 36
               },
               {
                 "key": "response",
-                "width_percent": 25
+                "width_percent": 44
               },
               {
-                "key": "deviation",
-                "width_percent": 10
-              },
-              {
-                "key": "deviation_note",
-                "width_percent": 10
-              },
-              {
-                "key": "evidence",
-                "width_percent": 10
+                "key": "compliance",
+                "width_percent": 14
               }
             ],
             "heading_style_id": "Heading 1",
@@ -1628,6 +1558,78 @@
     "ok": true,
     "warnings": []
   },
+  "export provenance": {
+    "command": "export provenance",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "attachments": [
+        {
+          "certificate_revision_id": "00000000-0000-0000-0000-000000000001",
+          "evidence_ids": [
+            "00000000-0000-0000-0000-000000000001"
+          ],
+          "evidence_source_id": "00000000-0000-0000-0000-000000000001",
+          "kind": "certificate_page",
+          "label": "E001",
+          "original_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+          "page": 1,
+          "png_sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "rendition_id": null,
+          "requirement_ids": [
+            "00000000-0000-0000-0000-000000000001"
+          ],
+          "title": "Synthetic certificate declaration（QMS-2026）"
+        }
+      ],
+      "export_id": "00000000-0000-0000-0000-000000000001",
+      "file": {
+        "media_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "name": "synthetic-review.docx",
+        "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "size_bytes": 1
+      },
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "items": [
+        {
+          "card_revision_id": "00000000-0000-0000-0000-000000000001",
+          "confirmed_at": "2026-10-01T00:00:00Z",
+          "confirmed_by": "00000000-0000-0000-0000-000000000001",
+          "disposition_at": null,
+          "disposition_by": null,
+          "evidence": [
+            {
+              "confirmed_at": "2026-10-01T00:00:00Z",
+              "confirmed_by": "00000000-0000-0000-0000-000000000001",
+              "evidence_id": "00000000-0000-0000-0000-000000000001",
+              "label": "E001",
+              "material_kind": "user_supplied_pdf_page",
+              "resource_revision_id": "00000000-0000-0000-0000-000000000001",
+              "selection_id": "00000000-0000-0000-0000-000000000001"
+            }
+          ],
+          "gap_reasons": [],
+          "number": 1,
+          "quote_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "requirement_id": "00000000-0000-0000-0000-000000000001",
+          "section": "technical"
+        }
+      ],
+      "manifest_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "mode": "final_section",
+      "released_at": "2026-10-01T00:00:00Z",
+      "released_by": "00000000-0000-0000-0000-000000000001",
+      "renderer_profile": "docx-export-v3",
+      "run_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
   "export release": {
     "command": "export release",
     "cost": {
@@ -1721,6 +1723,112 @@
       "task_template_id": "00000000-0000-0000-0000-000000000001",
       "template_revision_id": "00000000-0000-0000-0000-000000000001",
       "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "export template-sample": {
+    "command": "export template-sample",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "binding_sections": [
+        {
+          "columns": [
+            {
+              "key": "ordinal",
+              "width_percent": "6"
+            },
+            {
+              "key": "requirement",
+              "width_percent": "36"
+            },
+            {
+              "key": "response",
+              "width_percent": "42"
+            },
+            {
+              "key": "compliance",
+              "width_percent": "16"
+            }
+          ],
+          "heading_style_id": "Heading1",
+          "section": "substantive",
+          "table_style_id": "TableGrid"
+        },
+        {
+          "columns": [
+            {
+              "key": "ordinal",
+              "width_percent": "6"
+            },
+            {
+              "key": "requirement",
+              "width_percent": "36"
+            },
+            {
+              "key": "response",
+              "width_percent": "42"
+            },
+            {
+              "key": "compliance",
+              "width_percent": "16"
+            }
+          ],
+          "heading_style_id": "Heading1",
+          "section": "commercial",
+          "table_style_id": "TableGrid"
+        },
+        {
+          "columns": [
+            {
+              "key": "ordinal",
+              "width_percent": "6"
+            },
+            {
+              "key": "requirement",
+              "width_percent": "36"
+            },
+            {
+              "key": "response",
+              "width_percent": "42"
+            },
+            {
+              "key": "compliance",
+              "width_percent": "16"
+            }
+          ],
+          "heading_style_id": "Heading1",
+          "section": "technical",
+          "table_style_id": "TableGrid"
+        },
+        {
+          "columns": [],
+          "heading_style_id": "Heading1",
+          "section": "comply_only",
+          "table_style_id": "TableGrid"
+        },
+        {
+          "columns": [],
+          "heading_style_id": "Heading1",
+          "section": "gaps",
+          "table_style_id": "TableGrid"
+        },
+        {
+          "columns": [],
+          "heading_style_id": "Heading1",
+          "section": "evidence_appendix",
+          "table_style_id": "TableGrid"
+        }
+      ],
+      "output_path": "<download-output>",
+      "sha256": "dad235c317cf360d89d746a5077883c284ded4796fb6151239ac72858d51069c",
+      "size_bytes": 32651
     },
     "duration_ms": 0,
     "items": [],
@@ -5457,12 +5565,9 @@
                   "key": {
                     "enum": [
                       "ordinal",
-                      "tender_clause",
-                      "source_location",
+                      "requirement",
                       "response",
-                      "deviation",
-                      "deviation_note",
-                      "evidence"
+                      "compliance"
                     ],
                     "title": "Key",
                     "type": "string"
@@ -5496,7 +5601,7 @@
                     "items": {
                       "$ref": "#/$defs/ExportColumn"
                     },
-                    "maxItems": 7,
+                    "maxItems": 4,
                     "title": "Columns",
                     "type": "array"
                   },
@@ -5689,6 +5794,10 @@
                     "title": "Binding Hash",
                     "type": "string"
                   },
+                  "current": {
+                    "title": "Current",
+                    "type": "boolean"
+                  },
                   "id": {
                     "format": "uuid",
                     "title": "Id",
@@ -5711,7 +5820,14 @@
                   },
                   "sections": {
                     "items": {
-                      "$ref": "#/$defs/ExportSectionBinding"
+                      "anyOf": [
+                        {
+                          "$ref": "#/$defs/ExportSectionBinding"
+                        },
+                        {
+                          "$ref": "#/$defs/LegacyExportSectionBinding"
+                        }
+                      ]
                     },
                     "maxItems": 6,
                     "minItems": 6,
@@ -5743,6 +5859,7 @@
                   "static_content_hash",
                   "adapter_version",
                   "sections",
+                  "current",
                   "reviewed_by",
                   "reviewed_at"
                 ],
@@ -5755,12 +5872,9 @@
                   "key": {
                     "enum": [
                       "ordinal",
-                      "tender_clause",
-                      "source_location",
+                      "requirement",
                       "response",
-                      "deviation",
-                      "deviation_note",
-                      "evidence"
+                      "compliance"
                     ],
                     "title": "Key",
                     "type": "string"
@@ -5841,7 +5955,7 @@
                     "items": {
                       "$ref": "#/$defs/ExportColumn"
                     },
-                    "maxItems": 7,
+                    "maxItems": 4,
                     "title": "Columns",
                     "type": "array"
                   },
@@ -5876,6 +5990,88 @@
                   "table_style_id"
                 ],
                 "title": "ExportSectionBinding",
+                "type": "object"
+              },
+              "LegacyExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "tender_clause",
+                      "source_location",
+                      "response",
+                      "deviation",
+                      "deviation_note",
+                      "evidence"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "LegacyExportColumn",
+                "type": "object"
+              },
+              "LegacyExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/LegacyExportColumn"
+                    },
+                    "maxItems": 7,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "LegacyExportSectionBinding",
                 "type": "object"
               }
             },
@@ -5921,12 +6117,9 @@
                   "key": {
                     "enum": [
                       "ordinal",
-                      "tender_clause",
-                      "source_location",
+                      "requirement",
                       "response",
-                      "deviation",
-                      "deviation_note",
-                      "evidence"
+                      "compliance"
                     ],
                     "title": "Key",
                     "type": "string"
@@ -5960,7 +6153,7 @@
                     "items": {
                       "$ref": "#/$defs/ExportColumn"
                     },
-                    "maxItems": 7,
+                    "maxItems": 4,
                     "title": "Columns",
                     "type": "array"
                   },
@@ -5996,6 +6189,88 @@
                 ],
                 "title": "ExportSectionBinding",
                 "type": "object"
+              },
+              "LegacyExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "tender_clause",
+                      "source_location",
+                      "response",
+                      "deviation",
+                      "deviation_note",
+                      "evidence"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "LegacyExportColumn",
+                "type": "object"
+              },
+              "LegacyExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/LegacyExportColumn"
+                    },
+                    "maxItems": 7,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "LegacyExportSectionBinding",
+                "type": "object"
               }
             },
             "additionalProperties": false,
@@ -6010,6 +6285,10 @@
                 "pattern": "^[0-9a-f]{64}$",
                 "title": "Binding Hash",
                 "type": "string"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
               },
               "id": {
                 "format": "uuid",
@@ -6033,7 +6312,14 @@
               },
               "sections": {
                 "items": {
-                  "$ref": "#/$defs/ExportSectionBinding"
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ExportSectionBinding"
+                    },
+                    {
+                      "$ref": "#/$defs/LegacyExportSectionBinding"
+                    }
+                  ]
                 },
                 "maxItems": 6,
                 "minItems": 6,
@@ -6065,6 +6351,7 @@
               "static_content_hash",
               "adapter_version",
               "sections",
+              "current",
               "reviewed_by",
               "reviewed_at"
             ],
@@ -6957,6 +7244,468 @@
             ]
           }
         },
+        "export provenance": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ExportFile": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "default": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 536870912,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "ExportFile",
+                "type": "object"
+              },
+              "ProvenanceAttachment": {
+                "additionalProperties": false,
+                "properties": {
+                  "certificate_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Certificate Revision Id"
+                  },
+                  "evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Evidence Ids",
+                    "type": "array"
+                  },
+                  "evidence_source_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Evidence Source Id"
+                  },
+                  "kind": {
+                    "enum": [
+                      "certificate_page",
+                      "image"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "label": {
+                    "pattern": "^E\\d{3}$",
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "original_sha256": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Original Sha256"
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "png_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Png Sha256",
+                    "type": "string"
+                  },
+                  "rendition_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Rendition Id"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "title": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Title"
+                  }
+                },
+                "required": [
+                  "label",
+                  "kind",
+                  "title",
+                  "certificate_revision_id",
+                  "evidence_source_id",
+                  "rendition_id",
+                  "original_sha256",
+                  "png_sha256",
+                  "evidence_ids",
+                  "requirement_ids"
+                ],
+                "title": "ProvenanceAttachment",
+                "type": "object"
+              },
+              "ProvenanceEvidence": {
+                "additionalProperties": false,
+                "properties": {
+                  "confirmed_at": {
+                    "format": "date-time",
+                    "title": "Confirmed At",
+                    "type": "string"
+                  },
+                  "confirmed_by": {
+                    "format": "uuid",
+                    "title": "Confirmed By",
+                    "type": "string"
+                  },
+                  "evidence_id": {
+                    "format": "uuid",
+                    "title": "Evidence Id",
+                    "type": "string"
+                  },
+                  "label": {
+                    "pattern": "^[ED]\\d{3}$",
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "material_kind": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Material Kind",
+                    "type": "string"
+                  },
+                  "resource_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Resource Revision Id"
+                  },
+                  "selection_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Selection Id"
+                  }
+                },
+                "required": [
+                  "evidence_id",
+                  "label",
+                  "material_kind",
+                  "selection_id",
+                  "resource_revision_id",
+                  "confirmed_by",
+                  "confirmed_at"
+                ],
+                "title": "ProvenanceEvidence",
+                "type": "object"
+              },
+              "ProvenanceItem": {
+                "additionalProperties": false,
+                "description": "One printed row: its section and number match the Word document.",
+                "properties": {
+                  "card_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Card Revision Id"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirmed At"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Confirmed By"
+                  },
+                  "disposition_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Disposition At"
+                  },
+                  "disposition_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Disposition By"
+                  },
+                  "evidence": {
+                    "items": {
+                      "$ref": "#/$defs/ProvenanceEvidence"
+                    },
+                    "title": "Evidence",
+                    "type": "array"
+                  },
+                  "gap_reasons": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Gap Reasons",
+                    "type": "array"
+                  },
+                  "number": {
+                    "minimum": 1,
+                    "title": "Number",
+                    "type": "integer"
+                  },
+                  "quote_sha256": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Quote Sha256"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "number",
+                  "requirement_id",
+                  "card_revision_id",
+                  "confirmed_by",
+                  "confirmed_at",
+                  "disposition_by",
+                  "disposition_at",
+                  "quote_sha256",
+                  "evidence",
+                  "gap_reasons"
+                ],
+                "title": "ProvenanceItem",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Machine-readable record kept out of the printed section.",
+            "properties": {
+              "attachments": {
+                "items": {
+                  "$ref": "#/$defs/ProvenanceAttachment"
+                },
+                "title": "Attachments",
+                "type": "array"
+              },
+              "export_id": {
+                "format": "uuid",
+                "title": "Export Id",
+                "type": "string"
+              },
+              "file": {
+                "$ref": "#/$defs/ExportFile"
+              },
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/ProvenanceItem"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "manifest_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Manifest Hash",
+                "type": "string"
+              },
+              "mode": {
+                "enum": [
+                  "final_section",
+                  "review_copy"
+                ],
+                "title": "Mode",
+                "type": "string"
+              },
+              "released_at": {
+                "format": "date-time",
+                "title": "Released At",
+                "type": "string"
+              },
+              "released_by": {
+                "format": "uuid",
+                "title": "Released By",
+                "type": "string"
+              },
+              "renderer_profile": {
+                "minLength": 1,
+                "title": "Renderer Profile",
+                "type": "string"
+              },
+              "run_id": {
+                "format": "uuid",
+                "title": "Run Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "export_id",
+              "run_id",
+              "mode",
+              "file",
+              "renderer_profile",
+              "input_hash",
+              "manifest_hash",
+              "released_by",
+              "released_at",
+              "items",
+              "attachments"
+            ],
+            "title": "ExportProvenance",
+            "type": "object"
+          }
+        },
         "export release": {
           "cli_parameters": [
             {
@@ -7636,6 +8385,149 @@
               "invalidated_requirement_ids"
             ],
             "title": "ExportView",
+            "type": "object"
+          }
+        },
+        "export template-sample": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "output",
+              "options": [
+                "--output"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "requirement",
+                      "response",
+                      "compliance"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "ExportColumn",
+                "type": "object"
+              },
+              "ExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/ExportColumn"
+                    },
+                    "maxItems": 4,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "ExportSectionBinding",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "The built-in starter template written locally, and a binding that fits it.",
+            "properties": {
+              "binding_sections": {
+                "items": {
+                  "$ref": "#/$defs/ExportSectionBinding"
+                },
+                "maxItems": 6,
+                "minItems": 6,
+                "title": "Binding Sections",
+                "type": "array"
+              },
+              "output_path": {
+                "title": "Output Path",
+                "type": "string"
+              },
+              "sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Sha256",
+                "type": "string"
+              },
+              "size_bytes": {
+                "exclusiveMinimum": 0,
+                "title": "Size Bytes",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "output_path",
+              "sha256",
+              "size_bytes",
+              "binding_sections"
+            ],
+            "title": "TemplateSample",
             "type": "object"
           }
         },
@@ -14254,7 +15146,7 @@
         "title": "Result",
         "type": "object"
       },
-      "version": "2.2"
+      "version": "3.0"
     },
     "duration_ms": 0,
     "items": [],
