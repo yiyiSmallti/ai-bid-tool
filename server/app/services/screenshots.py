@@ -31,7 +31,7 @@ from app.schemas.screenshot_contracts import (
 from app.services import response_cards as cards
 from app.services import vendor_screenshots as vendor
 from app.services.evidence_sources import read_preview, require_source, source_data
-from app.services.resources import audit
+from app.services.versioned import audit
 
 PRIVACY_VERSION = "screenshot-privacy-v1"
 MAX_BYTES = 40 * 1024 * 1024

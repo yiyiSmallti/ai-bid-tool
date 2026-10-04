@@ -13,7 +13,7 @@ from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.drafts import digest
 from app.services.extraction import locate_quote, source_text
-from app.services.resources import audit
+from app.services.versioned import audit
 
 
 async def repair_citations(

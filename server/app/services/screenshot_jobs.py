@@ -23,7 +23,7 @@ from app.services import billing, redaction
 from app.services import response_cards as cards
 from app.services import screenshots as images
 from app.services.card_generation import model_identity, worker
-from app.services.resources import audit
+from app.services.versioned import audit
 
 RULE_VERSION = "screenshot-analysis-v1"
 

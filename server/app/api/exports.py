@@ -19,7 +19,7 @@ from app.schemas.export_contracts import (
     ExportRelease,
 )
 from app.services import exports
-from app.services.resources import audit
+from app.services.versioned import audit
 
 
 def create_router(context, db, storage, queue, settings, crypto):

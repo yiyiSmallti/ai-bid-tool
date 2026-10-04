@@ -68,7 +68,7 @@ from app.schemas.sandbox_contracts import (
     VendorSpec,
 )
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership
-from app.services.resources import audit
+from app.services.versioned import audit
 
 OFFLINE_POLICY = "offline-v1"
 OFFLINE_HASH = hashlib.sha256(b"offline-v1:no-network").hexdigest()

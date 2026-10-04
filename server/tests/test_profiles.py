@@ -370,7 +370,7 @@ async def test_old_tokens_denied_new_scopes_and_membership_intersection(
 
 
 async def test_profile_commit_failure_has_no_partial_success(api, headers, monkeypatch):
-    from app.services import profiles
+    from app.services import versioned
 
     def invalid_event(session, actor, action, object_id, details):
         session.add(
@@ -383,7 +383,7 @@ async def test_profile_commit_failure_has_no_partial_success(api, headers, monke
             )
         )
 
-    monkeypatch.setattr(profiles, "audit", invalid_event)
+    monkeypatch.setattr(versioned, "audit", invalid_event)
     response = await api.post("/resources/profiles", headers=headers[0], json={"data": metadata()})
     assert response.status_code == 409 and not response.json()["ok"]
     assert (await api.get("/resources/profiles", headers=headers[0])).json()["items"] == []

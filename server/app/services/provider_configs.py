@@ -18,7 +18,7 @@ from app.schemas.contracts import Extraction
 from app.schemas.provider_contracts import ProviderConfigSet, ProviderConfigView, ProviderTest
 from app.services import billing
 from app.services.auth import Identity, membership, set_actor_context
-from app.services.resources import audit
+from app.services.versioned import audit
 
 
 async def require_access(session, actor: Identity, *, write=False):

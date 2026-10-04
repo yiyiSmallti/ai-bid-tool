@@ -26,7 +26,7 @@ from app.schemas.certificate_file_contracts import (
 )
 from app.services.auth import Identity
 from app.services.certificates import snapshot_data
-from app.services.resources import audit
+from app.services.versioned import audit
 
 MAX_FILE_BYTES = 40 * 1024 * 1024
 WARNINGS = [

@@ -448,7 +448,7 @@ async def test_template_storage_and_commit_failure_keep_encrypted_unreferenced_o
     failed = await upload(api, headers[0], docx_bytes)
     assert failed.status_code == 503 and failed.json()["data"]["error"]["exit_code"] == 3
     monkeypatch.setattr(application.state.storage, "put", original)
-    from app.services import templates
+    from app.services import versioned
 
     def invalid_event(session, actor, action, object_id, details):
         session.add(
@@ -461,7 +461,7 @@ async def test_template_storage_and_commit_failure_keep_encrypted_unreferenced_o
             )
         )
 
-    monkeypatch.setattr(templates, "audit", invalid_event)
+    monkeypatch.setattr(versioned, "audit", invalid_event)
     failed = await upload(api, headers[0], docx_bytes)
     assert failed.status_code == 409 and not failed.json()["ok"]
     assert (await api.get("/resources/templates", headers=headers[0])).json()["items"] == []

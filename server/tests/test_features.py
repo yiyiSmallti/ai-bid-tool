@@ -228,7 +228,7 @@ async def test_feature_token_scope_and_actor(api, headers, application):
 
 
 async def test_feature_commit_failure_rolls_back(api, headers, application, monkeypatch):
-    from app.services import features
+    from app.services import versioned
 
     product_id = await product(api, headers[0])
 
@@ -243,7 +243,7 @@ async def test_feature_commit_failure_rolls_back(api, headers, application, monk
             )
         )
 
-    monkeypatch.setattr(features, "audit", invalid_event)
+    monkeypatch.setattr(versioned, "audit", invalid_event)
     response = await api.post(
         "/resources/features", headers=headers[0], json={"data": metadata(product_id)}
     )

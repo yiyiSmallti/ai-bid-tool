@@ -27,8 +27,8 @@ from app.services import billing, redaction
 from app.services import response_cards as cards
 from app.services import screenshots as images
 from app.services.card_generation import worker
-from app.services.resources import audit
 from app.services.screenshot_jobs import create_job
+from app.services.versioned import audit
 
 MAX_SOURCE_BYTES = 40 * 1024 * 1024
 

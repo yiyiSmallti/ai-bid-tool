@@ -203,9 +203,9 @@ async def test_invalid_metadata_is_rejected_without_writes(body, api, headers, a
 
 
 async def test_commit_failure_returns_error_and_rolls_back(api, headers, application, monkeypatch):
-    from app.services import resources
+    from app.services import versioned
 
-    original = resources.audit
+    original = versioned.audit
 
     def invalid_audit(session, actor, action, object_id, details):
         original(session, actor, action, object_id, details)
@@ -219,7 +219,7 @@ async def test_commit_failure_returns_error_and_rolls_back(api, headers, applica
             )
         )
 
-    monkeypatch.setattr(resources, "audit", invalid_audit)
+    monkeypatch.setattr(versioned, "audit", invalid_audit)
     response = await api.post("/resources/products", headers=headers[0], json={"data": DATA})
     assert response.status_code == 409
     assert response.json()["ok"] is False

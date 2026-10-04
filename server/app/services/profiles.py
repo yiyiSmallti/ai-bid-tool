@@ -2,11 +2,9 @@
 
 from uuid import UUID
 
-from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import ServiceError, not_found
-from app.models.entities import OrgProfile, OrgProfileRevision, Task, TaskOrgProfile
+from app.models.entities import OrgProfile, OrgProfileRevision, TaskOrgProfile
 from app.schemas.profile_contracts import (
     OrgProfileCreate,
     OrgProfileData,
@@ -17,8 +15,9 @@ from app.schemas.profile_contracts import (
 from app.schemas.profile_contracts import (
     OrgProfileRevision as RevisionContract,
 )
+from app.services import versioned
 from app.services.auth import Identity
-from app.services.resources import audit
+from app.services.versioned import VersionedKind
 
 
 def revision_data(row: OrgProfileRevision) -> dict:
@@ -37,102 +36,47 @@ def snapshot_data(row: TaskOrgProfile, revision: OrgProfileRevision) -> dict:
     ).model_dump(mode="json")
 
 
+PROFILES = VersionedKind(
+    root=OrgProfile,
+    revision=OrgProfileRevision,
+    selection=TaskOrgProfile,
+    key="profile_id",
+    revision_key="profile_revision_id",
+    label="OrgProfile",
+    read_scope="profile:read",
+    write_scope="profile:write",
+    select_scope="task:profile",
+    selection_list_scopes=("profile:read", "task:read"),
+    audit="resource.profile",
+    select_audit="task.profile",
+    snapshot_view=snapshot_data,
+)
+
+
 async def create_profile(session: AsyncSession, actor: Identity, body: OrgProfileCreate) -> dict:
-    actor.require("profile:write")
-    profile = OrgProfile(org_id=actor.org_id, created_by=actor.user_id, current_revision=1)
-    session.add(profile)
-    await session.flush()
-    revision = OrgProfileRevision(
-        org_id=actor.org_id,
-        profile_id=profile.id,
-        revision=1,
-        data=body.data.model_dump(mode="json"),
-    )
-    session.add(revision)
-    await session.flush()
-    audit(
-        session,
-        actor,
-        "resource.profile.create",
-        profile.id,
-        {"new_revision_id": str(revision.id), "revision": 1},
-    )
+    revision = await versioned.create(session, actor, PROFILES, body.data.model_dump(mode="json"))
     return revision_data(revision)
 
 
 async def list_profiles(
     session: AsyncSession, actor: Identity, *, history: bool = False, profile_id: UUID | None = None
 ) -> tuple[dict, list[dict]]:
-    actor.require("profile:read")
-    org_profiles = select(OrgProfile).order_by(OrgProfile.created_at, OrgProfile.id)
-    if profile_id is not None:
-        org_profiles = org_profiles.where(OrgProfile.id == profile_id)
-    records = (await session.scalars(org_profiles)).all()
-    if profile_id is not None and not records:
-        raise not_found()
-    current = {str(row.id): row.current_revision for row in records}
-    query = select(OrgProfileRevision).join(
-        OrgProfile,
-        and_(
-            OrgProfile.org_id == OrgProfileRevision.org_id,
-            OrgProfile.id == OrgProfileRevision.profile_id,
-        ),
+    data, rows = await versioned.list_revisions(
+        session, actor, PROFILES, history=history, root_id=profile_id
     )
-    if not history:
-        query = query.where(OrgProfileRevision.revision == OrgProfile.current_revision)
-    if profile_id is not None:
-        query = query.where(OrgProfileRevision.profile_id == profile_id)
-    rows = (
-        await session.scalars(
-            query.order_by(OrgProfileRevision.created_at, OrgProfileRevision.revision)
-        )
-    ).all()
-    return {"history": history, "current_revisions": current}, [revision_data(row) for row in rows]
+    return data, [revision_data(row) for row in rows]
 
 
 async def update_profile(
     session: AsyncSession, actor: Identity, profile_id: UUID, body: OrgProfileUpdate
 ) -> dict:
-    actor.require("profile:write")
-    profile = await session.scalar(
-        select(OrgProfile).where(OrgProfile.id == profile_id).with_for_update()
-    )
-    if profile is None:
-        raise not_found()
-    if profile.current_revision != body.expected_revision:
-        raise ServiceError(
-            "revision_conflict",
-            "OrgProfile revision changed; read the current revision before updating",
-            409,
-            2,
-        )
-    old = await session.scalar(
-        select(OrgProfileRevision).where(
-            OrgProfileRevision.profile_id == profile_id,
-            OrgProfileRevision.revision == profile.current_revision,
-        )
-    )
-    if old is None:
-        raise not_found()
-    revision = OrgProfileRevision(
-        org_id=actor.org_id,
-        profile_id=profile.id,
-        revision=profile.current_revision + 1,
-        data=body.data.model_dump(mode="json"),
-    )
-    session.add(revision)
-    await session.flush()
-    profile.current_revision = revision.revision
-    audit(
+    revision = await versioned.update(
         session,
         actor,
-        "resource.profile.update",
-        profile.id,
-        {
-            "old_revision_id": str(old.id),
-            "new_revision_id": str(revision.id),
-            "revision": revision.revision,
-        },
+        PROFILES,
+        profile_id,
+        body.expected_revision,
+        body.data.model_dump(mode="json"),
     )
     return revision_data(revision)
 
@@ -140,93 +84,13 @@ async def update_profile(
 async def select_profile(
     session: AsyncSession, actor: Identity, task_id: UUID, body: TaskOrgProfileSelection
 ) -> dict:
-    actor.require("task:profile")
-    # Serialize only selections on this task; a concurrent duplicate has one result.
-    task = await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
-    if task is None:
-        raise not_found()
-    profile = await session.scalar(
-        select(OrgProfile).where(OrgProfile.id == body.profile_id).with_for_update(read=True)
+    return await versioned.select_revision(
+        session, actor, PROFILES, task_id, body.profile_id, body.revision, body.lot
     )
-    if profile is None:
-        raise not_found()
-    revision = await session.scalar(
-        select(OrgProfileRevision).where(
-            OrgProfileRevision.profile_id == profile.id,
-            OrgProfileRevision.revision == (body.revision or profile.current_revision),
-        )
-    )
-    if revision is None:
-        raise not_found()
-    lot = (body.lot or "").strip()
-    previous = await session.scalar(
-        select(TaskOrgProfile).where(
-            TaskOrgProfile.task_id == task_id,
-            TaskOrgProfile.profile_id == profile.id,
-            TaskOrgProfile.lot == lot,
-            TaskOrgProfile.active.is_(True),
-        )
-    )
-    if previous is not None and previous.profile_revision_id == revision.id:
-        return {
-            **snapshot_data(previous, revision),
-            "duplicate": True,
-            "replaced_snapshot_id": None,
-        }
-    if previous is not None:
-        previous.active = False
-        await session.flush()
-    snapshot = TaskOrgProfile(
-        org_id=actor.org_id,
-        task_id=task_id,
-        profile_id=profile.id,
-        profile_revision_id=revision.id,
-        lot=lot,
-        active=True,
-    )
-    session.add(snapshot)
-    await session.flush()
-    audit(
-        session,
-        actor,
-        "task.profile.select",
-        snapshot.id,
-        {
-            "task_id": str(task_id),
-            "profile_id": str(profile.id),
-            "old_snapshot_id": str(previous.id) if previous else None,
-            "old_revision_id": str(previous.profile_revision_id) if previous else None,
-            "new_revision_id": str(revision.id),
-        },
-    )
-    return {
-        **snapshot_data(snapshot, revision),
-        "duplicate": False,
-        "replaced_snapshot_id": str(previous.id) if previous else None,
-    }
 
 
 async def list_selections(
     session: AsyncSession, actor: Identity, task_id: UUID, *, history: bool = False
 ) -> tuple[dict, list[dict]]:
-    actor.require("profile:read")
-    actor.require("task:read")
-    if await session.get(Task, task_id) is None:
-        raise not_found()
-    rows = (
-        await session.execute(
-            select(TaskOrgProfile, OrgProfileRevision)
-            .join(
-                OrgProfileRevision,
-                and_(
-                    TaskOrgProfile.org_id == OrgProfileRevision.org_id,
-                    TaskOrgProfile.profile_revision_id == OrgProfileRevision.id,
-                ),
-            )
-            .where(TaskOrgProfile.task_id == task_id)
-            .order_by(TaskOrgProfile.created_at, TaskOrgProfile.id)
-        )
-    ).all()
-    active_ids = [str(row.id) for row, _ in rows if row.active]
-    items = [snapshot_data(row, revision) for row, revision in rows if history or row.active]
-    return {"history": history, "active_snapshot_ids": active_ids}, items
+    data, rows = await versioned.list_selections(session, actor, PROFILES, task_id, history=history)
+    return data, [snapshot_data(row, revision) for row, revision in rows]

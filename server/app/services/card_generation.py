@@ -49,7 +49,7 @@ from app.services.auth import Identity
 from app.services.drafts import digest
 from app.services.evidence_sources import require_source
 from app.services.extraction import locate_quote
-from app.services.resources import audit
+from app.services.versioned import audit
 
 PROTECTED = {"confirmed", "pending_review", "comply_only"}
 
