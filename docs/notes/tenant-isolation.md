@@ -39,9 +39,10 @@ business job and results live in the RLS-protected `jobs` table. They are never
 queried through a user-facing route. Worker context must be restored before any
 business read/write. Synthetic test providers live in tests, never production.
 Keep the deployment encryption key available and backed up through the operator's
-existing secret workflow. Automatic key rotation or plaintext file conversion is
-not implemented. Unsupported plaintext files fail explicitly; do not overwrite
-existing documents to conceal a migration problem.
+existing secret workflow; replacing it follows
+[Keys and storage](../guides/development.md#keys-and-storage). Plaintext file
+conversion is not implemented. Unsupported plaintext files fail explicitly; do not
+overwrite existing documents to conceal a migration problem.
 
 ## Code
 

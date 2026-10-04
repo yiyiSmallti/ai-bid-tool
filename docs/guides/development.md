@@ -70,7 +70,9 @@ are listed in [deploy/.env.example](../../deploy/.env.example) and
 
 ## Start the API and worker
 
-Both processes need `BID_DATABASE_URL` for `bid_app` and `BID_ENCRYPTION_KEY`.
+Both processes need `BID_DATABASE_URL` for `bid_app`, `BID_ENCRYPTION_KEY` for
+stored data, and a different Fernet key in `BID_TOKEN_KEY` for sessions and
+signed links; [Keys and storage](#keys-and-storage) describes both.
 Startup fails if the runtime role is a superuser, can bypass RLS, or owns
 application tables.
 
@@ -288,10 +290,37 @@ citation.
 
 ## Keys and storage
 
-Original files are encrypted with `BID_ENCRYPTION_KEY` in both storage modes,
-and the ciphertext is bound to its object key. Keep the key in your secret and
-backup workflow. Key rotation and plaintext conversion are not automated; a
-file encrypted with another key fails with `unreadable_file`.
+Stored files and encrypted database fields use `BID_ENCRYPTION_KEY`; file
+ciphertext is bound to its object key. Sessions and signed download links use
+`BID_TOKEN_KEY`, which must differ from every other key. Org provider
+credentials use `BID_SECRETS_KEY` ([provider-config.md](../notes/provider-config.md)).
+Startup fails when a key is missing, malformed or reused. Keep all of them in
+your secret and backup workflow. Plaintext conversion is not automated; a file
+encrypted with an unknown key fails with `unreadable_file`.
+
+To replace the token key, set a new `BID_TOKEN_KEY` on the API and workers and
+restart them. Every outstanding session and link stops working at once, so
+users sign in again.
+
+To replace the data key:
+
+1. Generate a new Fernet key. On the API and all workers, set it as
+   `BID_ENCRYPTION_KEY`, put the old key in `BID_ENCRYPTION_KEY_PREVIOUS`
+   (several retired keys are comma separated), and restart. New data uses the
+   new key; data under the old key stays readable.
+2. Rewrite existing data with the migration owner, the same key variables, and
+   the same storage settings as the API:
+
+   ```sh
+   uv run python -m app.admin rotate-encryption
+   ```
+
+   It goes through every org's encrypted fields and stored objects and prints
+   the checked and rewritten counts as JSON. Values already under the new key
+   are skipped, so an interrupted run can be repeated; a second run reports zero
+   rewrites.
+3. Remove `BID_ENCRYPTION_KEY_PREVIOUS` and restart. Keep the old key as long as
+   backups taken before the rotation are retained, because they still need it.
 
 Downgrades from `0003` onward raise an error instead of dropping history
 tables; the `0001` and `0002` downgrades do drop their tables and columns. To

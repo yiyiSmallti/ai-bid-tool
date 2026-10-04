@@ -31,7 +31,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
 from app.core.password_attempts import PasswordAttempts
-from app.core.security import Secrets, token_digest
+from app.core.security import TokenSigner, token_digest
 from app.jobs.processor import Processor
 from app.jobs.queue import Queue
 from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task
@@ -133,7 +133,7 @@ def create_app(
     settings: Settings | None = None, *, llm=None, ocr=None, queue=None, llm_transport=None
 ) -> FastAPI:
     settings = settings or Settings.load()
-    db, crypto = Database(settings), Secrets(settings.encryption_key.get_secret_value())
+    db, crypto = Database(settings), TokenSigner.for_tokens(settings)
     password_attempts = PasswordAttempts(db)
     storage = create_storage(settings)
     # Test injection is explicit; runtime jobs resolve org configuration then the catalog.
@@ -1457,7 +1457,6 @@ def create_app(
             scopes=sorted(set(body.scopes)),
             expires_at=body.expires_at,
             digest=token_digest(secret),
-            encrypted_secret=crypto.encrypt(secret),
         )
         session.add(token)
         await session.flush()

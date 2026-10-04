@@ -93,7 +93,7 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
         task_id, run_id = run.task_id, run.id
     browser = service.browser_for(processor)
     await service.reconcile_run(processor.db, run_id, org_id, browser)
-    crypto = Secrets(processor.settings.encryption_key.get_secret_value())
+    crypto = Secrets.for_data(processor.settings)
     actor = None
     attempt = None
     result: ExecutionResult | None = None

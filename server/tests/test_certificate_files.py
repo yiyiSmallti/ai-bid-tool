@@ -232,9 +232,9 @@ async def test_scan_signature_expiry_member_and_integrity(
     assert (
         await api.get(path, headers=headers[0], params={"signature": "invalid"})
     ).status_code == 404
-    from app.core.security import Secrets
+    from app.core.security import TokenSigner
 
-    crypto = Secrets(application.state.processor.settings.encryption_key.get_secret_value())
+    crypto = TokenSigner.for_tokens(application.state.processor.settings)
     for changed in (
         {**payload, "kind": "template-download"},
         {**payload, "org_id": headers[1]["X-Org-Id"]},
@@ -497,7 +497,7 @@ async def test_limits_filters_and_storage_commit_rollback(
 async def test_old_tokens_and_scope_intersection(
     api, headers, pdf_bytes, application, tenants, admin_engine
 ):
-    from app.core.security import Secrets, token_digest
+    from app.core.security import token_digest
     from app.models.entities import ApiToken
 
     row, task = await setup(api, headers[0])
@@ -524,7 +524,6 @@ async def test_old_tokens_and_scope_intersection(
     ).status_code == 403
 
     # A signed token cannot exceed its issuer's current role grants.
-    crypto = Secrets(application.state.processor.settings.encryption_key.get_secret_value())
     secret = "bid_synthetic-file-writer-token"
     with Session(admin_engine) as session, session.begin():
         member = session.scalar(select(Membership).where(Membership.org_id == tenants["orgs"][0]))
@@ -535,7 +534,6 @@ async def test_old_tokens_and_scope_intersection(
                 user_id=tenants["users"][0],
                 name="Synthetic",
                 digest=token_digest(secret),
-                encrypted_secret=crypto.encrypt(secret),
                 scopes=["certificate:write", "certificate:file:write"],
                 expires_at=datetime(2030, 1, 1, tzinfo=UTC),
             )

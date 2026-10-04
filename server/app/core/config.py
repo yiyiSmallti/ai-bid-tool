@@ -2,15 +2,21 @@ import json
 import re
 from decimal import Decimal
 from pathlib import Path
+from typing import Annotated
 
+from cryptography.fernet import Fernet
 from pydantic import Field, SecretStr, field_validator, model_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="BID_", extra="ignore", env_ignore_empty=True)
     database_url: SecretStr
     encryption_key: SecretStr
+    # Retired data keys, comma separated: still decrypt, never encrypt.
+    encryption_key_previous: Annotated[list[SecretStr], NoDecode] = []
+    # Sessions and signed links only; never used for stored data.
+    token_key: SecretStr
     secrets_key: SecretStr | None = None
     data_dir: Path = Path("data")
     storage: str = "local"
@@ -69,6 +75,32 @@ class Settings(BaseSettings):
     def load(cls):
         # BaseSettings supplies required fields from environment at runtime.
         return cls()  # pyright: ignore[reportCallIssue]
+
+    @field_validator("encryption_key_previous", mode="before")
+    @classmethod
+    def split_keys(cls, value):
+        if isinstance(value, str):
+            return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @model_validator(mode="after")
+    def distinct_keys(self):
+        current = self.encryption_key.get_secret_value()
+        previous = [item.get_secret_value() for item in self.encryption_key_previous]
+        token = self.token_key.get_secret_value()
+        for value in (current, token, *previous):
+            try:
+                Fernet(value.encode())
+            except (ValueError, TypeError):
+                raise ValueError("Encryption and token keys must be Fernet keys") from None
+        if current in previous or len(set(previous)) != len(previous):
+            raise ValueError("BID_ENCRYPTION_KEY_PREVIOUS must list distinct retired keys")
+        others = {current, *previous}
+        if self.secrets_key is not None:
+            others.add(self.secrets_key.get_secret_value())
+        if token in others:
+            raise ValueError("BID_TOKEN_KEY must differ from every other key")
+        return self
 
     @field_validator("database_url")
     @classmethod

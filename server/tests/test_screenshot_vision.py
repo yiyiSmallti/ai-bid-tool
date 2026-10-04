@@ -25,6 +25,7 @@ from app.providers.base import ProviderFailure
 from app.providers.calls import current_accounting
 from app.providers.llm import OpenAICompatibleExtractor
 from app.providers.screenshot_vision import VisionImage, analyze, preview
+from cryptography.fernet import Fernet
 
 MODEL = "synthetic-vision-model"
 SYNTHETIC_KEY = "synthetic-vision-key-not-real"
@@ -151,7 +152,8 @@ def provider(tmp_path, vendor: Vendor, capability=CAPABILITY, **settings_overrid
     }
     settings = Settings(
         database_url="postgresql+psycopg://synthetic:synthetic@localhost/synthetic",
-        encryption_key="synthetic-encryption-key-only",
+        encryption_key=Fernet.generate_key().decode(),
+        token_key=Fernet.generate_key().decode(),
         data_dir=tmp_path,
         llm_provider="openai",
         llm_model=MODEL,

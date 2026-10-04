@@ -69,7 +69,6 @@ class ApiToken(Tenant, Base):
     user_id: Mapped[UUID] = mapped_column()
     name: Mapped[str] = mapped_column(String(100))
     digest: Mapped[str] = mapped_column(String(64))
-    encrypted_secret: Mapped[str] = mapped_column(Text)
     scopes: Mapped[list[str]] = mapped_column(JSONB)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)

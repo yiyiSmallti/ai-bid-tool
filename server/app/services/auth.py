@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
 from app.core.password_attempts import PasswordAttempts, invalid_login
-from app.core.security import Secrets, token_digest
+from app.core.security import TokenSigner, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
 
 SCOPES = {
@@ -217,7 +217,7 @@ async def login(
 
 
 async def authenticate(
-    session: AsyncSession, bearer: str, org_id: UUID, crypto: Secrets
+    session: AsyncSession, bearer: str, org_id: UUID, crypto: TokenSigner
 ) -> Identity:
     if bearer.startswith("bid_"):
         token = await session.scalar(

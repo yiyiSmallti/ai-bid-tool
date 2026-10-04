@@ -15,6 +15,7 @@ from starlette.datastructures import UploadFile
 from starlette.formparsers import MultiPartParser
 
 from app.core.errors import ServiceError, not_found
+from app.core.security import Secrets
 from app.models.entities import Job
 from app.schemas.contracts import Result
 from app.schemas.sandbox_contracts import (
@@ -200,7 +201,14 @@ def create_router(context, db, storage, queue, crypto, processor):
                 )
                 await session.refresh(previous)
         data, job = await sandbox.submit(
-            session, actor, task_id, body, html, storage, crypto, sandbox.browser_for(processor)
+            session,
+            actor,
+            task_id,
+            body,
+            html,
+            storage,
+            Secrets.for_data(processor.settings),
+            sandbox.browser_for(processor),
         )
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()

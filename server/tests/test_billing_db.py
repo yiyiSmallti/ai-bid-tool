@@ -193,8 +193,8 @@ async def test_memberships_listing_and_token_scope_constraint(runtime, admin_eng
         async with runtime.transaction(tenants["orgs"][0]) as session:
             await session.execute(
                 text(
-                    "INSERT INTO api_tokens (id, org_id, user_id, name, digest, encrypted_secret, scopes, expires_at, revoked) "
-                    "VALUES (gen_random_uuid(), :o, :u, 'x', :d, 'x', '[\"billing:redeem\"]', now() + interval '1 day', false)"
+                    "INSERT INTO api_tokens (id, org_id, user_id, name, digest, scopes, expires_at, revoked) "
+                    "VALUES (gen_random_uuid(), :o, :u, 'x', :d, '[\"billing:redeem\"]', now() + interval '1 day', false)"
                 ),
                 {"o": tenants["orgs"][0], "u": tenants["users"][0], "d": "f" * 64},
             )

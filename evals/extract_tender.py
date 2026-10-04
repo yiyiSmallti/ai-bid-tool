@@ -35,6 +35,7 @@ def settings(batch_chars: int | None) -> Settings:
     # Only the LLM and OCR settings matter here; storage and database stay unused.
     os.environ.setdefault("BID_DATABASE_URL", "postgresql+psycopg://unused@localhost/unused")
     os.environ.setdefault("BID_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    os.environ.setdefault("BID_TOKEN_KEY", Fernet.generate_key().decode())
     config = Settings.load()
     if batch_chars:
         config = config.model_copy(update={"llm_batch_chars": batch_chars})

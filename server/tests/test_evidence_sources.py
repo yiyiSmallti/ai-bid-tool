@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pymupdf
 import pytest
 from app.core.errors import ServiceError
-from app.core.security import Secrets
+from app.core.security import TokenSigner
 from app.models.entities import AuditLog, EvidenceSource, Membership
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive, EvidenceSourcePreview
 from app.services import evidence_sources as services
@@ -295,7 +295,7 @@ async def test_signatures_revoked_member_and_corrupt_preview(
     _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
     source = (await add(api, headers[0], task, choice["id"])).json()["data"]["source"]
     path = f"/evidence-sources/{source['id']}/preview/download"
-    crypto = Secrets(application.state.processor.settings.encryption_key.get_secret_value())
+    crypto = TokenSigner.for_tokens(application.state.processor.settings)
     payload = {
         "kind": "source-preview",
         "org_id": headers[0]["X-Org-Id"],

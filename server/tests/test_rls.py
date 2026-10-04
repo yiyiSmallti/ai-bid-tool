@@ -100,7 +100,6 @@ def seeded(tenants, admin_engine):
                         user_id=tenants["users"][index],
                         name="test",
                         digest="c" * 64,
-                        encrypted_secret="not-a-real-token",
                         scopes=["task:read"],
                         expires_at=datetime.now(UTC) + timedelta(days=1),
                     ),
@@ -228,7 +227,6 @@ async def test_database_rejects_forbidden_token_scope(seeded):
                             user_id=seeded["users"][0],
                             name="forbidden",
                             digest=uuid4().hex,
-                            encrypted_secret="synthetic",
                             scopes=[scope],
                             expires_at=datetime.now(UTC) + timedelta(days=1),
                         )

@@ -13,7 +13,7 @@ from sqlalchemy import select, tuple_
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.errors import ServiceError, not_found
-from app.core.security import Secrets
+from app.core.security import Secrets, TokenSigner
 from app.models.entities import Job
 from app.models.screenshots import PrototypeEvidenceDecision, ScreenshotAsset, ScreenshotRendition
 from app.providers.base import ProviderFailure
@@ -145,7 +145,7 @@ class ScreenshotRoute(APIRoute):
 
 def create_router(context, db, storage, queue, settings, llm, resolve, processor=None):
     router = APIRouter(route_class=ScreenshotRoute)
-    crypto = Secrets(settings.encryption_key.get_secret_value())
+    crypto, tokens = Secrets.for_data(settings), TokenSigner.for_tokens(settings)
 
     def result(command, data=None, items=None):
         return Result(ok=True, command=command, data=data or {}, items=items or [])
@@ -269,7 +269,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         asset, row = await screenshots.rendition_access(
             session, actor, rendition_id, storage=storage
         )
-        token = crypto.issue(
+        token = tokens.issue(
             {
                 "purpose": "screenshot-preview",
                 "org_id": str(actor.org_id),
@@ -296,7 +296,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         session, actor = ctx
         asset, row = await screenshots.rendition_access(session, actor, rendition_id)
         try:
-            signed = crypto.open(signature)
+            signed = tokens.open(signature)
         except ServiceError:
             raise not_found() from None
         if any(
