@@ -1,4 +1,5 @@
 <script setup>
+import { Coin } from "@element-plus/icons-vue";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { request, session } from "../api.js";
@@ -35,14 +36,16 @@ async function submit() {
 </script>
 
 <template>
-  <div class="center">
+  <el-card class="auth-card" shadow="always">
+    <div class="auth-brand"><el-icon :size="20"><Coin /></el-icon>AI 标书工具</div>
     <h2>平台后台登录</h2>
-    <form @submit.prevent="submit">
-      <label>邮箱<input v-model="email" type="email" autocomplete="username" name="email" /></label>
-      <label>密码<input v-model="password" type="password" autocomplete="current-password" name="password" /></label>
-      <label>验证码<input v-model="totp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" name="totp" placeholder="身份验证器中的 6 位数字" /></label>
-      <p v-if="error" class="error" role="alert">{{ error }}</p>
-      <button class="primary" type="submit" :disabled="busy">登录</button>
-    </form>
-  </div>
+    <p class="hint">平台运营人员使用，需要身份验证器中的 6 位验证码。</p>
+    <el-form label-position="top" @submit.prevent="submit">
+      <el-form-item label="邮箱"><el-input v-model="email" type="email" autocomplete="username" name="email" size="large" /></el-form-item>
+      <el-form-item label="密码"><el-input v-model="password" type="password" autocomplete="current-password" name="password" size="large" show-password /></el-form-item>
+      <el-form-item label="验证码"><el-input v-model="totp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" name="totp" placeholder="身份验证器中的 6 位数字" size="large" /></el-form-item>
+      <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
+      <el-button type="primary" native-type="submit" size="large" :loading="busy">登录</el-button>
+    </el-form>
+  </el-card>
 </template>

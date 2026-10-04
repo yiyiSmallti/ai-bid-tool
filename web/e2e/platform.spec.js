@@ -114,6 +114,7 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   expect(codes.every((code) => cardsCsv.includes(code))).toBe(true);
   const voidRow = page.getByRole("row", { name: new RegExp(`…${codes[1].slice(-4)}`) });
   await voidRow.getByRole("button", { name: "作废" }).click();
+  await page.getByRole("dialog").filter({ visible: true }).getByRole("button", { name: "确定" }).click();
   await expect(voidRow).toContainText("已作废");
   await shot("cards");
 
