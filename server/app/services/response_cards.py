@@ -57,7 +57,7 @@ from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_act
 from app.services.evidence_sources import joined_sources, require_source, source_data
 from app.services.evidence_sources import require_access as require_source_access
 from app.services.extraction import locate_quote
-from app.services.resources import audit
+from app.services.versioned import audit
 
 # Only explicit scalar declaration fields can be cited. URLs and identifiers are not proof.
 MATERIALS = {

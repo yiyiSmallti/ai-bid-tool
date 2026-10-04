@@ -55,7 +55,7 @@ from app.schemas.response_card_contracts import EvidenceInput
 from app.services import drafts, evidence_sources, prototype_decisions, screenshots, templates
 from app.services import response_cards as cards
 from app.services.auth import Identity
-from app.services.resources import audit
+from app.services.versioned import audit
 
 MANIFEST_VERSION = "human-export-manifest-v1"
 REQUIRED_SCOPES = ("export", "task:read", "draft:read", "card:read", "template:read")

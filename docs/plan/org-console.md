@@ -28,7 +28,7 @@ status: "已实施（U1、U2、U3）"
 | [platform-console.md](../notes/platform-console.md)、[api.js](../../web/src/api.js)、[router.js](../../web/src/router.js)、[App.vue](../../web/src/App.vue) | 平台/单位会话分离、同源请求、导航和现有单位计费入口 |
 | [provider-config.md](provider-config.md)、[annotation.md](annotation.md) | 独立草案的边界；不把单位自带模型、标注或派生图当作可用证据能力 |
 
-接口依据限定为本 checkout 的 [main.py](../../server/app/api/main.py)、
+接口依据限定为本 checkout 的 [tenders.py](../../server/app/api/tenders.py)、[resources.py](../../server/app/api/resources.py)、[jobs.py](../../server/app/api/jobs.py)、
 [response_cards.py](../../server/app/api/response_cards.py)、
 [CLI 命令注册](../../cli/bid_cli/schema.py)及上表已批准契约。
 路线图与响应卡草案中的旧状态文字不能代替入口核验；模型起草即使有 schema/预留表，
@@ -372,8 +372,8 @@ job status/cancel 使用提交回执的作业 ID，不能拿抽取 J 查询起�
 | G5 | 无单位业务审计查询、完整单位用量明细、SSE、任务预算强制执行或会话注销/续期接口 | 显示现有修订/作业结果，轮询；本地退出不称为服务端吊销；不借用 platform API 或发明端点 |
 
 前端适配已支持约定的业务部分成功、multipart、受权二进制与 Retry-After，
-响应规则见 [请求边界](../notes/org-console.md#session-and-request-boundaries)。未知 500/non-JSON 问题仍按
-[路线图已知缺陷](roadmap.md#已知代码缺陷)处理，不把未知响应降级成空列表。
+响应规则见 [请求边界](../notes/org-console.md#session-and-request-boundaries)。服务端未预期的失败返回
+Result 结构的 `internal_error`（[处理结果](../guides/cli.md#handle-results)），前端按失败呈现，不把未知响应降级成空列表。
 
 ### Result 与失败呈现
 

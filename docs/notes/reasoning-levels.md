@@ -43,7 +43,7 @@ removed from the catalog in between fails the job.
 Requirements carry `job_id`, unique per job and fingerprint instead of per
 task. `req list` returns, per document, the requirements of the latest
 succeeded extraction (`latest_extractions` in
-[main.py](../../server/app/api/main.py)), or those of the job given with
+[requirements.py](../../server/app/services/requirements.py)), or those of the job given with
 `job`. `GET /tasks/{id}/extractions` lists every extraction job with its level,
 the model and counts from `jobs.result`, and whether `req list` shows it by
 default.
@@ -68,7 +68,8 @@ without its key still lists every level as failed.
 ## Code
 
 - [server/app/providers/llm.py](../../server/app/providers/llm.py): `at_reasoning`, `with_reasoning`, `reasoning_choices`, `platform_llm`.
-- [server/app/api/main.py](../../server/app/api/main.py): `start_job`, `req_list`, `req_history`.
+- [server/app/services/tender_jobs.py](../../server/app/services/tender_jobs.py): `submit`.
+- [server/app/services/requirements.py](../../server/app/services/requirements.py): `list_requirements`, `extraction_history`.
 - [server/app/jobs/processor.py](../../server/app/jobs/processor.py): applying the stored level and saving `job_id`.
 - [server/app/services/platform.py](../../server/app/services/platform.py): `test_model`.
 - [web/src/views/Models.vue](../../web/src/views/Models.vue): level editing and per-level test results.

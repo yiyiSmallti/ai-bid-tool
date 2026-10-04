@@ -395,7 +395,7 @@ async def test_old_tokens_denied_new_scopes_and_membership_intersection(
 
 
 async def test_certificate_commit_failure_has_no_partial_success(api, headers, monkeypatch):
-    from app.services import certificates
+    from app.services import versioned
 
     def invalid_event(session, actor, action, object_id, details):
         session.add(
@@ -408,7 +408,7 @@ async def test_certificate_commit_failure_has_no_partial_success(api, headers, m
             )
         )
 
-    monkeypatch.setattr(certificates, "audit", invalid_event)
+    monkeypatch.setattr(versioned, "audit", invalid_event)
     response = await api.post(
         "/resources/certificates", headers=headers[0], json={"data": metadata()}
     )

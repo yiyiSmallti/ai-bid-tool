@@ -16,7 +16,7 @@ from app.schemas.contracts import Cost
 from app.schemas.response_card_contracts import DraftPreview, DraftRequest, DraftView
 from app.services import response_cards as cards
 from app.services.auth import Identity
-from app.services.resources import audit
+from app.services.versioned import audit
 
 RULE_VERSION = "response-draft-v3"
 TABLES = ("substantive", "commercial", "technical")

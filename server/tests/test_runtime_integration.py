@@ -883,13 +883,14 @@ async def test_real_background_worker_and_both_cli_modes(
 async def test_unexpected_server_error_is_a_result_in_both_modes(
     tenants, real_queue_schema, tmp_path, monkeypatch, capsys
 ):
+    import app.api.account as account
     import app.api.main as api_main
     from bid_cli.main import main
 
     async def failing_login(*args, **kwargs):
         raise RuntimeError("synthetic internal detail")
 
-    monkeypatch.setattr(api_main, "login", failing_login)
+    monkeypatch.setattr(account, "login", failing_login)
     monkeypatch.setenv("BID_DATA_DIR", str(tmp_path / "files"))
     monkeypatch.setenv("BID_PASSWORD", PASSWORD)
     application = api_main.create_app()

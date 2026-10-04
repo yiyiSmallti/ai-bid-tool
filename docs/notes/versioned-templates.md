@@ -55,7 +55,7 @@ downgrade is permitted. Tests use synthetic documents.
 ## Code
 
 - server/app/schemas/template_contracts.py and services/template_files.py.
-- services/templates.py, api/main.py, models/entities.py and services/auth.py.
+- services/templates.py, services/versioned.py, api/resources.py, models/entities.py and services/auth.py.
 - Migration 0007_versioned_templates.py and cli/bid_cli/client.py/main.py/schema.py.
 - test_templates.py, test_template_client.py, test_resource_rls.py, runtime and
   container integration.

@@ -445,7 +445,7 @@ class Processor:
                         await failure_audit(session, current, error["code"])
                     if kind == "card_generate":
                         from app.services.card_generation import worker
-                        from app.services.resources import audit
+                        from app.services.versioned import audit
 
                         audit(
                             session,

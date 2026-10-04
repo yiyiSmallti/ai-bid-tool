@@ -23,7 +23,7 @@ from app.schemas.evidence_source_contracts import (
 )
 from app.services.auth import Identity
 from app.services.certificate_files import validate_file
-from app.services.resources import audit
+from app.services.versioned import audit
 
 RENDER_PROFILE = "pdf-page-preview-v1"
 RENDER_SECONDS = 20.0

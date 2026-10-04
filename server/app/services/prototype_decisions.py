@@ -18,7 +18,7 @@ from app.models.screenshots import (
 from app.schemas.screenshot_contracts import PrototypeDecisionPreviewInput
 from app.services import response_cards as cards
 from app.services import screenshots as images
-from app.services.resources import audit
+from app.services.versioned import audit
 
 
 async def latest(session, evidence_id):

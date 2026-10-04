@@ -22,8 +22,8 @@ from app.services import resources
 from app.services import response_cards as cards
 from app.services import screenshots as images
 from app.services.card_generation import worker
-from app.services.resources import audit
 from app.services.screenshot_jobs import create_job
+from app.services.versioned import audit
 
 QUERY_VERSION = "vendor-search-v1"
 MAX_CANDIDATES = 20

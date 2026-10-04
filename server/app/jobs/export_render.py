@@ -22,7 +22,7 @@ from app.providers.storage import Storage
 from app.schemas.contracts import Cost
 from app.services import evidence_sources, exports, screenshots, templates
 from app.services.auth import set_actor_context
-from app.services.resources import audit
+from app.services.versioned import audit
 
 SERVER_ROOT = Path(__file__).resolve().parents[2]
 

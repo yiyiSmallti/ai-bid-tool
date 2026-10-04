@@ -47,5 +47,5 @@ task deadline inference or evidence confirmation is implemented here.
 ## Code
 
 - server/app/schemas/certificate_contracts.py and services/certificates.py.
-- Migration 0005_versioned_certificates.py, models/entities.py and api/main.py.
+- Migration 0005_versioned_certificates.py, models/entities.py, services/versioned.py and api/resources.py.
 - test_certificates.py, test_resource_rls.py, CLI snapshots and genuine runtime test.

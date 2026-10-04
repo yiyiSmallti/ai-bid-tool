@@ -37,7 +37,7 @@ from app.services import (
     vendor_search,
 )
 from app.services import response_cards as cards
-from app.services.resources import audit
+from app.services.versioned import audit
 
 
 async def memory_upload(request: Request, max_bytes: int = screenshots.MAX_BYTES):
