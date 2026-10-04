@@ -49,7 +49,10 @@ backup, encryption and audit retention. The migration refuses destructive downgr
 ## Code pointers
 
 - `server/app/schemas/resource_contracts.py`: shared API/CLI validation.
-- `server/app/services/resources.py`: locks, revision conflict, selection and audit.
+- `server/app/services/versioned.py`: locks, revision conflict, selection and audit shared by
+  products, features, certificates, profiles and templates; `VersionedKind` names each
+  one's tables, scopes and audit actions.
+- `server/app/services/resources.py`: the product kind and its views.
 - `server/migrations/versions/0003_versioned_products.py`: isolation and privileges.
 - `server/tests/test_resources.py`, `test_resource_rls.py`: functional/concurrent/DB tests.
 - `server/tests/test_runtime_integration.py`: genuine local and remote CLI transports.

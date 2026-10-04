@@ -74,7 +74,7 @@ download link alone is insufficient.
 - server/app/services/evidence_sources.py
 - server/app/models/entities.py:EvidenceSource
 - server/migrations/versions/0009_evidence_sources.py
-- server/app/api/main.py:evidence_source_* routes
+- server/app/api/resources.py:evidence_source_* routes
 - cli/bid_cli/client.py:download_evidence_source and CLI/source schema entries
 - server/tests/test_evidence_sources.py, test_evidence_source_client.py,
   test_resource_rls.py, test_cli_snapshots.py, test_runtime_integration.py

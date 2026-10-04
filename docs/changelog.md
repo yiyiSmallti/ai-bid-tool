@@ -6,6 +6,14 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-03：拆分 API 入口与合并版本化资源服务
+
+- 产品、功能、证书、资质档案和模板共用 `services/versioned.py`：修订锁、修订冲突、任务选择替换与审计只有一份
+  实现，各类以 `VersionedKind` 声明表、权限范围和审计动作；功能的产品校验和模板文件存储以钩子接入。
+- `api/main.py` 只保留应用组装、中间件、错误结构和认证上下文；路由按领域拆到 `api/account.py`、
+  `api/tenders.py`、`api/resources.py` 和 `api/jobs.py`，上传、解析/抽取提交、要求查询、作业状态和令牌签发移入
+  `services/`。四处签名下载链接共用 `api/common.py`。接口、路由名和 OpenAPI 文档不变。
+
 ## 2026-10-03：沙箱代理攻防验收驱动
 
 - 新增 [sandbox_proxy_acceptance.py](../scripts/sandbox_proxy_acceptance.py)：生产代码中的 `FetchBroker` 与

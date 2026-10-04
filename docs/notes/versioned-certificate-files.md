@@ -67,7 +67,7 @@ is refused. Do not treat raw-original download as bid export or evidence approva
 
 - Schemas: server/app/schemas/certificate_file_contracts.py
 - Service: server/app/services/certificate_files.py
-- API/CLI: server/app/api/main.py; cli/bid_cli/main.py; cli/bid_cli/client.py
+- API/CLI: server/app/api/resources.py; cli/bid_cli/main.py; cli/bid_cli/client.py
 - Migration: server/migrations/versions/0008_certificate_files.py
 - Tests: server/tests/test_certificate_files.py; test_certificate_file_client.py;
   test_resource_rls.py; test_cli_snapshots.py; test_runtime_integration.py

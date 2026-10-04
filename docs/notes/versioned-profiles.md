@@ -49,6 +49,6 @@ and backups. Downgrade refuses destructive history drops.
 
 ## Code
 
-- server/app/schemas/profile_contracts.py, services/profiles.py and api/main.py.
+- server/app/schemas/profile_contracts.py, services/profiles.py, services/versioned.py and api/resources.py.
 - Migration 0006_versioned_profiles.py, models/entities.py and services/auth.py.
 - test_profiles.py, test_resource_rls.py, CLI snapshots and both genuine CLI modes.

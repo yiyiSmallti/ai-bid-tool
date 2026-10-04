@@ -47,6 +47,6 @@ permission. No provider, external URL retrieval or AI call is involved.
 
 ## Code
 
-- `schemas/feature_contracts.py`, `services/features.py`, `api/main.py` under server/app.
+- `schemas/feature_contracts.py`, `services/features.py`, `services/versioned.py`, `api/resources.py` under server/app.
 - Migration `0004_versioned_features.py`, resource RLS tests and `test_features.py`.
 - Both real CLI modes in `test_runtime_integration.py`; all command JSON snapshots.

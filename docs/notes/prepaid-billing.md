@@ -33,7 +33,7 @@ requires a reason, and writes an `adjust` entry. Both restore the caller's
 runtime role has no column grant that could mark a card redeemed.
 
 `require_funds` checks positive available funds at extraction submission in
-[main.py](../../server/app/api/main.py) and drafting submission in
+[tender_jobs.py](../../server/app/services/tender_jobs.py) and drafting submission in
 [card_generation.py](../../server/app/services/card_generation.py). This check is advisory: every model
 request must also pass `JobExecution.admit` in
 [execution.py](../../server/app/jobs/execution.py), including split batches,
