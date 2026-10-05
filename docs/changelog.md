@@ -6,6 +6,12 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Agent integration regression fixes
+
+- Restore private candidate rendering for a verified human export submission while preserving worker identity, current attempt/lease checks and the separate [human release gate](plan/export.md#human-identity-and-release-gate). Automated actors still cannot invoke human-only export actions.
+- Restore verified actor context in the separate transactions that record rubric and score denials, so [invocation provenance](plan/agent.md#audit-and-a02-provenance) is validated without replacing the original authorization error. Human-only scope errors identify the required human session.
+- Batch draft-history provenance reads without increasing the query bound. Align regression expectations with the approved provenance and legacy-output contracts, and use known synthetic provider prices and zero remaining allowance in agent budget scenarios rather than erasing prior task expenditure.
+
 ## 2026-10-05: Check and score console assessments
 
 - Implemented the approved rules-check, combined-check, rubric-review and score-report console flow with Element Plus, Chinese labels, explicit preview/consent, durable job recovery and links to the responsible response-card review.

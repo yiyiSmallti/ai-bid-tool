@@ -9,6 +9,7 @@ Artifacts are reproducible with --basetemp=data/work/agent-validation.
 """
 
 import json
+from decimal import Decimal
 from uuid import UUID, uuid4
 
 import httpx
@@ -38,6 +39,17 @@ SCOPES = [
     "profile:read",
     "evidence:source:read",
 ]
+
+
+def workflow_client(tenants, tmp_path):
+    # A01 bounds vendor USD as well as platform charges. The drafting fixture's
+    # sale prices alone do not establish a known vendor-price admission bound.
+    return drafting_client(
+        tenants,
+        tmp_path,
+        llm_input_usd_per_mtok=1,
+        llm_output_usd_per_mtok=1,
+    )
 
 
 def start_body(extraction, **limits):
@@ -96,7 +108,7 @@ async def advance(api, app, header, session_id, *, maximum=30):
 
 
 async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, admin_engine):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
+    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
         header = headers[0]
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
         await select_real_materials(api, header, task, tmp_path)
@@ -197,7 +209,7 @@ async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, adm
 
 
 async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
+    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
         header = headers[0]
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
         sent = []
@@ -243,12 +255,19 @@ async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
 
 
 async def test_task_budget_pause_before_first_decision_and_reference_resume(tenants, tmp_path):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
+    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
         from test_task_budget_execution import set_limit
 
         header = headers[0]
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
-        await set_limit(api, header, task, "0")
+        current = await api.get(f"/v4/tasks/{task}/budget", headers=header)
+        assert current.status_code == 200, current.text
+        budget = current.json()["data"]["budget"]
+        # Extraction is already settled. Exhaust the remaining task budget
+        # without lowering the cap below its existing spent/reserved liability.
+        exposure = Decimal(budget["spent"]) + Decimal(budget["reserved"])
+        exhausted = await set_limit(api, header, task, str(exposure))
+        assert Decimal(exhausted["available"]) == 0
         before = len(vendor.bodies)
         body = start_body(extraction)
         started = await api.post(f"/v4/tasks/{task}/agent-sessions", headers=header, json=body)
@@ -278,7 +297,7 @@ async def test_task_budget_pause_before_first_decision_and_reference_resume(tena
 async def test_session_limits_do_not_reset_across_control_jobs(
     tenants, tmp_path, max_steps, max_calls
 ):
-    async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
+    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
         header = headers[0]
         task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
 

@@ -575,7 +575,22 @@ async def provenance(session, job_id):
     """Read immutable, database-validated Job origin without reading private sessions."""
     if job_id is None:
         return None
-    job = await session.get(Job, job_id)
+    return provenance_for_job(await session.get(Job, job_id))
+
+
+async def provenance_many(session, job_ids):
+    """Resolve public origins in one org-scoped query, independent of history size."""
+    ids = {job_id for job_id in job_ids if job_id is not None}
+    if not ids:
+        return {}
+    return {
+        job.id: provenance_for_job(job)
+        for job in await session.scalars(select(Job).where(Job.id.in_(ids)))
+    }
+
+
+def provenance_for_job(job):
+    """Project trusted Job columns without adding reads or inventing missing history."""
     if job is None:
         return None
     if job.invocation_id is None or not job.command:

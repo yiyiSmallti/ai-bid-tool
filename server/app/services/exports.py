@@ -213,6 +213,18 @@ async def human_access(
 
 
 async def worker_access(session: AsyncSession, job: Job, attempt_id: UUID) -> Identity:
+    # Rendering a fixed human request creates a private candidate, never a human
+    # release decision. JSON submission fields cannot substitute for job authority.
+    if (
+        job.kind != "export_render"
+        or job.actor_kind != "session"
+        or job.actor_token_id is not None
+        or job.actor_user_id is None
+        or job.agent_principal_id is not None
+        or job.agent_session_id is not None
+        or job.agent_step_id is not None
+    ):
+        raise ServiceError("forbidden", "Human export submission required", 403, 4)
     now = await session.scalar(select(func.clock_timestamp()))
     if (
         job.status != "running"
@@ -225,24 +237,40 @@ async def worker_access(session: AsyncSession, job: Job, attempt_id: UUID) -> Id
             "job_attempt_stopped", "Export render attempt no longer owns this job", 409, 4
         )
     submitted = job.result["submission"]
+    if UUID(submitted["actor_user_id"]) != job.actor_user_id:
+        raise ServiceError("forbidden", "Export submitter does not match job authority", 403, 4)
     actor = Identity(
-        UUID(submitted["actor_user_id"]),
+        job.actor_user_id,
         job.org_id,
-        set(submitted["scopes"]),
+        set(submitted["scopes"]) & set(job.actor_scopes),
         "bidder",
         actor_kind="worker",
+        invocation_id=job.invocation_id,
+        job_id=job.id,
+        run_id=attempt_id,
     )
-    actor = await cards.access(session, actor, "export")
-    if actor.role != "bidder" or actor.token_id is not None:
+    actor = await cards.access(session, actor, "card:read")
+    if actor.role != "bidder" or "export" not in actor.scopes:
         raise ServiceError("forbidden", "Export initiator is no longer authorized", 403, 4)
     for scope in REQUIRED_SCOPES:
-        actor.require(scope)
+        if scope != "export":
+            actor.require(scope)
     await session.execute(
         text(
             "SELECT set_config('app.export_run_id', :run, true), set_config('app.export_attempt_id', :attempt, true)"
         ),
         {"run": submitted["export_run_id"], "attempt": str(job.run_id)},
     )
+    run = await session.get(ExportRun, UUID(submitted["export_run_id"]))
+    if (
+        run is None
+        or run.org_id != job.org_id
+        or run.render_job_id != job.id
+        or run.task_id != job.task_id
+        or run.document_id != job.document_id
+        or run.initiated_by != job.actor_user_id
+    ):
+        raise not_found()
     return actor
 
 

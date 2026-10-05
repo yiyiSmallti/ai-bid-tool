@@ -280,6 +280,12 @@ async def test_rubric_responsible_session_and_hash_gates(rubric_case):
         assert all(
             "reason" not in audit.details and "reason_sha256" in audit.details for audit in audits
         )
+        token_denials = [event for event in audits if event.actor_token_id is not None]
+        assert len(token_denials) == 1
+        assert token_denials[0].actor_kind == "token"
+        assert token_denials[0].initiated_by == "external_agent"
+        assert token_denials[0].on_behalf_of_user_id == token_denials[0].actor_user_id
+        assert token_denials[0].invocation_id is not None
 
 
 @pytest.mark.parametrize(

@@ -1,4 +1,8 @@
-"""DB-free role contract for session-only budget administration."""
+"""DB-free role contract for session-only budget administration.
+
+Failure modes: automation with forged human scopes passes, or the generic scope
+gate hides the required human-session action behind an unrelated permission error.
+"""
 
 from uuid import uuid4
 
@@ -17,8 +21,9 @@ def test_budget_write_scopes_are_human_only():
         assert "task:budget:write" not in ROLE_SCOPES[role]
     for kind in ("token", "agent", "worker"):
         actor = Identity(uuid4(), uuid4(), {"task:budget:write"}, "admin", actor_kind=kind)
-        with pytest.raises(ServiceError):
+        with pytest.raises(ServiceError, match="human") as rejected:
             require_human(actor, "task:budget:write", {"admin", "bidder"})
+        assert rejected.value.code == "forbidden" and rejected.value.status == 403
     actor = Identity(uuid4(), uuid4(), {"task:budget:write"}, "admin", token_id=uuid4())
-    with pytest.raises(ServiceError):
+    with pytest.raises(ServiceError, match="human"):
         require_human(actor, "task:budget:write", {"admin", "bidder"})

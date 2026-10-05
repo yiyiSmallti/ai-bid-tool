@@ -60,6 +60,7 @@ async def test_sandbox_admission_uses_pinned_purpose_token_scope(monkeypatch, pu
         actor_token_id=token,
         actor_scopes=["task:read", scope],
         actor_kind="token",
+        agent_principal_id=None,
     )
     actor = await execution.authorized_job(Session(user, token, ["task:read", scope], purpose), job)
     assert scope in actor.scopes
@@ -82,6 +83,7 @@ async def test_wrong_sandbox_scope_never_admits(monkeypatch, purpose):
         actor_token_id=token,
         actor_scopes=["task:read", wrong],
         actor_kind="token",
+        agent_principal_id=None,
     )
     with pytest.raises(ServiceError) as caught:
         await execution.authorized_job(Session(user, token, ["task:read", wrong], purpose), job)
@@ -104,6 +106,7 @@ async def test_missing_pinned_sandbox_input_has_no_default_permission(monkeypatc
         actor_token_id=token,
         actor_scopes=scopes,
         actor_kind="token",
+        agent_principal_id=None,
     )
     with pytest.raises(ProviderFailure) as caught:
         await execution.authorized_job(Session(user, token, scopes, None), job)

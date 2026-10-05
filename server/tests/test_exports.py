@@ -21,7 +21,7 @@ from uuid import UUID, uuid4
 from zipfile import ZipFile
 
 import pytest
-from app.models.entities import AuditLog, UsageRecord
+from app.models.entities import AuditLog, Job, UsageRecord
 from docx import Document
 from sqlalchemy import func, select
 from test_response_cards import (
@@ -679,6 +679,84 @@ async def test_token_cannot_use_export_or_generic_job_read_cancel(tenants, tmp_p
                 method, path, headers=token_headers, **({"json": data} if data is not None else {})
             )
             assert result.status_code == 403, result.text
+
+
+async def test_human_render_worker_keeps_identity_without_human_export_rights(
+    tenants, tmp_path, admin_engine, monkeypatch
+):
+    """Candidate rendering must not impersonate a human or trust agent/job JSON grants.
+
+    Failure modes: nonhuman/token/delegated submission, mismatched submitter,
+    missing immutable export grant, or worker publication authority.
+    """
+    from types import SimpleNamespace
+
+    from app.core.errors import ServiceError
+    from app.services import exports
+
+    worker_access = exports.worker_access
+    checked = []
+
+    async def check_worker(session, job, attempt_id):
+        if not checked:
+            snapshot = {column.key: getattr(job, column.key) for column in Job.__table__.columns}
+            for changed in (
+                {"kind": "draft"},
+                {"actor_kind": "worker"},
+                {"actor_kind": "agent"},
+                {"actor_kind": "token"},
+                {"actor_token_id": uuid4()},
+                {"agent_principal_id": uuid4()},
+                {"agent_session_id": uuid4()},
+                {"agent_step_id": uuid4()},
+                {"actor_user_id": uuid4()},
+                {"actor_scopes": [scope for scope in job.actor_scopes if scope != "export"]},
+            ):
+                with pytest.raises(ServiceError) as rejected:
+                    await worker_access(
+                        session, SimpleNamespace(**(snapshot | changed)), attempt_id
+                    )
+                assert rejected.value.code == "forbidden"
+        actor = await worker_access(session, job, attempt_id)
+        assert job.actor_kind == "session" and job.actor_token_id is None
+        assert actor.actor_kind == "worker" and actor.token_id is None
+        assert actor.principal_id is None and actor.session_id is None and actor.step_id is None
+        with pytest.raises(ServiceError) as denied:
+            actor.require("export")
+        assert denied.value.code == "forbidden"
+        with pytest.raises(ServiceError) as denied:
+            await exports.human_access(session, actor)
+        assert denied.value.code == "forbidden"
+        checked.append({"actor_kind": actor.actor_kind, "attempt_id": str(attempt_id)})
+        return actor
+
+    monkeypatch.setattr(exports, "worker_access", check_worker)
+    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+        header = headers[0]
+        task, body, _, _ = await complete_inputs(api, app, header, tenants, admin_engine, tmp_path)
+        run = await prepared(api, app, header, task, body)
+        assert checked and run["export_id"] is None
+        assert (await api.get(f"/tasks/{task}/exports", headers=header)).json()["items"] == []
+        released = await api.post(
+            f"/export-runs/{run['id']}/release",
+            headers=header,
+            json={
+                "expected_input_hash": run["input_hash"],
+                "expected_candidate_sha256": run["candidate_sha256"],
+            },
+        )
+        assert released.status_code == 200, released.text
+        (tmp_path / "human-render-authority.json").write_text(
+            json.dumps(
+                {
+                    "run_id": run["id"],
+                    "candidate_sha256": run["candidate_sha256"],
+                    "worker_checks": checked,
+                    "human_release": released.json()["ok"],
+                },
+                indent=2,
+            )
+        )
 
 
 @pytest.mark.parametrize("limit", ["memory", "deadline", "output"])

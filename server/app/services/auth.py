@@ -243,11 +243,12 @@ class Identity:
             self.actor_kind = "token"
 
     def require(self, scope: str) -> None:
-        if scope not in self.scopes or (
-            scope in HUMAN_ONLY_SCOPES
-            and (self.actor_kind != "session" or self.token_id is not None)
-        ):
+        if scope not in self.scopes:
             raise ServiceError("forbidden", "Permission denied", 403, 4)
+        if scope in HUMAN_ONLY_SCOPES and (
+            self.actor_kind != "session" or self.token_id is not None
+        ):
+            raise ServiceError("forbidden", "A human session is required", 403, 4)
 
 
 async def set_actor_context(session: AsyncSession, actor: Identity) -> None:

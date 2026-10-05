@@ -591,12 +591,13 @@ async def list_drafts(
     batch, grouped, current_inputs = await load_draft_reads(
         session, actor, list(runs), requirements, storage
     )
+    from app.services.agent_tools import provenance_many
+
+    origins = await provenance_many(session, (run.generation_job_id for run in runs))
     items = []
     for run in runs:
         view = draft_view(run, grouped[run.id], batch, current_inputs)
-        from app.services.agent_tools import provenance
-
-        view["agent_provenance"] = await provenance(session, run.generation_job_id)
+        view["agent_provenance"] = origins.get(run.generation_job_id)
         items.append(
             {
                 key: view[key]

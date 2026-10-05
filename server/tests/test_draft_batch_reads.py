@@ -6,8 +6,9 @@ Failure modes enumerated before these gates:
 * Projection drift: row/comply-only/gap snapshots, source order, evidence order,
   partial completion, negative deviations and invalidation order must exactly
   match the retained slow reference, for current and stale drafts.
-* Contract drift: versioned reads retain the complete 4.0 Result, while legacy
-  reads retain exactly the same domain result with the strict three-field Cost.
+* Contract drift: versioned reads retain the complete 4.0 Result and nullable
+  agent provenance, while legacy reads omit that attachment and retain the
+  strict three-field Cost.
 * Freshness drift: changed card pointers, newly created cards for old gaps,
   replaced material selections, repaired quotes and invalid citations must keep
   their precedence, including already-reported invalid-citation gaps.
@@ -34,10 +35,12 @@ from app.core.errors import not_found
 from app.models.entities import Requirement
 from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevision, ResponseItem
 from app.providers.llm import OpenAICompatibleExtractor
+from app.schemas.compatibility import legacy_projection
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import DraftView
 from app.services import drafts
 from app.services import response_cards as cards
+from app.services.agent_tools import provenance
 from app.services.auth import ROLE_SCOPES, Identity
 from conftest import FakeQueue
 from docx import Document
@@ -152,6 +155,7 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
                 memory_lineage.append({"requirement_id": str(item.requirement_id), **lineage})
     return DraftView.model_validate(
         {
+            "agent_provenance": await provenance(session, run.generation_job_id),
             "id": run.id,
             "org_id": run.org_id,
             "task_id": run.task_id,
@@ -488,10 +492,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
             legacy_response = await api.get(f"/drafts/{draft_id}", headers=header)
         assert legacy_response.status_code == 200, legacy_response.text
         assert legacy_response.headers["X-Bid-Contract-Version"] == "3.0"
-        assert {**legacy_response.json(), "duration_ms": 0} == {
-            **expected_result,
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
-        }
+        assert {**legacy_response.json(), "duration_ms": 0} == legacy_projection(expected_result)
         assert legacy_counter["statements"] == counter["statements"]
         legacy_counts.append(legacy_counter["statements"])
         partition = [row["requirement_id"] for rows in reference["tables"].values() for row in rows]
@@ -520,6 +521,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         "invalidated_requirements",
         "memory_warnings",
         "memory_lineage",
+        "agent_provenance",
     )
     async with app.state.db.transaction(actor.org_id) as session:
         runs = (
@@ -553,10 +555,7 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         )
     assert legacy_response.status_code == 200, legacy_response.text
     assert legacy_response.headers["X-Bid-Contract-Version"] == "3.0"
-    assert {**legacy_response.json(), "duration_ms": 0} == {
-        **expected_result,
-        "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
-    }
+    assert {**legacy_response.json(), "duration_ms": 0} == legacy_projection(expected_result)
     assert legacy_counter["statements"] == counter["statements"]
     return {
         "detail_queries": fast_counts,
