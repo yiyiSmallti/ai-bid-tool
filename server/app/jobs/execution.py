@@ -4,6 +4,7 @@ import asyncio
 import math
 from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
@@ -73,6 +74,11 @@ async def locked_job(session: AsyncSession, job_id: UUID) -> Job | None:
     task_id = await session.scalar(select(Job.task_id).where(Job.id == job_id))
     if task_id is not None:
         await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
+        from app.models.team_workflow import TaskWorkflow
+
+        await session.scalar(
+            select(TaskWorkflow).where(TaskWorkflow.task_id == task_id).with_for_update()
+        )
     job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
     if job is not None and job.task_id != task_id:
         raise ProviderFailure("Job task binding changed", code="job_attempt_stopped")
@@ -81,7 +87,7 @@ async def locked_job(session: AsyncSession, job_id: UUID) -> Job | None:
     return job
 
 
-async def authorized_job(session: AsyncSession, job: Job) -> Identity:
+async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) -> Identity:
     """Saved grants are an upper bound, never a substitute for live membership."""
     if job.actor_user_id is None or not job.actor_scopes or job.actor_kind is None:
         raise ProviderFailure(
@@ -136,7 +142,11 @@ async def authorized_job(session: AsyncSession, job: Job) -> Identity:
     else:
         actor.require(JOB_SCOPES.get(job.kind, "task:read"))
     if job.task_id is not None:
-        actor.require("task:read")
+        from app.services.task_workflow import access as task_access
+
+        # The actual initiator is retained; workers receive no human admin recovery.
+        worker = replace(actor, actor_kind="worker", job_id=job.id, run_id=job.run_id)
+        await task_access(session, worker, job.task_id, write=True, bind_context=bind_context)
     return actor
 
 
@@ -250,10 +260,17 @@ class JobExecution:
             from app.services.agent_limits import guard_job
 
             await guard_job(session, job, self.settings)
+        # A controller's current step has a more specific invocation than its Job.
+        # Recheck authority without replacing the caller's already installed fence.
+        await authorized_job(session, job, bind_context=job.kind != "agent")
         return job
 
     async def heartbeat(self) -> None:
         async with self.db.transaction(self.org_id) as session:
+            try:
+                await self.owned_job(session)
+            except ServiceError as error:
+                raise self.stop(error.code, "Submission authorization is no longer valid") from None
             renewed = await session.scalar(
                 update(Job)
                 .where(

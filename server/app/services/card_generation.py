@@ -57,6 +57,7 @@ from app.services.auth import Identity
 from app.services.drafts import digest
 from app.services.evidence_sources import require_source
 from app.services.extraction import locate_quote
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 PROTECTED = {"confirmed", "pending_review", "comply_only"}
@@ -362,6 +363,7 @@ def estimate(llm, secret: dict) -> dict:
     }
 
 
+@task_authorized("card:generate", write=True)
 async def submit_generation(
     session, actor, task_id, body: CardGenerateRequest, storage, llm, settings
 ):

@@ -55,8 +55,17 @@ export async function fixture(page, options = {}) {
       let response;
       const extra = await state.extra?.({ method, path, url, body });
       if (extra) return route.fulfill({ status: extra.status ?? 200, json: extra.payload });
-      if (method === "GET" && path === "/org/current") response = result("org current", { org_id: state.org, role: state.role });
+      if (method === "GET" && path === "/org/current") response = result("org current", { org_id: state.org, role: state.role, user_id: uuid(3) });
       else if (method === "GET" && path === `/tasks/${ids.task}`) response = result("task get", { id: ids.task, org_id: state.org, name: "合成评估任务", tender_number: "SYN-001", deadline: null, budget_usd: 10, created_by: uuid(3), created_at: now, model_redaction_enabled: true, model_redaction_revision: 1, model_redaction_by: uuid(3) });
+      // Task pages also load the team workflow header and its live-progress stream; the
+      // assessment flows only need an active task and a stream that sends one heartbeat.
+      else if (method === "GET" && path === `/tasks/${ids.task}/workflow`) response = result("task workflow", { workflow: { org_id: state.org, task_id: ids.task, owner_user_id: uuid(3), state: "active", revision: 1, access_epoch: 1, last_event_cursor: "opaque-snapshot", co_sign_starred: false, rule_revision: 1, archived_at: null, archived_by_user_id: null } });
+      else if (method === "GET" && path === `/tasks/${ids.task}/members`) {
+        // The signed-in user's task membership mirrors the org role used by each scenario.
+        const [role, review_domains] = { bidder: ["owner", ["commercial"]], technical: ["contributor", ["technical"]] }[state.role] ?? ["observer", []];
+        response = result("task member list", { org_id: state.org, task_id: ids.task, next_cursor: null, returned: 1, has_more: false }, [{ org_id: state.org, task_id: ids.task, user_id: uuid(3), display_label: "合成成员", role, active: true, review_domains, revision: 1 }]);
+      }
+      else if (method === "GET" && path === `/tasks/${ids.task}/events`) return route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify({ type: "heartbeat", cursor: "opaque-snapshot", as_of: now })}\n\n` });
       else if (method === "GET" && path === `/tasks/${ids.task}/documents`) response = result("task document list", { task_id: ids.task }, [{ id: ids.document, task_id: ids.task, name: "合成招标文件.pdf", sha256: hash, media_type: "application/pdf", page_count: 5, status: "parsed", citation_mode: "page", created_at: now }]);
       else if (method === "GET" && path === `/tasks/${ids.task}/extractions`) response = result("req history", {}, [{ job_id: ids.extract, document_id: ids.document, reasoning: null, model: "synthetic-model", status: "succeeded", created_at: now, finished_at: now, saved: 1200, rejected: 0, tokens: 0, error: null, latest: true }]);
       else if (method === "GET" && ["/confidential-fields", "/confidential-values", `/tasks/${ids.task}/exports`].includes(path)) response = result(path.endsWith("exports") ? "export list" : "confidential list");

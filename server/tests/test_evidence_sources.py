@@ -4,7 +4,8 @@ PDF failure modes recorded before the isolated renderer implementation:
 - malformed, encrypted, repaired, empty-page or descriptor-mismatched originals fail closed;
 - page and raster/output bounds are preserved across the child-process boundary;
 - child deadlines and resource-limit failures cannot publish a DB row or object;
-- the bounded render slot remains held for the complete child operation.
+- the bounded render slot remains held for the complete child operation;
+- archiving or removing a preparing contributor blocks publication after rendering.
 """
 
 import asyncio
@@ -221,6 +222,12 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "agent:read",
         "agent:run",
         "agent:cancel",
+        "task:members:write",
+        "task:archive",
+        "card:assign",
+        "card:comment",
+        "task:review-policy",
+        "card:cosign",
         "task:budget:write",
         "billing:alert:write",
         "memory:read",
@@ -446,6 +453,62 @@ async def test_render_runs_outside_task_lock_and_rechecks_selection(
     response = await pending
     assert response.status_code == 409
     assert response.json()["data"]["error"]["code"] == "inactive_snapshot"
+    async with application.state.db.transaction(tenants["orgs"][0]) as session:
+        assert await session.scalar(select(func.count()).select_from(EvidenceSource)) == 0
+    assert not list(application.state.storage.root.rglob("*.png"))
+
+
+@pytest.mark.parametrize("change", ["archive", "remove_member"])
+async def test_render_rechecks_workflow_authority_before_publication(
+    api, headers, pdf_bytes, application, monkeypatch, tenants, admin_engine, change
+):
+    from test_team_workflow_membership import add_member, person, workflow
+
+    _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
+    reader = headers[0]
+    contributor = None
+    if change == "remove_member":
+        contributor, reader = await person(api, admin_engine, tenants["orgs"][0])
+        added = await add_member(api, headers[0], task, contributor, 1)
+        assert added.status_code == 200, added.text
+    version = (await workflow(api, headers[0], task))["revision"]
+    rendering, release = asyncio.Event(), asyncio.Event()
+    original_render = services.render_page_async
+
+    async def gated(*args):
+        rendering.set()
+        await asyncio.wait_for(release.wait(), 10)
+        return await original_render(*args)
+
+    monkeypatch.setattr(services, "render_page_async", gated)
+    pending = asyncio.create_task(add(api, reader, task, choice["id"]))
+    try:
+        await asyncio.wait_for(rendering.wait(), 10)
+        path = (
+            f"/tasks/{task}/archive"
+            if change == "archive"
+            else f"/tasks/{task}/members/{contributor}/remove"
+        )
+        changed = await asyncio.wait_for(
+            api.post(
+                path,
+                headers=headers[0],
+                json={
+                    "expected_revision": version,
+                    "reason": "Synthetic in-flight authority change",
+                },
+            ),
+            5,
+        )
+        assert changed.status_code == 200, changed.text
+    finally:
+        release.set()
+    response = await pending
+    expected_status, expected_code = (
+        (409, "task_archived") if change == "archive" else (404, "not_found")
+    )
+    assert response.status_code == expected_status, response.text
+    assert response.json()["data"]["error"]["code"] == expected_code
     async with application.state.db.transaction(tenants["orgs"][0]) as session:
         assert await session.scalar(select(func.count()).select_from(EvidenceSource)) == 0
     assert not list(application.state.storage.root.rglob("*.png"))

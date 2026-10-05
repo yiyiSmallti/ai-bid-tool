@@ -6,6 +6,16 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Agent and task authority integration
+
+- Apply the [agent task boundary](plan/agent.md#identity-permissions-and-human-gates)
+  to session admission, continuation, tools, model calls and child publication.
+  Preserve authority-loss cleanup and the current step's execution identity while
+  refreshing live task grants. Retain team event production and batched citations.
+- Combine the team workflow and agent scopes, routes, job access and worker
+  fences. Keep the migration chain at team workflow `0041` then builtin agent
+  `0042`; distinguish historical ownership from current task admission in guards.
+
 ## 2026-10-05: Controller identity after child-result reads
 
 - Recheck and restore the live controller identity after the command broker reads a child result and after the final draft validity read, before writing steps, completion messages or checkpoints. Keep the existing execution fence and immutable creator fields required by the [agent recovery contract](plan/agent.md#worker-recovery-and-cancellation).
@@ -22,7 +32,39 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Restore verified actor context in the separate transactions that record rubric and score denials, so [invocation provenance](plan/agent.md#audit-and-a02-provenance) is validated without replacing the original authorization error. Human-only scope errors identify the required human session.
 - Batch draft-history provenance reads without increasing the query bound. Align regression expectations with the approved provenance and legacy-output contracts, and use known synthetic provider prices and zero remaining allowance in agent budget scenarios rather than erasing prior task expenditure.
 
+## 2026-10-05: Team workflow slice 1
+
+- Batched board, response-card and scoring citation validation by bound source,
+  sharing exact/normalized searches while preserving verbatim, ambiguity and
+  Unicode-unit checks. Added a 300-page, 5,000-requirement board bound and frozen
+  predicate equivalence coverage; see [bulk citations](notes/docx-citations.md#how-it-works).
+- Corrected offline event production to derive missing org context only for the
+  effective privileged database role, preserving strict runtime/direct-append
+  checks. Fixed disabled-owner recovery autoflush and released task locks during
+  local source rendering, with live authorization rechecked at publication.
+- Updated existing SQL/API fixtures to establish explicit task members through
+  the real workflow services, retained permission and tenant-isolation assertions,
+  and corrected Element Plus reason/checkbox selectors in the browser scenarios.
+- Added task owners, explicit task members and bounded review domains, intersected
+  with current org roles and token scopes. Human org administrators retain the
+  approved read/member-recovery exception; existing task, document, card, resource,
+  job, check, score, export and signed-download services apply the task boundary.
+- Added revision-checked handover, archive and explicit unarchive. Busy tasks
+  cannot archive; active-state checks fence submission, worker admission and
+  publication while preserving settlement of dispatched vendor calls.
+- Migration `0041` adds FORCE RLS workflow/member/event tables and reviewed
+  owner/member import, preflight and cutover administration. Unresolved legacy
+  tasks block cutover; no historical activity grants implicit task access.
+- Added bounded task-board/progress/activity reads, encrypted continuation and
+  event cursors, same-transaction metadata events, SSE reconnection and polling.
+  Added Chinese Element Plus board/member pages and slice 1 CLI/schema commands.
+- Approved all team-workflow defaults and the ADR 0005 co-sign amendment. Assignment,
+  discussion and co-sign execution remain later slices. Added API/PostgreSQL,
+  CLI and mocked-API browser acceptance; see [Team workflow](notes/team-workflow.md).
+
 ## 2026-10-05: Check and score console assessments
+
+- Integrated task membership, archival and task responsibility domains into assessment discovery, console projections and shared review mutations. Capability hints use the same task policy; authorized denials retain their audited error semantics.
 
 - Implemented the approved rules-check, combined-check, rubric-review and score-report console flow with Element Plus, Chinese labels, explicit preview/consent, durable job recovery and links to the responsible response-card review.
 - Added bounded assessment input, job and verified-citation reads plus opt-in check/rubric/score projections. SQL keysets precede narrative hydration; principal/snapshot-bound cursors, complete-row byte limits and two-org API tests preserve existing authorization. No migration or Provider algorithm change was introduced.
@@ -53,7 +95,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-05: Built-in agent command orchestration
 
-- Add migration `0042`, persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
+- Chain [agent migration `0042`](../server/migrations/versions/0042_builtin_agent.py) after [team-workflow migration `0041`](../server/migrations/versions/0041_team_workflow.py); add persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
 - Register authenticated API and CLI session start/list/show/messages/steps/message/resume/cancel commands with shared Result, invocation schemas, revision checks and endpoint-scoped idempotency.
 - Connect the structured decision adapter and seven protected command services to checkpoint controller jobs, transactional child/queue dispatch and durable recovery wakes. Safe retries reuse uniquely proved owned jobs; unknown paid outcomes pause without redispatch.
 - Apply immutable cumulative session limits to decisions and descendants through the existing task-budget, prepaid and per-job admission/settlement boundary. Preserve fixed input/model/redaction checks, original human review/confirmation, no-memory A01 generation and confirmed-only draft assembly.

@@ -393,6 +393,11 @@ def main():
     create.add_argument("--email", required=True)
     rotate = commands.add_parser("rotate-encryption")
     rotate.add_argument("--scope", choices=("data", "provider-secrets"), default="data")
+    workflow_parser = commands.add_parser("team-workflow")
+    workflow_parser.add_argument("action", choices=("preflight", "import", "cutover"))
+    workflow_parser.add_argument("--org-id", required=True)
+    workflow_parser.add_argument("--mapping")
+    workflow_parser.add_argument("--workers-drained", action="store_true")
     totp_parser = commands.add_parser("platform-totp")
     totp_parser.add_argument("--email", required=True)
     args = parser.parse_args()
@@ -423,6 +428,25 @@ def main():
             report = rotate_encryption()
         print(json.dumps(report))
         raise SystemExit(report.get("exit_code", 0))
+    elif args.command == "team-workflow":
+        from uuid import UUID
+
+        from app.team_workflow_admin import output, run
+
+        engine = create_engine(os.environ["BID_MIGRATION_DATABASE_URL"], hide_parameters=True)
+        try:
+            output(
+                run(
+                    engine,
+                    UUID(args.org_id),
+                    mapping_path=args.mapping,
+                    apply=args.action == "import",
+                    cutover=args.action == "cutover",
+                    workers_drained=args.workers_drained,
+                )
+            )
+        finally:
+            engine.dispose()
     elif args.command == "platform-totp":
         platform_totp(args.email)
     else:

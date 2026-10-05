@@ -433,7 +433,10 @@ async def invoke(
     session, actor, agent_session, step, call, *, storage, llm, settings, queue, execution
 ):
     """Called inside the controller's live fenced transaction; never commits independently."""
+    from app.services.agent_limits import task_authority
+
     await execution.owned_job(session)
+    await task_authority(session, actor, agent_session.task_id)
     actor = await cards.access(session, actor, TOOL_SCOPES[call.command][0])
     call = await validate_call(session, actor, agent_session, step, call)
     args, warnings, child, cached = call.arguments, [], None, False
@@ -545,6 +548,9 @@ async def recover(session, actor, agent_session, step, *, storage, execution=Non
         or step.session_id != agent_session.id
     ):
         raise not_found()
+    from app.services.agent_limits import task_authority
+
+    await task_authority(session, actor, agent_session.task_id)
     selector = (
         AgentJobLink.job_id == step.child_job_id
         if step.child_job_id

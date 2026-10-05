@@ -16,6 +16,7 @@ from app.schemas.contracts import Cost
 from app.schemas.response_card_contracts import DraftPreview, DraftRequest, DraftView
 from app.services import response_cards as cards
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 RULE_VERSION = "response-draft-v3"
@@ -186,6 +187,7 @@ async def validate_materials(
                 )
 
 
+@task_authorized("draft:run", write=True)
 async def submit_draft(
     session: AsyncSession, actor: Identity, task_id: UUID, body: DraftRequest, storage: Storage
 ):
@@ -552,6 +554,7 @@ def draft_view(
     ).model_dump(mode="json")
 
 
+@task_authorized("draft:read", parent=("draft_id", "draft_runs"))
 async def show_draft(
     session: AsyncSession, actor: Identity, draft_id: UUID, storage: Storage | None = None
 ):
@@ -570,6 +573,7 @@ async def show_draft(
     return view
 
 
+@task_authorized("draft:read")
 async def list_drafts(
     session: AsyncSession,
     actor: Identity,

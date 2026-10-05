@@ -131,6 +131,8 @@ class MemoryDelete(MemoryDisable):
 
 class MemorySourceView(Contract):
     origin: MemoryOrigin
+    # Read projection only: the immutable stored source retains the full chain.
+    provenance_redacted: bool = Field(default=False, exclude_if=lambda value: not value)
     task_id: UUID | None = None
     card_id: UUID | None = None
     card_revision_id: UUID | None = None
@@ -141,6 +143,21 @@ class MemorySourceView(Contract):
 
     @model_validator(mode="after")
     def provenance(self):
+        if self.provenance_redacted:
+            if any(
+                value is not None
+                for value in (
+                    self.task_id,
+                    self.card_id,
+                    self.card_revision_id,
+                    self.feedback_event_id,
+                    self.proposal_job_id,
+                    self.proposal_run_id,
+                    self.platform_release_id,
+                )
+            ):
+                raise ValueError("redacted provenance cannot expose source identifiers")
+            return self
         if (self.card_id is None) != (self.card_revision_id is None):
             raise ValueError("card provenance requires a fixed revision")
         if self.card_id is not None and self.task_id is None:

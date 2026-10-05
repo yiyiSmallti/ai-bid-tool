@@ -48,6 +48,7 @@ from app.schemas.contracts import Cost, Result
 from app.services import budget_preflight, budgets, confidential, redaction
 from app.services.auth import AGENT_SCOPES, ROLE_SCOPES, membership, set_actor_context
 from app.services.response_cards import access, generation_materials_stale, linked_evidence
+from app.services.task_workflow import access as task_access
 from app.services.versioned import audit
 
 TERMINAL = {"completed", "partial", "failed", "cancelled"}
@@ -577,10 +578,10 @@ async def start(session, identity, task_id, body, settings, queue):
     from app.jobs.agent import enqueue_controller
     from app.services.agent_tools import definitions, schema_digest
 
+    task, _, _ = await task_access(
+        session, identity, task_id, scope="agent:run", write=True, require_member=True
+    )
     actor = await human_access(session, identity, "agent:run")
-    task = await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
-    if task is None:
-        raise not_found()
     request_hash = digest(body.model_dump(mode="json"))
     existing = await session.scalar(
         select(AgentSession).where(
@@ -701,6 +702,7 @@ async def paginate(session, query, model, request):
 
 
 async def list_sessions(session, identity, task_id, request):
+    await task_access(session, identity, task_id, scope="agent:read")
     actor = await human_access(session, identity)
     if await session.get(Task, task_id) is None:
         raise not_found()
@@ -725,6 +727,7 @@ async def list_sessions(session, identity, task_id, request):
 async def show(session, identity, session_id):
     actor = await human_access(session, identity)
     row = await owned(session, actor, session_id)
+    await task_access(session, actor, row.task_id, scope="agent:read")
     actor = await bind_owner(session, actor, row)
     principal = await session.get(AgentPrincipal, row.principal_id)
     pending = await session.get(AgentPause, row.pause_id) if row.pause_id else None
@@ -756,6 +759,7 @@ async def show(session, identity, session_id):
 async def history(session, identity, session_id, request, settings, model, view, command):
     actor = await human_access(session, identity)
     row = await owned(session, actor, session_id)
+    await task_access(session, actor, row.task_id, scope="agent:read")
     actor = await bind_owner(session, actor, row)
     rows, cursor = await paginate(
         session, select(model).where(model.session_id == row.id), model, request
@@ -798,6 +802,9 @@ async def steps(session, identity, session_id, request, settings):
 async def message(session, identity, session_id, body, settings):
     actor = await human_access(session, identity, "agent:run")
     row = await owned(session, actor, session_id, lock=True)
+    await task_access(
+        session, actor, row.task_id, scope="agent:run", write=True, require_member=True
+    )
     actor = await bind_owner(session, actor, row)
     request_hash = digest(body)
     existing = await session.scalar(
@@ -880,6 +887,9 @@ async def resume(session, identity, session_id, body, settings, queue):
 
     actor = await human_access(session, identity, "agent:run")
     row = await owned(session, actor, session_id, lock=True)
+    await task_access(
+        session, actor, row.task_id, scope="agent:run", write=True, require_member=True
+    )
     actor = await bind_owner(session, actor, row)
     request_hash = digest(body)
     previous = await session.scalar(

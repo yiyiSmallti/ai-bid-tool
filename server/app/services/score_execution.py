@@ -45,6 +45,7 @@ from app.schemas.score_contracts import (
 from app.services import drafts, redaction, score_generation, score_run_inputs, score_semantic
 from app.services import response_cards as cards
 from app.services.score_run_inputs import RULE_VERSION, ScoreSnapshot
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 PARTIAL_STOPS = score_generation.PARTIAL_STOPS
@@ -431,6 +432,7 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
     ).model_dump(mode="json"), job
 
 
+@task_authorized("score:run", write=True)
 async def submit_score(session, actor, task_id, body, settings, storage):
     try:
         return await _submit_score(session, actor, task_id, body, settings, storage)
@@ -709,6 +711,7 @@ async def run_view(session, actor, run, settings):
     ).model_dump(mode="json")
 
 
+@task_authorized("score:read")
 async def show_score(session, actor, task_id, report_id, settings, storage):
     actor = await score_run_inputs.access(session, actor, "score:read")
     run = await session.get(ScoreReport, report_id)
@@ -800,6 +803,7 @@ async def show_score(session, actor, task_id, report_id, settings, storage):
     ).model_dump(mode="json")
 
 
+@task_authorized("score:read")
 async def list_scores(session, actor, task_id, settings, storage, *, limit=50, cursor=None):
     actor = await score_run_inputs.access(session, actor, "score:read")
     if await session.get(Task, task_id) is None:

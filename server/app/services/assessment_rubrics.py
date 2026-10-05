@@ -50,8 +50,9 @@ from app.services.assessment_bounds import (
     read_cursor,
     snapshot_token,
 )
-from app.services.assessment_reads import action, dated_anchor
+from app.services.assessment_reads import ActionChecks, action, dated_anchor
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 
 
 def review_expression(model: Any, subject: str) -> tuple[Any, Any]:
@@ -332,6 +333,7 @@ def compact_completeness(value: RubricCompletenessView) -> RubricCompletenessSum
 async def summary(
     session: AsyncSession, actor: Identity, task_id: UUID, rubric_id: UUID
 ) -> RubricSummaryData:
+    checks: ActionChecks = {}
     actor, row = await score.get_set(session, actor, task_id, rubric_id)
     state = await score.review_state(session, row)
     complete = await completeness(session, row)
@@ -344,23 +346,41 @@ async def summary(
         select(func.count()).select_from(ScoreRubricItem).where(ScoreRubricItem.rubric_id == row.id)
     )
     active = state["state"] != "superseded"
-    confirm = action(
+    confirm = await action(
+        session,
         actor,
+        task_id,
         "rubric_confirm",
         "score:rubric:review",
         role="bidder",
+        domain="commercial",
         human=True,
+        checks=checks,
         valid=active and state["state"] == "candidate" and complete.complete,
     )
-    reopen = action(
+    reopen = await action(
+        session,
         actor,
+        task_id,
         "rubric_reopen",
         "score:rubric:review",
         role="bidder",
+        domain="commercial",
         human=True,
+        checks=checks,
         valid=active and state["state"] == "confirmed",
     )
-    revise = action(actor, "rubric_revise", "score:rubric:review", human=True, valid=active)
+    revise = await action(
+        session,
+        actor,
+        task_id,
+        "rubric_revise",
+        "score:rubric:review",
+        domain={"bidder": "commercial", "technical": "technical"}.get(actor.role),
+        human=True,
+        checks=checks,
+        valid=active,
+    )
     if actor.role not in {"bidder", "technical"}:
         revise = revise.model_copy(update={"allowed": False, "blocker_codes": ["wrong_role"]})
     return RubricSummaryData(
@@ -496,6 +516,7 @@ async def page(
     query: RubricPageRequest,
     settings: Settings,
 ) -> RubricPage:
+    checks: ActionChecks = {}
     actor, row = await score.get_set(session, actor, task_id, rubric_id)
     state = await score.review_state(session, row)
     snapshot = digest([row.id, row.input_hash, state["revision"], state["state"]])
@@ -637,25 +658,32 @@ async def page(
         for value in values:
             if query.part == "coverage":
                 availability = [
-                    action(
+                    await action(
+                        session,
                         actor,
+                        task_id,
                         "rubric_coverage_decide",
                         "score:rubric:review",
                         role="bidder",
+                        domain="commercial",
                         human=True,
+                        checks=checks,
                         valid=state["state"] == "candidate",
                     )
                 ]
             else:
                 domain = value.review_domain
                 role = {"commercial": "bidder", "technical": "technical"}.get(domain)
-                decision = action(
+                decision = await action(
+                    session,
                     actor,
+                    task_id,
                     "rubric_section_decide" if query.part == "sections" else "rubric_item_decide",
                     "score:rubric:review",
                     role=role,
                     domain=domain,
                     human=True,
+                    checks=checks,
                     valid=state["state"] == "candidate",
                 )
                 if role is None:
@@ -663,12 +691,15 @@ async def page(
                         update={"allowed": False, "blocker_codes": ["unclassified"]}
                     )
                 availability = [
-                    action(
+                    await action(
+                        session,
                         actor,
+                        task_id,
                         "rubric_classify",
                         "score:rubric:review",
                         role="admin",
                         human=True,
+                        checks=checks,
                         valid=state["state"] == "candidate",
                     ),
                     decision,
@@ -735,6 +766,7 @@ async def replacement(
     )
 
 
+@task_authorized("score:read")
 async def history(
     session: AsyncSession,
     actor: Identity,

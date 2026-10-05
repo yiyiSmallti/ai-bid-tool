@@ -49,6 +49,7 @@ from app.services import response_cards as cards
 from app.services import screenshots as images
 from app.services.card_generation import worker
 from app.services.screenshot_jobs import create_job
+from app.services.task_authorization import task_authorized
 from app.services.vendor_search import host_of, ranked, registrable
 
 JOB_KIND = "product_simulation"
@@ -177,6 +178,7 @@ async def access(session, actor):
     return actor
 
 
+@task_authorized("task:resource", write=True)
 async def submit(
     session, actor, task_id: UUID, body: ProductSimulationInput, provider, settings, llm=None
 ):
@@ -579,6 +581,7 @@ async def process(execution: JobExecution, processor, llm) -> None:
         job.result = {**job.result, "simulated": True, "counts": counts, "items": outcomes}
 
 
+@task_authorized("task:read")
 async def task_marks(session, actor, task_id: UUID) -> dict:
     """Selection IDs on this task whose product or feature was created by a simulation."""
     actor.require("task:read")

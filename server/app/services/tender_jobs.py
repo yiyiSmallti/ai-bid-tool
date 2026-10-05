@@ -23,8 +23,10 @@ from app.services.auth import Identity, set_actor_context
 from app.services.documents import require_document
 from app.services.extraction import EXTRACTION_VERSION, PROMPT_VERSION
 from app.services.parsing import PARSER_VERSION
+from app.services.task_authorization import task_authorized
 
 
+@task_authorized("task:read", parent=("document_id", "documents"), write=True)
 async def submit(
     session: AsyncSession,
     identity: Identity,

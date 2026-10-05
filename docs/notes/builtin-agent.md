@@ -69,7 +69,8 @@ cancel/start a new session if it cannot be proved.
 A persistent agent principal binds the initiator (发起人), who owns the session,
 Membership, org (organization/tenant; 单位), original grants,
 reduced scopes and authority expiry. Each admission intersects original grants,
-current Membership/role, requested scope reduction and the A01 allowlist. Owner
+current Membership/role, requested scope reduction and the A01 allowlist, subject
+to the [live task boundary](../plan/agent.md#identity-permissions-and-human-gates). Owner
 sessions alone can read/control the conversation; other org members receive 404.
 No user credential is retained. Renewal by the same human can reduce authority or
 extend it within a fresh valid session, but never reset cumulative limits.

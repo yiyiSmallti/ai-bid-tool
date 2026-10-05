@@ -181,6 +181,22 @@ action. Later role increases cannot expand a session. Even for an owner with the
 provider/token/resource management, redline switches and human disposition.
 Scope reduction alone cannot protect human responsibility; retain actor_kind.
 
+The scope intersection also passes the current task membership, task role,
+lifecycle and review-domain boundaries in
+[Team workflow authorization](team-workflow.md#membership-ownership-and-authorization).
+Start, resume and message require active owner/contributor task membership;
+the human administrator's recovery exception does not authorize agent work.
+Every tool, model admission and child publication rechecks that boundary using
+the initiating human's current grants while retaining the agent/worker identity
+and execution job/run. Removed membership returns the same inaccessible-resource
+response as the human task path. Archived tasks reject new agent work with
+`task_archived`, including read tools within an executing session. Loss of access
+pauses further work for authority renewal; cleanup, accounting and immutable
+history remain possible without publishing business output. Resume repeats the
+task checks before resolving the pause or renewing delegation. Cancellation
+remains available to the authenticated session owner under the existing human
+cancellation rules.
+
 `agent:read/run/cancel` are human-only: `admin`, `bidder` and `technical` can run/cancel;
 `viewer` can read. Sessions are owner-only; another org member gets 404, including
 an administrator. Run also requires the workflow's business grants; a role alone

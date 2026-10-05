@@ -1,6 +1,8 @@
 import hashlib
 import re
 import unicodedata
+from collections import deque
+from collections.abc import Iterable, Iterator
 from functools import lru_cache
 
 from app.core.errors import ServiceError
@@ -18,6 +20,8 @@ QUOTES = str.maketrans(
 def normalize(text: str) -> str:
     # Typographic differences only: width forms, curly quotes and whitespace. Applied
     # to quote and source alike, so a different word still fails the comparison.
+    if text.isascii():
+        return "".join(text.split())
     return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text).translate(QUOTES))
 
 
@@ -28,6 +32,24 @@ def normalized_spans(text: str) -> tuple[str, tuple[tuple[int, int], ...]]:
     Combining sequences and Hangul composition must stay together; compatibility
     expansions may map several output characters to the same original interval.
     """
+    singleton_text: str | None = None
+    if text.isascii():
+        singleton_text = text
+    elif (
+        all(
+            not unicodedata.combining(char) and unicodedata.normalize("NFKC", char) == char
+            for char in set(text)
+        )
+        and unicodedata.normalize("NFKC", text) == text
+    ):
+        # Normalization is closed under substrings. With no combining characters,
+        # an already-normalized source cannot join any adjacent original units.
+        # Checking the whole source also excludes CCC=0 composition (e.g. Hangul).
+        singleton_text = text.translate(QUOTES)
+    if singleton_text is not None:
+        return "".join(singleton_text.split()), tuple(
+            (index, index + 1) for index, char in enumerate(text) if not char.isspace()
+        )
     units: list[tuple[int, int]] = []
     start = 0
     for index in range(1, len(text)):
@@ -56,28 +78,123 @@ def locate_quote(text: str, quote: str) -> tuple[str | None, str | None]:
 
 def locate_span(text: str, quote: str) -> tuple[tuple[int, int] | None, str | None]:
     """Offsets of the one original span the quote cites, or the rejection reason."""
-    needle = normalize(quote)
-    if not needle:
-        return None, "quote_not_at_position"
-    haystack, offsets = normalized_spans(text)
-    spans = []
-    offset = haystack.find(needle)
-    while offset != -1:
-        start, end = offsets[offset][0], offsets[offset + len(needle) - 1][1]
-        # A match inside a compatibility expansion (e.g. f inside ﬁ) has no
-        # corresponding original span and must not be accepted.
-        if normalize(text[start:end]) == needle:
-            spans.append((start, end))
-        offset = haystack.find(needle, offset + 1)
-    if len(spans) > 1:
-        # "5mm插孔" also occurs inside "3.5mm插孔"; the occurrence that starts and ends at a
-        # segment boundary is the one cited. Several such occurrences stay ambiguous.
-        spans = [span for span in spans if at_boundary(text, *span)] or spans
-    if not spans:
-        return None, "quote_not_at_position"
-    if len(spans) > 1:
+    return locate_spans(text, (quote,))[quote]
+
+
+class _SpanCandidates:
+    """Keep only the counts and spans needed for the legacy ambiguity rule."""
+
+    __slots__ = ("count", "first", "boundary_count", "boundary")
+
+    def __init__(self) -> None:
+        self.count = 0
+        self.first: tuple[int, int] | None = None
+        self.boundary_count = 0
+        self.boundary: tuple[int, int] | None = None
+
+    def add(self, text: str, start: int, end: int) -> None:
+        if self.count < 2:
+            self.count += 1
+            self.first = (start, end)
+        if self.boundary_count < 2 and at_boundary(text, start, end):
+            self.boundary_count += 1
+            self.boundary = (start, end)
+
+    def result(self) -> tuple[tuple[int, int] | None, str | None]:
+        if not self.count:
+            return None, "quote_not_at_position"
+        if self.count == 1:
+            return self.first, None
+        # Boundary preference applies only after multiple valid original spans.
+        if self.boundary_count == 1:
+            return self.boundary, None
         return None, "ambiguous_quote"
-    return spans[0], None
+
+
+def _matching_offsets(haystack: str, needles: list[str]) -> Iterator[tuple[int, int]]:
+    """Yield every (pattern index, start), including overlapping occurrences."""
+    if len(needles) <= 16 or len(haystack) < 32_768:
+        # C-level find wins on small sources or query sets; trie construction is
+        # worthwhile when many quotes would repeatedly scan a long source.
+        for pattern, needle in enumerate(needles):
+            offset = haystack.find(needle)
+            while offset != -1:
+                yield pattern, offset
+                offset = haystack.find(needle, offset + 1)
+        return
+
+    # Aho-Corasick shares one source scan across all distinct normalized quotes.
+    transitions: list[dict[str, int]] = [{}]
+    failures = [0]
+    outputs: list[list[int]] = [[]]
+    for pattern, needle in enumerate(needles):
+        state = 0
+        for char in needle:
+            child = transitions[state].get(char)
+            if child is None:
+                child = len(transitions)
+                transitions[state][char] = child
+                transitions.append({})
+                failures.append(0)
+                outputs.append([])
+            state = child
+        outputs[state].append(pattern)
+    pending = deque(transitions[0].values())
+    while pending:
+        state = pending.popleft()
+        for char, child in transitions[state].items():
+            pending.append(child)
+            fallback = failures[state]
+            while fallback and char not in transitions[fallback]:
+                fallback = failures[fallback]
+            failures[child] = transitions[fallback].get(char, 0)
+            outputs[child].extend(outputs[failures[child]])
+    state = 0
+    for offset, char in enumerate(haystack):
+        while state and char not in transitions[state]:
+            state = failures[state]
+        state = transitions[state].get(char, 0)
+        for pattern in outputs[state]:
+            yield pattern, offset - len(needles[pattern]) + 1
+
+
+def locate_spans(
+    text: str, quotes: Iterable[str], *, require_verbatim: bool = False
+) -> dict[str, tuple[tuple[int, int] | None, str | None]]:
+    """Locate a batch in one source, preserving scalar offsets and rejection reasons.
+
+    The index lives for this call only. Normalized aliases share a search, while
+    results retain each original quote as a key. Optional verbatim presence is
+    checked independently of the span chosen by normalized boundary preference.
+    """
+    normalized = {quote: normalize(quote) for quote in dict.fromkeys(quotes)}
+    if require_verbatim:
+        raw_quotes = [quote for quote, needle in normalized.items() if needle]
+        present = {raw_quotes[pattern] for pattern, _ in _matching_offsets(text, raw_quotes)}
+        normalized = {
+            quote: needle if quote in present else "" for quote, needle in normalized.items()
+        }
+    candidates = {needle: _SpanCandidates() for needle in normalized.values() if needle}
+    if candidates:
+        haystack, offsets = normalized_spans(text)
+        needles = list(candidates)
+        matches = list(candidates.values())
+        ascii_text = text.isascii()
+        for pattern, offset in _matching_offsets(haystack, needles):
+            candidate = matches[pattern]
+            if candidate.boundary_count == 2:
+                continue
+            needle = needles[pattern]
+            start, end = offsets[offset][0], offsets[offset + len(needle) - 1][1]
+            # A partial compatibility expansion has no corresponding original span.
+            # ASCII units cannot expand or combine, so their offsets suffice.
+            if ascii_text or normalize(text[start:end]) == needle:
+                candidate.add(text, start, end)
+    resolved = {needle: candidate.result() for needle, candidate in candidates.items()}
+    return {
+        quote: resolved.get(needle, (None, "quote_not_at_position"))
+        for quote, needle in normalized.items()
+    }
 
 
 SEGMENT_SEPARATORS = frozenset("；;，,。：:、！!？?（）()【】[]《》“”‘’\"'")

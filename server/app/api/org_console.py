@@ -12,6 +12,7 @@ from app.schemas.console_assessments import AssessmentJobQuery, CitationRequest
 from app.schemas.contracts import Result
 from app.services import assessment_reads
 from app.services.assessment_bounds import bounded_result, query_model
+from app.services.task_workflow import access as task_access
 
 
 def _serial(row: Any, fields: tuple[str, ...]) -> dict[str, Any]:
@@ -32,7 +33,7 @@ def create_router(
     @router.get("/tasks/{task_id}", name="task_get", response_model=Result)
     async def task_get(task_id: UUID, ctx=Depends(context, scope="function")):
         session, actor = ctx
-        actor.require("task:read")
+        await task_access(session, actor, task_id)
         task = await session.get(Task, task_id)
         if task is None:
             raise not_found()
@@ -59,7 +60,7 @@ def create_router(
     @router.get("/tasks/{task_id}/documents", name="task_document_list", response_model=Result)
     async def task_document_list(task_id: UUID, ctx=Depends(context, scope="function")):
         session, actor = ctx
-        actor.require("task:read")
+        await task_access(session, actor, task_id)
         if await session.get(Task, task_id) is None:
             raise not_found()
         documents = (
@@ -102,6 +103,7 @@ def create_router(
         ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
+        await task_access(session, actor, task_id)
         if kind != "parse":
             if document is not None:
                 from app.core.errors import ServiceError
@@ -125,7 +127,6 @@ def create_router(
                     items=[row.model_dump(mode="json") for row in page.items],
                 )
             )
-        actor.require("task:read")
         actor.require("job:read")
         if await session.get(Task, task_id) is None:
             raise not_found()

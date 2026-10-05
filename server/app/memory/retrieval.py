@@ -58,7 +58,9 @@ async def access(session, actor, *, task_id=None):
     actor = await memory_access(session, actor, "memory:read")
     actor.require("memory:retrieve")
     if task_id is not None:
-        actor.require("task:read")
+        from app.services.task_workflow import access as task_access
+
+        await task_access(session, actor, task_id)
         task = await session.get(Task, task_id)
         if task is None or task.org_id != actor.org_id:
             raise not_found()

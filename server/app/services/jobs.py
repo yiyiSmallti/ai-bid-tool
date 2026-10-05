@@ -13,6 +13,7 @@ from app.providers.storage import Storage
 from app.schemas.contracts import Result
 from app.services.auth import Identity
 from app.services.sandbox import guard_job as sandbox_guard_job
+from app.services.task_authorization import task_authorized
 
 FIELDS = ("id", "kind", "status", "result", "error", "attempts", "reasoning")
 
@@ -69,13 +70,11 @@ def _public_result(job: Job) -> dict:
     }
 
 
-async def status(session: AsyncSession, identity: Identity, job_id: UUID, storage: Storage) -> dict:
-    """The `job status` Result after the access checks of the job's kind; some kinds
-    report partial completion, warnings or cost of their own."""
+async def read_access(
+    session: AsyncSession, identity: Identity, job: Job, storage: Storage
+) -> None:
+    """Same kind-specific authorization for status, boards and event replay."""
     identity.require("job:read")
-    job = await session.get(Job, job_id)
-    if job is None:
-        raise not_found()
     await agent_access(session, identity, job)
     if job.task_id is not None:
         identity.require("task:read")
@@ -104,6 +103,41 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
 
         await job_access(session, identity, job)
     await sandbox_guard_job(session, identity, job)
+    if job.kind in {"screenshot_render", "screenshot_analyze"}:
+        from app.services.screenshot_jobs import check_job_access
+
+        await check_job_access(session, identity, job)
+    if job.kind == "screenshot_search":
+        from app.services.vendor_search import check_job_access
+
+        await check_job_access(session, identity, job)
+    if job.kind == "prototype_generate":
+        from app.services.prototype_generation import check_job_access
+
+        await check_job_access(session, identity, job)
+    if job.kind == "provider_test":
+        identity.require("provider:read")
+    if job.kind in {"draft", "card_generate"}:
+        identity.require("draft:read" if job.kind == "draft" else "card:read")
+        if job.kind == "card_generate":
+            from app.services.card_generation import check_input_access
+
+            await check_input_access(
+                session, identity, job.task_id, job.result["submission"]["input_manifest"]
+            )
+        if job.result.get("draft_id"):
+            from app.services.drafts import show_draft
+
+            await show_draft(session, identity, UUID(job.result["draft_id"]), storage)
+
+
+@task_authorized("job:read", parent=("job_id", "jobs"), optional=True)
+async def status(session: AsyncSession, identity: Identity, job_id: UUID, storage: Storage) -> dict:
+    """Read a job only after its task and kind-specific dependency checks."""
+    job = await session.get(Job, job_id)
+    if job is None:
+        raise not_found()
+    await read_access(session, identity, job, storage)
     payload = Result(
         ok=job.status not in {"failed", "cancelled"} and job.result.get("completion") != "partial",
         command="job status",
@@ -236,6 +270,7 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
     return payload
 
 
+@task_authorized("job:cancel", parent=("job_id", "jobs"), write=True, optional=True)
 async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storage: Storage) -> Job:
     from app.jobs.execution import locked_job
 

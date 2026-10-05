@@ -84,6 +84,20 @@ class Processor:
                     "exit_code": 4,
                 }
                 return
+            try:
+                await authorized_job(session, current)
+                if current.agent_session_id is not None:
+                    from app.services.agent_limits import guard_job
+
+                    await guard_job(session, current, self.settings)
+            except (ServiceError, ProviderFailure) as error:
+                current.status = "failed"
+                current.error = {
+                    "code": error.code,
+                    "message": "Submission authorization is no longer valid",
+                }
+                current.finished_at = datetime.now(UTC)
+                return
             if current.kind == "card_generate":
                 from app.memory.retrieval import recover_unsettled_calls
 

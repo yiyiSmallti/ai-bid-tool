@@ -120,6 +120,7 @@ async def agent_history(application, tenants):
     )
     from app.models.entities import Document, Job, Membership, Task
     from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
+    from app.services.task_workflow import seed
     from sqlalchemy import select
 
     org, user = tenants["orgs"][0], tenants["users"][0]
@@ -131,6 +132,7 @@ async def agent_history(application, tenants):
         task = Task(id=uuid4(), org_id=org, name="Synthetic agent persistence", created_by=user)
         db.add(task)
         await db.flush()
+        await seed(db, owner, task)
         document = Document(
             id=uuid4(),
             org_id=org,

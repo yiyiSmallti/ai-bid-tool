@@ -46,6 +46,8 @@ class Session:
     ],
 )
 async def test_sandbox_admission_uses_pinned_purpose_token_scope(monkeypatch, purpose, scope):
+    from app.services import task_workflow
+
     async def membership(session, user_id, org_id):
         return SimpleNamespace(role="technical")
 
@@ -62,8 +64,23 @@ async def test_sandbox_admission_uses_pinned_purpose_token_scope(monkeypatch, pu
         actor_kind="token",
         agent_principal_id=None,
     )
+    checked = []
+
+    async def task_access(session, worker, task_id, *, write=False):
+        # This isolated admission test models one active task contributor. The
+        # real membership/RLS boundaries are exercised by workflow acceptance.
+        assert task_id == job.task_id and write is True
+        assert worker.user_id == job.actor_user_id and worker.org_id == job.org_id
+        assert worker.token_id == job.actor_token_id and worker.actor_kind == "worker"
+        assert worker.role == "technical" and worker.scopes == {"task:read", scope}
+        worker.require("task:read")
+        checked.append(worker)
+
+    monkeypatch.setattr(task_workflow, "access", task_access)
     actor = await execution.authorized_job(Session(user, token, ["task:read", scope], purpose), job)
     assert scope in actor.scopes
+    assert actor.actor_kind == "token" and actor.token_id == token
+    assert len(checked) == 1
 
 
 @pytest.mark.parametrize("purpose", ["vendor_capture", "prototype_offline"])

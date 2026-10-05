@@ -149,6 +149,7 @@ async def enforce(
     except ServiceError as exc:
         raise ProviderFailure("Agent authority needs human renewal", code=exc.code) from None
     actor.session_id = row.id
+    await task_authority(session, actor, row.task_id)
     task = await session.get(Task, row.task_id)
     if (
         task is None
@@ -213,6 +214,23 @@ async def enforce(
     if row.steps_used > limits.max_steps:
         raise ProviderFailure("Agent step ceiling exhausted", code="agent_step_limit")
     return actor
+
+
+async def task_authority(session: AsyncSession, actor: Identity, task_id):
+    """Agent work requires live task write access even when the next tool only reads."""
+    from app.services.task_workflow import access
+
+    try:
+        await access(
+            session,
+            actor,
+            task_id,
+            write=True,
+            require_member=True,
+            bind_context=False,
+        )
+    except ServiceError as error:
+        raise ProviderFailure("Agent task authority is no longer valid", code=error.code) from None
 
 
 async def guard_job(session: AsyncSession, job: Job, settings: Settings, quote=None):

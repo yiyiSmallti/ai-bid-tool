@@ -1,0 +1,1650 @@
+{
+  "remote:workflow": {
+    "ok": true,
+    "command": "task workflow",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 1
+    },
+    "items": [
+      {
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "state": "running",
+        "run_id": "00000000-0000-0000-0000-000000000001",
+        "attempts": 1,
+        "progress": {
+          "completed": 1,
+          "total": null
+        },
+        "updated_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:member list": {
+    "ok": true,
+    "command": "task member list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "role": "observer",
+        "review_domains": [],
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "display_label": "Synthetic member",
+        "active": true,
+        "revision": 1
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:member candidates": {
+    "ok": true,
+    "command": "task member candidates",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "display_label": "Synthetic candidate",
+        "org_role": "technical",
+        "active": true
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:member set": {
+    "ok": true,
+    "command": "task member set",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 2,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "member": {
+        "role": "observer",
+        "review_domains": [],
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "display_label": "Synthetic member",
+        "active": true,
+        "revision": 1
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:member remove": {
+    "ok": true,
+    "command": "task member remove",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:handover --to-user": {
+    "ok": true,
+    "command": "task handover",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:archive --expected-revision": {
+    "ok": true,
+    "command": "task archive",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "archived",
+        "revision": 2,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": "2026-10-05T00:00:00Z",
+        "archived_by_user_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:unarchive --expected-revision": {
+    "ok": true,
+    "command": "task unarchive",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 1,
+        "gap": 1,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 1,
+      "returned": 1,
+      "budget": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "limit": "10",
+        "currency": "USD",
+        "state": "active",
+        "spent": "0",
+        "reserved": "0",
+        "available": "10",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "history_complete": true,
+        "as_of": "2026-10-05T00:00:00Z"
+      },
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [
+      {
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "title": "Synthetic requirement",
+        "category": "technical",
+        "starred": false,
+        "bucket": "gap",
+        "card_id": null,
+        "card_revision": null,
+        "card_state": null,
+        "eligibility": null,
+        "review_domain": "technical",
+        "owner_user_id": null,
+        "assignment_revision": 0,
+        "co_sign": null,
+        "flags": {
+          "human_needs_material": false,
+          "model_needs_material_hint": false,
+          "certificate_date_advisory": false,
+          "final_export_prototype_blocked": false
+        },
+        "blockers": [
+          "missing_card"
+        ],
+        "next_actions": [
+          {
+            "code": "view",
+            "target": {
+              "kind": "requirement",
+              "id": "00000000-0000-0000-0000-000000000001"
+            },
+            "eligible_user_ids": [],
+            "eligible_domains": []
+          }
+        ],
+        "comment_thread_count": 0
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "actor_user_id": "00000000-0000-0000-0000-000000000001",
+        "action": "task_archived",
+        "requirement_id": null,
+        "card_id": null,
+        "job_id": null,
+        "thread_id": null,
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 0
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:member list": {
+    "ok": true,
+    "command": "task member list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:member candidates": {
+    "ok": true,
+    "command": "task member candidates",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 0,
+        "gap": 0,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 0,
+      "returned": 0,
+      "budget": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "limit": "10",
+        "currency": "USD",
+        "state": "active",
+        "spent": "0",
+        "reserved": "0",
+        "available": "10",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "history_complete": true,
+        "as_of": "2026-10-05T00:00:00Z"
+      },
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP404": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP409": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP429": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "stream_limit",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP503": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:workflow": {
+    "ok": true,
+    "command": "task workflow",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 1
+    },
+    "items": [
+      {
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "state": "running",
+        "run_id": "00000000-0000-0000-0000-000000000001",
+        "attempts": 1,
+        "progress": {
+          "completed": 1,
+          "total": null
+        },
+        "updated_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:member list": {
+    "ok": true,
+    "command": "task member list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "role": "observer",
+        "review_domains": [],
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "display_label": "Synthetic member",
+        "active": true,
+        "revision": 1
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:member candidates": {
+    "ok": true,
+    "command": "task member candidates",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "display_label": "Synthetic candidate",
+        "org_role": "technical",
+        "active": true
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:member set": {
+    "ok": true,
+    "command": "task member set",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 2,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "member": {
+        "role": "observer",
+        "review_domains": [],
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "user_id": "00000000-0000-0000-0000-000000000001",
+        "display_label": "Synthetic member",
+        "active": true,
+        "revision": 1
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:member remove": {
+    "ok": true,
+    "command": "task member remove",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:handover --to-user": {
+    "ok": true,
+    "command": "task handover",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:archive --expected-revision": {
+    "ok": true,
+    "command": "task archive",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "archived",
+        "revision": 2,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": "2026-10-05T00:00:00Z",
+        "archived_by_user_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:unarchive --expected-revision": {
+    "ok": true,
+    "command": "task unarchive",
+    "data": {
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 1,
+        "gap": 1,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 1,
+      "returned": 1,
+      "budget": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "limit": "10",
+        "currency": "USD",
+        "state": "active",
+        "spent": "0",
+        "reserved": "0",
+        "available": "10",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "history_complete": true,
+        "as_of": "2026-10-05T00:00:00Z"
+      },
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [
+      {
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "title": "Synthetic requirement",
+        "category": "technical",
+        "starred": false,
+        "bucket": "gap",
+        "card_id": null,
+        "card_revision": null,
+        "card_state": null,
+        "eligibility": null,
+        "review_domain": "technical",
+        "owner_user_id": null,
+        "assignment_revision": 0,
+        "co_sign": null,
+        "flags": {
+          "human_needs_material": false,
+          "model_needs_material_hint": false,
+          "certificate_date_advisory": false,
+          "final_export_prototype_blocked": false
+        },
+        "blockers": [
+          "missing_card"
+        ],
+        "next_actions": [
+          {
+            "code": "view",
+            "target": {
+              "kind": "requirement",
+              "id": "00000000-0000-0000-0000-000000000001"
+            },
+            "eligible_user_ids": [],
+            "eligible_domains": []
+          }
+        ],
+        "comment_thread_count": 0
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "actor_user_id": "00000000-0000-0000-0000-000000000001",
+        "action": "task_archived",
+        "requirement_id": null,
+        "card_id": null,
+        "job_id": null,
+        "thread_id": null,
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 0
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:member list": {
+    "ok": true,
+    "command": "task member list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:member candidates": {
+    "ok": true,
+    "command": "task member candidates",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "co_sign_starred": false,
+        "rule_revision": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 0,
+        "gap": 0,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 0,
+      "returned": 0,
+      "budget": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "limit": "10",
+        "currency": "USD",
+        "state": "active",
+        "spent": "0",
+        "reserved": "0",
+        "available": "10",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "history_complete": true,
+        "as_of": "2026-10-05T00:00:00Z"
+      },
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": null,
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP404": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP409": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP429": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "stream_limit",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP503": {
+    "ok": false,
+    "command": "task archive",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  }
+}

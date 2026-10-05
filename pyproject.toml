@@ -26,6 +26,9 @@ packages = ["server/app", "cli/bid_cli"]
 [tool.pytest.ini_options]
 testpaths = ["server/tests"]
 asyncio_mode = "auto"
+markers = [
+    "latency: asserts a contractual wall-clock bound; CI runs these serially, outside xdist",
+]
 
 [tool.ruff]
 target-version = "py312"

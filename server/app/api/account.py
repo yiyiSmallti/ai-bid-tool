@@ -61,7 +61,14 @@ def create_router(
     @router.get("/org/current", name="org_use", response_model=Result)
     async def org_use(ctx=Depends(context, scope="function")):
         _, identity = ctx
-        return result("org use", {"org_id": str(identity.org_id), "role": identity.role})
+        return result(
+            "org use",
+            {
+                "org_id": str(identity.org_id),
+                "role": identity.role,
+                "user_id": str(identity.user_id),
+            },
+        )
 
     @router.get("/billing", name="billing_balance", response_model=Result)
     async def billing_balance(ctx=Depends(context, scope="function")):

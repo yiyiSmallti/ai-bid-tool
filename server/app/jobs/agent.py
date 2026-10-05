@@ -42,6 +42,7 @@ AUTHORITY_STOPS = {
     "invalid_session",
     "not_found",
     "org_inactive",
+    "task_archived",
 }
 RECOVERY_STOPS = {"agent_request_uncertain", "usage_accounting_failed", "agent_receipt_unreadable"}
 CHANGE_STOPS = {
@@ -406,6 +407,12 @@ async def checkpoint(
     # ORM cost queries may autoflush. Complete them before marking a session
     # terminal: that transition must include its cleared execution binding.
     cost = Cost.model_validate(await job_cost(session, job.id, processor.settings.billing_currency))
+    from app.models.team_workflow import TaskWorkflow
+
+    archived = (
+        await session.scalar(select(TaskWorkflow.state).where(TaskWorkflow.task_id == row.task_id))
+        == "archived"
+    )
     checkpoint_revision = row.revision + 1
     disposition = (
         "terminal"
@@ -445,6 +452,10 @@ async def checkpoint(
         await session.flush([row])
     job.result = result.model_dump(mode="json")
     job.status, job.finished_at, job.lease_until, job.error = "succeeded", timestamp, None, None
+    if archived:
+        # Archive permits failure settlement, but never a new success publication.
+        job.status = "failed"
+        job.error = {"code": "task_archived", "message": "Task is archived", "exit_code": 2}
     audit(
         session,
         actor,
@@ -1283,8 +1294,10 @@ async def process_if_agent(processor, org_id, job_id):
                 raise ServiceError(
                     "agent_authority_expired", "Agent authority is unavailable", 403, 4
                 )
-            await agent_identity(session, principal)
-        except ServiceError:
+            live_actor = await agent_identity(session, principal)
+            live_actor.session_id = row.id
+            await agent_limits.task_authority(session, live_actor, row.task_id)
+        except (ServiceError, ProviderFailure):
             actor = await actor_for(session, row)
             await set_actor_context(session, actor)
             job.status, job.finished_at, job.lease_until = "failed", timestamp, None
@@ -1388,9 +1401,11 @@ async def wake(processor, org_id, session_id):
                 raise ServiceError(
                     "agent_authority_expired", "Agent authority is unavailable", 403, 4
                 )
-            await agent_identity(session, principal)
+            live_actor = await agent_identity(session, principal)
+            live_actor.session_id = row.id
+            await agent_limits.task_authority(session, live_actor, row.task_id)
             valid_authority = True
-        except ServiceError:
+        except (ServiceError, ProviderFailure):
             valid_authority = False
         if not valid_authority:
             if current is not None and current.status in {"queued", "running"}:

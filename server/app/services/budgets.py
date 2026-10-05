@@ -34,6 +34,7 @@ from app.schemas.budget_contracts import (
     TaskBudgetView,
 )
 from app.services.auth import Identity, membership, set_actor_context
+from app.services.task_authorization import task_authorized
 
 ZERO = Decimal(0)
 
@@ -146,6 +147,7 @@ async def view(
     )
 
 
+@task_authorized("task:read")
 async def show(
     session: AsyncSession, identity: Identity, task_id: UUID, currency: str = "USD"
 ) -> TaskBudgetData:
@@ -154,6 +156,7 @@ async def show(
     return TaskBudgetData(budget=await view(session, task, currency))
 
 
+@task_authorized("task:budget:write", write=True)
 async def set_budget(
     session: AsyncSession,
     identity: Identity,
@@ -242,6 +245,7 @@ async def set_budget(
     return TaskBudgetData(budget=await view(session, task, currency))
 
 
+@task_authorized("task:read")
 async def history(
     session: AsyncSession,
     identity: Identity,

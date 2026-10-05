@@ -266,6 +266,26 @@ $$;
 REVOKE ALL ON FUNCTION public.agent_owner(uuid,uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.agent_owner(uuid,uuid) TO bid_app;
 
+-- History keeps its original owner after task access changes. Admission is a
+-- separate ceiling, with no org-admin recovery exception for delegated work.
+CREATE FUNCTION public.agent_task_authority(p_org uuid,p_task uuid,p_user uuid) RETURNS boolean
+LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+DECLARE lifecycle text;
+BEGIN
+ PERFORM 1 FROM public.tasks WHERE org_id=p_org AND id=p_task FOR UPDATE;
+ SELECT state INTO lifecycle FROM public.task_workflows
+   WHERE org_id=p_org AND task_id=p_task FOR UPDATE;
+ RETURN lifecycle IS NOT DISTINCT FROM 'active' AND EXISTS(
+   SELECT FROM public.task_members tm
+   JOIN public.memberships m ON (m.org_id,m.user_id)=(tm.org_id,tm.user_id)
+   JOIN public.users u ON u.id=m.user_id JOIN public.orgs o ON o.id=m.org_id
+   WHERE tm.org_id=p_org AND tm.task_id=p_task AND tm.user_id=p_user
+     AND tm.active AND tm.role IN ('owner','contributor')
+     AND m.role IN ('admin','bidder','technical') AND m.active AND u.active AND o.active);
+END $$;
+REVOKE ALL ON FUNCTION public.agent_task_authority(uuid,uuid,uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.agent_task_authority(uuid,uuid,uuid) TO bid_app;
+
 CREATE FUNCTION public.agent_principal_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 BEGIN
@@ -326,9 +346,10 @@ BEGIN
       JOIN public.users u ON u.id=p.user_id JOIN public.orgs o ON o.id=p.org_id
       WHERE p.org_id=s.org_id AND p.id=s.principal_id AND p.revoked_at IS NULL
         AND p.authority_expires_at>clock_timestamp() AND s.expires_at>clock_timestamp()
-        AND m.active AND u.active AND o.active) INTO delegated;
-   -- Expiry blocks publication/dispatch, while leaving recovery able to retain
-   -- an authority pause or terminal receipt without another paid operation.
+        AND m.active AND u.active AND o.active)
+      AND public.agent_task_authority(s.org_id,s.task_id,s.owner_user_id) INTO delegated;
+   -- Expiry, task revocation and archival block publication/dispatch while
+   -- recovery may still retain a pause or terminal receipt without paid work.
    IF NOT delegated AND NOT (
        (TG_TABLE_NAME='agent_sessions' AND TG_OP='UPDATE' AND to_jsonb(NEW)->>'state' IN ('paused','failed','partial','cancelled'))
        OR TG_TABLE_NAME='agent_pauses'
@@ -359,11 +380,16 @@ BEGIN
    IF TG_OP='INSERT' THEN
      IF NEW.state<>'queued' OR NEW.revision<>1 OR NEW.steps_used<>0 OR NEW.vendor_calls_used<>0 OR NEW.active_seconds_used<>0 THEN
        RAISE EXCEPTION 'new agent session requires initial checkpoint' USING ERRCODE='23514'; END IF;
-     IF NOT public.agent_owner(NEW.org_id,NEW.owner_user_id) OR NOT EXISTS(
+     IF NOT public.agent_owner(NEW.org_id,NEW.owner_user_id)
+       OR NOT COALESCE(public.agent_task_authority(NEW.org_id,NEW.task_id,NEW.owner_user_id),false)
+       OR NOT EXISTS(
        SELECT FROM public.jobs x WHERE x.org_id=NEW.org_id AND x.id=NEW.extraction_job_id
          AND x.task_id=NEW.task_id AND x.document_id=NEW.document_id AND x.kind='extract' AND x.status='succeeded') THEN
        RAISE EXCEPTION 'agent requires human and successful extraction' USING ERRCODE='42501'; END IF;
    ELSE
+     IF kind='session' AND NEW.state NOT IN ('cancelled','failed','partial','paused')
+       AND NOT COALESCE(public.agent_task_authority(s.org_id,s.task_id,s.owner_user_id),false) THEN
+       RAISE EXCEPTION 'agent task authority is no longer active' USING ERRCODE='42501'; END IF;
      IF kind IN ('agent','worker') THEN
        SELECT * INTO j FROM public.jobs WHERE org_id=s.org_id AND id=execution_job;
        live_execution:=j.id IS NOT NULL AND j.kind='agent' AND j.agent_session_id=s.id
@@ -399,6 +425,7 @@ BEGIN
  ELSIF TG_TABLE_NAME='agent_messages' THEN
    IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'agent messages are append only' USING ERRCODE='42501'; END IF;
    IF (NEW.role='human' AND (NOT public.agent_owner(s.org_id,s.owner_user_id)
+         OR NOT COALESCE(public.agent_task_authority(s.org_id,s.task_id,s.owner_user_id),false)
          OR NEW.author_user_id IS DISTINCT FROM s.owner_user_id))
       OR (NEW.role<>'human' AND (kind NOT IN ('agent','worker') OR NEW.author_user_id IS NOT NULL)) THEN
       RAISE EXCEPTION 'message role does not match actor' USING ERRCODE='42501'; END IF;
@@ -429,12 +456,15 @@ BEGIN
       OR OLD.status<>'pending') THEN
      RAISE EXCEPTION 'pause input and resolution are immutable' USING ERRCODE='23514'; END IF;
    IF NEW.status='resolved' AND (NOT public.agent_owner(s.org_id,s.owner_user_id)
+      OR NOT COALESCE(public.agent_task_authority(s.org_id,s.task_id,s.owner_user_id),false)
       OR NEW.resolved_by IS DISTINCT FROM s.owner_user_id OR NEW.resolved_at IS NULL) THEN
      RAISE EXCEPTION 'pause resolution requires its human owner' USING ERRCODE='42501'; END IF;
    IF TG_OP='INSERT' AND (NEW.status<>'pending' OR NEW.resolved_by IS NOT NULL OR NEW.resolved_at IS NOT NULL) THEN
      RAISE EXCEPTION 'new pause must be pending' USING ERRCODE='23514'; END IF;
  ELSIF TG_TABLE_NAME='agent_job_links' THEN
    IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'job ownership is immutable' USING ERRCODE='42501'; END IF;
+   IF kind='session' AND NOT public.agent_task_authority(s.org_id,s.task_id,s.owner_user_id) THEN
+     RAISE EXCEPTION 'agent task authority is no longer active' USING ERRCODE='42501'; END IF;
    SELECT * INTO j FROM public.jobs WHERE org_id=NEW.org_id AND id=NEW.job_id;
    IF NEW.owned AND (j.id IS NULL OR j.initiated_by IS DISTINCT FROM 'builtin_agent'
       OR j.agent_session_id IS DISTINCT FROM s.id) THEN
@@ -532,9 +562,15 @@ BEGIN
      RAISE EXCEPTION 'agent origin must match execution context' USING ERRCODE='42501'; END IF;
    NEW.initiated_by:='builtin_agent'; NEW.on_behalf_of_user_id:=actor;
    NEW.agent_principal_id:=principal; NEW.agent_session_id:=sid; NEW.agent_step_id:=step;
-   IF TG_TABLE_NAME='jobs' AND kind IN ('agent','worker') THEN
+   IF TG_TABLE_NAME='jobs' THEN
      SELECT * INTO s FROM public.agent_sessions WHERE org_id=NEW.org_id AND id=sid;
-     IF s.id IS NULL OR s.state NOT IN ('queued','running','waiting_job') OR s.expires_at<=clock_timestamp()
+     -- Human resume creates its controller before resolving the immutable pause
+     -- receipt. Only that owner may enqueue from paused; workers still cannot.
+     IF s.id IS NULL OR NOT (s.state IN ('queued','running','waiting_job')
+         OR (kind='session' AND NEW.kind='agent' AND s.state='paused'
+           AND public.agent_owner(s.org_id,s.owner_user_id)))
+       OR s.expires_at<=clock_timestamp()
+       OR NOT COALESCE(public.agent_task_authority(s.org_id,s.task_id,s.owner_user_id),false)
        OR NOT EXISTS(SELECT FROM public.agent_principals p
           JOIN public.memberships m ON (m.org_id,m.id,m.user_id)=(p.org_id,p.membership_id,p.user_id)
           JOIN public.users u ON u.id=p.user_id JOIN public.orgs o ON o.id=p.org_id
@@ -542,14 +578,16 @@ BEGIN
             AND p.user_id=actor AND p.revoked_at IS NULL AND p.authority_expires_at>clock_timestamp()
             AND m.active AND u.active AND o.active) THEN
        RAISE EXCEPTION 'agent dispatch requires active delegation' USING ERRCODE='42501'; END IF;
-     SELECT * INTO j FROM public.jobs WHERE org_id=NEW.org_id AND id=execution_job;
-     IF NOT COALESCE(j.id IS NOT NULL AND j.kind='agent' AND j.agent_session_id=s.id
+     IF kind IN ('agent','worker') THEN
+       SELECT * INTO j FROM public.jobs WHERE org_id=NEW.org_id AND id=execution_job;
+       IF NOT COALESCE(j.id IS NOT NULL AND j.kind='agent' AND j.agent_session_id=s.id
          AND j.run_id=execution_run AND j.status='running' AND j.lease_until>clock_timestamp()
          AND (s.current_job_id,s.current_run_id) IS NOT DISTINCT FROM (j.id,j.run_id),false)
        AND NOT (NEW.kind='agent' AND execution_job IS NULL AND execution_run IS NULL
          AND NOT EXISTS(SELECT FROM public.jobs WHERE org_id=s.org_id AND id=s.current_job_id
            AND status='running' AND lease_until>clock_timestamp())) THEN
-       RAISE EXCEPTION 'stale agent job dispatch' USING ERRCODE='23514'; END IF;
+         RAISE EXCEPTION 'stale agent job dispatch' USING ERRCODE='23514'; END IF;
+     END IF;
    END IF;
  ELSIF TG_TABLE_NAME='audit_logs' AND kind='worker' AND (to_jsonb(NEW)->>'job_id') IS NOT NULL THEN
    SELECT * INTO j FROM public.jobs WHERE org_id=NEW.org_id AND id=NEW.job_id;

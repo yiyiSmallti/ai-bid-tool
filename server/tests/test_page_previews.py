@@ -215,7 +215,8 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
                 ("GET", f"/jobs/{job_id}"),
             ]:
                 response = await api.request(method, path, headers=header)
-                assert response.status_code == 403, (role, method, path, response.text)
+                expected_status = 403 if path.startswith("/jobs/") else 404
+                assert response.status_code == expected_status, (role, method, path, response.text)
 
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             job = await session.get(Job, UUID(job_id))
@@ -284,10 +285,21 @@ async def test_cached_final_preview_obeys_live_download_gate(
         elif invalidation == "initiator":
             # A different active bidder keeps access while the original initiator is revoked.
             with Session(admin_engine) as session, session.begin():
+                from task_fixtures import add_member
+
                 session.add(
                     Membership(
                         org_id=tenants["orgs"][0], user_id=tenants["users"][1], role="bidder"
                     )
+                )
+                session.flush()
+                add_member(
+                    session,
+                    tenants["orgs"][0],
+                    UUID(task),
+                    tenants["users"][1],
+                    role="contributor",
+                    review_domains=["commercial"],
                 )
             set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer")
             header = {**headers[1], "X-Org-Id": headers[0]["X-Org-Id"]}

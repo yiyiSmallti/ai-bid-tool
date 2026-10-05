@@ -161,6 +161,11 @@ for _role, _scopes in ROLE_SCOPES.items():
     _scopes.add("agent:read")
     if _role != "viewer":
         _scopes.update({"agent:run", "agent:cancel"})
+    _scopes.add("card:comment")
+    if _role in {"admin", "bidder"}:
+        _scopes.update({"task:members:write", "task:archive", "card:assign", "task:review-policy"})
+    if _role in {"bidder", "technical"}:
+        _scopes.add("card:cosign")
     _scopes.update({"memory:read", "memory:retrieve"})
     if _role != "viewer":
         _scopes.update({"memory:write", "memory:candidate:run"})
@@ -203,6 +208,12 @@ HUMAN_ONLY_SCOPES = {
     "agent:read",
     "agent:run",
     "agent:cancel",
+    "task:members:write",
+    "task:archive",
+    "card:assign",
+    "card:comment",
+    "task:review-policy",
+    "card:cosign",
     "evidence:confirm",
     "export",
     "confidential:write",
@@ -243,12 +254,12 @@ class Identity:
             self.actor_kind = "token"
 
     def require(self, scope: str) -> None:
-        if scope not in self.scopes:
-            raise ServiceError("forbidden", "Permission denied", 403, 4)
         if scope in HUMAN_ONLY_SCOPES and (
             self.actor_kind != "session" or self.token_id is not None
         ):
             raise ServiceError("forbidden", "A human session is required", 403, 4)
+        if scope not in self.scopes:
+            raise ServiceError("forbidden", "Permission denied", 403, 4)
 
 
 async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
