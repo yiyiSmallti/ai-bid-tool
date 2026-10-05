@@ -57,6 +57,16 @@ submission binds the dry-run input hash and follows the shared queue, lease, ret
 provider resolution, redaction, usage, and prepaid charge controls. Cached input returns the retained
 job without duplicating review or usage history.
 
+Rubric extraction submits the entire selected scoring table in one model request so section and
+overall rules share the same context. Admission counts the complete serialized HTTP JSON in UTF-8
+bytes, including prompts, schema and vendor options, using `Settings.rubric_max_request_bytes`.
+The [deployment template](../../deploy/.env.example) explains the long-context budget and its token
+limitations. An oversized request returns `rubric_context_limit` in preview and is refused on
+submission without jobs or calls. Malformed or truncated output fails with occurred usage retained;
+it never triggers table splitting. Acceptance requires exactly one complete response with the
+fixed table's ID/ref allowlist, then verifies each candidate citation and detects duplicate keys,
+orphan sections and missing requirement output. Ordinary HTTP retries retain the whole request.
+
 Scoring fixes the rubric set, coverage decisions, section/item revisions and DraftRun partitions.
 Only fixed confirmed response text and deviation notes become bid-side inputs; all confirmed
 response rows are candidate support, including rows for other requirements. Comply-only and gap

@@ -126,6 +126,13 @@ ResponseItem.draft_id/requirement_id、DraftRun.task_id/extraction_job_id 全部
 已经完成的确定性覆盖及未评估原因，返回 partial。结果计数按每条要求唯一覆盖，不按风险数
 推断覆盖率。未映射证书的日期未知不使无关要求失败，但报告 limitation 不得省略。
 
+`combined` 仅把有已确认投标正文的 `response` 行纳入语义请求；`gap`、`comply_only`
+保留全部确定性规则与风险，语义状态为 `not_requested`，outcome、reason 与引用为空。
+这些行不单独产生 unassessed 或 partial，不表示材料或实质要求已经满足。预检
+`semantic_items`、完整请求估价、worker planned calls 与报告统计使用相同范围；没有
+response 时不调用 Provider、不预约或产生用量，估算费用与 charge 为零，原因
+`no_model_calls`。已确认 response 的 unknown、拒收及确定性 unknown 仍使报告 partial。
+
 共享 `VerifiedCitation` 区分招标 `Source`、初稿某个响应行的 `response_text/deviation_note`、
 以及已确认 `Evidence.quote`。招标 PDF 引 page，Word 引 `Location`，不伪造 DOCX 页码。
 草稿不是上传的 `Document`，其引用以 draft/response_item/card_revision/field 定位，不能塞进
@@ -186,6 +193,12 @@ actor 用户引用 `(org_id,user_id)` Membership，不能只引用全局 User �
 保持 unassessed，拒收结论的 outcome 为 null，仅存固定原因码。相应公开字段为
 `CheckItemView.semantic_outcome` 和 `semantic_citations`，仅 combined 报告输出这两个新增字段；
 rules 的 JSON 与原 finding 引用结构保留。
+
+[0036_check_semantic_scope.py](../../server/migrations/versions/0036_check_semantic_scope.py)
+按分区约束 combined 覆盖：response 必须 assessed/unassessed，非 response 仅允许
+not_requested，不能附语义 finding 或 item citation；保留既有来源、确认、RLS 与发布门禁。
+范围变更必须更新规则版本及输入 hash，旧 pending 作业拒绝执行并要求重新预检，历史报告
+保留原记录且可标 stale。
 
 输入材料即使未成为引用也是依赖。manifest 中引用的每个对象仍须有受约束的父链，不能仅凭
 JSON 内 ID 保证隔离：ResponseItem→卡片修订→Evidence/资源选择沿现有关系核对；证书要求

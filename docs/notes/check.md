@@ -58,6 +58,14 @@ batched without splitting fields or truncating text; a single item above the
 configured context budget fails explicitly. Tender and bid instructions remain
 data under a fixed system prompt.
 
+Only confirmed response rows with bid text enter those requests. Gap and comply-only
+rows retain deterministic coverage and findings with `semantic_status=not_requested`
+and no semantic outcome, reason or citations. They do not by themselves make a
+report partial. Preview semantic item counts, request bounds and worker call plans
+use this same scope. With no response rows, combined runs have zero planned calls,
+zero estimated cost and charge, and no usage or reservations; deterministic unknown
+observations can still make the report partial.
+
 The model returns `no_risk_found`, `risk` or `unknown` for each requested ID.
 Missing, duplicate and unknown IDs cannot imply a pass. Each accepted citation
 must locate a unique contiguous span in both the sent text and the fixed original
@@ -130,6 +138,10 @@ RLS and organization-bound composite references.
   immutable-history and worker/human decision gates;
   [0033_check_semantic.py](../../server/migrations/versions/0033_check_semantic.py)
   extends the existing tables and gates for semantic outcomes and item citations.
+  [0036_check_semantic_scope.py](../../server/migrations/versions/0036_check_semantic_scope.py)
+  limits new combined semantic coverage to response rows while preserving all
+  prior publication gates. The rule version participates in input identity, so
+  older pending jobs require a new preview instead of adopting a new scope.
 - [test_check.py](../../server/tests/test_check.py),
   [test_check_storage.py](../../server/tests/test_check_storage.py),
   [test_check_api.py](../../server/tests/test_check_api.py) and

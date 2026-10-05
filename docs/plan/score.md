@@ -193,9 +193,16 @@ rubric Provider 只收到已遮挡的招标原文 ref。score Provider 的每个
   assessed/unassessable、分数、原因、补强动作与 refs。
 
 二者都只由 `server/app/providers/` 的实现调用厂商 SDK/HTTP，使用严格 JSON Schema；业务服务
-只依赖 Protocol。适配层保留已完成 batches 和每次 `ProviderUsage`，第一次不可恢复失败后停止
-尚未开始的批次，已在途调用可完成并计费。结构错误可按既有边界拆半，但单项仍失败就明确报告，
-不能用默认分数、空引用或宽泛重试掩盖。
+只依赖 Protocol。rubric 的全部 scoring Requirements 必须在一次完整请求中共同解析 section、
+item 与 overall；不得按字符预算分批，也不得在结构错误后拆半。容量门禁按完整 HTTP JSON 请求
+的 UTF-8 字节计算，包含 system/messages、schema 与厂商参数，使用 `BID_RUBRIC_MAX_REQUEST_BYTES`；
+配置定义与部署预算说明见 [环境变量模板](../../deploy/.env.example)。超限时 preview 返回
+`admission_blocker=rubric_context_limit`，submit 拒绝，均不创建作业或调用 Provider。响应必须有
+与整表完全一致的 requested IDs/ref 绑定；多个局部响应不能合并成 rubric。结构错误或截断明确
+失败并保留已发生 `ProviderUsage`；既有 HTTP 失败重试只重发完整请求，不新增结构重试策略。
+score 的适配层保留已完成 batches 和每次 `ProviderUsage`，第一次不可恢复失败后停止尚未开始
+的批次，已在途调用可完成并计费。score 结构错误可按既有边界拆半，但单项仍失败就明确报告。
+不能用默认分数、空引用或宽泛重试掩盖失败。
 
 rubric 和 score 的 Job kind 分别固定为 `score_rubric`、`score`。两者的 `task_id`、`document_id`
 必须非空；score Job 的 document 来自 DraftRun 固定 extraction Job 的真实 Document，不能造占位

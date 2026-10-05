@@ -9,6 +9,7 @@ All vendor traffic uses MockTransport and artifacts contain synthetic data only.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -17,7 +18,16 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from app.jobs.execution import JobExecution
-from app.models.entities import AuditLog, BalanceEntry, Job, OrgBalance, UsageRecord, VendorCall
+from app.models.entities import (
+    AuditLog,
+    BalanceEntry,
+    Chunk,
+    Job,
+    OrgBalance,
+    Requirement,
+    UsageRecord,
+    VendorCall,
+)
 from app.models.score import ScoreRubricSet
 from app.schemas.contracts import ProviderUsage
 from app.schemas.score_contracts import RubricGenerateResult, RubricPreview, RubricReportData
@@ -30,12 +40,14 @@ from test_response_cards import create_tender, set_role
 class RubricVendor:
     def __init__(self):
         self.requests: list[dict] = []
+        self.bodies: list[dict] = []
         self.mode = "valid"
         self.entered: asyncio.Event | None = None
         self.release: asyncio.Event | None = None
 
     async def __call__(self, request: httpx.Request) -> httpx.Response:
         body = json.loads(request.content)
+        self.bodies.append(body)
         payload = json.loads(body["messages"][-1]["content"])
         self.requests.append(payload)
         if self.entered is not None and self.release is not None:
@@ -85,6 +97,41 @@ class RubricVendor:
             "overall_score_range": {"minimum": "0", "maximum": str(5 * len(rows))},
             "overall_cap": None,
         }
+        if self.mode in {"whole_table", "whole_table_malformed"}:
+            technical = [row for row in rows if "Technical" in refs[row["tender_ref"]]]
+            commercial = [row for row in rows if "Commercial" in refs[row["tender_ref"]]]
+            assert technical and commercial, "Every call must retain both sections"
+            output["sections"] = []
+            for order, (key, members) in enumerate(
+                (("technical", technical), ("commercial", commercial)), 1
+            ):
+                output["sections"].append(
+                    {
+                        "key": key,
+                        "title": key,
+                        "order": order,
+                        "aggregation": "sum",
+                        "aggregation_rule_text": None,
+                        "score_range": {"minimum": "0", "maximum": str(5 * len(members))},
+                        "weight": None,
+                        "cap": None,
+                        "included_in_overall_total": True,
+                        "ambiguity_reason": None,
+                        "citations": [
+                            {
+                                "ref": members[0]["tender_ref"],
+                                "quote": refs[members[0]["tender_ref"]],
+                            }
+                        ],
+                    }
+                )
+            for item, row in zip(output["items"], rows, strict=True):
+                item["section_key"] = "technical" if row in technical else "commercial"
+            output["overall_aggregation"] = "capped_sum"
+            output["overall_cap"] = "12"
+            output["overall_score_range"] = {"minimum": "0", "maximum": "12"}
+            if self.mode == "whole_table_malformed" and len(self.requests) == 1:
+                output.pop("overall_aggregation")
         if self.mode == "unknown_ref":
             output["items"][0]["citations"][0]["ref"] = "untrusted-sensitive-ref"
         message = {"content": json.dumps(output)}
@@ -261,6 +308,198 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
         )
     )
     assert json.loads(artifact.read_text())["job"]["result"]["usage_record_ids"]
+
+
+async def add_whole_scoring_table(case):
+    """Keep fixed-source integrity while extending the selected extraction's scoring table."""
+    org = case["tenants"]["orgs"][0]
+    async with case["app"].state.db.transaction(org) as session:
+        original = await session.get(Requirement, UUID(case["requirements"][0]["id"]))
+        original.category = "technical"
+        for index, section in enumerate(("Technical", "Technical", "Commercial"), 6):
+            text = (
+                f"{section} criterion {index}: earn 5 points. " + "Supporting rule wording. " * 140
+            )
+            chunk = Chunk(
+                id=uuid4(),
+                org_id=org,
+                task_id=UUID(case["task"]),
+                document_id=UUID(case["document"]),
+                page=index,
+                seq=index,
+                text=text,
+            )
+            session.add(chunk)
+            await session.flush()
+            session.add(
+                Requirement(
+                    id=uuid4(),
+                    org_id=org,
+                    task_id=chunk.task_id,
+                    document_id=chunk.document_id,
+                    chunk_id=chunk.id,
+                    page=index,
+                    quote=text,
+                    text=text,
+                    category="scoring",
+                    starred=False,
+                    condition={"must_not_be_sent": True},
+                    fingerprint=hashlib.sha256(text.encode()).hexdigest(),
+                    job_id=UUID(case["extraction"]),
+                )
+            )
+
+
+async def test_rubric_whole_table_cross_section_and_overall_survive_one_request(
+    rubric_input_case, monkeypatch
+):
+    case = rubric_input_case
+    await add_whole_scoring_table(case)
+    case["vendor"].mode = "whole_table"
+    llm = semantic_llm(case["tmp_path"], case["vendor"], llm_batch_chars=8000)
+    install_rubric_resolver(monkeypatch, llm)
+    preview = await preview_rubric(case)
+    assert preview["admission_blocker"] is None
+    assert len(preview["scoring_requirement_ids"]) == 3
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 200, submitted.text
+    terminal = await finish_rubric(case, submitted.json()["data"])
+    assert terminal["status"] == "succeeded", terminal
+    assert terminal["result"]["completion"] == "complete"
+    assert terminal["result"]["candidate_items"] == 3
+    assert terminal["result"]["unresolved_requirements"] == 0
+    assert len(case["vendor"].requests) == len(terminal["result"]["usage_record_ids"]) == 1
+    assert all(len(json.dumps(payload)) > 8000 for payload in case["vendor"].requests)
+    assert all(len(payload["requirements"]) == 3 for payload in case["vendor"].requests)
+    assert all(payload == case["vendor"].requests[0] for payload in case["vendor"].requests)
+    shown = await case["api"].get(
+        f"/tasks/{case['task']}/score-rubrics/{terminal['result']['rubric_id']}",
+        headers=case["header"],
+    )
+    assert shown.status_code == 200, shown.text
+    report = shown.json()["data"]
+    assert {row["key"] for row in report["sections"]} == {"technical", "commercial"}
+    assert report["rubric"]["overall_aggregation"] == "capped_sum"
+    assert Decimal(report["rubric"]["overall_cap"]) == 12
+    artifact = case["tmp_path"] / "rubric-whole-table.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "preview": preview,
+                "job": terminal,
+                "report": report,
+                "requests": case["vendor"].bodies,
+            },
+            indent=2,
+        )
+    )
+    assert len(json.loads(artifact.read_text())["requests"]) == 1
+
+
+@pytest.mark.parametrize("mode", ["whole_table_malformed", "truncated"])
+async def test_rubric_structure_failure_keeps_whole_table_and_accounts_one_call(
+    rubric_input_case, monkeypatch, mode
+):
+    case = rubric_input_case
+    await add_whole_scoring_table(case)
+    case["vendor"].mode = mode
+    llm = semantic_llm(case["tmp_path"], case["vendor"], llm_batch_chars=8000)
+    install_rubric_resolver(monkeypatch, llm)
+    preview = await preview_rubric(case)
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 200, submitted.text
+    terminal = await finish_rubric(case, submitted.json()["data"])
+    assert terminal["status"] == "failed", terminal
+    assert len(case["vendor"].requests) == 1
+    assert len(case["vendor"].requests[0]["requirements"]) == 3
+    job_id = UUID(terminal["id"])
+    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        assert await session.scalar(select(func.count()).select_from(ScoreRubricSet)) == 0
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job_id)
+            )
+            == 1
+        )
+    artifact = case["tmp_path"] / f"rubric-structure-failure-{mode}.json"
+    artifact.write_text(json.dumps({"job": terminal, "requests": case["vendor"].bodies}, indent=2))
+    assert len(json.loads(artifact.read_text())["requests"]) == 1
+
+
+@pytest.mark.parametrize("overflow", ["table", "schema", "options"])
+async def test_rubric_full_request_limit_rejects_preview_and_submit_without_calls(
+    rubric_input_case, monkeypatch, overflow
+):
+    case = rubric_input_case
+    if overflow == "table":
+        await add_whole_scoring_table(case)
+    values = {"rubric_max_request_bytes": 8000 if overflow == "table" else 2000}
+    if overflow == "options":
+        values = {
+            "rubric_max_request_bytes": 20000,
+            "llm_request_options": json.dumps({"synthetic_padding": "x" * 20000}),
+        }
+    llm = semantic_llm(case["tmp_path"], case["vendor"], **values)
+    install_rubric_resolver(monkeypatch, llm)
+    org = case["tenants"]["orgs"][0]
+    async with case["app"].state.db.transaction(org) as session:
+        previous_audit_ids = list((await session.scalars(select(AuditLog.id))).all())
+    before = await rubric_counts(case)
+    preview = await preview_rubric(case)
+    assert preview["admission_blocker"] == "rubric_context_limit"
+    assert await rubric_counts(case) == before
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 409, submitted.text
+    assert submitted.json()["data"]["error"]["code"] == "rubric_context_limit"
+    assert not case["vendor"].requests
+    after = await rubric_counts(case)
+    assert after == {**before, "audit_logs": before["audit_logs"] + 1}
+    # Authenticated business rejection retains one safe audit after rolling back admission.
+    async with case["app"].state.db.transaction(org) as session:
+        audits = list(
+            (
+                await session.scalars(
+                    select(AuditLog).where(AuditLog.id.not_in(previous_audit_ids))
+                )
+            ).all()
+        )
+        assert len(audits) == 1
+        rejected = audits[0]
+        assert rejected.action == "score_rubric.failed"
+        assert rejected.org_id == org
+        assert rejected.object_id == UUID(case["task"])
+        assert rejected.actor_user_id == case["tenants"]["users"][0]
+        assert rejected.actor_token_id is None
+        assert rejected.details == {
+            "task_id": case["task"],
+            "extraction_job_id": case["extraction"],
+            "input_hash": preview["input"]["input_hash"],
+            "error_code": "rubric_context_limit",
+            "actor_kind": "session",
+        }
+        rejection_audit = {
+            "action": rejected.action,
+            "org_id": str(rejected.org_id),
+            "object_id": str(rejected.object_id),
+            "actor_user_id": str(rejected.actor_user_id),
+            "actor_token_id": rejected.actor_token_id,
+            "details": rejected.details,
+        }
+    artifact = case["tmp_path"] / f"rubric-limit-{overflow}.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "preview": preview,
+                "submit": submitted.json(),
+                "vendor_calls": len(case["vendor"].requests),
+                "counts_before": before,
+                "counts_after": after,
+                "rejection_audit": rejection_audit,
+            },
+            indent=2,
+        )
+    )
+    assert json.loads(artifact.read_text())["vendor_calls"] == 0
 
 
 @pytest.mark.parametrize("mode", ["valid", "refused", "truncated", "unknown_ref"])

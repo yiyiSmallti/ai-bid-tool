@@ -86,7 +86,7 @@ async def resolve(session: AsyncSession, settings: Settings, job: Job | None = N
     return await llm_providers.resolve_llm(session, settings, job=job)
 
 
-def prices(llm) -> dict:
+def prices(llm, *, rubric: bool = False) -> dict:
     configured = getattr(llm, "settings", None)
     return {
         "sale": [str(value) for value in llm.sale]
@@ -102,7 +102,15 @@ def prices(llm) -> dict:
         "request_options_sha256": drafts.digest(configured.request_options())
         if configured
         else None,
-        "batch_chars": configured.llm_batch_chars if configured else None,
+        **(
+            {
+                "rubric_max_request_bytes": configured.rubric_max_request_bytes
+                if configured
+                else None
+            }
+            if rubric
+            else {"batch_chars": configured.llm_batch_chars if configured else None}
+        ),
         "output_tokens": configured.llm_max_output_tokens if configured else None,
         "json_mode": configured.llm_json_mode if configured else None,
         "effort": configured.llm_effort if configured else None,
@@ -244,7 +252,7 @@ async def prepare(
         "adapter_version": ADAPTER_VERSION,
         "model": model_identity(llm),
         "reasoning": reasoning,
-        "price": prices(llm),
+        "price": prices(llm, rubric=True),
         "provider_source": "org" if getattr(llm, "org_owned", False) else "platform",
     }
     if getattr(llm, "org_owned", False):
@@ -307,22 +315,29 @@ async def preview_cost(
                 "admission_blocker": None,
             }
         return unknown | {"admission_blocker": "billing_bound_unavailable"}
-    requests = adapter._groups(request)
-    bodies = [adapter.request_body(entry) for entry in requests]
+    try:
+        request_body = adapter.validate_request(request)
+    except ProviderFailure as error:
+        if error.code != "rubric_context_limit":
+            raise
+        return unknown | {
+            "admission_blocker": error.code,
+            "cost_basis_reason": "complete_rubric_request_exceeds_limit",
+        }
     try:
         if adapter.llm.platform_model_id is None and not adapter.llm.org_owned:
             return unknown | {
                 "admission_blocker": "billing_price_unavailable",
                 "cost_basis_reason": "prices_unavailable",
             }
-        bounds = [adapter.reservation(entry) for entry in requests]
+        bound = adapter.reservation(request)
     except ProviderFailure as error:
         return unknown | {
             "admission_blocker": error.code,
             "cost_basis_reason": "prices_unavailable",
         }
-    inputs = sum(len(json.dumps(value, ensure_ascii=False).encode()) + 4096 for value in bodies)
-    outputs = sum(adapter.llm.output_token_bound(value) for value in bodies)
+    inputs = len(json.dumps(request_body, ensure_ascii=False).encode()) + 4096
+    outputs = adapter.llm.output_token_bound(request_body)
     input_price = adapter.llm.settings.llm_input_usd_per_mtok
     output_price = adapter.llm.settings.llm_output_usd_per_mtok
     usd = (
@@ -330,7 +345,7 @@ async def preview_cost(
         if input_price is None or output_price is None
         else (inputs * input_price + outputs * output_price) / 1_000_000
     )
-    first = bounds[0] if bounds else Decimal(0)
+    first = bound
     blocker = None
     if first > settings.job_max_charge:
         blocker = "job_charge_limit_exceeded"
@@ -349,7 +364,7 @@ async def preview_cost(
             blocker = "insufficient_balance"
     return {
         "estimated_cost": {"llm_tokens": inputs + outputs, "ocr_pages": 0, "usd": usd},
-        "estimated_charge": sum(bounds, Decimal(0)),
+        "estimated_charge": bound,
         "cost_basis": "known",
         "cost_basis_reason": (
             "org_key_platform_charge_zero_vendor_cost_estimate"
@@ -624,7 +639,7 @@ def _verified_requirement(
         return None, "ref_not_sent"
     binding = outbound["refs"][citation.ref]
     if UUID(binding["provider_id"]) not in batch.requested_requirement_ids:
-        return None, "cross_batch_citation"
+        return None, "requirement_not_requested"
     if redaction.PLACEHOLDER.search(citation.quote) or redaction.SECRET_PLACEHOLDER.search(
         citation.quote
     ):
@@ -675,68 +690,80 @@ def accept_batches(
     sections: list[dict] = []
     items: list[dict] = []
     errors: list[str] = []
-    overall: list[dict] = []
-    for batch in batches:
-        overall.append(
-            {
-                "overall_aggregation": batch.output.overall_aggregation,
-                "overall_rule_text": batch.output.overall_rule_text,
-                "overall_score_range": batch.output.overall_score_range.model_dump(mode="json")
-                if batch.output.overall_score_range
-                else None,
-                "overall_cap": batch.output.overall_cap,
-            }
+    if len(batches) != 1:
+        cards.fail(
+            "invalid_provider_output", "Rubric provider must return one complete response", 502, 4
         )
-        for section in batch.output.sections:
-            candidate = section.model_dump(mode="json")
-            requirement_id, reason = _candidate_requirement(section.citations, batch, outbound)
-            if reason is not None or requirement_id not in known:
-                errors.append("invalid_section_citation")
-                continue
-            if not _safe_candidate_text(
-                candidate,
-                ("key", "title", "aggregation_rule_text", "ambiguity_reason"),
-                library,
-                allowed_placeholders,
-            ):
-                errors.append("sensitive_model_output")
-                continue
-            candidate.pop("citations")
-            source = outbound["refs"][section.citations[0].ref]["source"]
-            candidate |= {
-                "requirement_id": requirement_id,
-                "source": source,
-                "citation_valid": True,
-            }
-            candidate["fingerprint"] = score_normalization.content_fingerprint("section", candidate)
-            sections.append(candidate)
-        for item in batch.output.items:
-            local = str(item.requirement_id)
-            expected_real = outbound["requirements"].get(local)
-            requirement_id, reason = _candidate_requirement(item.citations, batch, outbound)
-            if (
-                reason is not None
-                or expected_real is None
-                or requirement_id != expected_real
-                or requirement_id not in known
-            ):
-                errors.append("invalid_item_citation")
-                continue
-            candidate = item.model_dump(mode="json")
-            if not _safe_candidate_text(
-                candidate,
-                ("section_key", "key", "title", "rule_text", "ambiguity_reason"),
-                library,
-                allowed_placeholders,
-            ):
-                errors.append("sensitive_model_output")
-                continue
-            candidate.pop("citations")
-            source = outbound["refs"][item.citations[0].ref]["source"]
-            candidate["requirement_id"] = requirement_id
-            candidate |= {"source": source, "citation_valid": True}
-            candidate["fingerprint"] = score_normalization.content_fingerprint("item", candidate)
-            items.append(candidate)
+    batch = batches[0]
+    provider_ids = {UUID(local) for local in outbound["requirements"]}
+    sent_refs = set(outbound["refs"])
+    if (
+        len(batch.requested_requirement_ids) != len(provider_ids)
+        or set(batch.requested_requirement_ids) != provider_ids
+        or len(batch.sent_refs) != len(sent_refs)
+        or set(batch.sent_refs) != sent_refs
+    ):
+        cards.fail(
+            "invalid_provider_output", "Rubric response scope must match the complete table", 502, 4
+        )
+    canonical = {
+        "overall_aggregation": batch.output.overall_aggregation,
+        "overall_rule_text": batch.output.overall_rule_text,
+        "overall_score_range": batch.output.overall_score_range.model_dump(mode="json")
+        if batch.output.overall_score_range
+        else None,
+        "overall_cap": batch.output.overall_cap,
+    }
+    for section in batch.output.sections:
+        candidate = section.model_dump(mode="json")
+        requirement_id, reason = _candidate_requirement(section.citations, batch, outbound)
+        if reason is not None or requirement_id not in known:
+            errors.append("invalid_section_citation")
+            continue
+        if not _safe_candidate_text(
+            candidate,
+            ("key", "title", "aggregation_rule_text", "ambiguity_reason"),
+            library,
+            allowed_placeholders,
+        ):
+            errors.append("sensitive_model_output")
+            continue
+        candidate.pop("citations")
+        source = outbound["refs"][section.citations[0].ref]["source"]
+        candidate |= {
+            "requirement_id": requirement_id,
+            "source": source,
+            "citation_valid": True,
+        }
+        candidate["fingerprint"] = score_normalization.content_fingerprint("section", candidate)
+        sections.append(candidate)
+    for item in batch.output.items:
+        local = str(item.requirement_id)
+        expected_real = outbound["requirements"].get(local)
+        requirement_id, reason = _candidate_requirement(item.citations, batch, outbound)
+        if (
+            reason is not None
+            or expected_real is None
+            or requirement_id != expected_real
+            or requirement_id not in known
+        ):
+            errors.append("invalid_item_citation")
+            continue
+        candidate = item.model_dump(mode="json")
+        if not _safe_candidate_text(
+            candidate,
+            ("section_key", "key", "title", "rule_text", "ambiguity_reason"),
+            library,
+            allowed_placeholders,
+        ):
+            errors.append("sensitive_model_output")
+            continue
+        candidate.pop("citations")
+        source = outbound["refs"][item.citations[0].ref]["source"]
+        candidate["requirement_id"] = requirement_id
+        candidate |= {"source": source, "citation_valid": True}
+        candidate["fingerprint"] = score_normalization.content_fingerprint("item", candidate)
+        items.append(candidate)
 
     def remove_duplicate(rows: list[dict], field: str, code: str) -> list[dict]:
         counts = Counter(row[field] for row in rows)
@@ -758,9 +785,6 @@ def accept_batches(
     unresolved = sorted(expected - represented)
     if unresolved:
         errors.append("missing_requirement_output")
-    if not overall:
-        cards.fail("invalid_provider_output", "Rubric provider returned no completed batch", 502, 4)
-    canonical = overall[0]
     if not _safe_candidate_text(
         canonical,
         ("overall_rule_text",),
@@ -773,8 +797,6 @@ def accept_batches(
             409,
             4,
         )
-    if any(entry != canonical for entry in overall[1:]):
-        errors.append("overall_batch_conflict")
     return {
         **canonical,
         "sections": sections,

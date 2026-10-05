@@ -106,9 +106,16 @@ async def secret_library(session, task_id, settings):
     return confidential.prompt_fields(entries), library
 
 
+def eligible(item: dict) -> bool:
+    """Only verified response rows supply bid text for semantic comparison."""
+    return item["partition"] == "response" and bool((item.get("response_text") or "").strip())
+
+
 def build_outbound(secret: dict, fields: list[dict], library) -> dict:
     texts, refs, requirements = [], {}, {}
     for index, item in enumerate(secret["items"], 1):
+        if not eligible(item):
+            continue
         local = f"r{index}"
         requirements[local] = item["requirement_id"]
 
@@ -285,6 +292,14 @@ async def preview(session, fixed, llm, body, settings) -> dict:
         return summary | {
             "admission_blocker": "redaction_required",
             "cost_basis_reason": "redaction_required",
+        }
+    if not fixed.secret["outbound"]["requirements"]:
+        return {
+            "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+            "estimated_charge": Decimal(0),
+            "cost_basis": "known",
+            "cost_basis_reason": "no_model_calls",
+            "admission_blocker": None,
         }
     if not supports_check(llm):
         return summary | {"admission_blocker": "check_capability_unavailable"}

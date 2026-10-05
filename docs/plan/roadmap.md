@@ -63,7 +63,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
 | P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；Perplexity Search API 或自托管 SearXNG 搜索 | Embedding 草案见 [memory.md](memory.md#pgvector-与后续索引)；本机浏览器采集、仅用 SearXNG 时搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱租约接管与断连/存储失败注入验收 | 新契约 |
 | P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；机制见 [provider-config.md](../notes/provider-config.md) | [平台后台凭据管理草案](platform-credentials.md)（全局表例外见 [ADR 0006](../adr/0006-platform-credentials.md)）；视觉、搜索等其他能力的单位配置 | 平台凭据待批准；其他新契约 |
-| P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草/评分 rubric 部分成功；抽取、起草、评分 rubric 与模拟拟投按 `BID_LLM_CONCURRENCY` 并发 | 跨能力限流与统一进度 | 新契约 |
+| P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草/评分 rubric 部分成功；抽取、起草与模拟拟投按 `BID_LLM_CONCURRENCY` 并发；rubric 整表请求边界见[评分计划](score.md#provider作业和预付费) | 跨能力限流与统一进度 | 新契约 |
 | M01 记忆存储 | 未实施 | [记忆契约草案](memory.md#数据模型与迁移轮廓) | [待批准与待决定](memory.md#待决定) |
 | M02 记忆检索 | 未实施 | [记忆检索契约草案](memory.md#检索与优先级) | [分步范围](memory.md#目标与边界) |
 | M03 自动候选 | 未实施 | [自动候选与样本契约草案](memory.md#自动候选样本与作业) | 依赖 B07；待批准 |
