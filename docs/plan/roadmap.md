@@ -51,8 +51,8 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B06 ui mock | LLM 生成单页 HTML 原型并经沙箱离线截图、入库与逐项保留/替换决定；机制见 [screenshot-evidence.md](../notes/screenshot-evidence.md) | 软件响应表自动编排 | 新契约 |
 | B07 人工确认 | 卡片与 Evidence 按职责人工确认、不可变修订、原子处置、模型提议与消费关口；决定见 [ADR 0005](../adr/0005-human-confirmed-responses.md) | 会签、任务成员与看板交互 | 新契约 |
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
-| B09 check | 未实施 | 标书与要求对照、废标/扣分风险、误报处理 | 语义校验依赖 LLM |
-| B10 score | 未实施 | 逐项预估分、失分原因、引用 | 语义评估依赖 LLM |
+| B09 check | 未实施 | [校验契约草案](check.md) | 待批准 |
+| B10 score | 未实施 | [评分契约草案](score.md) | 待批准 |
 | B11 export | 人工 Word 响应章节导出、正式件/审阅件、证书页附件、审计；导出件经 Gotenberg 转 PDF 在线按页预览；机制见 [human-section-exports.md](../notes/human-section-exports.md)、[page-previews.md](../notes/page-previews.md) | WPS 视觉分页与隔离 S3 下载验收；契约见 [export.md](export.md) | 已批准 |
 
 ## 覆盖矩阵：Provider、记忆、看板、agent 与 CLI
