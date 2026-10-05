@@ -27,6 +27,7 @@ kind: readme
 - [model-drafting-redaction.md](notes/model-drafting-redaction.md)：模型起草输入快照、外发遮挡和双文本引用核验。
 - [confidential-values.md](notes/confidential-values.md)：保密字段、外发占位替换与导出时填入。
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
+- [pdf-parsing.md](notes/pdf-parsing.md)：PDF 栅格化预算、混合页 OCR、可核验文本合并与解析警告。
 - [llm-providers.md](notes/llm-providers.md)：抽取与响应起草的模型调用、批次、错误与计费。
 - [docx-citations.md](notes/docx-citations.md)：Word 按章节、段落、表格单元格引用。
 - [reasoning-levels.md](notes/reasoning-levels.md)：按官方档位选择推理强度、抽取历史。

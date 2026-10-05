@@ -55,8 +55,9 @@ Configure lease and heartbeat settings using
 ## Pitfalls
 
 An unconfigured production LLM fails explicitly. Test fixtures are labelled and
-only injected by tests. Native PDF text parsing is real; local OCR requires actual
-Tesseract language data. DOCX layout is unverified and cannot provide valid page
+only injected by tests. Native PDF parsing, mixed-page OCR selection, raster limits
+and incomplete-page warnings are defined in [PDF parsing](pdf-parsing.md).
+Local OCR requires actual Tesseract language data. DOCX layout is unverified and cannot provide valid page
 citations until converted to PDF. No Word page numbers are guessed.
 Queue permissions apply only to internal dispatch tables. There is no agent
 confirmation/export endpoint. Failed/cancelled identical jobs stay terminal until an explicit `--retry`; a new

@@ -31,8 +31,9 @@ export and 403 for roles that cannot download exports.
 ## How it works
 
 [page_previews.py](../../server/app/services/page_previews.py) reads the stored
-original, checks its hash, and renders one page with PyMuPDF inside the same
-pixel and byte bounds as archived certificate pages.
+original, checks its hash, and renders one page with PyMuPDF inside the shared
+[PDF raster budget](pdf-parsing.md#how-it-works) and the PNG byte limit in
+`MAX_PNG_BYTES`. Archived certificate pages use the same raster budget.
 
 Opening an export preview passes the same gate as a download, then creates or
 reuses one `export_preview` job keyed by export ID and file hash, and records

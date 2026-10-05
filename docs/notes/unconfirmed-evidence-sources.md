@@ -20,7 +20,8 @@ same authenticated preview ID; it is never inherited by a new selection.
 Validate scope intersections and active membership before reading any parent. Join
 immutable snapshot/revision/file identities and check original length/SHA/
 descriptor. Render the actual whole PDF page at150dpi RGB without alpha, preserving rotation, using existing PyMuPDF.
-Check projected and real dimensions (8192px/side,20M pixels), PNG byte limit (40MiB
+Check projected and real dimensions against the shared
+[PDF raster budget](pdf-parsing.md#how-it-works), PNG byte limit (40MiB
 or lower configured limit), and actual output. A pure CPU thread is awaited with a
 20second render deadline; only a successful await reaches any storage/DB work.
 Reading and rendering run without the task lock, at most two renders per process; a

@@ -11,6 +11,8 @@ import time
 import zlib
 from typing import Any
 
+from app.core.errors import ServiceError
+from app.core.pdf_raster import MAX_EDGE_PX, MAX_PIXELS, raster_dimensions
 from app.providers.sandbox_runtime import (
     CONTROL_LIMIT,
     KIND_LIMITS,
@@ -72,7 +74,7 @@ def artifact_header(artifact: ArtifactPayload, ordinal: int) -> dict[str, Any]:
 
 
 def check_dimensions(width: int, height: int) -> None:
-    if width < 1 or height < 1 or max(width, height) > 8192 or width * height > 20_000_000:
+    if width < 1 or height < 1 or max(width, height) > MAX_EDGE_PX or width * height > MAX_PIXELS:
         raise SandboxFailure("image_limit")
 
 
@@ -154,16 +156,22 @@ async def render_pdf(descriptor: RunDescriptor, source: bytes) -> list[ArtifactP
     if not data.startswith(b"%PDF-"):
         raise SandboxFailure("invalid_pdf")
     document = pymupdf.open(stream=data, filetype="pdf")
-    if document.needs_pass:
-        raise SandboxFailure("encrypted_pdf")
-    results = [ArtifactPayload("source_pdf", data)]
     try:
+        if document.needs_pass:
+            raise SandboxFailure("encrypted_pdf")
+        results = [ArtifactPayload("source_pdf", data)]
         for number in descriptor.pdf_pages:
             if number > document.page_count:
                 raise SandboxFailure("pdf_page_missing")
             page = document.load_page(number - 1)
-            rectangle = page.rect * (150 / 72)
-            check_dimensions(int(rectangle.width + 1), int(rectangle.height + 1))
+            try:
+                raster_dimensions(
+                    page.rect.width,
+                    page.rect.height,
+                    150 / 72,
+                )
+            except ServiceError as exc:
+                raise SandboxFailure("image_limit") from exc
             pixmap = page.get_pixmap(dpi=150, alpha=False)
             check_dimensions(pixmap.width, pixmap.height)
             results.append(

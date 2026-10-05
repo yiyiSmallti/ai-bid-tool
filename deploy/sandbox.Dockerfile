@@ -7,6 +7,8 @@ RUN python -m pip install --no-cache-dir playwright==1.55.0 PyMuPDF==1.26.4 \
     && groupadd --gid 10001 sandbox \
     && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /tmp sandbox
 WORKDIR /opt/bid
+COPY server/app/core/errors.py /opt/bid/app/core/errors.py
+COPY server/app/core/pdf_raster.py /opt/bid/app/core/pdf_raster.py
 COPY server/app/providers/sandbox_runtime.py /opt/bid/app/providers/sandbox_runtime.py
 COPY server/app/sandbox/__init__.py /opt/bid/app/sandbox/__init__.py
 COPY server/app/sandbox/runner.py /opt/bid/app/sandbox/runner.py

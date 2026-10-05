@@ -2,7 +2,6 @@
 
 import asyncio
 import hashlib
-import math
 import struct
 import threading
 from datetime import UTC, datetime
@@ -13,6 +12,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
+from app.core.pdf_raster import MAX_EDGE_PX, MAX_PIXELS, raster_dimensions
 from app.models.entities import CertificateFile, EvidenceSource, Task, TaskCertificate
 from app.providers.storage import Storage
 from app.schemas.certificate_file_contracts import CertificateScanFile
@@ -54,8 +54,8 @@ def check_png(content: bytes, descriptor: EvidenceSourcePreview):
         if (
             width != descriptor.width_px
             or height != descriptor.height_px
-            or width * height > 20_000_000
-            or max(width, height) > 8192
+            or width * height > MAX_PIXELS
+            or max(width, height) > MAX_EDGE_PX
         ):
             raise ValueError("invalid PNG dimensions")
         pixmap = pymupdf.Pixmap(content)
@@ -83,20 +83,17 @@ def render_page(
     try:
         with pymupdf.open(stream=content, filetype="pdf") as pdf:
             page = pdf[page_number - 1]
-            projected = (
-                math.ceil(page.rect.width * 150 / 72),
-                math.ceil(page.rect.height * 150 / 72),
+            raster_dimensions(
+                page.rect.width,
+                page.rect.height,
+                150 / 72,
+                code="source_preview_limits",
             )
-            if (
-                min(projected) < 1
-                or max(projected) > 8192
-                or projected[0] * projected[1] > 20_000_000
-            ):
-                raise ServiceError(
-                    "source_preview_limits", "Page exceeds preview pixel limits", 400, 2
-                )
             pixmap = page.get_pixmap(dpi=150, colorspace=pymupdf.csRGB, alpha=False)
-            if max(pixmap.width, pixmap.height) > 8192 or pixmap.width * pixmap.height > 20_000_000:
+            if (
+                max(pixmap.width, pixmap.height) > MAX_EDGE_PX
+                or pixmap.width * pixmap.height > MAX_PIXELS
+            ):
                 raise ServiceError(
                     "source_preview_limits", "Page exceeds preview pixel limits", 400, 2
                 )
