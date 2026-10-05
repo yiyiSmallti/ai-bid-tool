@@ -6,6 +6,13 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05：评分 rubric 规范化与人工确认
+
+- 新增 `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history`、对应 HTTP 接口和 `score_rubric` 作业。候选只读取指定成功抽取的全部 scoring Requirements；dry-run 固定输入哈希、遮挡与费用上界，提交沿用队列、租约、重试、取消、用量和预付计费边界。
+- rubric section、item、requirement coverage 与替换版本保存在受 FORCE RLS 保护的单位表。admin 只分类，商务和技术责任人按已存职责逐项确认，bidder 在覆盖、引用、上下限、权重、cap 与聚合全部通过确定性检查后确认整集；token、agent 和 worker 不能执行人工决定，所有分类、决定和修订历史只追加。
+- CLI 两种模式保持七键 Result 和 0/2/3/4/5 退出语义，复杂输入只接受 JSON 文件，`bid schema` 只公布阶段 A rubric 命令。四项 score scope 按批准契约注册；阶段 B 的 `score run/list/show`、评分报告和评分 Provider 作业保留为已批准契约，尚未注册。机制见 [Human-reviewed score rubrics](notes/score.md)。
+- 阶段 A 有一项明确的实现限制：遮挡会改变固定 `Source.quote` 或 `Source.location` 时，preview 返回 `sensitive_scoring_source`，提交在创建 Job 前拒绝。当前 schema 没有既保持逐字 Source 绑定又不持久化保密明文的安全表示；这不是新的契约默认，普通无效模型引用仍按契约保留为 unresolved。
+
 ## 2026-10-04：已确认初稿的 combined 语义校验
 
 - `bid check run --mode combined` 接入独立 CheckProvider 和结构化 HTTP 调用，固定单位配置或平台目录、推理档位、价格及输入哈希；rules 仍无模型调用。

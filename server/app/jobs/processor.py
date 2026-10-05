@@ -116,6 +116,7 @@ class Processor:
                 in {
                     "draft",
                     "check",
+                    "score_rubric",
                     "card_generate",
                     "provider_test",
                     "export_render",
@@ -226,6 +227,12 @@ class Processor:
                     await generate_prototype(execution, self.storage, llm, browser_for(self))
                     return
                 assert task_id is not None and document_id is not None
+                if kind == "score_rubric":
+                    from app.jobs.score_rubric import process as process_score_rubric
+
+                    incremental = True
+                    await process_score_rubric(execution)
+                    return
                 if kind == "check":
                     from app.jobs.check import process as process_check
 
@@ -446,6 +453,7 @@ class Processor:
                     retryable = exc.exit_code == 3 and exc.code not in {
                         "draft_input_changed",
                         "check_input_changed",
+                        "score_rubric_input_changed",
                         "export_input_changed",
                         "generation_input_changed",
                         "generation_model_changed",
@@ -481,6 +489,24 @@ class Processor:
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
+                    if kind == "score_rubric":
+                        from app.services.score_generation import worker
+                        from app.services.versioned import audit
+
+                        audit(
+                            session,
+                            worker(current),
+                            "score_rubric.failed",
+                            job_id,
+                            {
+                                "task_id": str(task_id),
+                                "job_id": str(job_id),
+                                "run_id": str(run_id),
+                                "actor_kind": "worker",
+                                "input_hash": current.result["submission"]["input_hash"],
+                                "error_code": error["code"],
+                            },
+                        )
                     if kind == "export_render":
                         from app.jobs.export_render import failure_audit
 

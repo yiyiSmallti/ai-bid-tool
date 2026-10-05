@@ -2,17 +2,23 @@
 kind: plan
 ---
 
-# 契约草案：已确认响应草案的逐项评分预估
+# 已确认响应草案的逐项评分预估契约
 
-状态：**待批准，未实施。** 本草案对应[路线图](roadmap.md) B10。仓库运行时代码、
-数据库、HTTP、CLI、权限和作业处理器均未注册本提案。
-[Pydantic 与 Provider 草案](score/score_contracts.py)用于在实现前固定边界；共用的
+状态：**已批准，分两阶段实施。** 本契约对应[路线图](roadmap.md) B10。阶段 A 实施评分
+rubric 的生成、规范化、人工分类、逐项确认、整集确认和历史；阶段 B 才实施对 current
+`DraftRun` 的实际评分、报告与评分 Provider 作业。完整 Pydantic 与 Provider 契约位于
+[运行时契约](../../server/app/schemas/score_contracts.py)，原
+[审阅路径](score/score_contracts.py)只保留兼容导入。共用的
 评估、引用、外发和 Result 约定见 [B09 已批准契约](check.md)，类型来自
 [共享契约](../../server/app/schemas/check_contracts.py)，不在本文件复制。
 
+阶段 A 只注册本页 rubric 命令与 `score_rubric` 作业。阶段 B 的模型可以作为已批准契约供
+静态检查和后续实现复用，但不得提前注册 `score run/list/show`、`score` 作业或评分 Provider
+调用。阶段拆分不改变下文固定输入、引用、聚合、人工关口和退出码决定。
+
 ## 目标与结论边界
 
-首版输出“已确认响应草案评分预估”：把一套经人确认的评分 rubric 逐项对照指定的
+阶段 B 首版输出“已确认响应草案评分预估”：把一套经人确认的评分 rubric 逐项对照指定的
 current `DraftRun`，给出可估项目的分数、失分原因、补强动作和逐字引用。它是辅助判断，
 不是招标人的正式得分，也不是全文、版式、附件完整性或最终交付件审查。
 
@@ -185,7 +191,7 @@ rubric Provider 只收到已遮挡的招标原文 ref。score Provider 的每个
 
 ## Provider、作业和预付费
 
-[协议草案](score/score_contracts.py)定义两个结构化 Provider 方法：
+[运行时契约](../../server/app/schemas/score_contracts.py)定义两个结构化 Provider 方法：
 
 - `RubricProvider.extract_rubric`：输入固定 scoring Requirements，输出 section/item 候选。
 - `ScoreProvider.score`：输入 confirmed rubric item、对应 DraftRun 分区和外发上下文，输出逐项
@@ -214,7 +220,7 @@ reservation。单位自带 key 的 reservation/平台 charge 为 0，跳过预�
 `--dry-run` 做同范围快照与授权检查，不写业务/审计/Job 数据、不调用 Provider，报告首轮费用
 上界、模型目录和遮挡摘要。正式提交必须带 preview 的 `expected_input_hash`；`max_charge` 只是
 本 Job 的平台售价扣款上限，不限制单位自带 key 的厂商账单，也不等于尚未实现的
-`Task.budget_usd` 全任务累计预算。全任务预算执行保留为待决定，不能在本切片里暗示已经生效。
+`Task.budget_usd` 全任务累计预算。已决定首版不执行全任务累计预算，不能在本切片里暗示已经生效。
 
 缓存键至少包含 org/task/document/extraction/draft/rubric ID 与固定版本、input hash、assessment
 date、Provider/模型目录修订、reasoning、prompt/schema/规则/遮挡版本。相同键可返回 cached Job；
@@ -222,9 +228,11 @@ date、Provider/模型目录修订、reasoning、prompt/schema/规则/遮挡版�
 
 ## HTTP、CLI 与 Result
 
-拟新增入口如下；HTTP 和 CLI 使用同一 service 与 Pydantic 模型。复杂 revision/decision/classify
+接口按阶段注册；HTTP 和 CLI 使用同一 service 与 Pydantic 模型。复杂 revision/decision/classify
 输入使用 UTF-8 JSON 文件，结构分别为 `RubricReviseRequest`、`Rubric*DecisionRequest` 或
 `RubricClassifyRequest`，CLI 不做交互提问。
+
+阶段 A 注册以下 rubric 入口：
 
 | HTTP | CLI（均支持 `--json`） | data / items |
 | --- | --- | --- |
@@ -240,6 +248,11 @@ date、Provider/模型目录修订、reasoning、prompt/schema/规则/遮挡版�
 | `POST /tasks/{task_id}/score-rubrics/{rubric_id}/coverage/{requirement_id}/decisions` | `bid score rubric coverage decide --task UUID --rubric UUID --requirement UUID --input DECISION.json --json` | `RubricCoverageDecisionView` / `[]` |
 | `POST /tasks/{task_id}/score-rubrics/{rubric_id}/decisions` | `bid score rubric decide --task UUID --rubric UUID --input DECISION.json --json` | `RubricSetView` / `[]` |
 | `GET /tasks/{task_id}/score-rubrics/{rubric_id}/history?cursor=…&limit=…` | `bid score rubric history --task UUID --rubric UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `RubricHistoryItem[]` |
+
+阶段 B 才注册以下评分执行入口：
+
+| HTTP | CLI（均支持 `--json`） | data / items |
+| --- | --- | --- |
 | `POST /tasks/{task_id}/scores/preview` | `bid score run --task UUID --draft UUID --rubric UUID --as-of YYYY-MM-DD [--reasoning LEVEL] [--max-charge DECIMAL] --dry-run --json` | `ScorePreview` / `[]` |
 | `POST /tasks/{task_id}/scores` | `bid score run --task UUID --draft UUID --rubric UUID --as-of YYYY-MM-DD --expected-input-hash SHA256 [--reasoning LEVEL] [--max-charge DECIMAL] [--retry] [--wait] --json` | `ScoreJobAccepted`；wait 后为 `ScoreJobResult` / `[]` |
 | `GET /tasks/{task_id}/scores?cursor=…&limit=…` | `bid score list --task UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `ScoreRunView[]` |
@@ -253,15 +266,15 @@ task，否则统一 404。耗时提交默认立即返回 Job；`--wait` 复用�
 `ok`、`command`、`data`、`items`、
 `warnings`、`cost`、`duration_ms`。`cost` 是该响应可证明的实际用量；preview 的估算在 data 的
 `estimated_cost/estimated_charge`，不能冒充已花费用。schema 仅新增上述命令，不改变既有命令；
-批准后同步注册 `bid schema`。
+阶段 A 的 `bid schema` 只公布已实施的 rubric 命令；阶段 B 命令到实现时再注册。
 
 | 退出码 | score 明确语义 |
 | --- | --- |
-| 0 | preview、提交、列表、完整 rubric/report 读取成功；等待结果时只有全部项目可评估且可形成完整总分才为 0 |
+| 0 | preview、提交、列表、完整 rubric/report 读取成功；等待 rubric 生成时只有完整候选为 0，等待评分时只有全部项目可评估且可形成完整总分才为 0 |
 | 2 | 参数、日期、UUID、expected hash/revision、非 current DraftRun、未确认 rubric、跨抽取绑定或输入完整性错误 |
 | 3 | 尚未形成持久报告的可重试 Provider、队列、网络或临时存储失败 |
 | 4 | 身份/权限、资源不存在、内容拒绝、固定输入/计费/引用完整性或不可重试 Provider 失败 |
-| 5 | 已保留有效结果但有失败批次、unassessable item、不可聚合 section 或因此没有完整总分 |
+| 5 | 已保留有效 rubric/report，但 rubric 生成有未解决要求，或评分有失败批次、unassessable item、不可聚合 section 或因此没有完整总分 |
 
 异步“已接受”本身返回 0；`job wait` 和 `score show` 读取 partial、含 unassessable item 或没有完整
 总分的报告时统一返回 5，不新增额外开关。
@@ -269,11 +282,14 @@ task，否则统一 404。耗时提交默认立即返回 Job；`--wait` 复用�
 
 ## 权限与人类关口
 
-拟增加 `score:read`、`score:run`、`score:rubric:generate`、`score:rubric:review`：
+阶段 A 注册已批准的 `score:read`、`score:run`、`score:rubric:generate`、
+`score:rubric:review` 权限映射。`score:run` 的 scope 可以签发和保留，但阶段 B 前没有对应
+CLI、HTTP 或 Job 处理器：
 
 - `score:read` 可按现有四种单位角色授予，也可进入 token allowlist；仍与 Membership 和任务读取
   权限取交集。
-- `score:run` 与 `score:rubric:generate` 可授予 bidder/technical，并可显式进入 token allowlist，
+- `score:run` 与 `score:rubric:generate` 授予 admin/bidder/technical（与 `check:run` 相同；令牌只能由 admin
+  签发且不能超出签发人权限），并可显式进入 token allowlist，
   使外部 agent 能预览和发起 advisory 作业；它们不能做人工决定。
 - `score:rubric:review` 只属于登录的人类 session，不进入 token `SCOPES`。数据库 CHECK/触发器
   与 service 双重拒绝 token/agent/worker actor。technical 只能确认或修订 technical 内容，bidder
@@ -288,7 +304,7 @@ task，否则统一 404。耗时提交默认立即返回 Job；`--wait` 复用�
 
 ## 数据表与迁移轮廓
 
-批准后新增以下业务表；名称可在实现迁移评审时微调，约束不能弱化：
+业务表也按阶段落地；名称可在实现迁移评审时微调，约束不能弱化：
 
 | 表 | 作用与关键固定字段 |
 | --- | --- |
@@ -301,6 +317,11 @@ task，否则统一 404。耗时提交默认立即返回 Job；`--wait` 复用�
 | `score_rubric_coverage_decisions` | coverage mapped/duplicate/excluded/reopen 的 append-only 人类决定 |
 | `score_rubric_classifications` | section/item 的 append-only admin 人类职责分类 |
 | `score_rubric_revision_events` | 新 candidate 版本与 prior rubric、理由、人类 actor 的 append-only 关联 |
+
+以上 rubric 表属于阶段 A。以下报告表属于阶段 B：
+
+| 表 | 作用与关键固定字段 |
+| --- | --- |
 | `score_reports` | job/run、AssessmentInput、rubric 固定版本、规则版本、完成/有效性、聚合状态与用量 IDs |
 | `score_report_items` | report/rubric item/requirement/anchor ResponseItem、anchor 分区、结果、分数、原因与补强动作 |
 | `score_report_item_responses` | assessed item 与一个或多个实际支持得分的 confirmed ResponseItem 的规范化复合外键关系 |
@@ -336,8 +357,8 @@ FORCE RLS 的端到端验收；每张新表、每个公开/聚合 view 和上述
 外发文字、保密值、模型原始输出或厂商错误体。
 
 dry-run 严格零写入，因此不写 AuditLog；cached 命中返回既有 Job/report，不新增 submitted、
-completed 或用量审计。是否把更多 pre-auth/404 失败持久化及相应强制测试，保留在“待决定”表，
-但以上默认事件与 metadata 边界不再悬空。
+completed 或用量审计。pre-auth 与跨单位统一 404 只进安全日志，不扩展为持久 AuditLog；以上事件
+与 metadata 边界不再悬空。
 
 ## 评测依据
 
@@ -345,10 +366,14 @@ Provider 匹配实验的来源限制、可得结论与不可声称事项统一�
 [B09 阶段二评测依据](check.md#阶段二评测依据)。B10 只继承其保守约束：所有模型引用都由本机逐字核验，
 missing/unknown 不默认满分，匹配实验不冒充真实招标得分或重复性证据。本页不复述样本数值。
 
-## 批准后验收
+## 分阶段验收
 
 按仓库规则只写端到端验收，不为模型类重复实现编写单元测试。测试 Provider 使用结构化 fake，
 真实服务评测放在 `evals/` 且不进默认 CI。至少覆盖：
+
+阶段 A 覆盖以下第 1、2、5、6 项中与 rubric 有关的迁移、HTTP、CLI、作业、费用和人工关口；
+阶段 B 覆盖评分报告、ScoreProvider 和聚合结果，并补齐其余条目。阶段 A 完成不能代替阶段 B
+评分验收。
 
 1. 两单位、无 org context、跨 task/document/draft/rubric 外键与 FORCE RLS；token scope、失效
    Membership、职责错位和 agent 试图确认全部被拒，不能由 404 枚举他单位对象。
@@ -374,15 +399,15 @@ missing/unknown 不默认满分，匹配实验不冒充真实招标得分或重�
 事件码验证成功、业务失败、dry-run 零写入和 cached 不重复审计。未接真实 Provider、未读 released 文件和未做版式审查必须
 留在报告 limitations，不能用“score 已完成”概括为最终投标评审。
 
-## 待决定
+## 已定决定
 
-| 事项 | 选项 | 推荐默认 | 理由 |
-| --- | --- | --- | --- |
-| 平台默认评分 Provider（Clef、DeepSeek、GLM 等候选） | 选一个平台默认；按单位覆盖；暂不提供平台默认 | 沿用 [B09 已定决定](check.md#已定决定)，B10 不单独选型 | check/score 应共享中文长文、结构化输出、引用、价格和数据政策评测，避免同一能力出现矛盾默认值 |
-| 失败持久审计扩展 | 把 pre-auth/统一 404 全部写 AuditLog；只记已认证且已绑定 org/object 的业务失败；仅安全日志 | 只持久化本文固定的已认证业务失败事件，pre-auth 与跨单位 404 留安全日志 | 避免审计表本身形成对象枚举或高噪声；批准扩展前仍需确定不会泄露目标 ID 的测试方法 |
-| `Task.budget_usd` 执行 | 全任务累计硬门槛；只提醒；继续不执行 | 首版继续不执行，只使用平台预付准入与单 Job `max_charge` | 当前没有跨 Job 累计的一致事务；`max_charge` 也不能限制单位自带 key 的厂商账单 |
-| 价格及主观评分 | 接入其他投标人/基准价与受控算法；人工录入结论；保持 unassessable | 首版全部 unassessable | 缺少可验证外部输入，自动猜测会制造虚假精度，且报价策略属于设计非目标 |
-| released-export 评分 | 扩展现有命令读取；另建人类会话专用流程；不支持 | 不扩展现有命令；需要时另立 human-only 契约 | released 文件含真实保密值并受 export 下载权限保护，不能把 agent 的 `score:run` 变成下载通道 |
-| 人工改分、采纳与 UI | 直接改报告；追加人工决定；只展示 advisory 报告 | 后续另立追加式决定与界面契约，首版不改报告 | 保留模型输出、人工判断和最终评标结果的不同来源，避免覆盖历史 |
+以下采用原推荐默认。阶段 A 不因已经批准阶段 B 契约而提前注册评分执行。
 
-以上决定批准前，不创建迁移、运行时代码、权限、命令、测试或外部调用。
+| 事项 | 决定 | 理由 |
+| --- | --- | --- |
+| 平台默认评分 Provider | 沿用 [B09 已定决定](check.md#已定决定)，B10 不单独选型 | check/score 应共享中文长文、结构化输出、引用、价格和数据政策评测，避免同一能力出现矛盾默认值 |
+| 失败持久审计扩展 | 只持久化本文固定的已认证业务失败事件，pre-auth 与跨单位 404 留安全日志 | 避免审计表本身形成对象枚举或高噪声 |
+| `Task.budget_usd` 执行 | 首版继续不执行，只使用平台预付准入与单 Job `max_charge` | 当前没有跨 Job 累计的一致事务；`max_charge` 也不能限制单位自带 key 的厂商账单 |
+| 价格及主观评分 | 首版全部 unassessable | 缺少可验证外部输入，自动猜测会制造虚假精度，且报价策略属于设计非目标 |
+| released-export 评分 | 不扩展现有命令；需要时另立 human-only 契约 | released 文件含真实保密值并受 export 下载权限保护，不能把 agent 的 `score:run` 变成下载通道 |
+| 人工改分、采纳与 UI | 后续另立追加式决定与界面契约，首版不改报告 | 保留模型输出、人工判断和最终评标结果的不同来源，避免覆盖历史 |

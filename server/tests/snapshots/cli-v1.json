@@ -15008,6 +15008,4496 @@
           ],
           "input": null
         },
+        "score rubric classify": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "section",
+              "options": [
+                "--section"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "item",
+              "options": [
+                "--item"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_input_hash": {
+                "$ref": "#/$defs/Sha256"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "review_domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_input_hash",
+              "review_domain",
+              "reason"
+            ],
+            "title": "RubricClassifyRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "decided_at": {
+                "format": "date-time",
+                "title": "Decided At",
+                "type": "string"
+              },
+              "decided_by": {
+                "format": "uuid",
+                "title": "Decided By",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "item_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Item Id"
+              },
+              "kind": {
+                "const": "classification",
+                "default": "classification",
+                "title": "Kind",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "review_domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "rubric_id": {
+                "format": "uuid",
+                "title": "Rubric Id",
+                "type": "string"
+              },
+              "section_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Section Id"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "rubric_id",
+              "revision",
+              "review_domain",
+              "reason",
+              "decided_by",
+              "decided_at"
+            ],
+            "title": "RubricClassificationView",
+            "type": "object"
+          }
+        },
+        "score rubric coverage decide": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "requirement",
+              "options": [
+                "--requirement"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "mapped",
+                  "duplicate",
+                  "excluded",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "canonical_requirement_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Canonical Requirement Id"
+              },
+              "expected_input_hash": {
+                "$ref": "#/$defs/Sha256"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "rubric_item_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": "Rubric Item Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_input_hash",
+              "action",
+              "reason"
+            ],
+            "title": "RubricCoverageDecisionRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "mapped",
+                  "duplicate",
+                  "excluded",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "canonical_requirement_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Canonical Requirement Id"
+              },
+              "decided_at": {
+                "format": "date-time",
+                "title": "Decided At",
+                "type": "string"
+              },
+              "decided_by": {
+                "format": "uuid",
+                "title": "Decided By",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "coverage_decision",
+                "default": "coverage_decision",
+                "title": "Kind",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "requirement_id": {
+                "format": "uuid",
+                "title": "Requirement Id",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "rubric_id": {
+                "format": "uuid",
+                "title": "Rubric Id",
+                "type": "string"
+              },
+              "rubric_item_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": "Rubric Item Ids",
+                "type": "array"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "rubric_id",
+              "requirement_id",
+              "revision",
+              "action",
+              "rubric_item_ids",
+              "reason",
+              "decided_by",
+              "decided_at"
+            ],
+            "title": "RubricCoverageDecisionView",
+            "type": "object"
+          }
+        },
+        "score rubric decide": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "confirm",
+                  "reopen"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_input_hash": {
+                "$ref": "#/$defs/Sha256"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_input_hash",
+              "action",
+              "reason"
+            ],
+            "title": "RubricSetDecisionRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AggregationRule": {
+                "enum": [
+                  "sum",
+                  "weighted_sum",
+                  "capped_sum",
+                  "formula",
+                  "non_additive"
+                ],
+                "type": "string"
+              },
+              "Money": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "RubricCompletenessView": {
+                "additionalProperties": false,
+                "properties": {
+                  "complete": {
+                    "title": "Complete",
+                    "type": "boolean"
+                  },
+                  "covered_requirement_count": {
+                    "minimum": 0,
+                    "title": "Covered Requirement Count",
+                    "type": "integer"
+                  },
+                  "normalization_errors": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Normalization Errors",
+                    "type": "array"
+                  },
+                  "overall_aggregation_rule_confirmed": {
+                    "title": "Overall Aggregation Rule Confirmed",
+                    "type": "boolean"
+                  },
+                  "pending_requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Pending Requirement Ids",
+                    "type": "array"
+                  },
+                  "scoring_requirement_count": {
+                    "minimum": 0,
+                    "title": "Scoring Requirement Count",
+                    "type": "integer"
+                  },
+                  "section_aggregation_rules_confirmed": {
+                    "title": "Section Aggregation Rules Confirmed",
+                    "type": "boolean"
+                  },
+                  "unconfirmed_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Unconfirmed Item Ids",
+                    "type": "array"
+                  },
+                  "unconfirmed_section_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Unconfirmed Section Ids",
+                    "type": "array"
+                  },
+                  "unresolved_duplicate_fingerprint_groups": {
+                    "items": {
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "title": "Unresolved Duplicate Fingerprint Groups",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "scoring_requirement_count",
+                  "covered_requirement_count",
+                  "pending_requirement_ids",
+                  "unresolved_duplicate_fingerprint_groups",
+                  "unconfirmed_section_ids",
+                  "unconfirmed_item_ids",
+                  "normalization_errors",
+                  "section_aggregation_rules_confirmed",
+                  "overall_aggregation_rule_confirmed",
+                  "complete"
+                ],
+                "title": "RubricCompletenessView",
+                "type": "object"
+              },
+              "RubricSetState": {
+                "enum": [
+                  "candidate",
+                  "confirmed",
+                  "superseded"
+                ],
+                "type": "string"
+              },
+              "ScoreRange": {
+                "additionalProperties": false,
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/Money"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "ScoreRange",
+                "type": "object"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "completeness": {
+                "$ref": "#/$defs/RubricCompletenessView"
+              },
+              "confirmed_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Confirmed At"
+              },
+              "confirmed_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Confirmed By"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "input_hash": {
+                "$ref": "#/$defs/Sha256"
+              },
+              "normalization_rule_version": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "overall_aggregation": {
+                "$ref": "#/$defs/AggregationRule"
+              },
+              "overall_aggregation_assessable": {
+                "title": "Overall Aggregation Assessable",
+                "type": "boolean"
+              },
+              "overall_cap": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Money"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "overall_rule_text": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "overall_score_range": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ScoreRange"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "prior_rubric_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Prior Rubric Id"
+              },
+              "prompt_version": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "schema_version": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "state": {
+                "$ref": "#/$defs/RubricSetState"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "version": {
+                "minimum": 1,
+                "title": "Version",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "extraction_job_id",
+              "document_id",
+              "version",
+              "input_hash",
+              "normalization_rule_version",
+              "prompt_version",
+              "schema_version",
+              "state",
+              "revision",
+              "overall_aggregation",
+              "overall_aggregation_assessable",
+              "completeness",
+              "created_at"
+            ],
+            "title": "RubricSetView",
+            "type": "object"
+          }
+        },
+        "score rubric generate": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "extraction_job",
+              "options": [
+                "--extraction-job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reasoning",
+              "options": [
+                "--reasoning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_input_hash",
+              "options": [
+                "--expected-input-hash"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "max_charge",
+              "options": [
+                "--max-charge"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "max_charge": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Max Charge"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "extraction_job_id"
+            ],
+            "title": "RubricGenerateRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AssessmentJobAccepted": {
+                "additionalProperties": false,
+                "properties": {
+                  "cached": {
+                    "title": "Cached",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "status",
+                  "cached"
+                ],
+                "title": "AssessmentJobAccepted",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "Money": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "RubricGenerateResult": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "maxLength": 3,
+                    "minLength": 3,
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "candidate_items": {
+                    "minimum": 0,
+                    "title": "Candidate Items",
+                    "type": "integer"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "completion": {
+                    "enum": [
+                      "complete",
+                      "partial"
+                    ],
+                    "title": "Completion",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "scoring_requirements": {
+                    "minimum": 0,
+                    "title": "Scoring Requirements",
+                    "type": "integer"
+                  },
+                  "stop_reason": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Stop Reason"
+                  },
+                  "unresolved_requirements": {
+                    "minimum": 0,
+                    "title": "Unresolved Requirements",
+                    "type": "integer"
+                  },
+                  "usage_record_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Usage Record Ids",
+                    "type": "array"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "title": "Version",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "rubric_id",
+                  "job_id",
+                  "completion",
+                  "version",
+                  "scoring_requirements",
+                  "candidate_items",
+                  "unresolved_requirements",
+                  "usage_record_ids",
+                  "charge",
+                  "billing_currency"
+                ],
+                "title": "RubricGenerateResult",
+                "type": "object"
+              },
+              "RubricInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "scope": {
+                    "const": "scoring_requirements",
+                    "default": "scoring_requirements",
+                    "title": "Scope",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "extraction_job_id",
+                  "document_id",
+                  "input_hash"
+                ],
+                "title": "RubricInput",
+                "type": "object"
+              },
+              "RubricPreview": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blocker": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Admission Blocker"
+                  },
+                  "billing_currency": {
+                    "maxLength": 3,
+                    "minLength": 3,
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost_basis": {
+                    "enum": [
+                      "known",
+                      "unknown"
+                    ],
+                    "title": "Cost Basis",
+                    "type": "string"
+                  },
+                  "cost_basis_reason": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "estimate_kind": {
+                    "const": "first_pass_upper_bound",
+                    "default": "first_pass_upper_bound",
+                    "title": "Estimate Kind",
+                    "type": "string"
+                  },
+                  "estimated_charge": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "estimated_cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "estimated_duration_ms": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Duration Ms"
+                  },
+                  "input": {
+                    "$ref": "#/$defs/RubricInput"
+                  },
+                  "max_charge": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
+                  },
+                  "model_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model Revision"
+                  },
+                  "normalization_rule_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "prompt_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "provider_config_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Config Id"
+                  },
+                  "provider_source": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "org",
+                          "platform"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Source"
+                  },
+                  "reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reasoning"
+                  },
+                  "redacted_counts": {
+                    "additionalProperties": {
+                      "type": "integer"
+                    },
+                    "title": "Redacted Counts",
+                    "type": "object"
+                  },
+                  "redaction_revision": {
+                    "minimum": 1,
+                    "title": "Redaction Revision",
+                    "type": "integer"
+                  },
+                  "redaction_rule_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "schema_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "scoring_requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Scoring Requirement Ids",
+                    "type": "array"
+                  },
+                  "selected_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Selected Item Ids",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "input",
+                  "selected_item_ids",
+                  "estimated_cost",
+                  "estimated_charge",
+                  "billing_currency",
+                  "cost_basis",
+                  "cost_basis_reason",
+                  "redaction_revision",
+                  "redaction_rule_version",
+                  "redacted_counts",
+                  "scoring_requirement_ids",
+                  "prompt_version",
+                  "schema_version",
+                  "normalization_rule_version"
+                ],
+                "title": "RubricPreview",
+                "type": "object"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RubricPreview"
+              },
+              {
+                "$ref": "#/$defs/AssessmentJobAccepted"
+              },
+              {
+                "$ref": "#/$defs/RubricGenerateResult"
+              }
+            ]
+          }
+        },
+        "score rubric history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "total": {
+                "minimum": 0,
+                "title": "Total",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "task_id",
+              "total"
+            ],
+            "title": "AssessmentListData",
+            "type": "object"
+          }
+        },
+        "score rubric item decide": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "item",
+              "options": [
+                "--item"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "RubricDecision": {
+                "enum": [
+                  "confirm",
+                  "reject",
+                  "reopen"
+                ],
+                "type": "string"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/$defs/RubricDecision"
+              },
+              "expected_input_hash": {
+                "$ref": "#/$defs/Sha256"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_input_hash",
+              "action",
+              "reason"
+            ],
+            "title": "RubricItemDecisionRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "RubricDecision": {
+                "enum": [
+                  "confirm",
+                  "reject",
+                  "reopen"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/$defs/RubricDecision"
+              },
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "decided_at": {
+                "format": "date-time",
+                "title": "Decided At",
+                "type": "string"
+              },
+              "decided_by": {
+                "format": "uuid",
+                "title": "Decided By",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "item_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Item Id"
+              },
+              "kind": {
+                "const": "decision",
+                "default": "decision",
+                "title": "Kind",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "rubric_id": {
+                "format": "uuid",
+                "title": "Rubric Id",
+                "type": "string"
+              },
+              "section_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Section Id"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "rubric_id",
+              "revision",
+              "action",
+              "reason",
+              "decided_by",
+              "decided_at"
+            ],
+            "title": "RubricDecisionView",
+            "type": "object"
+          }
+        },
+        "score rubric list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "total": {
+                "minimum": 0,
+                "title": "Total",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "task_id",
+              "total"
+            ],
+            "title": "AssessmentListData",
+            "type": "object"
+          }
+        },
+        "score rubric revise": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "AggregationRule": {
+                "enum": [
+                  "sum",
+                  "weighted_sum",
+                  "capped_sum",
+                  "formula",
+                  "non_additive"
+                ],
+                "type": "string"
+              },
+              "AssessmentMode": {
+                "enum": [
+                  "model_assessable",
+                  "ambiguous",
+                  "price_comparison",
+                  "external_comparison",
+                  "manual_only",
+                  "unsupported_formula"
+                ],
+                "type": "string"
+              },
+              "Money": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "RubricCoverageRevisionInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "canonical_requirement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Canonical Requirement Id"
+                  },
+                  "disposition": {
+                    "enum": [
+                      "mapped",
+                      "duplicate",
+                      "excluded",
+                      "pending"
+                    ],
+                    "title": "Disposition",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "rubric_item_keys": {
+                    "items": {
+                      "$ref": "#/$defs/NonBlank"
+                    },
+                    "title": "Rubric Item Keys",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "disposition"
+                ],
+                "title": "RubricCoverageRevisionInput",
+                "type": "object"
+              },
+              "RubricItemRevisionInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "ambiguity_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "assessment_mode": {
+                    "$ref": "#/$defs/AssessmentMode"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "order": {
+                    "minimum": 1,
+                    "title": "Order",
+                    "type": "integer"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "rule_text": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "section_key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "source_item_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Source Item Id"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "weight": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Weight"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "section_key",
+                  "key",
+                  "title",
+                  "rule_text",
+                  "order",
+                  "assessment_mode"
+                ],
+                "title": "RubricItemRevisionInput",
+                "type": "object"
+              },
+              "RubricSectionRevisionInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "aggregation": {
+                    "$ref": "#/$defs/AggregationRule"
+                  },
+                  "aggregation_rule_text": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "ambiguity_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "cap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "included_in_overall_total": {
+                    "title": "Included In Overall Total",
+                    "type": "boolean"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "order": {
+                    "minimum": 1,
+                    "title": "Order",
+                    "type": "integer"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "source_section_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Source Section Id"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "weight": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Weight"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "key",
+                  "title",
+                  "order",
+                  "aggregation",
+                  "included_in_overall_total"
+                ],
+                "title": "RubricSectionRevisionInput",
+                "type": "object"
+              },
+              "ScoreRange": {
+                "additionalProperties": false,
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/Money"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "ScoreRange",
+                "type": "object"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "Weight": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "maximum": 1.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "items": {
+                  "$ref": "#/$defs/RubricCoverageRevisionInput"
+                },
+                "minItems": 1,
+                "title": "Coverage",
+                "type": "array"
+              },
+              "expected_input_hash": {
+                "$ref": "#/$defs/Sha256"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/RubricItemRevisionInput"
+                },
+                "minItems": 1,
+                "title": "Items",
+                "type": "array"
+              },
+              "overall_aggregation": {
+                "$ref": "#/$defs/AggregationRule"
+              },
+              "overall_cap": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Money"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "overall_rule_text": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "overall_score_range": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ScoreRange"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/RubricSectionRevisionInput"
+                },
+                "minItems": 1,
+                "title": "Sections",
+                "type": "array"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_input_hash",
+              "sections",
+              "items",
+              "coverage",
+              "overall_aggregation",
+              "reason"
+            ],
+            "title": "RubricReviseRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AggregationRule": {
+                "enum": [
+                  "sum",
+                  "weighted_sum",
+                  "capped_sum",
+                  "formula",
+                  "non_additive"
+                ],
+                "type": "string"
+              },
+              "AssessmentMode": {
+                "enum": [
+                  "model_assessable",
+                  "ambiguous",
+                  "price_comparison",
+                  "external_comparison",
+                  "manual_only",
+                  "unsupported_formula"
+                ],
+                "type": "string"
+              },
+              "Location": {
+                "additionalProperties": false,
+                "description": "Where a quote sits in a Word document: a paragraph or a table cell.",
+                "properties": {
+                  "block_id": {
+                    "maxLength": 200,
+                    "minLength": 2,
+                    "title": "Block Id",
+                    "type": "string"
+                  },
+                  "column": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Column"
+                  },
+                  "kind": {
+                    "enum": [
+                      "paragraph",
+                      "cell"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "paragraph": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Paragraph"
+                  },
+                  "row": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Row"
+                  },
+                  "section_path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Section Path",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Table"
+                  }
+                },
+                "required": [
+                  "block_id",
+                  "kind",
+                  "label"
+                ],
+                "title": "Location",
+                "type": "object"
+              },
+              "Money": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "RubricCompletenessView": {
+                "additionalProperties": false,
+                "properties": {
+                  "complete": {
+                    "title": "Complete",
+                    "type": "boolean"
+                  },
+                  "covered_requirement_count": {
+                    "minimum": 0,
+                    "title": "Covered Requirement Count",
+                    "type": "integer"
+                  },
+                  "normalization_errors": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Normalization Errors",
+                    "type": "array"
+                  },
+                  "overall_aggregation_rule_confirmed": {
+                    "title": "Overall Aggregation Rule Confirmed",
+                    "type": "boolean"
+                  },
+                  "pending_requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Pending Requirement Ids",
+                    "type": "array"
+                  },
+                  "scoring_requirement_count": {
+                    "minimum": 0,
+                    "title": "Scoring Requirement Count",
+                    "type": "integer"
+                  },
+                  "section_aggregation_rules_confirmed": {
+                    "title": "Section Aggregation Rules Confirmed",
+                    "type": "boolean"
+                  },
+                  "unconfirmed_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Unconfirmed Item Ids",
+                    "type": "array"
+                  },
+                  "unconfirmed_section_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Unconfirmed Section Ids",
+                    "type": "array"
+                  },
+                  "unresolved_duplicate_fingerprint_groups": {
+                    "items": {
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "title": "Unresolved Duplicate Fingerprint Groups",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "scoring_requirement_count",
+                  "covered_requirement_count",
+                  "pending_requirement_ids",
+                  "unresolved_duplicate_fingerprint_groups",
+                  "unconfirmed_section_ids",
+                  "unconfirmed_item_ids",
+                  "normalization_errors",
+                  "section_aggregation_rules_confirmed",
+                  "overall_aggregation_rule_confirmed",
+                  "complete"
+                ],
+                "title": "RubricCompletenessView",
+                "type": "object"
+              },
+              "RubricItemState": {
+                "enum": [
+                  "candidate",
+                  "confirmed",
+                  "rejected"
+                ],
+                "type": "string"
+              },
+              "RubricItemView": {
+                "additionalProperties": false,
+                "properties": {
+                  "ambiguity_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "assessment_mode": {
+                    "$ref": "#/$defs/AssessmentMode"
+                  },
+                  "category": {
+                    "const": "scoring",
+                    "default": "scoring",
+                    "title": "Category",
+                    "type": "string"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed At"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed By"
+                  },
+                  "fingerprint": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "order": {
+                    "minimum": 1,
+                    "title": "Order",
+                    "type": "integer"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "review_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "rule_text": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "section_id": {
+                    "format": "uuid",
+                    "title": "Section Id",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/RubricItemState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "weight": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Weight"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "rubric_id",
+                  "section_id",
+                  "requirement_id",
+                  "key",
+                  "title",
+                  "rule_text",
+                  "order",
+                  "assessment_mode",
+                  "source",
+                  "fingerprint",
+                  "state",
+                  "revision"
+                ],
+                "title": "RubricItemView",
+                "type": "object"
+              },
+              "RubricRequirementCoverageView": {
+                "additionalProperties": false,
+                "properties": {
+                  "canonical_requirement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Canonical Requirement Id"
+                  },
+                  "decided_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Decided At"
+                  },
+                  "decided_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Decided By"
+                  },
+                  "disposition": {
+                    "enum": [
+                      "mapped",
+                      "duplicate",
+                      "excluded",
+                      "pending"
+                    ],
+                    "title": "Disposition",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "rubric_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Rubric Item Ids",
+                    "type": "array"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "rubric_id",
+                  "requirement_id",
+                  "source",
+                  "disposition",
+                  "rubric_item_ids",
+                  "revision"
+                ],
+                "title": "RubricRequirementCoverageView",
+                "type": "object"
+              },
+              "RubricSectionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "aggregation": {
+                    "$ref": "#/$defs/AggregationRule"
+                  },
+                  "aggregation_assessable": {
+                    "title": "Aggregation Assessable",
+                    "type": "boolean"
+                  },
+                  "aggregation_rule_text": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "ambiguity_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "cap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed At"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed By"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "included_in_overall_total": {
+                    "title": "Included In Overall Total",
+                    "type": "boolean"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "order": {
+                    "minimum": 1,
+                    "title": "Order",
+                    "type": "integer"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "review_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/RubricItemState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "weight": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Weight"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "rubric_id",
+                  "key",
+                  "title",
+                  "order",
+                  "aggregation",
+                  "aggregation_assessable",
+                  "included_in_overall_total",
+                  "source",
+                  "state",
+                  "revision"
+                ],
+                "title": "RubricSectionView",
+                "type": "object"
+              },
+              "RubricSetState": {
+                "enum": [
+                  "candidate",
+                  "confirmed",
+                  "superseded"
+                ],
+                "type": "string"
+              },
+              "RubricSetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "completeness": {
+                    "$ref": "#/$defs/RubricCompletenessView"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed At"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed By"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "normalization_rule_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "overall_aggregation": {
+                    "$ref": "#/$defs/AggregationRule"
+                  },
+                  "overall_aggregation_assessable": {
+                    "title": "Overall Aggregation Assessable",
+                    "type": "boolean"
+                  },
+                  "overall_cap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "overall_rule_text": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "overall_score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "prior_rubric_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Prior Rubric Id"
+                  },
+                  "prompt_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "schema_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/RubricSetState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "title": "Version",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "extraction_job_id",
+                  "document_id",
+                  "version",
+                  "input_hash",
+                  "normalization_rule_version",
+                  "prompt_version",
+                  "schema_version",
+                  "state",
+                  "revision",
+                  "overall_aggregation",
+                  "overall_aggregation_assessable",
+                  "completeness",
+                  "created_at"
+                ],
+                "title": "RubricSetView",
+                "type": "object"
+              },
+              "ScoreRange": {
+                "additionalProperties": false,
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/Money"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "ScoreRange",
+                "type": "object"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "Source": {
+                "additionalProperties": false,
+                "properties": {
+                  "chunk_id": {
+                    "format": "uuid",
+                    "title": "Chunk Id",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "location": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Location"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "quote": {
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "chunk_id",
+                  "quote"
+                ],
+                "title": "Source",
+                "type": "object"
+              },
+              "Weight": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "maximum": 1.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "items": {
+                  "$ref": "#/$defs/RubricRequirementCoverageView"
+                },
+                "title": "Coverage",
+                "type": "array"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/RubricItemView"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "rubric": {
+                "$ref": "#/$defs/RubricSetView"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/RubricSectionView"
+                },
+                "title": "Sections",
+                "type": "array"
+              }
+            },
+            "required": [
+              "rubric",
+              "sections",
+              "items",
+              "coverage"
+            ],
+            "title": "RubricReportData",
+            "type": "object"
+          }
+        },
+        "score rubric section decide": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "section",
+              "options": [
+                "--section"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "RubricDecision": {
+                "enum": [
+                  "confirm",
+                  "reject",
+                  "reopen"
+                ],
+                "type": "string"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/$defs/RubricDecision"
+              },
+              "expected_input_hash": {
+                "$ref": "#/$defs/Sha256"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_input_hash",
+              "action",
+              "reason"
+            ],
+            "title": "RubricSectionDecisionRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "RubricDecision": {
+                "enum": [
+                  "confirm",
+                  "reject",
+                  "reopen"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/$defs/RubricDecision"
+              },
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "decided_at": {
+                "format": "date-time",
+                "title": "Decided At",
+                "type": "string"
+              },
+              "decided_by": {
+                "format": "uuid",
+                "title": "Decided By",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "item_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Item Id"
+              },
+              "kind": {
+                "const": "decision",
+                "default": "decision",
+                "title": "Kind",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/$defs/NonBlank"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "rubric_id": {
+                "format": "uuid",
+                "title": "Rubric Id",
+                "type": "string"
+              },
+              "section_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Section Id"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "rubric_id",
+              "revision",
+              "action",
+              "reason",
+              "decided_by",
+              "decided_at"
+            ],
+            "title": "RubricDecisionView",
+            "type": "object"
+          }
+        },
+        "score rubric show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "AggregationRule": {
+                "enum": [
+                  "sum",
+                  "weighted_sum",
+                  "capped_sum",
+                  "formula",
+                  "non_additive"
+                ],
+                "type": "string"
+              },
+              "AssessmentMode": {
+                "enum": [
+                  "model_assessable",
+                  "ambiguous",
+                  "price_comparison",
+                  "external_comparison",
+                  "manual_only",
+                  "unsupported_formula"
+                ],
+                "type": "string"
+              },
+              "Location": {
+                "additionalProperties": false,
+                "description": "Where a quote sits in a Word document: a paragraph or a table cell.",
+                "properties": {
+                  "block_id": {
+                    "maxLength": 200,
+                    "minLength": 2,
+                    "title": "Block Id",
+                    "type": "string"
+                  },
+                  "column": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Column"
+                  },
+                  "kind": {
+                    "enum": [
+                      "paragraph",
+                      "cell"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "paragraph": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Paragraph"
+                  },
+                  "row": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Row"
+                  },
+                  "section_path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Section Path",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Table"
+                  }
+                },
+                "required": [
+                  "block_id",
+                  "kind",
+                  "label"
+                ],
+                "title": "Location",
+                "type": "object"
+              },
+              "Money": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "RubricCompletenessView": {
+                "additionalProperties": false,
+                "properties": {
+                  "complete": {
+                    "title": "Complete",
+                    "type": "boolean"
+                  },
+                  "covered_requirement_count": {
+                    "minimum": 0,
+                    "title": "Covered Requirement Count",
+                    "type": "integer"
+                  },
+                  "normalization_errors": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Normalization Errors",
+                    "type": "array"
+                  },
+                  "overall_aggregation_rule_confirmed": {
+                    "title": "Overall Aggregation Rule Confirmed",
+                    "type": "boolean"
+                  },
+                  "pending_requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Pending Requirement Ids",
+                    "type": "array"
+                  },
+                  "scoring_requirement_count": {
+                    "minimum": 0,
+                    "title": "Scoring Requirement Count",
+                    "type": "integer"
+                  },
+                  "section_aggregation_rules_confirmed": {
+                    "title": "Section Aggregation Rules Confirmed",
+                    "type": "boolean"
+                  },
+                  "unconfirmed_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Unconfirmed Item Ids",
+                    "type": "array"
+                  },
+                  "unconfirmed_section_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Unconfirmed Section Ids",
+                    "type": "array"
+                  },
+                  "unresolved_duplicate_fingerprint_groups": {
+                    "items": {
+                      "items": {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "title": "Unresolved Duplicate Fingerprint Groups",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "scoring_requirement_count",
+                  "covered_requirement_count",
+                  "pending_requirement_ids",
+                  "unresolved_duplicate_fingerprint_groups",
+                  "unconfirmed_section_ids",
+                  "unconfirmed_item_ids",
+                  "normalization_errors",
+                  "section_aggregation_rules_confirmed",
+                  "overall_aggregation_rule_confirmed",
+                  "complete"
+                ],
+                "title": "RubricCompletenessView",
+                "type": "object"
+              },
+              "RubricItemState": {
+                "enum": [
+                  "candidate",
+                  "confirmed",
+                  "rejected"
+                ],
+                "type": "string"
+              },
+              "RubricItemView": {
+                "additionalProperties": false,
+                "properties": {
+                  "ambiguity_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "assessment_mode": {
+                    "$ref": "#/$defs/AssessmentMode"
+                  },
+                  "category": {
+                    "const": "scoring",
+                    "default": "scoring",
+                    "title": "Category",
+                    "type": "string"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed At"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed By"
+                  },
+                  "fingerprint": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "order": {
+                    "minimum": 1,
+                    "title": "Order",
+                    "type": "integer"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "review_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "rule_text": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "section_id": {
+                    "format": "uuid",
+                    "title": "Section Id",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/RubricItemState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "weight": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Weight"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "rubric_id",
+                  "section_id",
+                  "requirement_id",
+                  "key",
+                  "title",
+                  "rule_text",
+                  "order",
+                  "assessment_mode",
+                  "source",
+                  "fingerprint",
+                  "state",
+                  "revision"
+                ],
+                "title": "RubricItemView",
+                "type": "object"
+              },
+              "RubricRequirementCoverageView": {
+                "additionalProperties": false,
+                "properties": {
+                  "canonical_requirement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Canonical Requirement Id"
+                  },
+                  "decided_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Decided At"
+                  },
+                  "decided_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Decided By"
+                  },
+                  "disposition": {
+                    "enum": [
+                      "mapped",
+                      "duplicate",
+                      "excluded",
+                      "pending"
+                    ],
+                    "title": "Disposition",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "rubric_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Rubric Item Ids",
+                    "type": "array"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "rubric_id",
+                  "requirement_id",
+                  "source",
+                  "disposition",
+                  "rubric_item_ids",
+                  "revision"
+                ],
+                "title": "RubricRequirementCoverageView",
+                "type": "object"
+              },
+              "RubricSectionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "aggregation": {
+                    "$ref": "#/$defs/AggregationRule"
+                  },
+                  "aggregation_assessable": {
+                    "title": "Aggregation Assessable",
+                    "type": "boolean"
+                  },
+                  "aggregation_rule_text": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "ambiguity_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "cap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed At"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed By"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "included_in_overall_total": {
+                    "title": "Included In Overall Total",
+                    "type": "boolean"
+                  },
+                  "key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "order": {
+                    "minimum": 1,
+                    "title": "Order",
+                    "type": "integer"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "review_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/RubricItemState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "weight": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Weight"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "rubric_id",
+                  "key",
+                  "title",
+                  "order",
+                  "aggregation",
+                  "aggregation_assessable",
+                  "included_in_overall_total",
+                  "source",
+                  "state",
+                  "revision"
+                ],
+                "title": "RubricSectionView",
+                "type": "object"
+              },
+              "RubricSetState": {
+                "enum": [
+                  "candidate",
+                  "confirmed",
+                  "superseded"
+                ],
+                "type": "string"
+              },
+              "RubricSetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "completeness": {
+                    "$ref": "#/$defs/RubricCompletenessView"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed At"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed By"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "normalization_rule_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "overall_aggregation": {
+                    "$ref": "#/$defs/AggregationRule"
+                  },
+                  "overall_aggregation_assessable": {
+                    "title": "Overall Aggregation Assessable",
+                    "type": "boolean"
+                  },
+                  "overall_cap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "overall_rule_text": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "overall_score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "prior_rubric_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Prior Rubric Id"
+                  },
+                  "prompt_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "schema_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/RubricSetState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "version": {
+                    "minimum": 1,
+                    "title": "Version",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "extraction_job_id",
+                  "document_id",
+                  "version",
+                  "input_hash",
+                  "normalization_rule_version",
+                  "prompt_version",
+                  "schema_version",
+                  "state",
+                  "revision",
+                  "overall_aggregation",
+                  "overall_aggregation_assessable",
+                  "completeness",
+                  "created_at"
+                ],
+                "title": "RubricSetView",
+                "type": "object"
+              },
+              "ScoreRange": {
+                "additionalProperties": false,
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/Money"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "ScoreRange",
+                "type": "object"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "Source": {
+                "additionalProperties": false,
+                "properties": {
+                  "chunk_id": {
+                    "format": "uuid",
+                    "title": "Chunk Id",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "location": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Location"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "quote": {
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "chunk_id",
+                  "quote"
+                ],
+                "title": "Source",
+                "type": "object"
+              },
+              "Weight": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "maximum": 1.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "coverage": {
+                "items": {
+                  "$ref": "#/$defs/RubricRequirementCoverageView"
+                },
+                "title": "Coverage",
+                "type": "array"
+              },
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/RubricItemView"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "rubric": {
+                "$ref": "#/$defs/RubricSetView"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/RubricSectionView"
+                },
+                "title": "Sections",
+                "type": "array"
+              }
+            },
+            "required": [
+              "rubric",
+              "sections",
+              "items",
+              "coverage"
+            ],
+            "title": "RubricReportData",
+            "type": "object"
+          }
+        },
         "screenshot add": {
           "cli_parameters": [
             {

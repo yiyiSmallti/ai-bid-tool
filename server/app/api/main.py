@@ -26,6 +26,7 @@ from app.api.providers import create_router as create_provider_router
 from app.api.resources import create_router as create_resource_router
 from app.api.response_cards import create_router as create_response_router
 from app.api.sandbox import create_router as create_sandbox_router
+from app.api.score import create_router as create_score_router
 from app.api.tenders import create_router as create_tender_router
 from app.core.config import Settings
 from app.core.db import Database
@@ -264,5 +265,6 @@ def create_app(
     app.include_router(create_resource_router(context, settings, storage, crypto))
     app.include_router(create_confidential_router(context, settings))
     app.include_router(create_check_router(context, db, storage, queue, settings))
+    app.include_router(create_score_router(context, db, storage, queue, settings))
     app.include_router(create_job_router(context, storage))
     return app

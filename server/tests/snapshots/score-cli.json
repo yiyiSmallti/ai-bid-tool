@@ -1,0 +1,1302 @@
+{
+  "local": {
+    "score rubric classify": {
+      "command": "score rubric classify",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": null,
+        "kind": "classification",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "This section evaluates technical content.",
+        "review_domain": "technical",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": "00000000-0000-0000-0000-000000000006",
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric classify item": {
+      "command": "score rubric classify",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": "00000000-0000-0000-0000-000000000007",
+        "kind": "classification",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "This item evaluates technical content.",
+        "review_domain": "technical",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": null,
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric coverage decide": {
+      "command": "score rubric coverage decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "action": "mapped",
+        "actor_kind": "session",
+        "canonical_requirement_id": null,
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "kind": "coverage_decision",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "The requirement maps to this score item.",
+        "requirement_id": "00000000-0000-0000-0000-000000000008",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "rubric_item_ids": [
+          "00000000-0000-0000-0000-000000000007"
+        ],
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric decide": {
+      "command": "score rubric decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "completeness": {
+          "complete": true,
+          "covered_requirement_count": 1,
+          "normalization_errors": [],
+          "overall_aggregation_rule_confirmed": true,
+          "pending_requirement_ids": [],
+          "scoring_requirement_count": 1,
+          "section_aggregation_rules_confirmed": true,
+          "unconfirmed_item_ids": [],
+          "unconfirmed_section_ids": [],
+          "unresolved_duplicate_fingerprint_groups": []
+        },
+        "confirmed_at": "2026-10-04T00:00:00Z",
+        "confirmed_by": "00000000-0000-0000-0000-000000000009",
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000004",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+        "id": "00000000-0000-0000-0000-000000000005",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "normalization_rule_version": "rubric-normalization-v1",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "prompt_version": "rubric-prompt-v1",
+        "revision": 2,
+        "schema_version": "rubric-wire-v1",
+        "state": "confirmed",
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric generate": {
+      "command": "score rubric generate",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "configured_price",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0.04",
+        "estimated_cost": {
+          "llm_tokens": 800,
+          "ocr_pages": 0,
+          "usd": 0.02
+        },
+        "estimated_duration_ms": null,
+        "input": {
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "scoring_requirements",
+          "task_id": "00000000-0000-0000-0000-000000000002"
+        },
+        "max_charge": "1.25",
+        "model": "synthetic-model",
+        "model_revision": 1,
+        "normalization_rule_version": "rubric-normalization-v1",
+        "platform_model_id": "synthetic-score",
+        "prompt_version": "rubric-prompt-v1",
+        "provider_config_id": null,
+        "provider_source": "platform",
+        "reasoning": "high",
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "schema_version": "rubric-wire-v1",
+        "scoring_requirement_ids": [
+          "00000000-0000-0000-0000-000000000008"
+        ],
+        "selected_item_ids": [
+          "00000000-0000-0000-0000-000000000008"
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric history": {
+      "command": "score rubric history",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "total": 2
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "actor_kind": "session",
+          "decided_at": "2026-10-04T00:00:00Z",
+          "decided_by": "00000000-0000-0000-0000-000000000009",
+          "id": "00000000-0000-0000-0000-000000000009",
+          "item_id": null,
+          "kind": "classification",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "This section evaluates technical content.",
+          "review_domain": "technical",
+          "revision": 2,
+          "rubric_id": "00000000-0000-0000-0000-000000000005",
+          "section_id": "00000000-0000-0000-0000-000000000006",
+          "task_id": "00000000-0000-0000-0000-000000000002"
+        },
+        {
+          "actor_kind": "session",
+          "id": "00000000-0000-0000-0000-000000000009",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "kind": "revision",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "prior_rubric_id": "00000000-0000-0000-0000-000000000006",
+          "reason": "Corrected the item title and bounds.",
+          "revised_at": "2026-10-04T00:00:00Z",
+          "revised_by": "00000000-0000-0000-0000-000000000009",
+          "rubric_id": "00000000-0000-0000-0000-000000000005",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 2
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric item decide": {
+      "command": "score rubric item decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "action": "confirm",
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": "00000000-0000-0000-0000-000000000007",
+        "kind": "decision",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "The item bounds match the tender text.",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": null,
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric list": {
+      "command": "score rubric list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "normalization_errors": [],
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirement_ids": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "scoring_requirement_count": 1,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_item_ids": [
+              "00000000-0000-0000-0000-000000000007"
+            ],
+            "unconfirmed_section_ids": [
+              "00000000-0000-0000-0000-000000000006"
+            ],
+            "unresolved_duplicate_fingerprint_groups": []
+          },
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "id": "00000000-0000-0000-0000-000000000005",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "normalization_rule_version": "rubric-normalization-v1",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "rubric-prompt-v1",
+          "revision": 1,
+          "schema_version": "rubric-wire-v1",
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 1
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric revise": {
+      "command": "score rubric revise",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "coverage": [
+          {
+            "canonical_requirement_id": null,
+            "decided_at": null,
+            "decided_by": null,
+            "disposition": "pending",
+            "id": "00000000-0000-0000-0000-000000000008",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "reason": null,
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rubric_item_ids": [],
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          }
+        ],
+        "items": [
+          {
+            "ambiguity_reason": null,
+            "assessment_mode": "model_assessable",
+            "category": "scoring",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "00000000-0000-0000-0000-000000000007",
+            "key": "technical-response",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rule_text": "Award 0 to 10 points.",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_id": "00000000-0000-0000-0000-000000000006",
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response quality",
+            "weight": null
+          }
+        ],
+        "rubric": {
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "normalization_errors": [],
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirement_ids": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "scoring_requirement_count": 1,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_item_ids": [
+              "00000000-0000-0000-0000-000000000007"
+            ],
+            "unconfirmed_section_ids": [
+              "00000000-0000-0000-0000-000000000006"
+            ],
+            "unresolved_duplicate_fingerprint_groups": []
+          },
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "id": "00000000-0000-0000-0000-000000000005",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "normalization_rule_version": "rubric-normalization-v1",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "rubric-prompt-v1",
+          "revision": 1,
+          "schema_version": "rubric-wire-v1",
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 1
+        },
+        "sections": [
+          {
+            "aggregation": "sum",
+            "aggregation_assessable": true,
+            "aggregation_rule_text": null,
+            "ambiguity_reason": null,
+            "cap": null,
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "id": "00000000-0000-0000-0000-000000000006",
+            "included_in_overall_total": true,
+            "key": "technical",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response",
+            "weight": null
+          }
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric section decide": {
+      "command": "score rubric section decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "action": "confirm",
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": null,
+        "kind": "decision",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "The aggregation rule matches the tender text.",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": "00000000-0000-0000-0000-000000000006",
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric show": {
+      "command": "score rubric show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "coverage": [
+          {
+            "canonical_requirement_id": null,
+            "decided_at": null,
+            "decided_by": null,
+            "disposition": "pending",
+            "id": "00000000-0000-0000-0000-000000000008",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "reason": null,
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rubric_item_ids": [],
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          }
+        ],
+        "items": [
+          {
+            "ambiguity_reason": null,
+            "assessment_mode": "model_assessable",
+            "category": "scoring",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "00000000-0000-0000-0000-000000000007",
+            "key": "technical-response",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rule_text": "Award 0 to 10 points.",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_id": "00000000-0000-0000-0000-000000000006",
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response quality",
+            "weight": null
+          }
+        ],
+        "rubric": {
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "normalization_errors": [],
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirement_ids": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "scoring_requirement_count": 1,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_item_ids": [
+              "00000000-0000-0000-0000-000000000007"
+            ],
+            "unconfirmed_section_ids": [
+              "00000000-0000-0000-0000-000000000006"
+            ],
+            "unresolved_duplicate_fingerprint_groups": []
+          },
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "id": "00000000-0000-0000-0000-000000000005",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "normalization_rule_version": "rubric-normalization-v1",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "rubric-prompt-v1",
+          "revision": 1,
+          "schema_version": "rubric-wire-v1",
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 1
+        },
+        "sections": [
+          {
+            "aggregation": "sum",
+            "aggregation_assessable": true,
+            "aggregation_rule_text": null,
+            "ambiguity_reason": null,
+            "cap": null,
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "id": "00000000-0000-0000-0000-000000000006",
+            "included_in_overall_total": true,
+            "key": "technical",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response",
+            "weight": null
+          }
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    }
+  },
+  "remote": {
+    "score rubric classify": {
+      "command": "score rubric classify",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": null,
+        "kind": "classification",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "This section evaluates technical content.",
+        "review_domain": "technical",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": "00000000-0000-0000-0000-000000000006",
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric classify item": {
+      "command": "score rubric classify",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": "00000000-0000-0000-0000-000000000007",
+        "kind": "classification",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "This item evaluates technical content.",
+        "review_domain": "technical",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": null,
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric coverage decide": {
+      "command": "score rubric coverage decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "action": "mapped",
+        "actor_kind": "session",
+        "canonical_requirement_id": null,
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "kind": "coverage_decision",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "The requirement maps to this score item.",
+        "requirement_id": "00000000-0000-0000-0000-000000000008",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "rubric_item_ids": [
+          "00000000-0000-0000-0000-000000000007"
+        ],
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric decide": {
+      "command": "score rubric decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "completeness": {
+          "complete": true,
+          "covered_requirement_count": 1,
+          "normalization_errors": [],
+          "overall_aggregation_rule_confirmed": true,
+          "pending_requirement_ids": [],
+          "scoring_requirement_count": 1,
+          "section_aggregation_rules_confirmed": true,
+          "unconfirmed_item_ids": [],
+          "unconfirmed_section_ids": [],
+          "unresolved_duplicate_fingerprint_groups": []
+        },
+        "confirmed_at": "2026-10-04T00:00:00Z",
+        "confirmed_by": "00000000-0000-0000-0000-000000000009",
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000004",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+        "id": "00000000-0000-0000-0000-000000000005",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "normalization_rule_version": "rubric-normalization-v1",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "prompt_version": "rubric-prompt-v1",
+        "revision": 2,
+        "schema_version": "rubric-wire-v1",
+        "state": "confirmed",
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric generate": {
+      "command": "score rubric generate",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "configured_price",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0.04",
+        "estimated_cost": {
+          "llm_tokens": 800,
+          "ocr_pages": 0,
+          "usd": 0.02
+        },
+        "estimated_duration_ms": null,
+        "input": {
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "scoring_requirements",
+          "task_id": "00000000-0000-0000-0000-000000000002"
+        },
+        "max_charge": "1.25",
+        "model": "synthetic-model",
+        "model_revision": 1,
+        "normalization_rule_version": "rubric-normalization-v1",
+        "platform_model_id": "synthetic-score",
+        "prompt_version": "rubric-prompt-v1",
+        "provider_config_id": null,
+        "provider_source": "platform",
+        "reasoning": "high",
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "schema_version": "rubric-wire-v1",
+        "scoring_requirement_ids": [
+          "00000000-0000-0000-0000-000000000008"
+        ],
+        "selected_item_ids": [
+          "00000000-0000-0000-0000-000000000008"
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric history": {
+      "command": "score rubric history",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "total": 2
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "actor_kind": "session",
+          "decided_at": "2026-10-04T00:00:00Z",
+          "decided_by": "00000000-0000-0000-0000-000000000009",
+          "id": "00000000-0000-0000-0000-000000000009",
+          "item_id": null,
+          "kind": "classification",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "This section evaluates technical content.",
+          "review_domain": "technical",
+          "revision": 2,
+          "rubric_id": "00000000-0000-0000-0000-000000000005",
+          "section_id": "00000000-0000-0000-0000-000000000006",
+          "task_id": "00000000-0000-0000-0000-000000000002"
+        },
+        {
+          "actor_kind": "session",
+          "id": "00000000-0000-0000-0000-000000000009",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "kind": "revision",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "prior_rubric_id": "00000000-0000-0000-0000-000000000006",
+          "reason": "Corrected the item title and bounds.",
+          "revised_at": "2026-10-04T00:00:00Z",
+          "revised_by": "00000000-0000-0000-0000-000000000009",
+          "rubric_id": "00000000-0000-0000-0000-000000000005",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 2
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric item decide": {
+      "command": "score rubric item decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "action": "confirm",
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": "00000000-0000-0000-0000-000000000007",
+        "kind": "decision",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "The item bounds match the tender text.",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": null,
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric list": {
+      "command": "score rubric list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "normalization_errors": [],
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirement_ids": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "scoring_requirement_count": 1,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_item_ids": [
+              "00000000-0000-0000-0000-000000000007"
+            ],
+            "unconfirmed_section_ids": [
+              "00000000-0000-0000-0000-000000000006"
+            ],
+            "unresolved_duplicate_fingerprint_groups": []
+          },
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "id": "00000000-0000-0000-0000-000000000005",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "normalization_rule_version": "rubric-normalization-v1",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "rubric-prompt-v1",
+          "revision": 1,
+          "schema_version": "rubric-wire-v1",
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 1
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric revise": {
+      "command": "score rubric revise",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "coverage": [
+          {
+            "canonical_requirement_id": null,
+            "decided_at": null,
+            "decided_by": null,
+            "disposition": "pending",
+            "id": "00000000-0000-0000-0000-000000000008",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "reason": null,
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rubric_item_ids": [],
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          }
+        ],
+        "items": [
+          {
+            "ambiguity_reason": null,
+            "assessment_mode": "model_assessable",
+            "category": "scoring",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "00000000-0000-0000-0000-000000000007",
+            "key": "technical-response",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rule_text": "Award 0 to 10 points.",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_id": "00000000-0000-0000-0000-000000000006",
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response quality",
+            "weight": null
+          }
+        ],
+        "rubric": {
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "normalization_errors": [],
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirement_ids": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "scoring_requirement_count": 1,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_item_ids": [
+              "00000000-0000-0000-0000-000000000007"
+            ],
+            "unconfirmed_section_ids": [
+              "00000000-0000-0000-0000-000000000006"
+            ],
+            "unresolved_duplicate_fingerprint_groups": []
+          },
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "id": "00000000-0000-0000-0000-000000000005",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "normalization_rule_version": "rubric-normalization-v1",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "rubric-prompt-v1",
+          "revision": 1,
+          "schema_version": "rubric-wire-v1",
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 1
+        },
+        "sections": [
+          {
+            "aggregation": "sum",
+            "aggregation_assessable": true,
+            "aggregation_rule_text": null,
+            "ambiguity_reason": null,
+            "cap": null,
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "id": "00000000-0000-0000-0000-000000000006",
+            "included_in_overall_total": true,
+            "key": "technical",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response",
+            "weight": null
+          }
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric section decide": {
+      "command": "score rubric section decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "action": "confirm",
+        "actor_kind": "session",
+        "decided_at": "2026-10-04T00:00:00Z",
+        "decided_by": "00000000-0000-0000-0000-000000000009",
+        "id": "00000000-0000-0000-0000-000000000009",
+        "item_id": null,
+        "kind": "decision",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason": "The aggregation rule matches the tender text.",
+        "revision": 2,
+        "rubric_id": "00000000-0000-0000-0000-000000000005",
+        "section_id": "00000000-0000-0000-0000-000000000006",
+        "task_id": "00000000-0000-0000-0000-000000000002"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score rubric show": {
+      "command": "score rubric show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "coverage": [
+          {
+            "canonical_requirement_id": null,
+            "decided_at": null,
+            "decided_by": null,
+            "disposition": "pending",
+            "id": "00000000-0000-0000-0000-000000000008",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "reason": null,
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rubric_item_ids": [],
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          }
+        ],
+        "items": [
+          {
+            "ambiguity_reason": null,
+            "assessment_mode": "model_assessable",
+            "category": "scoring",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "id": "00000000-0000-0000-0000-000000000007",
+            "key": "technical-response",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "rule_text": "Award 0 to 10 points.",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_id": "00000000-0000-0000-0000-000000000006",
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response quality",
+            "weight": null
+          }
+        ],
+        "rubric": {
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "normalization_errors": [],
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirement_ids": [
+              "00000000-0000-0000-0000-000000000008"
+            ],
+            "scoring_requirement_count": 1,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_item_ids": [
+              "00000000-0000-0000-0000-000000000007"
+            ],
+            "unconfirmed_section_ids": [
+              "00000000-0000-0000-0000-000000000006"
+            ],
+            "unresolved_duplicate_fingerprint_groups": []
+          },
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000004",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000003",
+          "id": "00000000-0000-0000-0000-000000000005",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "normalization_rule_version": "rubric-normalization-v1",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "rubric-prompt-v1",
+          "revision": 1,
+          "schema_version": "rubric-wire-v1",
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "version": 1
+        },
+        "sections": [
+          {
+            "aggregation": "sum",
+            "aggregation_assessable": true,
+            "aggregation_rule_text": null,
+            "ambiguity_reason": null,
+            "cap": null,
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "id": "00000000-0000-0000-0000-000000000006",
+            "included_in_overall_total": true,
+            "key": "technical",
+            "order": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "review_domain": null,
+            "revision": 1,
+            "rubric_id": "00000000-0000-0000-0000-000000000005",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "source": {
+              "chunk_id": "00000000-0000-0000-0000-000000000004",
+              "document_id": "00000000-0000-0000-0000-000000000004",
+              "location": null,
+              "page": 7,
+              "quote": "Technical response quality: 0 to 10 points."
+            },
+            "state": "candidate",
+            "task_id": "00000000-0000-0000-0000-000000000002",
+            "title": "Technical response",
+            "weight": null
+          }
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    }
+  }
+}

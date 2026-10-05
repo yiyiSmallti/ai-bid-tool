@@ -72,6 +72,22 @@ from app.schemas.response_card_contracts import (
     TaskRedactionSet,
 )
 from app.schemas.sandbox_contracts import PrototypeSpec, VendorSpec
+from app.schemas.score_contracts import (
+    RubricClassificationView,
+    RubricClassifyRequest,
+    RubricCoverageDecisionRequest,
+    RubricCoverageDecisionView,
+    RubricDecisionView,
+    RubricGenerateRequest,
+    RubricGenerateResult,
+    RubricItemDecisionRequest,
+    RubricPreview,
+    RubricReportData,
+    RubricReviseRequest,
+    RubricSectionDecisionRequest,
+    RubricSetDecisionRequest,
+    RubricSetView,
+)
 from app.schemas.screenshot_contracts import (
     PrototypeDecisionBatch,
     PrototypeDecisionPreviewInput,
@@ -120,6 +136,16 @@ COMMANDS = {
     "check show": None,
     "check decide": FindingDecisionRequest,
     "check history": None,
+    "score rubric generate": RubricGenerateRequest,
+    "score rubric list": None,
+    "score rubric show": None,
+    "score rubric revise": RubricReviseRequest,
+    "score rubric classify": RubricClassifyRequest,
+    "score rubric section decide": RubricSectionDecisionRequest,
+    "score rubric item decide": RubricItemDecisionRequest,
+    "score rubric coverage decide": RubricCoverageDecisionRequest,
+    "score rubric decide": RubricSetDecisionRequest,
+    "score rubric history": None,
     "evidence source add": EvidenceSourceCreate,
     "evidence source list": None,
     "evidence source download": None,
@@ -239,7 +265,21 @@ CHECK_OUTPUTS = {
     "check decide": TypeAdapter(FindingDecisionData),
     "check history": TypeAdapter(AssessmentListData),
 }
-OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS
+SCORE_OUTPUTS = {
+    "score rubric generate": TypeAdapter(
+        RubricPreview | AssessmentJobAccepted | RubricGenerateResult
+    ),
+    "score rubric list": TypeAdapter(AssessmentListData),
+    "score rubric show": TypeAdapter(RubricReportData),
+    "score rubric revise": TypeAdapter(RubricReportData),
+    "score rubric classify": TypeAdapter(RubricClassificationView),
+    "score rubric section decide": TypeAdapter(RubricDecisionView),
+    "score rubric item decide": TypeAdapter(RubricDecisionView),
+    "score rubric coverage decide": TypeAdapter(RubricCoverageDecisionView),
+    "score rubric decide": TypeAdapter(RubricSetView),
+    "score rubric history": TypeAdapter(AssessmentListData),
+}
+OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS
 
 
 def command_schema(app=None) -> dict:
