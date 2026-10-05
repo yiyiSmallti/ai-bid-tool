@@ -60,6 +60,7 @@ async def search(api, header, task, body):
 
 async def test_search_preview_worker_candidates_adopt_and_capture(tenants, tmp_path, monkeypatch):
     monkeypatch.setenv("BID_SEARCH_URL", SEARCH_URL)
+    monkeypatch.setenv("BID_SEARCH_PROVIDER", "searxng")
     sent = []
     async with vendor_client(tenants, tmp_path, monkeypatch) as (api, app, headers):
         header = headers[0]
@@ -211,6 +212,7 @@ async def test_search_unconfigured_blocks_admission(tenants, tmp_path, monkeypat
 async def test_live_search_returns_candidates(tenants, tmp_path, monkeypatch):
     """Development check against a real SearXNG; never runs in CI."""
     monkeypatch.setenv("BID_SEARCH_URL", os.environ["BID_SEARCH_LIVE_URL"])
+    monkeypatch.setenv("BID_SEARCH_PROVIDER", "searxng")
     vendor, model = os.environ["BID_SEARCH_LIVE_PRODUCT"].split("|", 1)
     async with vendor_client(tenants, tmp_path, monkeypatch) as (api, app, headers):
         header = headers[0]

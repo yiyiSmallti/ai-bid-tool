@@ -13,6 +13,8 @@ from app.core.config import Settings
 from app.core.totp import generate_secret
 from app.models.entities import Membership, Org, User
 from app.providers.llm import HTTPExtractor
+from app.services.platform_credentials import PlatformCredentialResolver as CredentialResolver
+from cryptography.fernet import Fernet
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
@@ -37,8 +39,12 @@ OPERATOR_PASSWORD = "synthetic-operator-password"
 OPERATOR_SECRET = generate_secret()
 
 
-def prepare_database(url: str) -> None:
-    """Create the application role if missing and migrate the database at `url` to head."""
+def prepare_database(url: str, *, configure_logins: bool = True) -> None:
+    """Create the application role if missing and migrate the database at `url` to head.
+
+    Role passwords are cluster-wide, so concurrent xdist workers must not set them; only the
+    locked `pytest_configure` path and single-process runs configure logins.
+    """
     if not (make_url(url).database or "").startswith("bid_test"):
         raise RuntimeError("Tests refuse to mutate a database without the bid_test prefix")
     engine = create_engine(url, hide_parameters=True)
@@ -57,6 +63,23 @@ def prepare_database(url: str) -> None:
     engine.dispose()
     os.environ["BID_MIGRATION_DATABASE_URL"] = url
     command.upgrade(Config("alembic.ini"), "head")
+    # CI uses password authentication instead of the local test socket's trust policy.
+    # These roles exist only after migration and use the isolated test runtime password.
+    if configure_logins and os.environ.get("BID_DATABASE_PASSWORD"):
+        from psycopg import sql
+        from sqlalchemy.exc import SQLAlchemyError
+
+        try:
+            with engine.begin() as connection:
+                for role in ("bid_platform_app", "bid_credential_reader"):
+                    statement = sql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                        sql.Identifier(role), sql.Literal(os.environ["BID_DATABASE_PASSWORD"])
+                    )
+                    connection.exec_driver_sql(statement.as_string())
+        except SQLAlchemyError as exc:
+            raise RuntimeError("Could not configure isolated credential test logins") from exc
+        finally:
+            engine.dispose()
 
 
 def pytest_configure(config):
@@ -94,9 +117,14 @@ def pytest_configure(config):
             connection.execute(text("SELECT pg_advisory_unlock(hashtext('bid_test_workers'))"))
     maintenance.dispose()
     os.environ["BID_TEST_ADMIN_URL"] = base.set(database=name).render_as_string(hide_password=False)
-    if os.environ.get("BID_DATABASE_URL"):
-        app = make_url(os.environ["BID_DATABASE_URL"]).set(database=name)
-        os.environ["BID_DATABASE_URL"] = app.render_as_string(hide_password=False)
+    for variable in (
+        "BID_DATABASE_URL",
+        "BID_PLATFORM_DATABASE_URL",
+        "BID_CREDENTIAL_DATABASE_URL",
+    ):
+        if os.environ.get(variable):
+            app = make_url(os.environ[variable]).set(database=name)
+            os.environ[variable] = app.render_as_string(hide_password=False)
 
 
 @pytest.fixture(autouse=True)
@@ -112,18 +140,31 @@ def admin_engine():
     if not url:
         # Failing instead of skipping keeps a run without the database from looking green.
         pytest.fail("BID_TEST_ADMIN_URL must point at an isolated PostgreSQL test runtime")
-    prepare_database(url)
+    # Under xdist, pytest_configure already prepared this worker's copy under a lock.
+    prepare_database(url, configure_logins=not os.environ.get("PYTEST_XDIST_WORKER"))
     engine = create_engine(url, hide_parameters=True)
     yield engine
     engine.dispose()
 
 
 @pytest.fixture
-def tenants(admin_engine):
+def tenants(admin_engine, monkeypatch):
+    # Dedicated logins use the same isolated test database, never the org connection.
+    runtime_url = make_url(os.environ["BID_DATABASE_URL"])
+    for variable, role in (
+        ("BID_PLATFORM_DATABASE_URL", "bid_platform_app"),
+        ("BID_CREDENTIAL_DATABASE_URL", "bid_credential_reader"),
+    ):
+        if not os.environ.get(variable):
+            monkeypatch.setenv(
+                variable, runtime_url.set(username=role).render_as_string(hide_password=False)
+            )
+    if not os.environ.get("BID_SECRETS_KEY"):
+        monkeypatch.setenv("BID_SECRETS_KEY", Fernet.generate_key().decode())
     with admin_engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE platform_cards, balance_entries, org_balances, platform_audit_logs, platform_models, evidence_sources, certificate_files, task_templates, template_revisions, templates, task_org_profiles, org_profile_revisions, org_profiles, task_certificates, certificate_revisions, certificates, task_features, feature_revisions, features, audit_logs, task_resources, product_revisions, products, jobs, usage_records, requirements, chunks, documents, tasks, api_tokens, memberships, orgs, users CASCADE"
+                "TRUNCATE platform_credentials, platform_cards, balance_entries, org_balances, platform_audit_logs, platform_models, evidence_sources, certificate_files, task_templates, template_revisions, templates, task_org_profiles, org_profile_revisions, org_profiles, task_certificates, certificate_revisions, certificates, task_features, feature_revisions, features, audit_logs, task_resources, product_revisions, products, jobs, usage_records, requirements, chunks, documents, tasks, api_tokens, memberships, orgs, users CASCADE"
             )
         )
     orgs, users = [], []
@@ -221,3 +262,95 @@ def operator(tenants, admin_engine):
             User(id=uuid4(), email=OPERATOR, password_hash=cheap_password_hash(OPERATOR_PASSWORD))
         )
     return OPERATOR
+
+
+async def seed_platform_credential(
+    settings,
+    *,
+    name="main",
+    provider="anthropic",
+    endpoint="https://api.anthropic.com",
+    key="synthetic-platform-key",
+    active=True,
+    purpose="catalog_llm",
+):
+    """Persist a synthetic credential through the restricted management connection."""
+    from datetime import UTC, datetime, timedelta
+
+    from app.schemas.platform_credentials import CredentialCreate, PlatformOperator
+    from app.services.platform_credentials import PlatformCredentialService
+    from pydantic import SecretStr
+
+    actor = PlatformOperator("fixture@example.test", datetime.now(UTC) + timedelta(minutes=5))
+    return (
+        await PlatformCredentialService(settings).create(
+            actor,
+            CredentialCreate(
+                name=name,
+                purpose=purpose,
+                provider=provider,
+                endpoint=endpoint,
+                api_key=SecretStr(key),
+                active=active,
+            ),
+        )
+    ).credential
+
+
+async def credential_app(settings, *, llm: HTTPExtractor, queue):
+    """Use stored platform credentials with an explicitly injected MockTransport adapter.
+
+    The adapter remains injectable for unknown-price, reasoning and stale-identity cases.
+    Its billing flags and request settings are untouched; only authentication moves to the
+    same encrypted store and per-call catalog resolver used by production API/worker calls.
+    """
+    from app.models.entities import PlatformModel
+    from app.schemas.platform_credentials import CatalogResolveTarget, CredentialSpec
+
+    key = llm.settings.llm_api_key
+    assert key is not None and isinstance(llm.transport, httpx.MockTransport)
+    provider = "anthropic" if llm.name == "anthropic" else "openai"
+    endpoint = CredentialSpec.safe_endpoint(
+        llm.settings.llm_base_url
+        or ("https://api.anthropic.com" if llm.name == "anthropic" else "https://api.openai.com/v1")
+    )
+    clean_settings = settings.model_copy(update={"llm_api_key": None})
+    llm.settings = llm.settings.model_copy(update={"llm_api_key": None, "llm_base_url": endpoint})
+    app = create_app(clean_settings, llm=llm, queue=queue)
+    credential_name = "fixture_" + uuid4().hex
+    await seed_platform_credential(
+        clean_settings,
+        name=credential_name,
+        provider=provider,
+        endpoint=endpoint,
+        key=key.get_secret_value(),
+    )
+    model_id = llm.platform_model_id or "fixture-" + uuid4().hex
+    revision = llm.model_revision or 1
+    async with app.state.db.transaction() as session:
+        session.add(
+            PlatformModel(
+                id=model_id,
+                capability="llm_extract",
+                provider=provider,
+                model=llm.model,
+                base_url=endpoint,
+                credential=credential_name,
+                revision=revision,
+                # These rows authorize credential resolution. Deliberate pricing faults stay
+                # on the injected adapter, rather than inventing nullable catalog prices.
+                vendor_input_usd_per_mtok=llm.settings.llm_input_usd_per_mtok or 0,
+                vendor_output_usd_per_mtok=llm.settings.llm_output_usd_per_mtok or 0,
+                sale_input_per_mtok=llm.sale[0] if llm.sale else 0,
+                sale_output_per_mtok=llm.sale[1] if llm.sale else 0,
+                enabled=True,
+                is_default=False,
+                reasoning=[],
+                updated_by="fixture@example.test",
+            )
+        )
+    llm.credential_resolver = CredentialResolver(clean_settings)
+    llm.credential_target = CatalogResolveTarget(
+        model_id=model_id, expected_model_revision=revision
+    )
+    return app

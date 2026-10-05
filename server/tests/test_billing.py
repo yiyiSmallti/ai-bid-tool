@@ -9,7 +9,7 @@ import pytest
 from app.api.main import create_app
 from app.core.config import Settings
 from app.models.entities import Membership, PlatformModel
-from conftest import PASSWORD, FakeQueue
+from conftest import PASSWORD, FakeQueue, seed_platform_credential
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from test_api import create_document, run_job
@@ -21,7 +21,6 @@ CODE = "ABCD-EFGH-JKMN-PQRS"
 
 @pytest.fixture
 async def billing_app(tenants, tmp_path, monkeypatch):
-    monkeypatch.setenv("BID_PLATFORM_CREDENTIAL_MAIN", "synthetic-platform-key")
     vendor = Vendor()
     app = create_app(
         Settings(data_dir=tmp_path), queue=FakeQueue(), llm_transport=vendor.transport()
@@ -31,6 +30,7 @@ async def billing_app(tenants, tmp_path, monkeypatch):
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
         api.app, api.vendor = app, vendor  # pyright: ignore[reportAttributeAccessIssue]
+        await seed_platform_credential(app.state.processor.settings)
         yield api
 
 

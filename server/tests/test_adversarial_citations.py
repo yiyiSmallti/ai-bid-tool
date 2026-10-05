@@ -13,12 +13,11 @@ import json
 from uuid import UUID
 
 import pytest
-from app.api.main import create_app
 from app.models.entities import Requirement
 from app.providers.llm import AnthropicExtractor
 from app.services.extraction import locate_quote
 from app.services.response_cards import citation_valid
-from conftest import FakeQueue
+from conftest import FakeQueue, credential_app
 from sqlalchemy import text
 from test_api import run_job
 from test_citation_repair import create_commitment_card
@@ -44,7 +43,7 @@ async def test_boundary_citation_extract_repair_confirm_and_draft(
     model_quotes = [part.replace("：", ":").replace(" ", "") for part in parts]
     vendor = Vendor(anthropic_reply([item("t1r1c1", quote) for quote in model_quotes]))
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -150,7 +149,7 @@ async def test_starred_membership_uses_the_located_span(tenants, tmp_path, missi
         replies.append(anthropic_reply([]))  # one unanswered gap, covered by the star rule
     vendor = Vendor(*replies)
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):

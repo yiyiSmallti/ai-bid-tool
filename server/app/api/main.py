@@ -29,6 +29,7 @@ from app.api.sandbox import create_router as create_sandbox_router
 from app.api.score import create_router as create_score_router
 from app.api.tenders import create_router as create_tender_router
 from app.core.config import Settings
+from app.core.credential_db import close_connections, get_connections
 from app.core.db import Database
 from app.core.errors import ServiceError
 from app.core.password_attempts import PasswordAttempts
@@ -75,6 +76,7 @@ def create_app(
     settings: Settings | None = None, *, llm=None, ocr=None, queue=None, llm_transport=None
 ) -> FastAPI:
     settings = settings or Settings.load()
+    settings.assert_vendor_credentials_absent()
     db, crypto = Database(settings), TokenSigner.for_tokens(settings)
     password_attempts = PasswordAttempts(db)
     storage = create_storage(settings)
@@ -94,12 +96,15 @@ def create_app(
     @asynccontextmanager
     async def lifespan(_app):
         await db.verify_role()
+        await get_connections(settings).management.verify()
+        await get_connections(settings).reader.verify()
         await billing.verify_currency(db, settings.billing_currency)
         try:
             yield
         finally:
             await password_attempts.close()
             await db.engine.dispose()
+            await close_connections(settings)
 
     app = FastAPI(
         title="Local API",
@@ -119,7 +124,44 @@ def create_app(
     @app.middleware("http")
     async def bound_source_input(request: Request, call_next):
         parts = request.url.path.split("/")
-        if (
+        credential_route = request.url.path.startswith("/platform/credentials")
+        if credential_route:
+            from app.services.platform import identify
+
+            header = request.headers.get("authorization", "")
+            try:
+                scheme, _, token = header.partition(" ")
+                if scheme.lower() != "bearer" or not token:
+                    raise ServiceError("invalid_session", "Invalid platform session", 401, 4)
+                request.state.credential_actor = identify(settings, crypto, token)
+            except ServiceError:
+                # The ordinary pool records a fixed rejection category; it never invokes
+                # privileged credential functions or creates probe authority.
+                from app.services.platform import audit
+
+                try:
+                    async with db.transaction() as session:
+                        audit(
+                            session,
+                            "unauthenticated@localhost",
+                            "platform.credential_denied",
+                            "denied",
+                            details={"error_code": "invalid_session"},
+                        )
+                except Exception:
+                    return error_response(
+                        request,
+                        ServiceError(
+                            "credential_audit_unavailable",
+                            "Credential audit could not be saved",
+                            503,
+                            3,
+                        ),
+                    )
+                return error_response(
+                    request, ServiceError("invalid_session", "Invalid platform session", 401, 4)
+                )
+        if credential_route or (
             request.method == "POST"
             and len(parts) == 4
             and parts[1] == "tasks"
@@ -128,10 +170,28 @@ def create_app(
             content = bytearray()
             async for chunk in request.stream():
                 content.extend(chunk)
-                if len(content) > 128 * 1024:
+                if len(content) > (512 * 1024 if credential_route else 128 * 1024):
+                    if credential_route:
+                        from app.services.platform_credentials import (
+                            PlatformCredentialService,
+                            credential_error,
+                        )
+
+                        try:
+                            await PlatformCredentialService(settings).record_failure(
+                                request.state.credential_actor,
+                                "read",
+                                credential_error("invalid_input"),
+                            )
+                        except ServiceError as exc:
+                            return error_response(request, exc)
                     return error_response(
                         request,
-                        ServiceError("input_too_large", "Source input exceeds JSON limit", 413, 2),
+                        ServiceError("invalid_input", "Credential input exceeds JSON limit", 422, 2)
+                        if credential_route
+                        else ServiceError(
+                            "input_too_large", "Source input exceeds JSON limit", 413, 2
+                        ),
                     )
             # Starlette's wrapped request replays its cached body to FastAPI.
             request._body = bytes(content)
@@ -159,6 +219,23 @@ def create_app(
     def error_response(request: Request, error: ServiceError):
         command = request.scope.get("route")
         name = command.name.replace("_", " ") if command else "request"
+        if command is None and request.url.path.startswith("/platform/credentials"):
+            tail = request.url.path.removeprefix("/platform/credentials").strip("/")
+            action = (
+                {
+                    "active": "set-active",
+                    "replace": "replace",
+                    "remove": "remove",
+                    "test": "test",
+                }.get(tail.rsplit("/", 1)[-1], "show")
+                if tail
+                else "list"
+                if request.method == "GET"
+                else "create"
+            )
+            if tail == "import-env":
+                action = "import-env"
+            name = "platform credential " + action
         body = Result(
             ok=False,
             command=name,
@@ -183,6 +260,28 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path.startswith("/platform/credentials"):
+            from app.services.platform_credentials import (
+                PlatformCredentialService,
+                credential_error,
+            )
+
+            actor = getattr(request.state, "credential_actor", None)
+            dry_import = (
+                request.url.path == "/platform/credentials/import-env"
+                and isinstance(error.body, dict)
+                and error.body.get("dry_run") is True
+            )
+            if actor is not None and not dry_import:
+                try:
+                    await PlatformCredentialService(settings).record_failure(
+                        actor, "read", credential_error("invalid_input")
+                    )
+                except ServiceError as exc:
+                    return error_response(request, exc)
+            return error_response(
+                request, ServiceError("invalid_input", "Invalid credential input", 422, 2)
+            )
         # Name the offending fields but never echo submitted values.
         fields = sorted(
             {

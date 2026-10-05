@@ -2,16 +2,17 @@
 
 Only the fixed vendor and model text leave the worker. Results are unverified candidate
 URLs; a person confirms one before it can become a product source or be captured.
-SearXNG scrapes public engines that block a busy address with CAPTCHAs, so a configured
-Perplexity key takes precedence.
+The deployment selects one provider explicitly; there is no credential fallback.
 """
 
+import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 import httpx
 
 from app.core.config import Settings
+from app.core.errors import ServiceError
 from app.providers.base import ProviderFailure
 
 MAX_RESULTS_PER_QUERY = 30
@@ -49,6 +50,10 @@ class SearXNGSearch:
     def identity(self) -> str:
         return f"{self.name}:{self.base_url}"
 
+    @property
+    def public_identity(self) -> str:
+        return self.identity
+
     async def search(self, query: str, domains: Sequence[str] = ()) -> SearchResult:
         """`domains` narrows only providers that filter by domain; SearXNG ignores it."""
         try:
@@ -65,10 +70,10 @@ class SearXNGSearch:
             results = body.get("results")
             if not isinstance(results, list):
                 raise ValueError("results")
-        except (httpx.HTTPError, ValueError) as exc:
+        except (httpx.HTTPError, ValueError):
             raise ProviderFailure(
                 "Search service is unavailable", code="search_unavailable", retryable=True
-            ) from exc
+            ) from None
         hits = []
         for item in results[:MAX_RESULTS_PER_QUERY]:
             if not isinstance(item, dict):
@@ -91,12 +96,22 @@ class PerplexitySearch:
     name = "perplexity"
     filters_domains = True
 
-    def __init__(self, api_key: str, transport: httpx.AsyncBaseTransport | None = None):
-        self.api_key = api_key
+    def __init__(
+        self,
+        credential_resolver,
+        credential_target,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ):
+        self.credential_resolver = credential_resolver
+        self.credential_target = credential_target
         self.transport = transport
 
     @property
     def identity(self) -> str:
+        return f"{self.name}:{PERPLEXITY_URL}:{self.credential_target.credential_id}"
+
+    @property
+    def public_identity(self) -> str:
         return f"{self.name}:{PERPLEXITY_URL}"
 
     async def search(self, query: str, domains: Sequence[str] = ()) -> SearchResult:
@@ -108,19 +123,30 @@ class PerplexitySearch:
         if domains:
             body["search_domain_filter"] = list(domains)[:20]
         try:
+            credential = await self.credential_resolver.resolve_for_call(self.credential_target)
+        except ServiceError as exc:
+            raise ServiceError(
+                "provider_unavailable", "Selected provider is unavailable", 503, exc.exit_code
+            ) from None
+        if (
+            credential.provider != "perplexity"
+            or credential.endpoint != "https://api.perplexity.ai"
+        ):
+            raise ServiceError("provider_unavailable", "Selected provider is unavailable", 503, 4)
+        try:
             async with httpx.AsyncClient(
                 transport=self.transport, timeout=TIMEOUT_SECONDS, trust_env=False
             ) as client:
                 response = await client.post(
                     PERPLEXITY_URL,
                     json=body,
-                    headers={"Authorization": f"Bearer {self.api_key}"},
+                    headers={"Authorization": f"Bearer {credential.api_key.get_secret_value()}"},
                     follow_redirects=False,
                 )
-        except httpx.HTTPError as exc:
+        except httpx.HTTPError:
             raise ProviderFailure(
                 "Search service is unavailable", code="search_unavailable", retryable=True
-            ) from exc
+            ) from None
         if response.status_code != 200:
             # The body is not kept: it may echo the request.
             raise ProviderFailure(
@@ -129,13 +155,23 @@ class PerplexitySearch:
                 retryable=response.status_code in RETRYABLE_STATUS,
             )
         try:
-            results = response.json().get("results")
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("results")
+            escaped_key = json.dumps(credential.api_key.get_secret_value(), ensure_ascii=False)[
+                1:-1
+            ]
+            if escaped_key in json.dumps(payload, ensure_ascii=False):
+                raise ProviderFailure(
+                    "Search service returned an unsafe response", code="search_unavailable"
+                )
+            results = payload.get("results")
             if not isinstance(results, list):
                 raise ValueError("results")
-        except ValueError as exc:
+        except ValueError:
             raise ProviderFailure(
                 "Search service returned an invalid response", code="search_unavailable"
-            ) from exc
+            ) from None
         hits = []
         for item in results[:PERPLEXITY_MAX_RESULTS]:
             if not isinstance(item, dict):
@@ -147,11 +183,27 @@ class PerplexitySearch:
         return SearchResult(tuple(hits), ())
 
 
-def create_search_provider(
-    settings: Settings, transport: httpx.AsyncBaseTransport | None = None
+async def create_search_provider(
+    settings: Settings,
+    transport: httpx.AsyncBaseTransport | None = None,
+    *,
+    credential_resolver=None,
 ) -> PerplexitySearch | SearXNGSearch | None:
-    # An empty variable from an env file means unset, as for BID_SEARCH_URL.
-    key = settings.perplexity_api_key.get_secret_value() if settings.perplexity_api_key else ""
-    if key:
-        return PerplexitySearch(key, transport)
-    return SearXNGSearch(settings.search_url, transport) if settings.search_url else None
+    settings.assert_vendor_credentials_absent()
+    if settings.search_provider == "disabled":
+        return None
+    if settings.search_provider == "searxng":
+        if not settings.search_url:
+            raise ProviderFailure("SearXNG endpoint is not configured", code="search_unavailable")
+        return SearXNGSearch(settings.search_url, transport)
+    if credential_resolver is None:
+        from app.services.platform_credentials import PlatformCredentialResolver
+
+        credential_resolver = PlatformCredentialResolver(settings)
+    try:
+        target = await credential_resolver.select_service("vendor_search")
+    except ServiceError as exc:
+        raise ServiceError(
+            "provider_unavailable", "Selected provider is unavailable", 503, exc.exit_code
+        ) from None
+    return PerplexitySearch(credential_resolver, target, transport)

@@ -357,10 +357,10 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         await dispatch(ctx[0], ctx[1], job)
         return result("ui mock", data)
 
-    def search_provider():
+    async def search_provider():
         from app.providers.search import create_search_provider
 
-        return create_search_provider(
+        return await create_search_provider(
             settings, getattr(processor, "search_transport", None) if processor else None
         )
 
@@ -370,7 +370,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def search(
         task_id: UUID, body: VendorSearchInput, ctx=Depends(context, scope="function")
     ):
-        data, job = await vendor_search.submit(ctx[0], ctx[1], task_id, body, search_provider())
+        data, job = await vendor_search.submit(
+            ctx[0], ctx[1], task_id, body, await search_provider()
+        )
         await dispatch(ctx[0], ctx[1], job)
         return result("evidence search", data)
 
@@ -381,7 +383,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         task_id: UUID, body: ProductSimulationInput, ctx=Depends(context, scope="function")
     ):
         data, job = await product_simulation.submit(
-            ctx[0], ctx[1], task_id, body, search_provider(), settings
+            ctx[0], ctx[1], task_id, body, await search_provider(), settings
         )
         await dispatch(ctx[0], ctx[1], job)
         if job is not None:

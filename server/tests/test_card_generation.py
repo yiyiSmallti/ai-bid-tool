@@ -41,7 +41,7 @@ from app.models.response_cards import (
     ResponseCardRevision,
 )
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
-from conftest import FakeQueue
+from conftest import FakeQueue, credential_app
 from sqlalchemy import func, select, update
 from test_api import create_document, run_job
 from test_llm_providers import provider_reply, settings_for
@@ -144,7 +144,7 @@ async def drafting_client(
         sale_usd_per_mtok=(1, 1) if paid else None,
     )
     llm.model_revision = 1 if paid else None
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
@@ -1359,6 +1359,14 @@ async def test_platform_default_catalog_is_used_without_changing_extraction(
 
     # Long catalog IDs exercise the 0018 adapter identity width as well as real resolution.
     catalog_id = "synthetic-drafting-catalog-long-id-12345"  # the 40-character maximum
+    from conftest import seed_platform_credential
+
+    await seed_platform_credential(
+        Settings(data_dir=tmp_path),
+        name="synthetic_unset",
+        provider="openai",
+        endpoint="https://vendor.example.test/v1",
+    )
     with Session(admin_engine) as session, session.begin():
         session.add(
             PlatformModel(

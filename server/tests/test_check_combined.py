@@ -32,8 +32,11 @@ from app.models.entities import (
 )
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.contracts import ProviderUsage
+from app.schemas.platform_credentials import CatalogResolveTarget
 from app.services import drafts
+from app.services.platform_credentials import PlatformCredentialResolver
 from bid_cli import main as cli
+from conftest import seed_platform_credential
 from sqlalchemy import func, select, update
 from test_check import (
     ASSESSMENT_DATE,  # noqa: F401
@@ -183,7 +186,16 @@ def semantic_llm(
     )
 
 
-def seed_platform(admin_engine, org_id: UUID, model_id: str = "semantic-paid") -> None:
+async def seed_platform(
+    admin_engine, settings: Settings, org_id: UUID, model_id: str = "semantic-paid"
+) -> None:
+    await seed_platform_credential(
+        settings,
+        name="synthetic",
+        provider="openai",
+        endpoint="https://semantic.example.test/v1",
+        key="synthetic-check-key",
+    )
     with admin_engine.begin() as connection:
         connection.execute(
             PlatformModel.__table__.insert().values(
@@ -212,15 +224,18 @@ def seed_platform(admin_engine, org_id: UUID, model_id: str = "semantic-paid") -
         )
 
 
-def platform_llm(tmp_path, vendor: SemanticVendor, model_id: str = "semantic-paid"):
+def platform_llm(settings: Settings, vendor: SemanticVendor, model_id: str = "semantic-paid"):
     llm = semantic_llm(
-        tmp_path,
+        settings.data_dir,
         vendor,
         org_owned=False,
         platform_model_id=model_id,
         sale=(2, 3),
+        llm_api_key=None,
     )
     llm.model_revision = 1
+    llm.credential_resolver = PlatformCredentialResolver(settings)
+    llm.credential_target = CatalogResolveTarget(model_id=model_id, expected_model_revision=1)
     return llm
 
 
@@ -868,9 +883,13 @@ async def test_combined_platform_call_cap_and_failure_settle_exactly_once(
 ):
     case = check_case
     model_id = "semantic-paid"
-    seed_platform(admin_engine, tenants["orgs"][0], model_id)
+    await seed_platform(
+        admin_engine, case["app"].state.processor.settings, tenants["orgs"][0], model_id
+    )
     vendor = SemanticVendor({1: failure})
-    install_resolver(monkeypatch, platform_llm(tmp_path, vendor, model_id))
+    install_resolver(
+        monkeypatch, platform_llm(case["app"].state.processor.settings, vendor, model_id)
+    )
     before = await combined_counts(case)
 
     response, capped = await combined_preview(case, max_charge="0.00000001")
@@ -999,9 +1018,9 @@ async def test_combined_per_call_admission_stop_after_submit_publishes_fixed_par
     check_case, tenants, tmp_path, monkeypatch, admin_engine, guard, reason
 ):
     case = check_case
-    seed_platform(admin_engine, tenants["orgs"][0])
+    await seed_platform(admin_engine, case["app"].state.processor.settings, tenants["orgs"][0])
     vendor = SemanticVendor()
-    install_resolver(monkeypatch, platform_llm(tmp_path, vendor))
+    install_resolver(monkeypatch, platform_llm(case["app"].state.processor.settings, vendor))
     response, preview = await combined_preview(case, max_charge="5")
     assert response.status_code == 200, response.text
     assert preview["admission_blocker"] is None

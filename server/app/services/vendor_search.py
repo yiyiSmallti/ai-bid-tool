@@ -100,7 +100,7 @@ async def submit(session, actor, task_id, body, provider):
             "dry_run": True,
             "input_hash": input_hash,
             "queries": manifest["queries"],
-            "search_identity": manifest["search_identity"],
+            "search_identity": provider.public_identity if provider else None,
             "admission_blocker": blocker,
         }, None
     if body.expected_input_hash != input_hash:

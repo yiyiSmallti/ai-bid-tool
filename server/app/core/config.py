@@ -1,18 +1,34 @@
+import base64
+import binascii
 import json
+import os
 import re
 from decimal import Decimal
 from pathlib import Path
 from typing import Annotated
 
-from cryptography.fernet import Fernet
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+
+def canonical_fernet_key(value: str) -> bytes:
+    """Reject permissive Fernet encodings so roots have a single comparable identity."""
+    try:
+        encoded = value.encode("ascii")
+        decoded = base64.b64decode(encoded, altchars=b"-_", validate=True)
+        if len(decoded) != 32 or base64.urlsafe_b64encode(decoded) != encoded:
+            raise ValueError
+    except (ValueError, UnicodeError, binascii.Error):
+        raise ValueError("Root keys must use canonical Fernet encoding") from None
+    return decoded
 
 
 class PDFSettings(BaseSettings):
     """PDF limits can also be loaded by standalone parsing without service credentials."""
 
-    model_config = SettingsConfigDict(env_prefix="BID_", extra="ignore", env_ignore_empty=True)
+    model_config = SettingsConfigDict(
+        env_prefix="BID_", extra="ignore", env_ignore_empty=True, hide_input_in_errors=True
+    )
     pdf_timeout_seconds: float = Field(default=600, gt=0, allow_inf_nan=False)
     pdf_memory_bytes: int = Field(default=1024 * 1024 * 1024, gt=0)
     pdf_cpu_seconds: int = Field(default=300, ge=1)
@@ -21,12 +37,16 @@ class PDFSettings(BaseSettings):
 
 class Settings(PDFSettings):
     database_url: SecretStr
+    platform_database_url: SecretStr | None = None
+    credential_database_url: SecretStr | None = None
+    _credential_connections: object | None = PrivateAttr(default=None)
     encryption_key: SecretStr
     # Retired data keys, comma separated: still decrypt, never encrypt.
     encryption_key_previous: Annotated[list[SecretStr], NoDecode] = []
     # Sessions and signed links only; never used for stored data.
     token_key: SecretStr
     secrets_key: SecretStr | None = None
+    secrets_key_previous: Annotated[list[SecretStr], NoDecode] = []
     data_dir: Path = Path("data")
     storage: str = "local"
     s3_endpoint: str | None = None
@@ -38,7 +58,7 @@ class Settings(PDFSettings):
     max_pages: int = 1000
     ocr_language: str = "chi_sim+eng"
     ocr_data_dir: str | None = None
-    # Platform-provided extraction model. "disabled" makes extraction fail explicitly.
+    # Standalone/eval model parameters; org jobs use their fixed provider or catalog identity.
     llm_provider: str = "disabled"
     llm_model: str | None = None
     llm_api_key: SecretStr | None = None
@@ -80,9 +100,10 @@ class Settings(PDFSettings):
     export_max_expanded_bytes: int = Field(default=1024 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
     export_memory_bytes: int = Field(default=1024 * 1024 * 1024, ge=1, le=1024 * 1024 * 1024)
     export_deadline_seconds: float = Field(default=900, gt=0, le=900, allow_inf_nan=False)
-    # Operator-run SearXNG base URL for vendor-source search; unset disables search.
+    # Operator-run SearXNG base URL, used only when search_provider explicitly selects it.
     search_url: str | None = None
-    # Perplexity Search API key; when set, vendor search uses it instead of SearXNG.
+    search_provider: str = "disabled"
+    # Legacy direct field retained only so startup can reject leaked deployment values.
     perplexity_api_key: SecretStr | None = None
     # Private Gotenberg (LibreOffice) base URL for export page previews; unset disables them.
     converter_url: str | None = None
@@ -94,9 +115,12 @@ class Settings(PDFSettings):
     @classmethod
     def load(cls):
         # BaseSettings supplies required fields from environment at runtime.
-        return cls()  # pyright: ignore[reportCallIssue]
+        cls._refuse_vendor_credentials(cls._legacy_vendor_environment())
+        settings = cls()  # pyright: ignore[reportCallIssue]
+        settings.assert_vendor_credentials_absent()
+        return settings
 
-    @field_validator("encryption_key_previous", mode="before")
+    @field_validator("encryption_key_previous", "secrets_key_previous", mode="before")
     @classmethod
     def split_keys(cls, value):
         if isinstance(value, str):
@@ -110,21 +134,30 @@ class Settings(PDFSettings):
         token = self.token_key.get_secret_value()
         for value in (current, token, *previous):
             try:
-                Fernet(value.encode())
+                canonical_fernet_key(value)
             except (ValueError, TypeError):
                 raise ValueError("Encryption and token keys must be Fernet keys") from None
         if current in previous or len(set(previous)) != len(previous):
             raise ValueError("BID_ENCRYPTION_KEY_PREVIOUS must list distinct retired keys")
-        others = {current, *previous}
+        secret_roots = [item.get_secret_value() for item in self.secrets_key_previous]
         if self.secrets_key is not None:
-            others.add(self.secrets_key.get_secret_value())
-        if token in others:
-            raise ValueError("BID_TOKEN_KEY must differ from every other key")
+            secret_roots.insert(0, self.secrets_key.get_secret_value())
+        for value in secret_roots:
+            try:
+                canonical_fernet_key(value)
+            except (ValueError, TypeError):
+                raise ValueError("Provider secret keys must be Fernet keys") from None
+        if len(set(secret_roots)) != len(secret_roots):
+            raise ValueError("BID_SECRETS_KEY_PREVIOUS must list distinct retired keys")
+        if set(secret_roots) & {current, *previous, token} or token in {current, *previous}:
+            raise ValueError("Data, token and provider secret roots must remain distinct")
         return self
 
-    @field_validator("database_url")
+    @field_validator("database_url", "platform_database_url", "credential_database_url")
     @classmethod
     def postgres_only(cls, value: SecretStr) -> SecretStr:
+        if value is None:
+            return value
         if not value.get_secret_value().startswith("postgresql+psycopg://"):
             raise ValueError("a PostgreSQL psycopg URL is required; file databases are unsupported")
         return value
@@ -162,16 +195,10 @@ class Settings(PDFSettings):
     def llm_complete(self):
         if self.job_heartbeat_seconds * 3 > self.job_lease_seconds:
             raise ValueError("Job heartbeat must be at most one third of the lease duration")
-        # A selected provider with missing settings must stop startup, not degrade.
         if self.llm_provider == "anthropic":
             self.llm_model = self.llm_model or "claude-opus-5-5"
-            if self.llm_api_key is None:
-                raise ValueError("BID_LLM_API_KEY is required for the anthropic provider")
-        if self.llm_provider == "openai":
-            if not self.llm_model:
-                raise ValueError("BID_LLM_MODEL is required for the openai provider")
-            if self.llm_api_key is None and not self.llm_base_url:
-                raise ValueError("BID_LLM_API_KEY is required unless BID_LLM_BASE_URL is set")
+        if self.llm_provider == "openai" and not self.llm_model:
+            raise ValueError("BID_LLM_MODEL is required for the openai provider")
         if (
             self.llm_batch_chars < 1000
             or self.llm_max_output_tokens < 1024
@@ -219,3 +246,64 @@ class Settings(PDFSettings):
                 raise ValueError("BID_PLATFORM_TOTP_SECRETS has an invalid entry") from None
             pairs[email.strip().lower()] = secret.strip()
         return pairs
+
+    @field_validator("search_provider")
+    @classmethod
+    def search_backend(cls, value: str) -> str:
+        if value not in {"disabled", "perplexity", "searxng"}:
+            raise ValueError("search_provider must be disabled, perplexity or searxng")
+        return value
+
+    @field_validator("llm_base_url", "search_url", "converter_url", "s3_endpoint")
+    @classmethod
+    def no_endpoint_credentials(cls, value: str | None) -> str | None:
+        from urllib.parse import urlsplit
+
+        if value is not None:
+            try:
+                parsed = urlsplit(value)
+                if (
+                    parsed.username is not None
+                    or parsed.password is not None
+                    or parsed.query
+                    or parsed.fragment
+                ):
+                    raise ValueError
+            except ValueError:
+                raise ValueError(
+                    "Service endpoints must not contain authentication values"
+                ) from None
+        return value
+
+    @staticmethod
+    def _legacy_vendor_environment() -> set[str]:
+        return {
+            name
+            for name in os.environ
+            if (
+                name.startswith("BID_PLATFORM_CREDENTIAL_")
+                or name in {"BID_LLM_API_KEY", "BID_PERPLEXITY_API_KEY"}
+            )
+        }
+
+    @staticmethod
+    def _refuse_vendor_credentials(names: set[str]) -> None:
+        from app.core.errors import ServiceError
+
+        if names:
+            raise ServiceError(
+                "credential_env_forbidden",
+                "Remove legacy vendor credential configuration: " + ", ".join(sorted(names)),
+                503,
+                4,
+            )
+
+    def assert_vendor_credentials_absent(self) -> None:
+        names = self._legacy_vendor_environment()
+        for field, name in (
+            (self.llm_api_key, "BID_LLM_API_KEY"),
+            (self.perplexity_api_key, "BID_PERPLEXITY_API_KEY"),
+        ):
+            if field is not None and field.get_secret_value():
+                names.add(name)
+        self._refuse_vendor_credentials(names)

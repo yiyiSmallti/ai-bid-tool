@@ -82,9 +82,11 @@ class PlatformModelSet(Contract):
     @field_validator("base_url")
     @classmethod
     def https_url(cls, value: str | None) -> str | None:
-        if value is not None and not re.fullmatch(r"https://[^\s/]+(/\S*)?", value):
-            raise ValueError("base_url must be an https URL")
-        return value
+        if value is None:
+            return value
+        from app.schemas.platform_credentials import CredentialSpec
+
+        return CredentialSpec.safe_endpoint(value)
 
     @model_validator(mode="after")
     def default_is_enabled(self):

@@ -25,7 +25,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/export_preview/sandbox/截图/原型生成/厂家搜索/模拟拟投/score_rubric/score 作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
 | F08 AuditLog | 资源、卡片人工决策、模型起草、评分 rubric 生成与人工决定、评分执行、遮挡设置及组表审计 | 登录、令牌、导出、其他配置及 agent 调用审计与查询 | 新契约 |
 | F09 UsageRecord | OCR、抽取、模型起草和评分 rubric 生成与评分执行的逐次用量记录；平台计费调用按售价从预付余额扣除，充值卡密 | 存储计量、[预算预检与低余额通知草案](budget.md)、在线支付 | 新契约 |
-| F10 部署与质量 | 本机迁移、Compose（含 SearXNG、Gotenberg）、锁定依赖、GitHub Actions 在每个 PR 上按改动范围运行，测试按 worker 分库并行 | 生产对象存储、TLS、备份与密钥轮换、[平台凭据入库与迁移草案](platform-credentials.md)、私有化包装 | 平台凭据待批准；生产需授权 |
+| F10 部署与质量 | 本机迁移、Compose（含 SearXNG、Gotenberg）、锁定依赖、GitHub Actions 在每个 PR 上按改动范围运行，测试按 worker 分库并行；平台凭据专用角色与根轮换 | 生产对象存储、TLS、备份、[平台凭据数据库验收与部署切换](platform-credentials.md)、私有化包装 | 平台凭据契约已批准；生产需授权 |
 
 ## 覆盖矩阵：资源与任务选择
 
@@ -62,7 +62,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身；起草与模拟拟投共用的结构化 JSON 调用；独立 CheckProvider 和 RubricProvider 及对应结构化 HTTP adapter | ScoreProvider、agent 接入结构化调用 | 需相应能力契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
 | P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；Perplexity Search API 或自托管 SearXNG 搜索 | Embedding 后续边界见 [memory.md](memory.md#pgvector-与后续索引)；本机浏览器采集、仅用 SearXNG 时搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱租约接管与断连/存储失败注入验收 | 新契约 |
-| P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；机制见 [provider-config.md](../notes/provider-config.md) | [平台后台凭据管理草案](platform-credentials.md)（全局表例外见 [ADR 0006](../adr/0006-platform-credentials.md)）；视觉、搜索等其他能力的单位配置 | 平台凭据待批准；其他新契约 |
+| P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；[平台后台凭据管理与逐次解析](../notes/platform-credentials.md)；机制见 [provider-config.md](../notes/provider-config.md) | [平台凭据数据库验收与切换](platform-credentials.md)；视觉、搜索等其他能力的单位配置 | 平台凭据契约已批准；其他新契约 |
 | P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草/评分 rubric 部分成功；抽取、起草与模拟拟投按 `BID_LLM_CONCURRENCY` 并发；rubric 整表请求边界见[评分计划](score.md#provider作业和预付费) | 跨能力限流与统一进度 | 新契约 |
 | M01 记忆存储 | org 候选/确切修订人工审批、不可变历史、FORCE RLS 与逻辑删除 | user/project/global 及其 ACL | [已定决定](memory.md#已定决定) |
 | M02 记忆检索 | org keyword/tag、规则/偏好优先级、独立起草上下文、逐调用使用记录 | Embedding/hybrid、其他消费者 | [分步范围](memory.md#目标与边界) |

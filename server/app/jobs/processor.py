@@ -229,7 +229,8 @@ class Processor:
                     from app.services.vendor_search import process as search_vendor
 
                     await search_vendor(
-                        execution, create_search_provider(self.settings, self.search_transport)
+                        execution,
+                        await create_search_provider(self.settings, self.search_transport),
                     )
                     return
                 if kind == "prototype_generate":

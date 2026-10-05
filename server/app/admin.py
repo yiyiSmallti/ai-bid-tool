@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from uuid import uuid4
 
 import procrastinate
@@ -40,6 +41,24 @@ def initialize_database():
         elif existing.rolsuper or existing.rolbypassrls:
             raise RuntimeError("Existing runtime role is privileged; refusing to change it")
     command.upgrade(Config("alembic.ini"), "head")
+    # Bootstrap credentials are optional for peer/certificate authentication, but when
+    # supplied they belong only to this owner command, never a vendor credential row.
+    from sqlalchemy.exc import SQLAlchemyError
+
+    for role, variable in (
+        ("bid_platform_app", "BID_PLATFORM_DATABASE_PASSWORD"),
+        ("bid_credential_reader", "BID_CREDENTIAL_DATABASE_PASSWORD"),
+    ):
+        password = os.environ.get(variable)
+        if password:
+            try:
+                with engine.begin() as connection:
+                    statement = sql.SQL("ALTER ROLE {} PASSWORD {}").format(
+                        sql.Identifier(role), sql.Literal(password)
+                    )
+                    connection.exec_driver_sql(statement.as_string())
+            except SQLAlchemyError:
+                raise ValueError(f"Could not configure {variable}") from None
 
     async def install_queue():
         conninfo = make_url(url).set(drivername="postgresql").render_as_string(hide_password=False)
@@ -172,6 +191,191 @@ def rotate_encryption() -> dict:
     return report
 
 
+def rotate_provider_secrets() -> dict:
+    """Rewrap platform and all historical BYOK rows through owner-only CAS functions.
+
+    Counts change only after commit. A failed row or scope scan contributes a fixed
+    diagnostic and cannot erase previously committed progress from the report.
+    """
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.core.config import Settings
+    from app.core.errors import ServiceError
+    from app.core.provider_secrets import ProviderSecrets
+    from app.schemas.platform_credentials import CredentialSpec, RotationReport
+
+    settings = Settings.load()
+    if not settings.secrets_key_previous:
+        raise ValueError("Set BID_SECRETS_KEY_PREVIOUS to the retired keys first")
+    cipher = ProviderSecrets(settings)
+    engine = create_engine(os.environ["BID_MIGRATION_DATABASE_URL"], hide_parameters=True)
+    counts = {
+        "platform_checked": 0,
+        "platform_rewritten": 0,
+        "org_revisions_checked": 0,
+        "org_revisions_rewritten": 0,
+        "failed": 0,
+    }
+    permanent_failed, successes = False, 0
+
+    def transient(exc: Exception) -> bool:
+        if isinstance(exc, ServiceError):
+            return exc.exit_code == 3
+        state = getattr(getattr(exc, "orig", None), "sqlstate", None)
+        return bool(
+            getattr(exc, "connection_invalidated", False)
+            or (state and (state.startswith("08") or state in {"40001", "40P01"}))
+        )
+
+    def record_failure(kind: str, row_id, exc: Exception) -> None:
+        nonlocal permanent_failed
+        retryable = transient(exc)
+        counts["failed"] += 1
+        permanent_failed |= not retryable
+        # Restricted diagnostics contain stable identities and fixed classes only.
+        print(
+            json.dumps(
+                {
+                    "scope": "provider-secrets",
+                    "kind": kind,
+                    "id": str(row_id),
+                    "code": "rewrap_conflict" if retryable else "rewrap_failed",
+                }
+            ),
+            file=sys.stderr,
+        )
+
+    def conflict() -> ServiceError:
+        return ServiceError(
+            "credential_rotation_conflict", "Credential changed during rewrap", 409, 3
+        )
+
+    try:
+        try:
+            with engine.connect() as connection:
+                platform_ids = connection.scalars(
+                    text(
+                        "SELECT id FROM public.platform_credentials WHERE state <> 'removed' ORDER BY id"
+                    )
+                ).all()
+        except SQLAlchemyError as exc:
+            record_failure("platform_scan", "platform_scan", exc)
+            platform_ids = []
+        for credential_id in platform_ids:
+            counts["platform_checked"] += 1
+            did_rewrite = False
+            try:
+                with engine.begin() as connection:
+                    row = (
+                        connection.execute(
+                            text(
+                                "SELECT id, name, purpose, provider, endpoint, secret_version, encrypted_key "
+                                "FROM public.platform_credentials WHERE id=:id AND state <> 'removed'"
+                            ),
+                            {"id": credential_id},
+                        )
+                        .mappings()
+                        .first()
+                    )
+                    if row is None:
+                        counts["platform_checked"] -= 1
+                        continue
+                    spec = CredentialSpec(
+                        **{name: row[name] for name in ("name", "purpose", "provider", "endpoint")}
+                    )
+                    value = cipher.rewrap_platform(
+                        row["encrypted_key"],
+                        expected=spec,
+                        credential_id=row["id"],
+                        secret_version=row["secret_version"],
+                    )
+                    if value is not None:
+                        if not connection.scalar(
+                            text(
+                                "SELECT public.platform_credential_rewrap(:id, :old, :new, :actor)"
+                            ),
+                            {
+                                "id": row["id"],
+                                "old": row["encrypted_key"],
+                                "new": value,
+                                "actor": "maintenance@localhost",
+                            },
+                        ):
+                            raise conflict()
+                        did_rewrite = True
+                counts["platform_rewritten"] += int(did_rewrite)
+                successes += 1
+            except (ServiceError, ValueError, SQLAlchemyError) as exc:
+                record_failure("platform", credential_id, exc)
+        try:
+            with engine.connect() as connection:
+                orgs = connection.scalars(
+                    text("SELECT id FROM public.platform_org_summaries()")
+                ).all()
+        except SQLAlchemyError as exc:
+            record_failure("org_scan", "org_scan", exc)
+            orgs = []
+        for org_id in orgs:
+            try:
+                with engine.begin() as connection:
+                    connection.execute(
+                        text("SELECT set_config('app.current_org', :org, true)"),
+                        {"org": str(org_id)},
+                    )
+                    config_ids = connection.scalars(
+                        text(
+                            "SELECT id FROM public.provider_configs WHERE org_id=:org AND source='org' ORDER BY revision"
+                        ),
+                        {"org": org_id},
+                    ).all()
+            except SQLAlchemyError as exc:
+                record_failure("org_revision_scan", org_id, exc)
+                continue
+            for config_id in config_ids:
+                counts["org_revisions_checked"] += 1
+                did_rewrite = False
+                try:
+                    with engine.begin() as connection:
+                        connection.execute(
+                            text("SELECT set_config('app.current_org', :org, true)"),
+                            {"org": str(org_id)},
+                        )
+                        row = connection.execute(
+                            text(
+                                "SELECT encrypted_key FROM public.provider_configs WHERE org_id=:org AND id=:id"
+                            ),
+                            {"org": org_id, "id": config_id},
+                        ).first()
+                        if row is None:
+                            counts["org_revisions_checked"] -= 1
+                            continue
+                        value = cipher.rewrap_org(
+                            row.encrypted_key, org_id=org_id, config_id=config_id
+                        )
+                        if value is not None:
+                            if not connection.scalar(
+                                text(
+                                    "SELECT public.provider_credential_rewrap(:org, :id, :old, :new)"
+                                ),
+                                {
+                                    "org": org_id,
+                                    "id": config_id,
+                                    "old": row.encrypted_key,
+                                    "new": value,
+                                },
+                            ):
+                                raise conflict()
+                            did_rewrite = True
+                    counts["org_revisions_rewritten"] += int(did_rewrite)
+                    successes += 1
+                except (ServiceError, ValueError, SQLAlchemyError) as exc:
+                    record_failure("org_revision", config_id, exc)
+        code = 0 if not counts["failed"] else 5 if successes else 4 if permanent_failed else 3
+        return RotationReport.model_validate({**counts, "exit_code": code}).model_dump()
+    finally:
+        engine.dispose()
+
+
 def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -179,7 +383,8 @@ def main():
     create = commands.add_parser("bootstrap")
     create.add_argument("--org-name", required=True)
     create.add_argument("--email", required=True)
-    commands.add_parser("rotate-encryption")
+    rotate = commands.add_parser("rotate-encryption")
+    rotate.add_argument("--scope", choices=("data", "provider-secrets"), default="data")
     totp_parser = commands.add_parser("platform-totp")
     totp_parser.add_argument("--email", required=True)
     args = parser.parse_args()
@@ -187,7 +392,29 @@ def main():
         initialize_database()
         print("Selected development database initialized; runtime role is restricted")
     elif args.command == "rotate-encryption":
-        print(json.dumps(rotate_encryption()))
+        if args.scope == "provider-secrets":
+            from sqlalchemy.exc import SQLAlchemyError
+
+            from app.core.errors import ServiceError
+
+            try:
+                report = rotate_provider_secrets()
+            except ServiceError as exc:
+                print(json.dumps({"error": exc.code}), file=sys.stderr)
+                raise SystemExit(exc.exit_code) from None
+            except (ValueError, KeyError):
+                print(
+                    json.dumps({"error": "credential_rotation_configuration_invalid"}),
+                    file=sys.stderr,
+                )
+                raise SystemExit(4) from None
+            except SQLAlchemyError:
+                print(json.dumps({"error": "credential_backend_unavailable"}), file=sys.stderr)
+                raise SystemExit(3) from None
+        else:
+            report = rotate_encryption()
+        print(json.dumps(report))
+        raise SystemExit(report.get("exit_code", 0))
     elif args.command == "platform-totp":
         platform_totp(args.email)
     else:

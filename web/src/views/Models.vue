@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref, watch } from "vue";
 import { Plus } from "@element-plus/icons-vue";
 import { count, money, request } from "../api.js";
 
@@ -23,13 +23,28 @@ const blank = () => ({
 const blankLevel = () => ({ name: "", label: "", options: "{}", batch_chars: 8000, effort: "" });
 const models = ref([]);
 const currency = ref("");
+const credentials = ref([]);
 const form = ref(null);
+const normalizedEndpoint = (provider, url) => {
+  try { const parsed = new URL(url || (provider === "anthropic" ? "https://api.anthropic.com" : "")); if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.search || parsed.hash || (parsed.port && parsed.port !== "443")) return null; return `https://${parsed.host.toLowerCase()}${parsed.pathname.replace(/\/+$/, "")}`; } catch { return null; }
+};
+const matchingCredentials = computed(() => form.value ? credentials.value.filter((credential) => credential.purpose === "catalog_llm" && credential.state === "active" && credential.provider === form.value.provider && credential.endpoint === normalizedEndpoint(form.value.provider, form.value.base_url)) : []);
+watch(() => [form.value?.provider, form.value?.base_url], () => { if (form.value?.credential && !matchingCredentials.value.some((credential) => credential.name === form.value.credential)) form.value.credential = ""; });
 const error = ref("");
 const tests = ref({});
 
 async function load() {
   try {
     const result = await request("GET", "/platform/models");
+    const available = [];
+    let cursor = null;
+    do {
+      const query = new URLSearchParams({ purpose: "catalog_llm", limit: "100" });
+      if (cursor) query.set("after_name", cursor);
+      const page = await request("GET", `/platform/credentials?${query}`);
+      available.push(...page.items); cursor = page.data.next_after_name;
+    } while (cursor);
+    credentials.value = available;
     models.value = result.items;
     currency.value = result.data.currency;
   } catch (exc) {
@@ -96,7 +111,7 @@ function problems(body) {
   const issues = [];
   if (!/^[a-z0-9][a-z0-9_-]{0,39}$/.test(body.id)) issues.push("标识只能用小写字母、数字、- 和 _，以字母或数字开头，最多 40 个字符");
   if (!body.model) issues.push("请填写模型名称");
-  if (!/^[a-z0-9_]{1,40}$/.test(body.credential)) issues.push("凭据名只能用小写字母、数字和 _，例如 main");
+  if (!matchingCredentials.value.some((credential) => credential.name === body.credential)) issues.push("请选择用途、服务商和端点匹配的目录模型凭据");
   if (body.base_url && !/^https:\/\/[^\s/]+(\/\S*)?$/.test(body.base_url)) issues.push("Base URL 必须以 https:// 开头");
   if (body.provider === "openai" && !body.base_url) issues.push("OpenAI 兼容服务需要填写 Base URL");
   for (const key of ["vendor_input_usd_per_mtok", "vendor_output_usd_per_mtok", "sale_input_per_mtok", "sale_output_per_mtok"]) {
@@ -137,6 +152,21 @@ async function save() {
   }
 }
 
+async function disableModel(model) {
+  error.value = "";
+  // Keep the catalog fields byte-for-byte: this path may only disable the existing
+  // consumer, including one whose credential was removed. It cannot change a binding.
+  const body = { ...model, expected_revision: model.revision, enabled: false, default: false };
+  for (const key of ["revision", "updated_by", "updated_at", "credential_configured"]) delete body[key];
+  try {
+    await request("POST", "/platform/models", body);
+    form.value = null;
+    await load();
+  } catch (exc) {
+    error.value = exc.code === "revision_conflict" ? "模型已被他人修改，请刷新后重试" : "停用失败，请刷新后重试";
+  }
+}
+
 async function test(model) {
   tests.value[model.id] = { running: true };
   try {
@@ -154,7 +184,7 @@ onMounted(load);
     <div><h2>模型</h2><p class="subtitle">设为默认的模型用于所有单位的要求抽取，并按售价计入应收。</p></div>
     <el-button type="primary" :icon="Plus" @click="edit(null)">添加模型</el-button>
   </div>
-  <p class="notice">服务商密钥只保存在部署环境变量 BID_PLATFORM_CREDENTIAL_&lt;凭据名&gt; 中，页面只显示是否已配置。</p>
+  <p class="notice">服务商密钥通过服务凭据页面维护。模型选择用途、服务商和端点匹配的已启用凭据。</p>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
   <el-card v-if="form" shadow="never" class="section">
     <template #header><h3 class="card-title">{{ form.expected_revision !== null ? `编辑模型 ${form.id}` : "添加模型" }}</h3></template>
@@ -164,8 +194,8 @@ onMounted(load);
         <el-form-item label="服务商"><el-select v-model="form.provider" name="provider"><el-option value="anthropic" label="Anthropic" /><el-option value="openai" label="OpenAI 兼容" /></el-select></el-form-item>
         <el-form-item label="模型"><el-input v-model="form.model" name="model" /></el-form-item>
         <el-form-item label="Base URL（可选，https）"><el-input v-model="form.base_url" name="base-url" /></el-form-item>
-        <el-form-item label="凭据名"><el-input v-model="form.credential" name="credential" placeholder="main" /></el-form-item>
-        <div class="hint cred-hint">凭据名 main 对应环境变量 BID_PLATFORM_CREDENTIAL_MAIN；标识和凭据名只用小写字母、数字、_（标识还可用 -）。</div>
+        <el-form-item label="服务凭据"><el-select v-model="form.credential" name="credential" data-testid="model-credential-select" placeholder="选择匹配的凭据"><el-option v-for="credential in matchingCredentials" :key="credential.id" :value="credential.name" :label="`${credential.name} · …${credential.last_four}`" /></el-select></el-form-item>
+        <div class="hint cred-hint"><RouterLink to="/platform/credentials">管理服务凭据</RouterLink>。新绑定只显示匹配的已启用凭据；已有失效引用可使用列表中的“停用”停止该模型。“已配置”不代表厂商认证或额度已验证。</div>
       </div>
       <div class="grid four">
         <el-form-item label="成本价 输入（USD/百万 token）"><el-input v-model="form.vendor_input_usd_per_mtok" type="number" min="0" step="0.01" name="vendor-input" /></el-form-item>
@@ -214,7 +244,7 @@ onMounted(load);
           <td class="num">{{ model.sale_input_per_mtok }} / {{ model.sale_output_per_mtok }}</td>
           <td><div class="tags"><span v-if="model.default" class="tag success">默认</span><span v-if="!model.enabled" class="tag">已停用</span></div></td>
           <td class="num">
-            <div class="row-actions"><el-button size="small" @click="edit(model)">编辑</el-button><el-button size="small" @click="test(model)">测试</el-button></div>
+            <div class="row-actions"><el-button size="small" @click="edit(model)">编辑</el-button><el-button v-if="model.enabled" size="small" @click="disableModel(model)">停用</el-button><el-button size="small" @click="test(model)">测试</el-button></div>
             <div v-if="tests[model.id]" class="hint test-result" data-testid="test-result">
               <template v-if="tests[model.id].running">测试中…</template>
               <template v-else-if="tests[model.id].levels">

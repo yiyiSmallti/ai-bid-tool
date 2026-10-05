@@ -48,8 +48,10 @@ cluster, because tests truncate shared tables.
 
 ## Provision a development database
 
-Two credentials are involved. The provisioning owner runs migrations; the
-restricted `bid_app` role is the only one the server and worker receive.
+The provisioning owner runs migrations and never serves requests. Runtime receives
+`bid_app` for tenant work, `bid_platform_app` for credential management, and
+`bid_credential_reader` for per-call resolution. The dedicated roles have no table or
+tenant access; see [Platform credential authority](../notes/platform-credentials.md).
 
 1. Set `BID_MIGRATION_DATABASE_URL` for the owner and `BID_DATABASE_PASSWORD`
    for the new `bid_app` role.
@@ -90,45 +92,102 @@ scheme: choose **Authorize**, paste the session or token value without the
 
 ## Configure the extraction model
 
-`bid req extract` uses the platform model configured on the API and the worker.
-With `BID_LLM_PROVIDER=disabled`, the default, extraction fails with
-`provider_unavailable`. All variables are listed in
-[deploy/.env.example](../../deploy/.env.example); keep the key in an ignored
-env file or your secret manager.
-
-1. Choose a provider:
-   - Anthropic: `BID_LLM_PROVIDER=anthropic` and `BID_LLM_API_KEY`. The model
-     defaults to `claude-opus-5-5`; override it with `BID_LLM_MODEL`.
-   - Any OpenAI-compatible service: `BID_LLM_PROVIDER=openai`, `BID_LLM_MODEL`,
-     `BID_LLM_BASE_URL` (for example `https://api.openai.com/v1`), and
-     `BID_LLM_API_KEY` unless the service needs none. If the service rejects
-     JSON Schema output, set `BID_LLM_JSON_MODE=json_object`.
-2. Set `BID_LLM_INPUT_USD_PER_MTOK` and `BID_LLM_OUTPUT_USD_PER_MTOK` to the
-   vendor's prices per million tokens. Without them, usage records store
-   tokens but `usd` is `null`.
-3. Optional tuning: `BID_LLM_BATCH_CHARS` (characters per request, default
-   8000), `BID_LLM_CONCURRENCY` (parallel requests, default 4),
-   `BID_LLM_TIMEOUT_SECONDS` (total deadline per request, default 600), and
-   `BID_LLM_REQUEST_OPTIONS`, a JSON object added to every request body, for
-   example `{"thinking": {"type": "disabled"}}` for models that otherwise
-   think until the output limit. Catalog models with reasoning levels use each
-   level's own options and batch size instead.
-4. Restart the API and the worker. `GET /health` reports
-   `real_llm_configured: true`. A selected provider with a missing key or
-   model stops startup instead of falling back to disabled.
-5. Check the model on a public tender before real use. The script accepts a
-   PDF or Word file, calls the vendor, and costs money; it reports verified
-   citations and ★ recall and writes every item with its position and a
-   `citation_verified` flag:
+1. Configure a platform operator and the dedicated credential connections using
+   [Manage platform credentials](#manage-platform-credentials).
+2. Create an active `catalog_llm` credential, then select it in the platform Models
+   page. The provider and canonical endpoint must match. Set vendor and sale prices,
+   model name, reasoning options and the default model in that catalog entry.
+3. Tenant jobs use their pinned BYOK revision or the platform catalog. They do not
+   use standalone deployment settings as a fallback. A missing or disabled credential
+   prevents the next request; replacing its key does not change model/cache identity.
+4. For standalone evaluation, create a separate active `standalone_llm` credential.
+   Set non-secret `BID_LLM_PROVIDER`, `BID_LLM_MODEL`, `BID_LLM_BASE_URL` and pricing
+   settings to match that credential. The evaluator requires the reader database URL
+   and secrets root. No anonymous or env-key mode is supported.
+5. An explicit public-tender evaluation makes paid vendor requests:
 
    ```sh
-   uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --output /tmp/extract-result.json
+   uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --output data/work/extract-result.json
    ```
 
-Changing the provider, model, or prompt changes the job cache key, so the
-next `req extract` runs again instead of returning the cached job. How
-batching, errors, and costs work is described in
-[llm-providers.md](../notes/llm-providers.md).
+Batching and model options are defined by
+[llm-providers.md](../notes/llm-providers.md); variable names are in
+[deploy/.env.example](../../deploy/.env.example).
+
+## Manage platform credentials
+
+1. Apply migrations with the migration owner. Provision authentication for
+   `bid_platform_app` and `bid_credential_reader` through the deployment secret
+   manager/database administration channel; the migration creates the restricted
+   LOGIN roles without passwords. For password-authenticated development, supply
+   `BID_PLATFORM_DATABASE_PASSWORD` and `BID_CREDENTIAL_DATABASE_PASSWORD` only to
+   `app.admin init-db` (the Compose migrate service); it assigns those explicit bootstrap
+   passwords after migration. Use matching URL-encoded values in the dedicated runtime
+   URLs. Peer/certificate deployments may omit these password variables. Do not grant
+   either role membership in another role.
+2. Inject `BID_PLATFORM_DATABASE_URL` for management, `BID_CREDENTIAL_DATABASE_URL`
+   for resolution, and a distinct `BID_SECRETS_KEY` into the appropriate API/worker
+   processes. The standalone evaluator requires only the reader URL. Keep root keys,
+   database credentials and platform TOTP seeds outside the credential table.
+3. Sign in through the existing platform password-and-TOTP flow. In `/app/platform/credentials`,
+   create the credential, inspect consumers, replace, enable, disable, remove or test it.
+   CLI automation uses `bid platform login` followed by these commands:
+
+   ```sh
+   bid platform credential list --json
+   bid platform credential create --input data/work/credential-metadata.json --key-file data/work/vendor-key --json
+   bid platform credential show --id CREDENTIAL_UUID --json
+   bid platform credential replace --id CREDENTIAL_UUID --expected-revision REVISION --reason scheduled_rotation --key-file data/work/vendor-key --json
+   bid platform credential set-active --id CREDENTIAL_UUID --expected-revision REVISION --inactive --reason incident --json
+   bid platform credential test --id CREDENTIAL_UUID --expected-revision REVISION --json
+   bid platform credential remove --id CREDENTIAL_UUID --expected-revision REVISION --reason retired --json
+   ```
+
+   Metadata JSON contains `name`, `purpose`, `provider`, `endpoint`, optional `active`
+   (default false) and `reason`; it never contains `api_key`. Key files must be owned by
+   the caller, mode 0600, and have no symbolic-link path components. Use `--active` to
+   enable. Conflicts require refreshing the revision, not blindly retrying.
+4. For a legacy deployment, stop admissions and drain old workers before cutover.
+   Export only the intended legacy vendor assignments to an owner-only env file; do
+   not source it into the new API, worker or evaluator. Prepare a manifest containing
+   `entries`, each with `name/purpose/provider/endpoint/active/source_env`.
+
+   ```sh
+   bid platform credential import-env --manifest data/work/credential-import.json --env-file data/work/legacy-vendor.env --dry-run --json
+   bid platform credential import-env --manifest data/work/credential-import.json --env-file data/work/legacy-vendor.env --json
+   ```
+
+   The parser does not execute shell expressions. Dry-run makes no writes; same-value
+   replays skip existing rows; any mismatch rejects the batch. Import all catalog
+   references, then have the migration owner validate
+   `platform_model_credential_fk` using `ALTER TABLE public.platform_models VALIDATE
+   CONSTRAINT platform_model_credential_fk`. Resolve any mismatch explicitly.
+5. Remove `BID_PLATFORM_CREDENTIAL_*`, `BID_PERPLEXITY_API_KEY` and `BID_LLM_API_KEY`
+   from every runtime environment/config, including empty legacy assignments and old
+   mounts. Startup refuses them by variable name without echoing values. Remove the
+   temporary import/key files after the deployment secret source is cleared.
+6. Set `BID_SEARCH_PROVIDER` explicitly: `disabled`, `searxng` or `perplexity`.
+   Perplexity requires the active `vendor_search` credential. It never falls back to
+   SearXNG. Re-submit old search jobs that lack the pinned service credential identity.
+
+Metadata testing does not prove model authorization or available balance. Official
+OpenAI/Anthropic model-list probes are bounded; Perplexity and custom endpoints return
+`unsupported`. No probe generates content or performs a paid search.
+
+To rotate the encryption root, first distribute the new key as a readable previous key
+on all replicas, then switch it to current while retaining the old key in
+`BID_SECRETS_KEY_PREVIOUS`. Run with the migration owner and the same root keyring:
+
+```sh
+uv run python -m app.admin rotate-encryption --scope provider-secrets
+uv run python -m app.admin rotate-encryption --scope provider-secrets
+```
+
+The report separates checked/rewritten platform and BYOK-history counts. Require zero
+failures and zero rewrites on the second run before removing retired keys from the online
+keyring. Preserve retired keys for the backup retention period. Default `--scope data`
+keeps the existing data rotation behavior. Never downgrade to an env-reading release
+while serving requests; retain the table/audits and repair forward.
 
 ## Configure job guards
 
@@ -180,8 +239,8 @@ usage totals, never org business data.
 
 3. Set `BID_PLATFORM_ADMIN_EMAILS` to the operator emails and
    `BID_PLATFORM_TOTP_SECRETS` to the printed `email:SECRET` pairs, comma
-   separated. For each catalog model credential, set
-   `BID_PLATFORM_CREDENTIAL_<NAME>` to the vendor key.
+   separated. Manage catalog keys through
+   [Manage platform credentials](#manage-platform-credentials).
 4. Build the console and point the API at it:
 
    ```sh
@@ -296,10 +355,10 @@ BID_CONVERTER_LIVE_URL=http://127.0.0.1:3300 uv run pytest -q server/tests/test_
 
 ## Run vendor search locally
 
-Vendor-source search (`bid evidence search`) and product simulation use the
-Perplexity Search API when `BID_PERPLEXITY_API_KEY` is set in the API and worker
-environment; restart both after setting it. Without a key they query a private
-SearXNG instance. SearXNG scrapes public search engines, which answer a busy
+Vendor-source search (`bid evidence search`) and product simulation follow the explicit
+`BID_SEARCH_PROVIDER` selection. Choose `perplexity` with an active `vendor_search`
+credential, or `searxng` with `BID_SEARCH_URL`; the default is `disabled`.
+SearXNG scrapes public search engines, which answer a busy
 address with CAPTCHAs or rate limits until they lift the block. It is configured by
 [deploy/searxng/settings.yml](../../deploy/searxng/settings.yml). Without a
 container daemon, run it from the source revision that the Compose image tag
@@ -371,7 +430,8 @@ To replace the data key:
 
 Downgrades from `0003` onward raise an error instead of dropping history
 tables; the `0001` and `0002` downgrades do drop their tables and columns. To
-roll back, deploy the previous application version and keep the tables. Each migration's tables
+recover credential cutover failures, retain the table and audit history and repair forward;
+an env-reading application version cannot safely serve after revocation. Each migration's tables
 and constraints are described in the matching note listed in the
 [documentation index](../README.md#机制笔记).
 

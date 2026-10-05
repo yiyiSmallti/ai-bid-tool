@@ -25,14 +25,13 @@ import io
 import json
 from decimal import Decimal
 from urllib.parse import urlsplit
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from app.api.main import create_app
 from app.models.entities import BalanceEntry, OrgBalance, SimulatedResource
 from app.providers.llm import OpenAICompatibleExtractor
-from conftest import FakeQueue
+from conftest import FakeQueue, credential_app
 from docx import Document
 from sqlalchemy import select
 from test_exports import draft, setup_template
@@ -254,10 +253,36 @@ async def test_simulation_records_only_verbatim_marked_parameters(
     monkeypatch.setenv("BID_SANDBOX_FETCH_QUOTA", str(tmp_path / "quota.sqlite3"))
     vendor = Vendor()
     search = (
-        {"search_url": "https://search.test"}
+        {"search_url": "https://search.test", "search_provider": "searxng"}
         if provider == "searxng"
-        else {"perplexity_api_key": "synthetic-pplx-key"}
+        else {"search_provider": "perplexity"}
     )
+    if provider == "perplexity":
+        from app.schemas.platform_credentials import ResolvedCredential, ServiceResolveTarget
+        from pydantic import SecretStr
+
+        selected = ServiceResolveTarget(service="vendor_search", credential_id=uuid4())
+
+        class SearchResolver:
+            def __init__(self, settings):
+                pass
+
+            async def select_service(self, service):
+                return selected
+
+            async def resolve_for_call(self, target):
+                return ResolvedCredential(
+                    selected.credential_id,
+                    1,
+                    1,
+                    "perplexity",
+                    "https://api.perplexity.ai",
+                    SecretStr("synthetic-pplx-key"),
+                )
+
+        monkeypatch.setattr(
+            "app.services.platform_credentials.PlatformCredentialResolver", SearchResolver
+        )
     settings = settings_for(tmp_path, "openai", **search)
     llm = OpenAICompatibleExtractor(
         settings,
@@ -266,7 +291,7 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         sale_usd_per_mtok=(1, 1),
     )
     llm.model_revision = 1
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     app.state.processor.search_transport = httpx.MockTransport(
         search_handler if provider == "searxng" else perplexity_handler
     )

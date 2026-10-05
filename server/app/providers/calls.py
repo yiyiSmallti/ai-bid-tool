@@ -19,6 +19,8 @@ class CallAccounting(Protocol):
 
     async def unknown(self, call_id: UUID) -> None: ...
 
+    async def not_sent(self, call_id: UUID) -> None: ...
+
 
 # Context-local, so concurrent jobs can safely share an adapter instance. Child batch
 # tasks inherit the attempt; neither a model nor a reasoning copy owns mutable job state.
@@ -42,16 +44,24 @@ async def accounted_call[T](
     reserved_charge: Decimal,
     platform_billed: bool,
     operation: Callable[[], Awaitable[tuple[T, ProviderUsage]]],
+    *,
+    before_send: Callable[[], Awaitable[None]] | None = None,
 ) -> tuple[T, ProviderUsage]:
     accounting = current_accounting.get()
     if accounting is None:
+        if before_send is not None:
+            await before_send()
         return await operation()
     call_id = await accounting.admit(reserved_charge, platform_billed)
     last_admitted_call.set(call_id)
 
     async def finish():
         settled = False
+        prepared = False
         try:
+            if before_send is not None:
+                await before_send()
+            prepared = True
             result, usage = await operation()
             await accounting.complete(call_id, usage)
             settled = True
@@ -59,7 +69,10 @@ async def accounted_call[T](
         finally:
             if not settled:
                 # No response/usage is not proof of no vendor charge. Keep the hold.
-                await accounting.unknown(call_id)
+                if prepared:
+                    await accounting.unknown(call_id)
+                else:
+                    await accounting.not_sent(call_id)
 
     pending = asyncio.create_task(finish())
     try:

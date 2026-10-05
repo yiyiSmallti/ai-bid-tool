@@ -39,7 +39,7 @@ from app.models.entities import (
 )
 from app.models.provider_configs import ProviderConfig
 from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
-from conftest import FakeQueue
+from conftest import FakeQueue, seed_platform_credential
 from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from sqlalchemy import func, insert, select, text
@@ -124,6 +124,12 @@ async def save(api, header, **changes):
 
 
 async def catalog(app, org, **changes):
+    await seed_platform_credential(
+        app.state.processor.settings,
+        name="provider_test",
+        provider="openai",
+        endpoint="https://vendor.example/v1",
+    )
     async with app.state.db.transaction(org) as session:
         session.add(
             PlatformModel(
@@ -264,7 +270,6 @@ async def test_org_extraction_pins_revision_and_skips_prepaid(tenants, tmp_path,
 
 @pytest.mark.parametrize("source", ["unconfigured", "default", "selected"])
 async def test_resolution_and_platform_admission(source, tenants, tmp_path, pdf_bytes, monkeypatch):
-    monkeypatch.setenv("BID_PLATFORM_CREDENTIAL_PROVIDER_TEST", "synthetic-platform-key")
     async with configured(tenants, tmp_path) as (app, api, headers, vendor):
         if source != "unconfigured":
             await catalog(app, tenants["orgs"][0])
@@ -492,7 +497,6 @@ async def test_concurrent_updates_and_token_reads(tenants, tmp_path):
 async def test_catalog_changed_after_submission_is_fenced(
     tenants, tmp_path, pdf_bytes, monkeypatch
 ):
-    monkeypatch.setenv("BID_PLATFORM_CREDENTIAL_PROVIDER_TEST", "synthetic-platform-key")
     async with configured(tenants, tmp_path) as (app, api, headers, vendor):
         await catalog(app, tenants["orgs"][0])
         async with app.state.db.transaction(tenants["orgs"][0]) as session:

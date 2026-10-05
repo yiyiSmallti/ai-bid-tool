@@ -12,6 +12,7 @@ from app.providers.llm import (
     ADAPTER_VERSION,
     AnthropicExtractor,
     OpenAICompatibleExtractor,
+    UnavailablePlatformModel,
     platform_llm,
 )
 
@@ -113,7 +114,19 @@ async def resolve_configured(session, settings, transport=None, job: Job | None 
             raise ServiceError(
                 "provider_unavailable", "Selected platform model is unavailable", 503, 4
             )
-        llm = DisabledLLM() if entry is None else platform_llm(settings, entry, transport)
+        if entry is None:
+            llm = DisabledLLM()
+        else:
+            llm = platform_llm(settings, entry, transport)
+            assert llm.credential_resolver is not None
+            try:
+                readiness = await llm.credential_resolver.readiness(llm.credential_target)
+            except ServiceError as exc:
+                raise ServiceError(
+                    "provider_unavailable", "Selected provider is unavailable", 503, exc.exit_code
+                ) from None
+            if not readiness.configured:
+                llm = UnavailablePlatformModel(entry)
         if config is not None:
             assert entry is not None
             llm.provider_config_id = config.id

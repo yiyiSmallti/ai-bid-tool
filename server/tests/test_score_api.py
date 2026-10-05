@@ -507,9 +507,11 @@ async def test_rubric_platform_calls_settle_once_even_when_output_refused(
     rubric_input_case, monkeypatch, mode
 ):
     case = rubric_input_case
-    seed_platform(case["admin_engine"], case["tenants"]["orgs"][0])
+    await seed_platform(
+        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
+    )
     case["vendor"].mode = mode
-    llm = platform_llm(case["tmp_path"], case["vendor"])
+    llm = platform_llm(case["app"].state.processor.settings, case["vendor"])
     install_rubric_resolver(monkeypatch, llm)
     preview = await preview_rubric(case)
     assert Decimal(preview["estimated_charge"]) > 0
@@ -562,8 +564,12 @@ async def test_rubric_platform_calls_settle_once_even_when_output_refused(
 
 async def test_rubric_cancel_drains_usage_and_fences_publication(rubric_input_case, monkeypatch):
     case = rubric_input_case
-    seed_platform(case["admin_engine"], case["tenants"]["orgs"][0])
-    install_rubric_resolver(monkeypatch, platform_llm(case["tmp_path"], case["vendor"]))
+    await seed_platform(
+        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
+    )
+    install_rubric_resolver(
+        monkeypatch, platform_llm(case["app"].state.processor.settings, case["vendor"])
+    )
     case["vendor"].entered, case["vendor"].release = asyncio.Event(), asyncio.Event()
     preview = await preview_rubric(case)
     submitted = await submit_rubric(case, preview)

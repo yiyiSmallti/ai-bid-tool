@@ -41,6 +41,9 @@ def main():
     values = {
         "BID_OWNER_PASSWORD": secrets.token_urlsafe(24),
         "BID_DATABASE_PASSWORD": secrets.token_urlsafe(24),
+        "BID_PLATFORM_DATABASE_PASSWORD": secrets.token_urlsafe(24),
+        "BID_CREDENTIAL_DATABASE_PASSWORD": secrets.token_urlsafe(24),
+        "BID_SECRETS_KEY": Fernet.generate_key().decode(),
         "BID_ENCRYPTION_KEY": key,
         "BID_TOKEN_KEY": Fernet.generate_key().decode(),
         "BID_CLI_KEY": Fernet.generate_key().decode(),
@@ -58,6 +61,12 @@ def main():
         + quote(values["BID_DATABASE_PASSWORD"], safe="")
         + "@postgres/bid"
     )
+    for prefix, role in (("PLATFORM", "bid_platform_app"), ("CREDENTIAL", "bid_credential_reader")):
+        values[f"BID_{prefix}_DATABASE_URL"] = (
+            f"postgresql+psycopg://{role}:"
+            + quote(values[f"BID_{prefix}_DATABASE_PASSWORD"], safe="")
+            + "@postgres/bid"
+        )
     env_file = args.root / "test.env"
     with os.fdopen(os.open(env_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as handle:
         handle.write("\n".join(f"{name}={value}" for name, value in values.items()))

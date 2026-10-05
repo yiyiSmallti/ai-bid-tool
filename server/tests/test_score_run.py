@@ -254,8 +254,12 @@ async def test_score_preview_worker_cross_response_total_cache_and_cli(score_cas
 @pytest.mark.parametrize("mode", ["bounds", "unknown_ref", "deduction", "refused", "truncated"])
 async def test_score_invalid_outputs_bill_once(score_case, monkeypatch, mode):
     case = score_case
-    seed_platform(case["admin_engine"], case["tenants"]["orgs"][0])
-    install_score_resolver(monkeypatch, platform_llm(case["tmp_path"], case["score_vendor"]))
+    await seed_platform(
+        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
+    )
+    install_score_resolver(
+        monkeypatch, platform_llm(case["app"].state.processor.settings, case["score_vendor"])
+    )
     case["score_vendor"].mode = mode
     preview = await preview_score(case)
     accepted = await submit_score(case, preview)

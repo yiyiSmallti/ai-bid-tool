@@ -20,6 +20,8 @@ kind: readme
 
 ## 机制笔记
 
+- [Platform credential authority](notes/platform-credentials.md)：平台凭据权限、逐次解析、导入与根密钥轮换。
+
 英文，结构为 Problem / Usage / How it works / Pitfalls / Code。
 
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。

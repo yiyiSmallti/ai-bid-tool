@@ -62,17 +62,35 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await expect(page.getByRole("row", { name: /端到端测试单位/ })).toContainText("e2e-admin@example.test");
   await shot("org-created");
 
+  await page.click("nav >> text=服务凭据");
+  await page.getByRole("button", { name: "添加凭据" }).click();
+  await page.fill("input[name=credential-name]", "e2e_catalog");
+  await page.fill("input[name=credential-key]", "synthetic-e2e-catalog-key");
+  await page.check("input[name=credential-active]");
+  await page.locator("form.panel button[type=submit]").click();
+  await expect(page.getByRole("row", { name: /e2e_catalog/ })).toContainText("已启用");
+  await expect(page.locator("input[name=credential-key]")).toHaveCount(0);
+  await shot("credential-created");
+
+  // Model content tests use a deterministic failure, never a real vendor request.
+  let modelTests = 0;
+  await page.route("**/platform/models/e2e-model/test", async (route) => {
+    const names = modelTests++ ? ["low", "max"] : [null];
+    const levels = names.map((reasoning) => ({ reasoning, passed: false, error: { code: "provider_unavailable", message: "Synthetic vendor unavailable" }, usage: null }));
+    await route.fulfill({ json: { ok: true, command: "platform model test", data: { passed: false, levels, error: levels[0].error }, items: [], warnings: [], cost: { llm_tokens: 0, ocr_pages: 0, usd: "0" }, duration_ms: 0 } });
+  });
   await page.click("nav >> text=模型");
   await page.click("text=添加模型");
   await page.fill("input[name=model-id]", "e2e-model");
-  await page.fill("input[name=credential]", "missing_key");
+  await page.getByTestId("model-credential-select").click();
+  await page.getByRole("option", { name: /e2e_catalog/ }).click();
   for (const [name, value] of [["vendor-input", "2"], ["vendor-output", "10"], ["sale-input", "3"], ["sale-output", "15"]]) {
     await page.fill(`input[name=${name}]`, value);
   }
   await page.check("input[name=default]");
   await page.click("form.panel button[type=submit]");
   const row = page.getByRole("row", { name: /e2e-model/ });
-  await expect(row).toContainText("未配置");
+  await expect(row).toContainText("已配置");
   await expect(row).toContainText("默认");
   await row.getByRole("button", { name: "测试" }).click();
   await expect(row.getByTestId("test-result")).toContainText("未通过：provider_unavailable");

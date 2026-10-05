@@ -17469,6 +17469,3285 @@
           ],
           "input": null
         },
+        "platform credential create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "key_file",
+              "options": [
+                "--key-file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "description": "Non-secret CLI input file; the API adds a separately supplied key.",
+            "properties": {
+              "active": {
+                "default": false,
+                "title": "Active",
+                "type": "boolean"
+              },
+              "endpoint": {
+                "maxLength": 300,
+                "minLength": 8,
+                "title": "Endpoint",
+                "type": "string"
+              },
+              "name": {
+                "pattern": "^[a-z0-9_]{1,40}$",
+                "title": "Name",
+                "type": "string"
+              },
+              "provider": {
+                "enum": [
+                  "anthropic",
+                  "openai",
+                  "perplexity"
+                ],
+                "title": "Provider",
+                "type": "string"
+              },
+              "purpose": {
+                "enum": [
+                  "catalog_llm",
+                  "standalone_llm",
+                  "vendor_search"
+                ],
+                "title": "Purpose",
+                "type": "string"
+              },
+              "reason": {
+                "default": "setup",
+                "enum": [
+                  "setup",
+                  "scheduled_rotation",
+                  "vendor_revoked",
+                  "incident",
+                  "retired",
+                  "migration"
+                ],
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "purpose",
+              "provider",
+              "endpoint"
+            ],
+            "title": "CredentialCreateInput",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CatalogConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "title": "Default",
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "const": "catalog_model",
+                    "default": "catalog_model",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "model_id": {
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "model_revision": {
+                    "minimum": 1,
+                    "title": "Model Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "model_id",
+                  "model_revision",
+                  "enabled",
+                  "default"
+                ],
+                "title": "CatalogConsumer",
+                "type": "object"
+              },
+              "CredentialData": {
+                "additionalProperties": false,
+                "properties": {
+                  "credential": {
+                    "$ref": "#/$defs/CredentialView"
+                  }
+                },
+                "required": [
+                  "credential"
+                ],
+                "title": "CredentialData",
+                "type": "object"
+              },
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              },
+              "CredentialView": {
+                "additionalProperties": false,
+                "properties": {
+                  "consumers": {
+                    "items": {
+                      "discriminator": {
+                        "mapping": {
+                          "catalog_model": "#/$defs/CatalogConsumer",
+                          "service": "#/$defs/ServiceConsumer"
+                        },
+                        "propertyName": "kind"
+                      },
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/CatalogConsumer"
+                        },
+                        {
+                          "$ref": "#/$defs/ServiceConsumer"
+                        }
+                      ]
+                    },
+                    "title": "Consumers",
+                    "type": "array"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "maxLength": 300,
+                    "minLength": 8,
+                    "title": "Endpoint",
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "pattern": "^sha256:[a-f0-9]{16}$",
+                    "title": "Fingerprint",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "last_four": {
+                    "pattern": "^[!-~]{4}$",
+                    "title": "Last Four",
+                    "type": "string"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_]{1,40}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "perplexity"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "catalog_llm",
+                      "standalone_llm",
+                      "vendor_search"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "removed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "updated_by": {
+                    "title": "Updated By",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "purpose",
+                  "provider",
+                  "endpoint",
+                  "id",
+                  "revision",
+                  "secret_version",
+                  "state",
+                  "fingerprint",
+                  "last_four",
+                  "created_at",
+                  "updated_at",
+                  "updated_by"
+                ],
+                "title": "CredentialView",
+                "type": "object"
+              },
+              "ServiceConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "service",
+                    "default": "service",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "selected": {
+                    "title": "Selected",
+                    "type": "boolean"
+                  },
+                  "service": {
+                    "enum": [
+                      "vendor_search",
+                      "standalone_llm"
+                    ],
+                    "title": "Service",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "service",
+                  "selected"
+                ],
+                "title": "ServiceConsumer",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
+        "platform credential import-env": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "manifest",
+              "options": [
+                "--manifest"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "env_file",
+              "options": [
+                "--env-file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CredentialImportManifestEntry": {
+                "additionalProperties": false,
+                "description": "Non-secret CLI manifest; source_env is checked again by CredentialImportEntry.",
+                "properties": {
+                  "active": {
+                    "default": false,
+                    "title": "Active",
+                    "type": "boolean"
+                  },
+                  "endpoint": {
+                    "maxLength": 300,
+                    "minLength": 8,
+                    "title": "Endpoint",
+                    "type": "string"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_]{1,40}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "perplexity"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "catalog_llm",
+                      "standalone_llm",
+                      "vendor_search"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "source_env": {
+                    "pattern": "^(BID_PLATFORM_CREDENTIAL_[A-Z0-9_]{1,40}|BID_PERPLEXITY_API_KEY|BID_LLM_API_KEY)$",
+                    "title": "Source Env",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "purpose",
+                  "provider",
+                  "endpoint",
+                  "source_env"
+                ],
+                "title": "CredentialImportManifestEntry",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "entries": {
+                "items": {
+                  "$ref": "#/$defs/CredentialImportManifestEntry"
+                },
+                "maxItems": 100,
+                "minItems": 1,
+                "title": "Entries",
+                "type": "array"
+              }
+            },
+            "required": [
+              "entries"
+            ],
+            "title": "CredentialImportManifest",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "would_create",
+                  "would_skip",
+                  "created",
+                  "skipped"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "credential_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Credential Id"
+              },
+              "name": {
+                "pattern": "^[a-z0-9_]{1,40}$",
+                "title": "Name",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "action"
+            ],
+            "title": "CredentialImportItem",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialImportData": {
+                "additionalProperties": false,
+                "properties": {
+                  "created": {
+                    "minimum": 0,
+                    "title": "Created",
+                    "type": "integer"
+                  },
+                  "dry_run": {
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "skipped": {
+                    "minimum": 0,
+                    "title": "Skipped",
+                    "type": "integer"
+                  },
+                  "would_create": {
+                    "minimum": 0,
+                    "title": "Would Create",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "dry_run",
+                  "created",
+                  "skipped",
+                  "would_create"
+                ],
+                "title": "CredentialImportData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialImportData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
+        "platform credential list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "state",
+              "options": [
+                "--state"
+              ],
+              "required": false,
+              "type": "choice"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "purpose",
+              "options": [
+                "--purpose"
+              ],
+              "required": false,
+              "type": "choice"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "after_name",
+              "options": [
+                "--after-name"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "100",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "after_name": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_]{1,40}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "After Name"
+              },
+              "limit": {
+                "default": 100,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "purpose": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "catalog_llm",
+                      "standalone_llm",
+                      "vendor_search"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Purpose"
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "removed"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "State"
+              }
+            },
+            "title": "CredentialListQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "CatalogConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "title": "Default",
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "const": "catalog_model",
+                    "default": "catalog_model",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "model_id": {
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "model_revision": {
+                    "minimum": 1,
+                    "title": "Model Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "model_id",
+                  "model_revision",
+                  "enabled",
+                  "default"
+                ],
+                "title": "CatalogConsumer",
+                "type": "object"
+              },
+              "ServiceConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "service",
+                    "default": "service",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "selected": {
+                    "title": "Selected",
+                    "type": "boolean"
+                  },
+                  "service": {
+                    "enum": [
+                      "vendor_search",
+                      "standalone_llm"
+                    ],
+                    "title": "Service",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "service",
+                  "selected"
+                ],
+                "title": "ServiceConsumer",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "consumers": {
+                "items": {
+                  "discriminator": {
+                    "mapping": {
+                      "catalog_model": "#/$defs/CatalogConsumer",
+                      "service": "#/$defs/ServiceConsumer"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/CatalogConsumer"
+                    },
+                    {
+                      "$ref": "#/$defs/ServiceConsumer"
+                    }
+                  ]
+                },
+                "title": "Consumers",
+                "type": "array"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "endpoint": {
+                "maxLength": 300,
+                "minLength": 8,
+                "title": "Endpoint",
+                "type": "string"
+              },
+              "fingerprint": {
+                "pattern": "^sha256:[a-f0-9]{16}$",
+                "title": "Fingerprint",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "last_four": {
+                "pattern": "^[!-~]{4}$",
+                "title": "Last Four",
+                "type": "string"
+              },
+              "name": {
+                "pattern": "^[a-z0-9_]{1,40}$",
+                "title": "Name",
+                "type": "string"
+              },
+              "provider": {
+                "enum": [
+                  "anthropic",
+                  "openai",
+                  "perplexity"
+                ],
+                "title": "Provider",
+                "type": "string"
+              },
+              "purpose": {
+                "enum": [
+                  "catalog_llm",
+                  "standalone_llm",
+                  "vendor_search"
+                ],
+                "title": "Purpose",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "secret_version": {
+                "minimum": 1,
+                "title": "Secret Version",
+                "type": "integer"
+              },
+              "state": {
+                "enum": [
+                  "active",
+                  "disabled",
+                  "removed"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              },
+              "updated_by": {
+                "title": "Updated By",
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "purpose",
+              "provider",
+              "endpoint",
+              "id",
+              "revision",
+              "secret_version",
+              "state",
+              "fingerprint",
+              "last_four",
+              "created_at",
+              "updated_at",
+              "updated_by"
+            ],
+            "title": "CredentialView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialListData": {
+                "additionalProperties": false,
+                "properties": {
+                  "next_after_name": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z0-9_]{1,40}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Next After Name"
+                  }
+                },
+                "title": "CredentialListData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialListData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
+        "platform credential remove": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "credential_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "choice"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "enum": [
+                  "vendor_revoked",
+                  "incident",
+                  "retired"
+                ],
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "reason"
+            ],
+            "title": "CredentialRemove",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CatalogConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "title": "Default",
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "const": "catalog_model",
+                    "default": "catalog_model",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "model_id": {
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "model_revision": {
+                    "minimum": 1,
+                    "title": "Model Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "model_id",
+                  "model_revision",
+                  "enabled",
+                  "default"
+                ],
+                "title": "CatalogConsumer",
+                "type": "object"
+              },
+              "CredentialData": {
+                "additionalProperties": false,
+                "properties": {
+                  "credential": {
+                    "$ref": "#/$defs/CredentialView"
+                  }
+                },
+                "required": [
+                  "credential"
+                ],
+                "title": "CredentialData",
+                "type": "object"
+              },
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              },
+              "CredentialView": {
+                "additionalProperties": false,
+                "properties": {
+                  "consumers": {
+                    "items": {
+                      "discriminator": {
+                        "mapping": {
+                          "catalog_model": "#/$defs/CatalogConsumer",
+                          "service": "#/$defs/ServiceConsumer"
+                        },
+                        "propertyName": "kind"
+                      },
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/CatalogConsumer"
+                        },
+                        {
+                          "$ref": "#/$defs/ServiceConsumer"
+                        }
+                      ]
+                    },
+                    "title": "Consumers",
+                    "type": "array"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "maxLength": 300,
+                    "minLength": 8,
+                    "title": "Endpoint",
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "pattern": "^sha256:[a-f0-9]{16}$",
+                    "title": "Fingerprint",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "last_four": {
+                    "pattern": "^[!-~]{4}$",
+                    "title": "Last Four",
+                    "type": "string"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_]{1,40}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "perplexity"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "catalog_llm",
+                      "standalone_llm",
+                      "vendor_search"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "removed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "updated_by": {
+                    "title": "Updated By",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "purpose",
+                  "provider",
+                  "endpoint",
+                  "id",
+                  "revision",
+                  "secret_version",
+                  "state",
+                  "fingerprint",
+                  "last_four",
+                  "created_at",
+                  "updated_at",
+                  "updated_by"
+                ],
+                "title": "CredentialView",
+                "type": "object"
+              },
+              "ServiceConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "service",
+                    "default": "service",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "selected": {
+                    "title": "Selected",
+                    "type": "boolean"
+                  },
+                  "service": {
+                    "enum": [
+                      "vendor_search",
+                      "standalone_llm"
+                    ],
+                    "title": "Service",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "service",
+                  "selected"
+                ],
+                "title": "ServiceConsumer",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
+        "platform credential replace": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "credential_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "choice"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "key_file",
+              "options": [
+                "--key-file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "api_key": {
+                "format": "password",
+                "title": "Api Key",
+                "type": "string",
+                "writeOnly": true
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "enum": [
+                  "setup",
+                  "scheduled_rotation",
+                  "vendor_revoked",
+                  "incident",
+                  "retired",
+                  "migration"
+                ],
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "api_key",
+              "expected_revision",
+              "reason"
+            ],
+            "title": "CredentialReplace",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CatalogConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "title": "Default",
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "const": "catalog_model",
+                    "default": "catalog_model",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "model_id": {
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "model_revision": {
+                    "minimum": 1,
+                    "title": "Model Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "model_id",
+                  "model_revision",
+                  "enabled",
+                  "default"
+                ],
+                "title": "CatalogConsumer",
+                "type": "object"
+              },
+              "CredentialData": {
+                "additionalProperties": false,
+                "properties": {
+                  "credential": {
+                    "$ref": "#/$defs/CredentialView"
+                  }
+                },
+                "required": [
+                  "credential"
+                ],
+                "title": "CredentialData",
+                "type": "object"
+              },
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              },
+              "CredentialView": {
+                "additionalProperties": false,
+                "properties": {
+                  "consumers": {
+                    "items": {
+                      "discriminator": {
+                        "mapping": {
+                          "catalog_model": "#/$defs/CatalogConsumer",
+                          "service": "#/$defs/ServiceConsumer"
+                        },
+                        "propertyName": "kind"
+                      },
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/CatalogConsumer"
+                        },
+                        {
+                          "$ref": "#/$defs/ServiceConsumer"
+                        }
+                      ]
+                    },
+                    "title": "Consumers",
+                    "type": "array"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "maxLength": 300,
+                    "minLength": 8,
+                    "title": "Endpoint",
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "pattern": "^sha256:[a-f0-9]{16}$",
+                    "title": "Fingerprint",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "last_four": {
+                    "pattern": "^[!-~]{4}$",
+                    "title": "Last Four",
+                    "type": "string"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_]{1,40}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "perplexity"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "catalog_llm",
+                      "standalone_llm",
+                      "vendor_search"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "removed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "updated_by": {
+                    "title": "Updated By",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "purpose",
+                  "provider",
+                  "endpoint",
+                  "id",
+                  "revision",
+                  "secret_version",
+                  "state",
+                  "fingerprint",
+                  "last_four",
+                  "created_at",
+                  "updated_at",
+                  "updated_by"
+                ],
+                "title": "CredentialView",
+                "type": "object"
+              },
+              "ServiceConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "service",
+                    "default": "service",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "selected": {
+                    "title": "Selected",
+                    "type": "boolean"
+                  },
+                  "service": {
+                    "enum": [
+                      "vendor_search",
+                      "standalone_llm"
+                    ],
+                    "title": "Service",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "service",
+                  "selected"
+                ],
+                "title": "ServiceConsumer",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
+        "platform credential set-active": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "credential_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "choice"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "active",
+              "options": [
+                "--active"
+              ],
+              "required": true,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "active": {
+                "title": "Active",
+                "type": "boolean"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "enum": [
+                  "setup",
+                  "scheduled_rotation",
+                  "vendor_revoked",
+                  "incident",
+                  "retired",
+                  "migration"
+                ],
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "active",
+              "reason"
+            ],
+            "title": "CredentialSetActive",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CatalogConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "title": "Default",
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "const": "catalog_model",
+                    "default": "catalog_model",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "model_id": {
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "model_revision": {
+                    "minimum": 1,
+                    "title": "Model Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "model_id",
+                  "model_revision",
+                  "enabled",
+                  "default"
+                ],
+                "title": "CatalogConsumer",
+                "type": "object"
+              },
+              "CredentialData": {
+                "additionalProperties": false,
+                "properties": {
+                  "credential": {
+                    "$ref": "#/$defs/CredentialView"
+                  }
+                },
+                "required": [
+                  "credential"
+                ],
+                "title": "CredentialData",
+                "type": "object"
+              },
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              },
+              "CredentialView": {
+                "additionalProperties": false,
+                "properties": {
+                  "consumers": {
+                    "items": {
+                      "discriminator": {
+                        "mapping": {
+                          "catalog_model": "#/$defs/CatalogConsumer",
+                          "service": "#/$defs/ServiceConsumer"
+                        },
+                        "propertyName": "kind"
+                      },
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/CatalogConsumer"
+                        },
+                        {
+                          "$ref": "#/$defs/ServiceConsumer"
+                        }
+                      ]
+                    },
+                    "title": "Consumers",
+                    "type": "array"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "maxLength": 300,
+                    "minLength": 8,
+                    "title": "Endpoint",
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "pattern": "^sha256:[a-f0-9]{16}$",
+                    "title": "Fingerprint",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "last_four": {
+                    "pattern": "^[!-~]{4}$",
+                    "title": "Last Four",
+                    "type": "string"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_]{1,40}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "perplexity"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "catalog_llm",
+                      "standalone_llm",
+                      "vendor_search"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "removed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "updated_by": {
+                    "title": "Updated By",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "purpose",
+                  "provider",
+                  "endpoint",
+                  "id",
+                  "revision",
+                  "secret_version",
+                  "state",
+                  "fingerprint",
+                  "last_four",
+                  "created_at",
+                  "updated_at",
+                  "updated_by"
+                ],
+                "title": "CredentialView",
+                "type": "object"
+              },
+              "ServiceConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "service",
+                    "default": "service",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "selected": {
+                    "title": "Selected",
+                    "type": "boolean"
+                  },
+                  "service": {
+                    "enum": [
+                      "vendor_search",
+                      "standalone_llm"
+                    ],
+                    "title": "Service",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "service",
+                  "selected"
+                ],
+                "title": "ServiceConsumer",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
+        "platform credential show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "credential_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "CatalogConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "title": "Default",
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "kind": {
+                    "const": "catalog_model",
+                    "default": "catalog_model",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "model_id": {
+                    "title": "Model Id",
+                    "type": "string"
+                  },
+                  "model_revision": {
+                    "minimum": 1,
+                    "title": "Model Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "model_id",
+                  "model_revision",
+                  "enabled",
+                  "default"
+                ],
+                "title": "CatalogConsumer",
+                "type": "object"
+              },
+              "CredentialData": {
+                "additionalProperties": false,
+                "properties": {
+                  "credential": {
+                    "$ref": "#/$defs/CredentialView"
+                  }
+                },
+                "required": [
+                  "credential"
+                ],
+                "title": "CredentialData",
+                "type": "object"
+              },
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              },
+              "CredentialView": {
+                "additionalProperties": false,
+                "properties": {
+                  "consumers": {
+                    "items": {
+                      "discriminator": {
+                        "mapping": {
+                          "catalog_model": "#/$defs/CatalogConsumer",
+                          "service": "#/$defs/ServiceConsumer"
+                        },
+                        "propertyName": "kind"
+                      },
+                      "oneOf": [
+                        {
+                          "$ref": "#/$defs/CatalogConsumer"
+                        },
+                        {
+                          "$ref": "#/$defs/ServiceConsumer"
+                        }
+                      ]
+                    },
+                    "title": "Consumers",
+                    "type": "array"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "endpoint": {
+                    "maxLength": 300,
+                    "minLength": 8,
+                    "title": "Endpoint",
+                    "type": "string"
+                  },
+                  "fingerprint": {
+                    "pattern": "^sha256:[a-f0-9]{16}$",
+                    "title": "Fingerprint",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "last_four": {
+                    "pattern": "^[!-~]{4}$",
+                    "title": "Last Four",
+                    "type": "string"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_]{1,40}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai",
+                      "perplexity"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "catalog_llm",
+                      "standalone_llm",
+                      "vendor_search"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "disabled",
+                      "removed"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "updated_by": {
+                    "title": "Updated By",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "purpose",
+                  "provider",
+                  "endpoint",
+                  "id",
+                  "revision",
+                  "secret_version",
+                  "state",
+                  "fingerprint",
+                  "last_four",
+                  "created_at",
+                  "updated_at",
+                  "updated_by"
+                ],
+                "title": "CredentialView",
+                "type": "object"
+              },
+              "ServiceConsumer": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "service",
+                    "default": "service",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "selected": {
+                    "title": "Selected",
+                    "type": "boolean"
+                  },
+                  "service": {
+                    "enum": [
+                      "vendor_search",
+                      "standalone_llm"
+                    ],
+                    "title": "Service",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "service",
+                  "selected"
+                ],
+                "title": "ServiceConsumer",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
+        "platform credential test": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "credential_id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "mode": {
+                "const": "authentication",
+                "default": "authentication",
+                "title": "Mode",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_revision"
+            ],
+            "title": "CredentialTest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CredentialError": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "enum": [
+                      "invalid_input",
+                      "invalid_session",
+                      "not_found",
+                      "revision_conflict",
+                      "credential_name_conflict",
+                      "credential_purpose_conflict",
+                      "credential_import_conflict",
+                      "credential_reference_mismatch",
+                      "credential_missing",
+                      "credential_disabled",
+                      "credential_removed",
+                      "credential_unreadable",
+                      "credential_backend_unavailable",
+                      "credential_audit_unavailable",
+                      "credential_env_forbidden",
+                      "credential_probe_auth_failed",
+                      "credential_probe_unsupported",
+                      "credential_probe_timeout",
+                      "credential_probe_rate_limited",
+                      "credential_probe_unavailable",
+                      "credential_probe_interrupted",
+                      "credential_probe_endpoint_rejected"
+                    ],
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "exit_code": {
+                    "enum": [
+                      2,
+                      3,
+                      4
+                    ],
+                    "title": "Exit Code",
+                    "type": "integer"
+                  },
+                  "message": {
+                    "title": "Message",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message",
+                  "exit_code"
+                ],
+                "title": "CredentialError",
+                "type": "object"
+              },
+              "CredentialErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/CredentialError"
+                  },
+                  "probe": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CredentialProbeView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "CredentialErrorData",
+                "type": "object"
+              },
+              "CredentialProbeData": {
+                "additionalProperties": false,
+                "properties": {
+                  "probe": {
+                    "$ref": "#/$defs/CredentialProbeView"
+                  }
+                },
+                "required": [
+                  "probe"
+                ],
+                "title": "CredentialProbeData",
+                "type": "object"
+              },
+              "CredentialProbeView": {
+                "additionalProperties": false,
+                "properties": {
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "credential_id": {
+                    "format": "uuid",
+                    "title": "Credential Id",
+                    "type": "string"
+                  },
+                  "duration_ms": {
+                    "minimum": 0,
+                    "title": "Duration Ms",
+                    "type": "integer"
+                  },
+                  "outcome": {
+                    "enum": [
+                      "passed",
+                      "auth_failed",
+                      "unsupported",
+                      "timeout",
+                      "rate_limited",
+                      "unavailable",
+                      "interrupted"
+                    ],
+                    "title": "Outcome",
+                    "type": "string"
+                  },
+                  "probe_id": {
+                    "format": "uuid",
+                    "title": "Probe Id",
+                    "type": "string"
+                  },
+                  "proves": {
+                    "const": "authentication_only",
+                    "default": "authentication_only",
+                    "title": "Proves",
+                    "type": "string"
+                  },
+                  "retry_after_seconds": {
+                    "anyOf": [
+                      {
+                        "maximum": 3600,
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Retry After Seconds"
+                  },
+                  "secret_version": {
+                    "minimum": 1,
+                    "title": "Secret Version",
+                    "type": "integer"
+                  },
+                  "tested_revision": {
+                    "minimum": 1,
+                    "title": "Tested Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "credential_id",
+                  "tested_revision",
+                  "secret_version",
+                  "outcome",
+                  "duration_ms",
+                  "checked_at"
+                ],
+                "title": "CredentialProbeView",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/CredentialProbeData"
+              },
+              {
+                "$ref": "#/$defs/CredentialErrorData"
+              }
+            ]
+          }
+        },
         "platform login": {
           "cli_parameters": [
             {

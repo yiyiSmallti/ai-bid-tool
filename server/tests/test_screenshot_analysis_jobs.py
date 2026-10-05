@@ -30,11 +30,13 @@ from uuid import UUID
 
 import httpx
 import pytest
-from app.api.main import create_app
 from app.models.entities import AuditLog, BalanceEntry, Job, OrgBalance, UsageRecord, VendorCall
 from app.models.screenshots import ScreenshotAnalysisRun, ScreenshotSuggestion
 from app.providers.llm import OpenAICompatibleExtractor
-from conftest import FakeQueue  # pyright: ignore[reportMissingImports]
+from conftest import (
+    FakeQueue,  # pyright: ignore[reportMissingImports]
+    credential_app,
+)
 from sqlalchemy import func, select
 from test_llm_providers import settings_for  # pyright: ignore[reportMissingImports]
 from test_response_cards import (  # pyright: ignore[reportMissingImports]
@@ -179,7 +181,7 @@ async def analysis_client(tenants, tmp_path, vendor, *, balance="100"):
         }
     }
     provider.default_reasoning = "high"
-    app = create_app(settings, llm=provider, queue=FakeQueue())
+    app = await credential_app(settings, llm=provider, queue=FakeQueue())
     async with (
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,

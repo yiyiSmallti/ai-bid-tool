@@ -60,6 +60,7 @@ from bid_cli.confidential import register as register_confidential_commands
 from bid_cli.export import app as export_app
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
+from bid_cli.platform_credentials import app as platform_credential_app
 from bid_cli.providers import app as provider_app
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
 from bid_cli.schema import command_schema
@@ -1219,6 +1220,7 @@ app.add_typer(platform_app, name="platform")
 app.add_typer(auth_app, name="auth")
 platform_app.add_typer(platform_org_app, name="org")
 platform_app.add_typer(platform_model_app, name="model")
+platform_app.add_typer(platform_credential_app, name="credential")
 
 
 def env_secret(name: str, purpose: str) -> str:

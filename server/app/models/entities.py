@@ -250,7 +250,11 @@ class VendorCall(Tenant, Base):
         UniqueConstraint("org_id", "job_id", "run_id", "id"),
         ForeignKeyConstraint(["org_id", "job_id"], ["jobs.org_id", "jobs.id"]),
         CheckConstraint("reserved_charge >= 0 AND (charge IS NULL OR charge >= 0)"),
-        CheckConstraint("state IN ('pending', 'completed', 'unknown')"),
+        CheckConstraint("state IN ('pending', 'completed', 'unknown', 'not_sent')"),
+        CheckConstraint(
+            "state <> 'not_sent' OR (reserved_charge = 0 AND charge IS NULL)",
+            name="vendor_calls_not_sent_no_charge",
+        ),
         CheckConstraint("(state = 'completed') = (charge IS NOT NULL)"),
         Index("vendor_calls_job", "org_id", "job_id"),
         Index("vendor_calls_unsettled", "org_id", "state"),

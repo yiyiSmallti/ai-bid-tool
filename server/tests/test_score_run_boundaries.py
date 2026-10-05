@@ -174,10 +174,12 @@ async def test_later_refused_batch_publishes_partial_report(score_case, monkeypa
 
 async def test_billing_charge_failure_is_visible_and_publishes_no_report(score_case, monkeypatch):
     case = score_case
-    seed_platform(case["admin_engine"], case["tenants"]["orgs"][0])
+    await seed_platform(
+        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
+    )
     install_score_resolver(
         monkeypatch,
-        platform_llm(case["tmp_path"], case["score_vendor"]),
+        platform_llm(case["app"].state.processor.settings, case["score_vendor"]),
     )
 
     async def fail_charge(*args, **kwargs):

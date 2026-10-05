@@ -20,12 +20,11 @@ from uuid import UUID, uuid4
 import httpx
 import pymupdf
 import pytest
-from app.api.main import create_app
 from app.jobs.execution import JobExecution
 from app.models.entities import BalanceEntry, Job, OrgBalance, Requirement, UsageRecord, VendorCall
 from app.providers.base import ProviderFailure
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
-from conftest import FakeQueue
+from conftest import FakeQueue, credential_app
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import DBAPIError, OperationalError
 from sqlalchemy.exc import TimeoutError as PoolTimeoutError
@@ -56,7 +55,7 @@ async def environment(
         platform_model_id="guard-test",
         sale_usd_per_mtok=(1, 1),
     )
-    app = create_app(config, llm=llm, queue=FakeQueue())
+    app = await credential_app(config, llm=llm, queue=FakeQueue())
     org = tenants["orgs"][0]
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         async with app.state.db.transaction(org) as session:
@@ -769,3 +768,89 @@ async def test_settlement_failure_stops_waiting_batches_and_drains_sent_calls(
         assert balance == Decimal("9.9985") and saved == 0
         assert result["result"]["cost"]["llm_tokens"] == 1500
         evidence(tmp_path, "settlement_stop", calls, usages, balance, result)
+
+
+async def test_proven_unsent_credential_failure_releases_hold_without_delete_or_call_count(
+    tenants,
+    tmp_path,
+):
+    """Run the credential preparation failure against bid_app's real UPDATE-only ledger."""
+    from app.core.errors import ServiceError
+    from app.schemas.platform_credentials import CatalogResolveTarget, ResolvedCredential
+    from pydantic import SecretStr
+
+    requests = []
+
+    def vendor(request):
+        requests.append(request)
+        return anthropic_reply([])
+
+    class Resolver:
+        unavailable = True
+
+        async def resolve_for_call(self, target):
+            if self.unavailable:
+                raise ServiceError("credential_disabled", "Credential is disabled", 409, 4)
+            return ResolvedCredential(
+                uuid4(),
+                1,
+                1,
+                "anthropic",
+                "https://api.anthropic.com",
+                SecretStr("synthetic-unsent-credential-key"),
+            )
+
+    async with environment(
+        tenants, tmp_path, vendor, job_max_vendor_calls=1, job_vendor_calls_per_batch=1
+    ) as (app, api, header):
+        _, job_id = await prepare(app, api, header, pdf_lines(1))
+        run_id = uuid4()
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            job = await session.get(Job, UUID(job_id))
+            job.status, job.run_id = "running", run_id
+            job.lease_until = datetime.now(UTC) + timedelta(minutes=5)
+        execution = JobExecution(
+            app.state.processor.settings, app.state.db, tenants["orgs"][0], UUID(job_id), run_id
+        )
+        resolver = Resolver()
+        llm = app.state.processor.llm
+        llm.credential_resolver = resolver
+        llm.credential_target = CatalogResolveTarget(
+            model_id="guard-test", expected_model_revision=1
+        )
+        async with execution.activate(), httpx.AsyncClient(transport=llm.transport) as client:
+            with pytest.raises(ServiceError) as caught:
+                await llm.post(
+                    client,
+                    "https://api.anthropic.com/v1/messages",
+                    {},
+                    {"max_tokens": 1024},
+                    reserved_charge=Decimal("0.02"),
+                )
+            assert caught.value.code == "provider_unavailable"
+            calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job_id)
+            assert len(calls) == 1 and calls[0].state == "not_sent"
+            assert calls[0].reserved_charge == 0 and calls[0].charge is None
+            assert not requests and not usages and not entries and balance == Decimal("10")
+            # Repeating the cleanup is idempotent; a later valid call still fits ceiling=1.
+            await execution.not_sent(calls[0].id)
+            resolver.unavailable = False
+            await llm.post(
+                client,
+                "https://api.anthropic.com/v1/messages",
+                {},
+                {"max_tokens": 1024},
+                reserved_charge=Decimal("0.02"),
+            )
+        calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job_id)
+        assert len(requests) == len(usages) == len(entries) == 1
+        assert sorted(call.state for call in calls) == ["completed", "not_sent"]
+        assert balance == Decimal("10") - Decimal(usages[0].charge)
+        evidence(
+            tmp_path,
+            "unsent-credential-release",
+            calls,
+            usages,
+            balance,
+            await status(api, header, job_id),
+        )
