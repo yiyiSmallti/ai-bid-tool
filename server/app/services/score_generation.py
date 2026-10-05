@@ -7,6 +7,7 @@ import json
 import re
 import unicodedata
 from collections import Counter
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, cast
@@ -32,8 +33,10 @@ from app.providers.configured import model_identity
 from app.providers.llm import with_reasoning
 from app.providers.rubric import (
     ADAPTER_VERSION,
+    ITEMS_PROMPT_VERSION,
     PROMPT_VERSION,
     SCHEMA_VERSION,
+    STRUCTURE_PROMPT_VERSION,
     HTTPRubricProvider,
     rubric_provider,
     supports_rubric,
@@ -45,9 +48,12 @@ from app.schemas.score_contracts import (
     RubricGenerateRequest,
     RubricGenerateResult,
     RubricInput,
+    RubricItemsRequest,
     RubricPreview,
     RubricProviderRequest,
     RubricProviderRequirement,
+    RubricSectionContext,
+    RubricStructureOutput,
 )
 from app.services import confidential, drafts, redaction, score_inputs, score_normalization
 from app.services import response_cards as cards
@@ -61,6 +67,9 @@ PARTIAL_STOPS = {
     "spend_cap_reached",
     "job_charge_limit_exceeded",
     "job_call_limit_exceeded",
+    "task_budget_exceeded",
+    "task_budget_unpriced",
+    "task_budget_currency_review_required",
 }
 HARD_STOPS = {
     "job_attempt_stopped",
@@ -106,7 +115,9 @@ def prices(llm, *, rubric: bool = False) -> dict:
             {
                 "rubric_max_request_bytes": configured.rubric_max_request_bytes
                 if configured
-                else None
+                else None,
+                "batch_chars": configured.llm_batch_chars if configured else None,
+                "concurrency": configured.llm_concurrency if configured else None,
             }
             if rubric
             else {"batch_chars": configured.llm_batch_chars if configured else None}
@@ -231,6 +242,10 @@ async def prepare(
     requested_reasoning: str | None,
     settings: Settings,
 ):
+    fixed.manifest |= {
+        "structure_prompt_version": STRUCTURE_PROMPT_VERSION,
+        "items_prompt_version": ITEMS_PROMPT_VERSION,
+    }
     if not fixed.manifest["model_redaction_enabled"]:
         fixed.manifest |= {
             "prompt_version": PROMPT_VERSION,
@@ -316,7 +331,7 @@ async def preview_cost(
             }
         return unknown | {"admission_blocker": "billing_bound_unavailable"}
     try:
-        request_body = adapter.validate_request(request)
+        adapter.validate_request(request)
     except ProviderFailure as error:
         if error.code != "rubric_context_limit":
             raise
@@ -330,14 +345,12 @@ async def preview_cost(
                 "admission_blocker": "billing_price_unavailable",
                 "cost_basis_reason": "prices_unavailable",
             }
-        bound = adapter.reservation(request)
+        inputs, outputs, bound, first = adapter.preview_bounds(request)
     except ProviderFailure as error:
         return unknown | {
             "admission_blocker": error.code,
             "cost_basis_reason": "prices_unavailable",
         }
-    inputs = len(json.dumps(request_body, ensure_ascii=False).encode()) + 4096
-    outputs = adapter.llm.output_token_bound(request_body)
     input_price = adapter.llm.settings.llm_input_usd_per_mtok
     output_price = adapter.llm.settings.llm_output_usd_per_mtok
     usd = (
@@ -345,7 +358,6 @@ async def preview_cost(
         if input_price is None or output_price is None
         else (inputs * input_price + outputs * output_price) / 1_000_000
     )
-    first = bound
     blocker = None
     if first > settings.job_max_charge:
         blocker = "job_charge_limit_exceeded"
@@ -630,9 +642,15 @@ def _safe_candidate_text(
     )
 
 
+@dataclass(frozen=True)
+class _CitationScope:
+    requested_requirement_ids: list[UUID]
+    sent_refs: list[str]
+
+
 def _verified_requirement(
     citation,
-    batch: RubricAnsweredBatch,
+    batch: RubricAnsweredBatch | _CitationScope,
     outbound: dict,
 ) -> tuple[str | None, str | None]:
     if citation.ref not in batch.sent_refs or citation.ref not in outbound["refs"]:
@@ -667,14 +685,7 @@ def _candidate_requirement(citations, batch, outbound) -> tuple[str | None, str 
     return requirements.pop(), None
 
 
-def accept_batches(
-    secret: dict,
-    outbound: dict,
-    batches: list[RubricAnsweredBatch],
-    library=(),
-) -> dict:
-    """Accept only locally bound candidates; never repair a model reference or quote."""
-
+def _require_safe_sources(outbound: dict) -> None:
     if outbound["redacted_requirements"]:
         cards.fail(
             "sensitive_scoring_source",
@@ -682,124 +693,182 @@ def accept_batches(
             409,
             4,
         )
-    known = {item["requirement_id"]: item for item in secret["requirements"]}
-    expected = set(known)
+
+
+def accept_structure(
+    secret: dict,
+    outbound: dict,
+    output: RubricStructureOutput,
+    library=(),
+) -> dict:
+    """Verify the entire structure before any item request can use its section keys."""
+
+    _require_safe_sources(outbound)
+    known = {item["requirement_id"] for item in secret["requirements"]}
+    scope = _CitationScope(
+        requested_requirement_ids=[UUID(local) for local in outbound["requirements"]],
+        sent_refs=list(outbound["refs"]),
+    )
     allowed_placeholders = {
         entry["placeholder"] for entry in outbound["context"]["confidential_fields"]
     }
-    sections: list[dict] = []
-    items: list[dict] = []
-    errors: list[str] = []
-    if len(batches) != 1:
-        cards.fail(
-            "invalid_provider_output", "Rubric provider must return one complete response", 502, 4
-        )
-    batch = batches[0]
-    provider_ids = {UUID(local) for local in outbound["requirements"]}
-    sent_refs = set(outbound["refs"])
-    if (
-        len(batch.requested_requirement_ids) != len(provider_ids)
-        or set(batch.requested_requirement_ids) != provider_ids
-        or len(batch.sent_refs) != len(sent_refs)
-        or set(batch.sent_refs) != sent_refs
-    ):
-        cards.fail(
-            "invalid_provider_output", "Rubric response scope must match the complete table", 502, 4
-        )
-    canonical = {
-        "overall_aggregation": batch.output.overall_aggregation,
-        "overall_rule_text": batch.output.overall_rule_text,
-        "overall_score_range": batch.output.overall_score_range.model_dump(mode="json")
-        if batch.output.overall_score_range
-        else None,
-        "overall_cap": batch.output.overall_cap,
-    }
-    for section in batch.output.sections:
-        candidate = section.model_dump(mode="json")
-        requirement_id, reason = _candidate_requirement(section.citations, batch, outbound)
+    canonical = output.model_dump(mode="json", exclude={"sections", "overall_citations"})
+    if not _safe_candidate_text(canonical, ("overall_rule_text",), library, allowed_placeholders):
+        cards.fail("sensitive_model_output", "Rubric structure contains sensitive text", 409, 4)
+    overall_citations = []
+    for citation in output.overall_citations:
+        requirement_id, reason = _verified_requirement(citation, scope, outbound)
         if reason is not None or requirement_id not in known:
-            errors.append("invalid_section_citation")
-            continue
+            cards.fail(
+                "invalid_overall_citation", "The overall rule lacks a verified citation", 502, 4
+            )
+        overall_citations.append(
+            {
+                "requirement_id": requirement_id,
+                "source": outbound["refs"][citation.ref]["source"],
+                "quote": citation.quote,
+            }
+        )
+    sections: list[dict] = []
+    for section in output.sections:
+        candidate = section.model_dump(mode="json")
+        requirement_id, reason = _candidate_requirement(section.citations, scope, outbound)
+        if reason is not None or requirement_id not in known:
+            cards.fail(
+                "invalid_section_citation", "A rubric section lacks a verified citation", 502, 4
+            )
         if not _safe_candidate_text(
             candidate,
             ("key", "title", "aggregation_rule_text", "ambiguity_reason"),
             library,
             allowed_placeholders,
         ):
-            errors.append("sensitive_model_output")
-            continue
+            cards.fail("sensitive_model_output", "Rubric structure contains sensitive text", 409, 4)
         candidate.pop("citations")
-        source = outbound["refs"][section.citations[0].ref]["source"]
         candidate |= {
             "requirement_id": requirement_id,
-            "source": source,
+            "source": outbound["refs"][section.citations[0].ref]["source"],
             "citation_valid": True,
         }
         candidate["fingerprint"] = score_normalization.content_fingerprint("section", candidate)
         sections.append(candidate)
-    for item in batch.output.items:
-        local = str(item.requirement_id)
-        expected_real = outbound["requirements"].get(local)
-        requirement_id, reason = _candidate_requirement(item.citations, batch, outbound)
-        if (
-            reason is not None
-            or expected_real is None
-            or requirement_id != expected_real
-            or requirement_id not in known
-        ):
-            errors.append("invalid_item_citation")
-            continue
-        candidate = item.model_dump(mode="json")
-        if not _safe_candidate_text(
-            candidate,
-            ("section_key", "key", "title", "rule_text", "ambiguity_reason"),
-            library,
-            allowed_placeholders,
-        ):
-            errors.append("sensitive_model_output")
-            continue
-        candidate.pop("citations")
-        source = outbound["refs"][item.citations[0].ref]["source"]
-        candidate["requirement_id"] = requirement_id
-        candidate |= {"source": source, "citation_valid": True}
-        candidate["fingerprint"] = score_normalization.content_fingerprint("item", candidate)
-        items.append(candidate)
-
-    def remove_duplicate(rows: list[dict], field: str, code: str) -> list[dict]:
-        counts = Counter(row[field] for row in rows)
-        duplicates = {key for key, count in counts.items() if count > 1}
-        if duplicates:
-            errors.append(code)
-        return [row for row in rows if row[field] not in duplicates]
-
-    sections = remove_duplicate(sections, "key", "duplicate_section_key")
-    sections = remove_duplicate(sections, "fingerprint", "duplicate_section_fingerprint")
-    items = remove_duplicate(items, "key", "duplicate_item_key")
-    items = remove_duplicate(items, "fingerprint", "duplicate_item_fingerprint")
-    section_keys = {section["key"] for section in sections}
-    orphaned = [item for item in items if item["section_key"] not in section_keys]
-    if orphaned:
-        errors.append("orphan_section_key")
-        items = [item for item in items if item["section_key"] in section_keys]
-    represented = {item["requirement_id"] for item in items}
-    unresolved = sorted(expected - represented)
-    if unresolved:
-        errors.append("missing_requirement_output")
-    if not _safe_candidate_text(
-        canonical,
-        ("overall_rule_text",),
-        library,
-        allowed_placeholders,
+    for field, code in (
+        ("key", "duplicate_section_key"),
+        ("fingerprint", "duplicate_section_fingerprint"),
     ):
-        cards.fail(
-            "sensitive_model_output",
-            "Rubric provider output contains sensitive text",
-            409,
-            4,
-        )
+        if len({row[field] for row in sections}) != len(sections):
+            cards.fail(code, "Rubric structure has duplicate sections", 502, 4)
+    # Citations, proposals and both prompt versions participate in the stage boundary.
+    structure_hash = drafts.digest(
+        {
+            "output": output.model_dump(mode="json"),
+            "structure_prompt_version": STRUCTURE_PROMPT_VERSION,
+            "items_prompt_version": ITEMS_PROMPT_VERSION,
+            "schema_version": SCHEMA_VERSION,
+        }
+    )
     return {
         **canonical,
         "sections": sections,
+        "overall_citations": overall_citations,
+        "proposal": output.model_dump(mode="json"),
+        "structure_hash": structure_hash,
+    }
+
+
+def items_request(outbound: dict, structure: dict) -> RubricItemsRequest:
+    """Expose fixed section metadata, without other requirements' citation text."""
+
+    fields = RubricSectionContext.model_fields
+    return RubricItemsRequest(
+        **provider_request(outbound).model_dump(),
+        sections=[
+            RubricSectionContext.model_validate({key: section[key] for key in fields})
+            for section in structure["sections"]
+        ],
+        structure_hash=structure["structure_hash"],
+    )
+
+
+def accept_batches(
+    secret: dict,
+    outbound: dict,
+    structure: dict,
+    batches: list[RubricAnsweredBatch],
+    library=(),
+) -> dict:
+    """Keep valid items only within each sent batch and the verified fixed structure."""
+
+    _require_safe_sources(outbound)
+    expected = {item["requirement_id"] for item in secret["requirements"]}
+    allowed_placeholders = {
+        entry["placeholder"] for entry in outbound["context"]["confidential_fields"]
+    }
+    section_keys = {section["key"] for section in structure["sections"]}
+    provider_refs = {UUID(binding["provider_id"]): ref for ref, binding in outbound["refs"].items()}
+    occurrences = Counter(local for batch in batches for local in batch.requested_requirement_ids)
+    items: list[dict] = []
+    errors: list[str] = []
+    for batch in batches:
+        requested = set(batch.requested_requirement_ids)
+        if (
+            not requested
+            or any(occurrences[local] != 1 for local in requested)
+            or not requested <= set(provider_refs)
+            or len(batch.sent_refs) != len(requested)
+            or set(batch.sent_refs)
+            != {provider_refs[local] for local in requested if local in provider_refs}
+            or batch.structure_hash != structure["structure_hash"]
+        ):
+            errors.append("invalid_batch_scope")
+            continue
+        for item in batch.output.items:
+            local = str(item.requirement_id)
+            expected_real = outbound["requirements"].get(local)
+            requirement_id, reason = _candidate_requirement(item.citations, batch, outbound)
+            if (
+                item.requirement_id not in requested
+                or reason is not None
+                or expected_real is None
+                or requirement_id != expected_real
+                or requirement_id not in expected
+            ):
+                errors.append("invalid_item_citation")
+                continue
+            if item.section_key not in section_keys:
+                errors.append("orphan_section_key")
+                continue
+            candidate = item.model_dump(mode="json")
+            if not _safe_candidate_text(
+                candidate,
+                ("section_key", "key", "title", "rule_text", "ambiguity_reason"),
+                library,
+                allowed_placeholders,
+            ):
+                errors.append("sensitive_model_output")
+                continue
+            candidate.pop("citations")
+            candidate |= {
+                "requirement_id": requirement_id,
+                "source": outbound["refs"][item.citations[0].ref]["source"],
+                "citation_valid": True,
+            }
+            candidate["fingerprint"] = score_normalization.content_fingerprint("item", candidate)
+            items.append(candidate)
+    for field, code in (
+        ("key", "duplicate_item_key"),
+        ("fingerprint", "duplicate_item_fingerprint"),
+    ):
+        counts = Counter(row[field] for row in items)
+        duplicates = {key for key, count in counts.items() if count > 1}
+        if duplicates:
+            errors.append(code)
+            items = [row for row in items if row[field] not in duplicates]
+    unresolved = sorted(expected - {item["requirement_id"] for item in items})
+    if unresolved:
+        errors.append("missing_requirement_output")
+    return {
+        **structure,
         "items": items,
         "unresolved_requirement_ids": unresolved,
         "normalization_errors": sorted(set(errors)),
@@ -904,6 +973,28 @@ async def publish(
         or 0
     ) + 1
     submission = job.result["submission"]
+    # The queued cache key still binds the zero-call preview. The published input
+    # also binds the verified structure used by every item batch. Update the job
+    # envelope in this owned transaction so the existing database publication gate
+    # checks exactly the same manifest/hash as the immutable rubric snapshot.
+    preview_input_hash = fixed.input_hash
+    fixed.manifest = {
+        **fixed.manifest,
+        "rubric_structure": {
+            key: value
+            for key, value in accepted.items()
+            if key not in {"items", "unresolved_requirement_ids", "normalization_errors"}
+        },
+    }
+    fixed.input_hash = drafts.digest(fixed.manifest)
+    submission = {
+        **submission,
+        "preview_input_hash": preview_input_hash,
+        "input_manifest": fixed.manifest,
+        "input_hash": fixed.input_hash,
+    }
+    job.result = {**job.result, "submission": submission}
+    await session.flush()
     rubric = ScoreRubricSet(
         id=uuid4(),
         org_id=job.org_id,
