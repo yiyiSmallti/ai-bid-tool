@@ -1,6 +1,5 @@
 """Tasks and their tender documents: creation, upload and access."""
 
-import asyncio
 import hashlib
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -10,12 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import PDFSettings
 from app.core.errors import ServiceError, not_found
 from app.models.entities import Document, Task
 from app.providers.storage import Storage
 from app.schemas.contracts import TaskCreate
 from app.services.auth import Identity
-from app.services.parsing import validate_document
+from app.services.parsing import validate_document_async
 
 TASK_FIELDS = ("id", "name", "org_id", "model_redaction_enabled", "model_redaction_revision")
 
@@ -50,6 +50,7 @@ async def upload(
     *,
     max_bytes: int,
     max_pages: int,
+    settings: PDFSettings | None = None,
 ) -> tuple[Document, bool]:
     """Store a validated tender once per task and content hash: (document, duplicate)."""
     identity.require("tender:upload")
@@ -63,7 +64,7 @@ async def upload(
     if not name or len(name) > 200:
         raise ServiceError("invalid_filename", "Valid file name required", 400, 2)
     suffix = Path(name).suffix.lower()
-    await asyncio.to_thread(validate_document, content, suffix, max_pages)
+    await validate_document_async(content, suffix, max_pages, settings)
     digest = hashlib.sha256(content).hexdigest()
     key = f"org/{identity.org_id}/task/{task_id}/{digest}{suffix}"
     await storage.put(identity.org_id, key, content)

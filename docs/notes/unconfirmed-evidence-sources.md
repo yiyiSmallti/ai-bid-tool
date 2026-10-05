@@ -19,14 +19,16 @@ same authenticated preview ID; it is never inherited by a new selection.
 
 Validate scope intersections and active membership before reading any parent. Join
 immutable snapshot/revision/file identities and check original length/SHA/
-descriptor. Render the actual whole PDF page at150dpi RGB without alpha, preserving rotation, using existing PyMuPDF.
+descriptor. A disposable child validates the original PDF and renders the actual
+whole page at 150 DPI RGB without alpha, preserving rotation, using PyMuPDF.
 Check projected and real dimensions against the shared
 [PDF raster budget](pdf-parsing.md#how-it-works), PNG byte limit (40MiB
-or lower configured limit), and actual output. A pure CPU thread is awaited with a
-20second render deadline; only a successful await reaches any storage/DB work.
-Reading and rendering run without the task lock, at most two renders per process; a
-timed-out render keeps its slot until its thread returns, and a full pool fails with
-retryable `source_render_busy`. The task is then locked in the same order as
+or lower configured limit), and actual output. The shared
+[PDF process limits](pdf-parsing.md#how-it-works) terminate and reap a child that
+exceeds its deadline; only a successful render reaches storage/DB work.
+Reading and rendering run without the task lock, at most two renders per process.
+The slot is released after the child is reaped, and a full pool fails with retryable
+`source_render_busy`. The task is then locked in the same order as
 certificate selection and the snapshot and duplicate checks are repeated, so a
 selection replaced during rendering fails with `inactive_snapshot` and writes nothing.
 
@@ -59,9 +61,9 @@ matching or eligibility conclusion occurs. SQL parent binding and decoded PNG
 validity cannot prove that an uploaded certificate itself is authentic. This is a
 source archive, not a full Evidence/Card/confirmation chain or bid export.
 
-The rendering deadline does not forcibly terminate a native thread, or cap the
-whole original storage read and final write. A late pure renderer result cannot
-reach any database/object writes after the await fails. Storage succeeds before
+The rendering deadline covers the PDF child, not the original storage read and
+final write. Child timeout, resource exhaustion or crash returns non-retryable
+`pdf_resource_limits`; no partial image is archived. Storage succeeds before
 DB commit; a failed commit may leave an encrypted unreferenced object, retained
 for an explicitly designed later cleanup policy. Never delete historical source
 or original data to roll back; revert application behavior while retaining0009.

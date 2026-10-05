@@ -1,8 +1,16 @@
+"""Evidence-source archive coverage.
+
+PDF failure modes recorded before the isolated renderer implementation:
+- malformed, encrypted, repaired, empty-page or descriptor-mismatched originals fail closed;
+- page and raster/output bounds are preserved across the child-process boundary;
+- child deadlines and resource-limit failures cannot publish a DB row or object;
+- the bounded render slot remains held for the complete child operation.
+"""
+
 import asyncio
 import hashlib
 import json
-import threading
-import time
+import sys
 from datetime import UTC
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -398,18 +406,18 @@ async def test_render_runs_outside_task_lock_and_rechecks_selection(
     api, headers, pdf_bytes, application, monkeypatch, tenants
 ):
     certificate, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
-    rendering, release = threading.Event(), threading.Event()
-    original_render = services.render_page
+    rendering, release = asyncio.Event(), asyncio.Event()
+    original_render = services.render_page_async
 
-    def gated(*args):
+    async def gated(*args):
         rendering.set()
-        assert release.wait(10)
-        return original_render(*args)
+        await asyncio.wait_for(release.wait(), 10)
+        return await original_render(*args)
 
-    monkeypatch.setattr(services, "render_page", gated)
+    monkeypatch.setattr(services, "render_page_async", gated)
     pending = asyncio.create_task(add(api, headers[0], task, choice["id"]))
     try:
-        assert await asyncio.to_thread(rendering.wait, 10)
+        await asyncio.wait_for(rendering.wait(), 10)
         # Replacing the selection takes the task lock while the page is still rendering.
         assert (
             await upload(api, headers[0], certificate, pdf_bytes, expected=2)
@@ -427,7 +435,7 @@ async def test_render_runs_outside_task_lock_and_rechecks_selection(
 
 
 @pytest.mark.parametrize("failure", ["read", "original_hash", "put", "audit", "timeout", "size"])
-async def test_source_failures_never_commit_and_late_render_never_writes(
+async def test_source_failures_never_commit(
     failure, api, headers, pdf_bytes, application, monkeypatch, tenants
 ):
     _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
@@ -469,18 +477,13 @@ async def test_source_failures_never_commit_and_late_render_never_writes(
         monkeypatch.setattr(services, "audit", fail_audit)
     elif failure == "size":
         application.state.processor.settings.max_upload_bytes = 1
-    else:
-        original_render = services.render_page
-        completed = []
+    elif failure == "timeout":
 
-        def late(*args):
-            time.sleep(0.05)
-            result = original_render(*args)
-            completed.append(True)
-            return result
+        def sleeping_child(_root):
+            return [sys.executable, "-c", "import time; time.sleep(60)"]
 
-        monkeypatch.setattr(services, "render_page", late)
-        monkeypatch.setattr(services, "RENDER_SECONDS", 0.001)
+        monkeypatch.setattr("app.core.pdf_process.child_command", sleeping_child)
+        application.state.processor.settings.pdf_timeout_seconds = 0.1
     response = await add(api, headers[0], task, choice["id"])
     assert (
         response.status_code
@@ -489,13 +492,13 @@ async def test_source_failures_never_commit_and_late_render_never_writes(
             "original_hash": 502,
             "put": 503,
             "audit": 409,
-            "timeout": 503,
+            "timeout": 400,
             "size": 413,
         }[failure]
     )
     if failure == "timeout":
-        await asyncio.sleep(0.3)
-        assert completed and not writes and response.json()["data"]["error"]["exit_code"] == 3
+        error = response.json()["data"]["error"]
+        assert error["code"] == "pdf_resource_limits" and error["exit_code"] == 4
     async with application.state.db.transaction(tenants["orgs"][0]) as session:
         assert await session.scalar(select(func.count()).select_from(EvidenceSource)) == 0
         assert (

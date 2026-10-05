@@ -19,6 +19,11 @@ kind: changelog
   `combined` 语义模式保留到阶段二，当前明确返回 `check_mode_unavailable`。机制见
   [Confirmed-draft checks](notes/check.md)。
 
+## 2026-10-04：PDF 子进程资源隔离与背景图片 OCR 排除
+
+- PDF 上传验证、整份解析、在线预览及证据页渲染改用短生命周期子进程；设置墙钟、CPU、Linux 内存及输出上限，超时终止回收，资源超限或崩溃以不可重试的 `pdf_resource_limits` 结束。OCR 与用量记账保留在父进程，机制和 macOS 限制见 [PDF parsing](notes/pdf-parsing.md)。
+- 图片内原生文字块的联合面积覆盖至少 25% 时视为背景，不再因页边空白触发 OCR；扫描正文加页码仍执行 OCR，纯文字页仍不执行 OCR。
+
 ## 2026-10-04：PDF 栅格化上限与混合页 OCR
 
 - PDF 栅格化统一预检像素预算，OCR 对可处理的大页降低 DPI、对超大页明确拒绝；扫描正文带原生页码/页眉时执行 OCR 并合并可核验文本，未完整解析时返回警告，见 [PDF parsing](notes/pdf-parsing.md)。

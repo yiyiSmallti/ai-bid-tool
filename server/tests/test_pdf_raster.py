@@ -6,8 +6,8 @@ citations; empty OCR silently succeeds; large but usable pages exceed the pixel 
 """
 
 import json
-import math
-from unittest.mock import patch
+import sys
+from pathlib import Path
 
 import pymupdf
 import pytest
@@ -22,6 +22,29 @@ from test_api import create_document, run_job
 from test_job_boundaries import session_for
 
 BODY = "Synthetic OCR fixture only"
+
+
+def guarded_render_command(marker: Path):
+    script = (
+        "import sys\n"
+        "from pathlib import Path\n"
+        "from app.core import pdf_child\n"
+        "apply_limits = pdf_child.apply_limits\n"
+        "def install_guard(request):\n"
+        "    apply_limits(request)\n"
+        "    import pymupdf\n"
+        "    def guarded(*_args, **_kwargs):\n"
+        f"        Path({str(marker)!r}).write_text('called')\n"
+        "        raise AssertionError('raster allocation attempted')\n"
+        "    pymupdf.Page.get_pixmap = guarded\n"
+        "pdf_child.apply_limits = install_guard\n"
+        "raise SystemExit(pdf_child.main(Path(sys.argv[1])))\n"
+    )
+
+    def command(root: Path) -> list[str]:
+        return [sys.executable, "-c", script, str(root)]
+
+    return command
 
 
 def pdf_page(width=595, height=842, *, scanned=False, rotation=0, native="1"):
@@ -51,17 +74,26 @@ class RecordingOCR(FakeOCR):
         return result.model_copy(update={"text": self.text})
 
 
-async def test_oversized_parse_refuses_before_raster_allocation(tmp_path):
+async def test_oversized_parse_refuses_before_raster_allocation(tmp_path, monkeypatch):
     content = pdf_page(14400, 14400, native="")
-    with patch.object(pymupdf.Page, "get_pixmap") as render:
-        render.side_effect = AssertionError("Huge raster allocation attempted")
+    ocr = RecordingOCR()
+    render_marker = tmp_path / "get-pixmap-called"
+    with monkeypatch.context() as guarded:
+        guarded.setattr("app.core.pdf_process.child_command", guarded_render_command(render_marker))
         with pytest.raises(ServiceError) as refused:
-            await parse_document(content, ".pdf", FakeOCR(), 20)
+            await parse_document(content, ".pdf", ocr, 20)
     assert refused.value.code == "pdf_raster_limits" and refused.value.exit_code != 3
     assert "page" in refused.value.message.lower()
-    render.assert_not_called()
+    assert not render_marker.exists() and ocr.images == []
     (tmp_path / "oversized-refusal.json").write_text(
-        json.dumps({"bytes": len(content), "code": refused.value.code, "raster_calls": 0})
+        json.dumps(
+            {
+                "bytes": len(content),
+                "code": refused.value.code,
+                "render_guard_called": render_marker.exists(),
+                "ocr_calls": len(ocr.images),
+            }
+        )
     )
 
 
@@ -81,24 +113,21 @@ async def test_mixed_parse_keeps_body_and_native_text(tmp_path, rotation):
     (tmp_path / "mixed-page.json").write_text(pages[0].model_dump_json())
 
 
-async def test_large_sensible_page_reduces_ocr_resolution():
+async def test_large_sensible_page_reduces_ocr_resolution(tmp_path):
     content = pdf_page(2400, 2400, native="")
-    original = pymupdf.Page.get_pixmap
-    requested = []
-
-    def guarded(page, *args, **kwargs):
-        dpi = kwargs["dpi"]
-        width, height = (
-            math.ceil(page.rect.width * dpi / 72),
-            math.ceil(page.rect.height * dpi / 72),
-        )
-        assert 72 <= dpi < 180 and width * height <= 20_000_000 and max(width, height) <= 8192
-        requested.append(dpi)
-        return original(page, *args, **kwargs)
-
-    with patch.object(pymupdf.Page, "get_pixmap", guarded):
-        pages, _, _ = await parse_document(content, ".pdf", FakeOCR(), 20)
-    assert pages[0].ocr and len(requested) == 1
+    ocr = RecordingOCR()
+    pages, _, warnings = await parse_document(content, ".pdf", ocr, 20)
+    assert pages[0].ocr and ocr.images == [(1, 4467, 4467)]
+    _, width, height = ocr.images[0]
+    assert width * height <= 20_000_000 and max(width, height) <= 8192
+    assert 72 <= round(width * 72 / 2400) < 180
+    assert warnings == [
+        "Page 1 OCR resolution was reduced to 134 DPI to fit raster limits; "
+        "check small text manually."
+    ]
+    (tmp_path / "reduced-resolution.json").write_text(
+        json.dumps({"page": 1, "png_width": width, "png_height": height, "warnings": warnings})
+    )
 
 
 async def test_native_text_parse_never_calls_ocr(pdf_bytes):
@@ -144,6 +173,97 @@ async def test_parse_uses_visible_image_union_minus_native_blocks(layout, expect
         assert warnings and "not parsed" in warnings[0]
     elif layout == "native":
         assert warnings == []
+
+
+async def test_dense_native_text_suppresses_full_page_background_image(tmp_path):
+    image = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 2, 2), False)
+    image.clear_with(240)
+    native = "\n".join(
+        f"Searchable native line {number:02d} fills this page." for number in range(16)
+    )
+    with pymupdf.open() as pdf:
+        page = pdf.new_page(width=400, height=400)
+        page.insert_image(page.rect, stream=image.tobytes("png"), keep_proportion=False)
+        assert (
+            page.insert_textbox(
+                pymupdf.Rect(20, 20, 380, 380), native, fontsize=16, lineheight=1.25
+            )
+            >= 0
+        )
+        blocks = [
+            pymupdf.Rect(block[:4])
+            for block in page.get_text("blocks")
+            if block[6] == 0 and block[4].strip()
+        ]
+        text_ratio = sum(block.get_area() for block in blocks) / page.rect.get_area()
+        assert text_ratio >= 0.25
+        content = pdf.tobytes()
+
+    ocr = RecordingOCR()
+    pages, usages, warnings = await parse_document(content, ".pdf", ocr, 20)
+    assert pages[0].text.strip() == native and not pages[0].ocr
+    assert ocr.images == [] and usages == [] and warnings == []
+    (tmp_path / "background-image.json").write_text(
+        json.dumps({"native_text_ratio": text_ratio, "ocr": pages[0].ocr, "warnings": warnings})
+    )
+
+
+@pytest.mark.parametrize("rotation", [0, 90])
+async def test_background_filter_is_per_image_and_keeps_a_separate_scan(tmp_path, rotation):
+    background = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 2, 2), False)
+    background.clear_with(240)
+    with pymupdf.open() as scan_pdf:
+        scan_page = scan_pdf.new_page(width=220, height=320)
+        scan_page.insert_text((20, 60), BODY)
+        scan = scan_page.get_pixmap().tobytes("png")
+
+    native = "\n".join(
+        f"Native background line {number:02d} remains searchable." for number in range(16)
+    )
+    background_rect = pymupdf.Rect(0, 0, 360, 400)
+    scan_rect = pymupdf.Rect(380, 40, 600, 360)
+    with pymupdf.open() as pdf:
+        page = pdf.new_page(width=600, height=400)
+        page.insert_image(background_rect, stream=background.tobytes("png"), keep_proportion=False)
+        page.insert_image(scan_rect, stream=scan, keep_proportion=False)
+        assert (
+            page.insert_textbox(
+                pymupdf.Rect(20, 20, 340, 380), native, fontsize=15, lineheight=1.25
+            )
+            >= 0
+        )
+        page.insert_text((390, 350), "7")
+        blocks = [
+            pymupdf.Rect(block[:4])
+            for block in page.get_text("blocks")
+            if block[6] == 0 and block[4].strip()
+        ]
+        background_ratio = sum((block & background_rect).get_area() for block in blocks) / (
+            background_rect.get_area()
+        )
+        scan_ratio = sum((block & scan_rect).get_area() for block in blocks) / scan_rect.get_area()
+        assert background_ratio >= 0.25 and scan_ratio < 0.25
+        page.set_rotation(rotation)
+        content = pdf.tobytes()
+
+    ocr = RecordingOCR("7\n" + BODY)
+    pages, usages, warnings = await parse_document(content, ".pdf", ocr, 20)
+    assert pages[0].ocr and len(ocr.images) == 1 and usages[0].ocr_pages == 1
+    # Sorted native text preserves layout padding for the separate right-hand column.
+    assert native in pages[0].text
+    assert [line.strip() for line in pages[0].text.splitlines()].count("7") == 1
+    assert BODY in pages[0].text and warnings == []
+    (tmp_path / f"per-image-background-filter-{rotation}.json").write_text(
+        json.dumps(
+            {
+                "rotation": rotation,
+                "background_text_ratio": background_ratio,
+                "scan_text_ratio": scan_ratio,
+                "ocr": pages[0].ocr,
+                "warnings": warnings,
+            }
+        )
+    )
 
 
 @pytest.mark.parametrize("recognized", ["1\n" + BODY, BODY + "\n1", BODY + "\n128 GB"])
@@ -207,17 +327,18 @@ async def test_mixed_page_job_and_extraction_verify_body_citation(tenants, tmp_p
 
 async def test_oversized_legacy_job_fails_cleanly(api, application, headers, monkeypatch):
     content = pdf_page(14400, 14400, native="")
+
     # Model a file accepted by the previous upload validator; the worker must defend itself.
+    async def legacy_validation(*args):
+        return None
+
     with monkeypatch.context() as legacy:
-        legacy.setattr("app.services.documents.validate_document", lambda *args: None)
+        legacy.setattr("app.services.documents.validate_document_async", legacy_validation)
         task, document = await create_document(api, headers[0], content)
-    with patch.object(pymupdf.Page, "get_pixmap") as render:
-        render.side_effect = AssertionError("Huge raster allocation attempted")
-        _, failed = await run_job(api, application, headers[0], document, "parse")
+    _, failed = await run_job(api, application, headers[0], document, "parse")
     assert failed["status"] == "failed" and failed["attempts"] == 1
     assert failed["error"]["code"] == "pdf_raster_limits"
     assert failed["error"]["exit_code"] != 3
-    render.assert_not_called()
     assert (await api.get(f"/documents/{document}/chunks", headers=headers[0])).json()[
         "items"
     ] == []

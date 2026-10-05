@@ -412,7 +412,9 @@ def create_router(
         ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
-        png = await page_previews.certificate_page(session, actor, revision_id, page, zoom, storage)
+        png = await page_previews.certificate_page(
+            session, actor, revision_id, page, zoom, storage, settings
+        )
         return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     async def template_upload(metadata, file, model):
@@ -542,7 +544,7 @@ def create_router(
         value = result(
             "evidence source add",
             await evidence_sources.create_source(
-                session, actor, task_id, body, storage, settings.max_upload_bytes
+                session, actor, task_id, body, storage, settings.max_upload_bytes, settings
             ),
             warnings=evidence_sources.WARNINGS,
         )
