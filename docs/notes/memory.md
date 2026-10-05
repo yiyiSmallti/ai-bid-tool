@@ -12,7 +12,7 @@ Create an organization candidate with `bid memory add --input FILE --json`, insp
 `memory show` and `memory history`, then approve its exact revision through an administrator human
 session using `memory approve --id UUID --input FILE`. Editing active content creates a new candidate
 and withdraws the old rule. Disable and delete are human administrator operations; deletion preserves
-history. Request shapes and every command are defined by the [memory contract](../plan/memory.md#接口)
+history. Request shapes and every command are defined by the [memory contract](../plan/memory.md#interfaces)
 and exposed by `bid schema`.
 
 Use `memory retrieve --input FILE --dry-run` to preview selection without creating a retrieval, job,
@@ -35,7 +35,7 @@ human-only scopes.
 
 [Retrieval](../../server/app/memory/retrieval.py) restricts PostgreSQL queries to current, active,
 undeleted, unexpired organization revisions before scoring or limiting. Normalized text and tags
-use NFKC, case folding and collapsed whitespace. The approved [scoring and priority rules](../plan/memory.md#检索与优先级)
+use NFKC, case folding and collapsed whitespace. The approved [scoring and priority rules](../plan/memory.md#retrieval-and-precedence)
 resolve explicit conflict keys, retain whole entries and preserve stable ordering. The service does
 not make embedding calls and rejects unavailable modes explicitly.
 

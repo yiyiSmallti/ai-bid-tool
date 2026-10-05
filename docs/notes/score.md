@@ -43,7 +43,7 @@ confirm, classify, revise, or exclude anything.
 Rubric sets, sections, items, requirement coverage, normalized coverage links, and append-only review
 events use tenant-bound composite keys and forced row-level security. Revisions create a new candidate
 set with new child IDs; they never rewrite an earlier set. Expected revision and input hash checks stop
-stale decisions. Session-only review scopes and stored review domains enforce the human role boundary;
+stale decisions. Session-only review scopes and stored review domains (职责) enforce the human role boundary;
 tokens, agents, and workers cannot perform review actions.
 
 Completeness is deterministic. Every extracted scoring requirement needs an explicit coverage result;
@@ -69,7 +69,7 @@ orphan sections and missing requirement output. Ordinary HTTP retries retain the
 
 Scoring fixes the rubric set, coverage decisions, section/item revisions and DraftRun partitions.
 Only fixed confirmed response text and deviation notes become bid-side inputs; all confirmed
-response rows are candidate support, including rows for other requirements. Comply-only and gap
+response rows are candidate support, including rows for other requirements. Comply-only (须遵守) and gap
 anchors contribute metadata and tender text. Current card revision numbers are used only to detect
 staleness; current card pointers, candidate text, material bodies, released documents, templates and
 page images are not scoring inputs.
@@ -83,7 +83,7 @@ and redacted-value dependence stay unassessable. Unsafe reasons and unknown plac
 saved. Verified supporting responses have normalized database links.
 
 Aggregation uses Decimal without intermediate rounding. Sum, weighted sum and capped sum round only
-final section and overall outputs to eight decimal places with ROUND_HALF_UP. Weights must sum
+final section (正式件) and overall outputs to eight decimal places with ROUND_HALF_UP. Weights must sum
 exactly to one at their own node. Unassessable included children and unsupported aggregations make
 the parent unavailable; assessed subtotals remain visibly separate from totals.
 
@@ -100,7 +100,7 @@ A complete rubric means that it covers the scoring requirements saved by the spe
 It does not prove that extraction found every scoring rule in the tender. Generation never scans the
 document or adjacent chunks to discover missing requirements.
 
-Rubric confirmation and advisory scoring do not modify response cards, confirm evidence, fill
+Rubric confirmation and advisory scoring do not modify response cards (响应卡), confirm evidence, fill
 confidential values, or produce an official tender score. The boundaries are fixed in the
 [score contract](../plan/score.md). Formula text is retained as text and is never evaluated.
 Rejected or ambiguous model citations are not repaired into another source.

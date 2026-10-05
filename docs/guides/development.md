@@ -276,12 +276,12 @@ cd web && E2E_BASE_URL=http://127.0.0.1:8000 E2E_EMAIL=OPERATOR_EMAIL E2E_PASSWO
 ```
 
 The check expects an org named 计费演示单位 with platform-billed usage in the
-current month and creates an org, a model named `e2e-model` and recharge cards,
+current month and creates an org, a model named `e2e-model` and recharge cards (充值卡密),
 so run it against a disposable database.
 
 ## Check an export in Word
 
-The opt-in scale scenario builds a final section with long synthetic tables and one
+The opt-in scale scenario builds a final section (正式件) with long synthetic tables and one
 confirmed certificate page per attachment, and writes it to
 `data/work/export-acceptance/scale/`:
 
@@ -318,7 +318,7 @@ its image in the PDF.
 The MinIO image is built from pinned community source by
 [deploy/minio.Dockerfile](../../deploy/minio.Dockerfile) for development only;
 choosing a production object store is an open decision in
-[the roadmap](../plan/roadmap.md#待定决定).
+[the roadmap](../plan/roadmap.md#open-decisions).
 
 [scripts/container_smoke.py](../../scripts/container_smoke.py) builds and
 exercises the whole stack in a fresh Compose project with generated
@@ -433,7 +433,7 @@ tables; the `0001` and `0002` downgrades do drop their tables and columns. To
 recover credential cutover failures, retain the table and audit history and repair forward;
 an env-reading application version cannot safely serve after revocation. Each migration's tables
 and constraints are described in the matching note listed in the
-[documentation index](../README.md#机制笔记).
+[documentation index](../README.md#mechanism-notes).
 
 ## Troubleshooting
 

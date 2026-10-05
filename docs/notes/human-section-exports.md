@@ -21,8 +21,8 @@ implying that the associated bytes remain downloadable.
 
 `bid export download` reads current history, requests a short-lived link, verifies
 the returned file descriptor and saves to a new local `.docx` path. The local mode
-uses the same authenticated API and PostgreSQL gates. Formal sections require no
-gaps. Explicit review copies retain the visible no-submission marker and return
+uses the same authenticated API and PostgreSQL gates. Final sections (正式件) require no
+gaps. Explicit review copies (审阅件) retain the visible no-submission marker and return
 partial completion on release and download, including when they have no gaps.
 
 ## How it works
@@ -30,7 +30,7 @@ partial completion on release and download, including when they have no gaps.
 [exports.py](../../server/app/services/exports.py) rebuilds a canonical input
 manifest from the selected `DraftRun`, immutable `ResponseItem` rows, current card
 reviews, typed Evidence relations and template binding. Every requirement occurs
-once as a response, a comply-only decision or a gap. Gap entries carry source and
+once as a response, a comply-only (须遵守) decision or a gap. Gap entries carry source and
 reason metadata, never unconfirmed proposed responses or candidate material.
 Canonical UTF-8 JSON uses sorted keys, compact separators and ASCII escaping.
 The input hash excludes acknowledgments; the manifest hash also binds the exact

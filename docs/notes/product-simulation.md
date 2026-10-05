@@ -63,8 +63,8 @@ root, so a later human revision stays marked. The table only accepts inserts.
 `export_simulated_material` when any root of a declaration is marked: a product
 revision checks its product root, and a feature revision checks both its feature
 root and its linked product. Rebinding a simulated feature to an ordinary product
-cannot clear its permanent feature mark. A hit blocks a final section and needs
-acknowledgment in a review copy. Preparation, rendering, release and download
+cannot clear its permanent feature mark. A hit blocks a final section (正式件) and needs
+acknowledgment in a review copy (审阅件). Preparation, rendering, release and download
 rechecks use this same manifest check.
 Model calls use the job's accounting like drafting; search and fetch use the same
 providers and limits as vendor-source capture.
