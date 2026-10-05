@@ -11,8 +11,10 @@ a defined job state rather than partial or silent results.
 
 Configure tenant models and select platform catalog models through
 [provider configuration](provider-config.md#usage). `BID_LLM_*` still supplies
-adapter execution limits and standalone/eval configuration; it does not select a
-tenant job's fallback model. Tests inject adapters with `httpx.MockTransport`.
+non-secret adapter execution limits and standalone/eval configuration; credential
+resolution follows [platform credential authority](platform-credentials.md#how-it-works).
+These settings do not select a tenant job's fallback model. Tests inject adapters
+with `httpx.MockTransport`.
 
 ## How it works
 

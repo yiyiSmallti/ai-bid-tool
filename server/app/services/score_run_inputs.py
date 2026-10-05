@@ -11,7 +11,14 @@ from sqlalchemy.orm import load_only
 
 from app.core.errors import not_found
 from app.models.entities import Chunk, Document, Job, Requirement, Task
-from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevision, ResponseItem
+from app.models.response_cards import (
+    CardEvidenceLink,
+    DraftRun,
+    Evidence,
+    ResponseCard,
+    ResponseCardRevision,
+    ResponseItem,
+)
 from app.models.score import ScoreRubricSet
 from app.services import check_inputs, drafts, score, score_inputs
 from app.services import response_cards as cards
@@ -360,8 +367,10 @@ async def require_dependencies(session, actor, task_id, manifest):
         raise not_found()
     if manifest.get("confidential"):
         actor.require("confidential:read")
-    for entry in manifest["items"]:
-        requirement = (
+    entries = manifest["items"]
+    requirements = {
+        row.id: row
+        for row in (
             await session.execute(
                 select(
                     Requirement.id,
@@ -369,11 +378,83 @@ async def require_dependencies(session, actor, task_id, manifest):
                     Requirement.document_id,
                     Requirement.chunk_id,
                     Requirement.job_id,
-                ).where(Requirement.id == UUID(entry["requirement_id"]))
+                ).where(Requirement.id.in_([UUID(entry["requirement_id"]) for entry in entries]))
             )
-        ).one_or_none()
-        chunk = await session.get(Chunk, UUID(entry["chunk_id"]))
-        row = await session.get(ResponseItem, UUID(entry["response_item_id"]))
+        ).all()
+    }
+    chunks = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(Chunk.id, Chunk.task_id, Chunk.document_id).where(
+                    Chunk.id.in_([UUID(entry["chunk_id"]) for entry in entries])
+                )
+            )
+        ).all()
+    }
+    responses = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(
+                    ResponseItem.id,
+                    ResponseItem.draft_id,
+                    ResponseItem.requirement_id,
+                    ResponseItem.card_id,
+                    ResponseItem.card_revision_id,
+                ).where(ResponseItem.id.in_([UUID(entry["response_item_id"]) for entry in entries]))
+            )
+        ).all()
+    }
+    card_ids = {row.card_id for row in responses.values() if row.card_id is not None}
+    revision_ids = {
+        row.card_revision_id for row in responses.values() if row.card_revision_id is not None
+    }
+    card_rows = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(
+                    ResponseCard.id,
+                    ResponseCard.task_id,
+                    ResponseCard.requirement_id,
+                    ResponseCard.extraction_job_id,
+                ).where(ResponseCard.id.in_(card_ids))
+            )
+        ).all()
+    }
+    revisions = {
+        row.id: row
+        for row in (
+            await session.execute(
+                select(
+                    ResponseCardRevision.id,
+                    ResponseCardRevision.card_id,
+                    ResponseCardRevision.model_job_id,
+                ).where(ResponseCardRevision.id.in_(revision_ids))
+            )
+        ).all()
+    }
+    linked: dict[UUID, list[Evidence]] = {}
+    for evidence, revision_id in await session.execute(
+        select(Evidence, CardEvidenceLink.revision_id)
+        .join(CardEvidenceLink, CardEvidenceLink.evidence_id == Evidence.id)
+        .where(CardEvidenceLink.revision_id.in_(revision_ids))
+    ):
+        linked.setdefault(revision_id, []).append(evidence)
+    generated_ids = {
+        revision.model_job_id
+        for revision in revisions.values()
+        if revision.model_job_id is not None
+    }
+    generated_jobs = {
+        job.id: job for job in await session.scalars(select(Job).where(Job.id.in_(generated_ids)))
+    }
+    authorized_generations: set[UUID] = set()
+    for entry in entries:
+        requirement = requirements.get(UUID(entry["requirement_id"]))
+        chunk = chunks.get(UUID(entry["chunk_id"]))
+        row = responses.get(UUID(entry["response_item_id"]))
         if (
             requirement is None
             or chunk is None
@@ -393,25 +474,8 @@ async def require_dependencies(session, actor, task_id, manifest):
             raise not_found()
         if row.card_id is None:
             continue
-        card = (
-            await session.execute(
-                select(
-                    ResponseCard.id,
-                    ResponseCard.task_id,
-                    ResponseCard.requirement_id,
-                    ResponseCard.extraction_job_id,
-                ).where(ResponseCard.id == row.card_id)
-            )
-        ).one_or_none()
-        revision = (
-            await session.execute(
-                select(
-                    ResponseCardRevision.id,
-                    ResponseCardRevision.card_id,
-                    ResponseCardRevision.model_job_id,
-                ).where(ResponseCardRevision.id == row.card_revision_id)
-            )
-        ).one_or_none()
+        card = card_rows.get(row.card_id)
+        revision = revisions.get(row.card_revision_id)
         if (
             card is None
             or revision is None
@@ -421,12 +485,18 @@ async def require_dependencies(session, actor, task_id, manifest):
             or revision.card_id != card.id
         ):
             raise not_found()
-        for evidence in await cards.linked_evidence(session, revision.id):
+        for evidence in linked.get(revision.id, []):
+            if evidence.task_id != task_id or evidence.card_id != card.id:
+                raise not_found()
             await cards.evidence_view(session, actor, evidence)
-        if revision.model_job_id is not None:
-            generated = await session.get(Job, revision.model_job_id)
+        if (
+            revision.model_job_id is not None
+            and revision.model_job_id not in authorized_generations
+        ):
+            generated = generated_jobs.get(revision.model_job_id)
             if generated is None or generated.task_id != task_id:
                 raise not_found()
             await check_input_access(
                 session, actor, task_id, generated.result["submission"]["input_manifest"]
             )
+            authorized_generations.add(revision.model_job_id)

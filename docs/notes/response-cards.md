@@ -1,4 +1,4 @@
-# Response cards and draft tables
+# Response cards (响应卡) and draft tables
 
 ## Problem
 
@@ -59,7 +59,7 @@ Evidence resolves typed selection and revision references on the server. A
 resource quote must occur exactly in an allowed field. Product URLs remain
 stored declarations and are never fetched. Certificate page evidence reads the
 retained original, verifies its hash and page, and matches locally extractable
-page text. Human confirmation changes the Evidence's page review status; the
+page text. Human confirmation (人工确认) changes the Evidence's page review status; the
 [unconfirmed source archive](unconfirmed-evidence-sources.md) remains unchanged.
 Replacing a task selection invalidates dependent material. Selecting the old
 resource revision again creates another selection and does not revive the old
@@ -85,7 +85,7 @@ call budget. Changed configuration fails explicitly before sending new text.
 
 The worker fixes `origin=model`, `actor_kind=worker`, `model_job_id` and `state=draft`.
 It never sets a human disposition or confirmer. Under the task lock it checks each
-expected revision again. Confirmed, pending and comply-only cards are reported as
+expected revision again. Confirmed, pending and comply-only (须遵守) cards are reported as
 protected skips at submission and publication; concurrent edits report
 `revision_conflict`; a changed requirement quote/location reports
 `requirement_input_changed`. A proposal changing a recorded current negative deviation to

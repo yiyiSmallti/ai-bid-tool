@@ -8,12 +8,12 @@ Status: **Approved. All recommended defaults are adopted.** This contract covers
 [roadmap](roadmap.md) F06, F09 and C03. The approved interface is preserved in
 [budget_contracts.py](budget/budget_contracts.py); the registered models live in
 [budget_contracts.py](../../server/app/schemas/budget_contracts.py). Approval satisfies
-the interface-first requirement in [agent.md](../../agent.md#工作方式).
+the interface-first requirement in [agent.md](../../agent.md#workflow).
 Implementation details belong to [Task budgets](../notes/task-budgets.md).
 
 ## Objective and boundaries
 
-The [design](../AI%20标书工具设计文档.md#cli-设计规范与外部-agent-接入)
+The [design](../design.md#cli-design-and-external-agent-integration)
 requires read-only cost estimates and task budgets that agents cannot increase.
 The slice is: a human sets a task budget; a command previews its first pass; each
 Provider dispatch atomically reserves task liability and applicable prepaid funds;

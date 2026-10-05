@@ -109,4 +109,4 @@ cannot be located uniquely remain unchanged.
 - [server/migrations/versions/0013_docx_locations.py](../../server/migrations/versions/0013_docx_locations.py): schema.
 - [server/migrations/versions/0017_exact_citations.py](../../server/migrations/versions/0017_exact_citations.py): exact-source quote provenance for new and legacy requirements.
 - [server/tests/test_docx_blocks.py](../../server/tests/test_docx_blocks.py), [server/tests/test_docx_extraction.py](../../server/tests/test_docx_extraction.py): parser and end-to-end cases.
-- [test_adversarial_citations.py](../../server/tests/test_adversarial_citations.py): extraction, repair, human confirmation, draft assembly and SQL/Python locator parity.
+- [test_adversarial_citations.py](../../server/tests/test_adversarial_citations.py): extraction, repair, human confirmation (人工确认), draft assembly and SQL/Python locator parity.

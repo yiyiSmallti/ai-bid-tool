@@ -5,8 +5,8 @@ kind: plan
 # Built-in agent command orchestration and human pauses
 
 Status: **Approved. All recommended defaults are adopted.** This contract covers
-[roadmap](roadmap.md) A01; invocation provenance also serves A02. Approval satisfies
-the interface-first requirement in [project rules](../../agent.md#工作方式).
+[roadmap](roadmap.md) A01; invocation provenance (溯源) also serves A02. Approval satisfies
+the interface-first requirement in [project rules](../../agent.md#workflow).
 The [approved interface models](agent/agent_contracts.py) retain the reviewed
 contract; [runtime models](../../server/app/schemas/agent_contracts.py), the
 [agent API](../../server/app/api/agent.py), [CLI](../../cli/bid_cli/agent.py) and
@@ -14,39 +14,43 @@ contract; [runtime models](../../server/app/schemas/agent_contracts.py), the
 queue recovery and concurrent budget acceptance remain required by
 [Acceptance requirements](#acceptance-requirements); static checks and fake
 Provider responses do not establish those guarantees. Adopted choices are in
-[Decided decisions](#decided-decisions).
+[Decisions](#decisions). Terminology follows the [glossary](../glossary.md).
 
 ## Objective and boundaries
 
-The [agent design](../AI%20标书工具设计文档.md#看板与-agent-设计) requires intent
+The [agent design](../design.md#dashboard-and-agent-design) requires intent
 understanding, command dispatch, bounded retries, summaries, server-side recovery
 and human intervention before exceeding budgets. The built-in agent (内置 agent),
 console and external agents share CLI command requests and Result contracts.
-The agent cannot confirm evidence, change confirmed cards or export. Execution
-follows the [agent tool boundary](sandbox.md#后续内置-agent-工具边界).
+The agent cannot confirm evidence (证据), change confirmed response cards (响应卡)
+or export. Execution follows the
+[agent tool boundary](sandbox.md#future-built-in-agent-tool-boundary).
 
-The first workflow starts with **an existing task, a real tender Document and a
-successful extraction job**: a human submits a goal and limits; the agent reads
+The first workflow starts with **an existing task (任务), a real tender document
+(招标文件; `Document`) and a successful extraction background job (后台作业)**:
+a human submits a goal and limits; the agent reads
 that extraction's requirements and cards; it previews and submits `card generate`;
 it waits for the generation job; it shows proposals and pauses; the human reviews,
 submits and confirms through the existing card entry points; the agent rereads
-state and invokes `draft` to assemble confirmed responses; it returns draft
-references and unresolved gaps. Proposals remain `draft`. Unconfirmed evidence
+state and invokes `draft` to assemble confirmed responses (响应); it returns draft
+(初稿) references and unresolved gaps (缺口). Proposals remain `draft`. Unconfirmed evidence
 cannot enter response tables; a draft with gaps reports partial completion.
 
 This workflow covers discovery, paid decisions, tool child jobs, human gates,
-recovery and provenance audit. It does not require the human to declare the entire
-task complete first. Existing human card actions and responsibilities remain the
-authority; an agent approval cannot become evidence confirmation (人工确认).
+recovery and provenance audit (审计). It does not require the human to declare the entire
+task complete first. Existing human card actions and review domains (职责) remain
+the authority; an agent approval cannot substitute for human confirmation (人工确认)
+of evidence.
 Task-budget definitions, preflight, human changes, reservations and invalidation
 have one home: the approved and implemented [budget contract](budget.md),
 [Task budgets](../notes/task-budgets.md) and [ADR 0007](../adr/0007-task-budget-reservations.md).
 A01 consumes those mechanisms and stores opaque intervention references; a
-single-job cap or positive prepaid balance cannot replace task admission. Monthly
-org quotas remain outside the budget slice and are not claimed as implemented.
+single-job cap or positive prepaid balance (预付余额) cannot replace task admission.
+Monthly org (organization/tenant; 单位) quotas remain outside the budget slice and
+are not claimed as implemented.
 
 The first slice excludes task creation, upload/parse/re-extraction, automatic
-collection, prototypes, check/score, memory, MCP, cross-task delegation, parallel
+evidence capture (取证), prototypes (原型), check/score, memory (记忆), MCP, cross-task delegation, parallel
 tools, an SDK framework, persistent shells, code interpreters and browsers. Each
 later tool requires a contract for its readable inputs, side effects, fees,
 cancellation and recovery. The first slice does not start the sandbox `agent_tool`
@@ -69,10 +73,10 @@ registration is separate from the database and worker acceptance requirements.
 | [execution.py](../../server/app/jobs/execution.py) `JobExecution.admit/complete`, `job_cost`; [agent limits](../../server/app/services/agent_limits.py) `enforce/guard_job/cost_view`; [calls.py](../../server/app/providers/calls.py) `accounted_call` | Reuse per-call UsageRecord, prepaid settlement and task admission. Every owned descendant checks parent exposure and deadlines as well as original job/balance gates; fresh controller jobs cannot reset cumulative session ceilings. |
 | [response_cards.py](../../server/app/services/response_cards.py), [card_generation.py](../../server/app/services/card_generation.py) `submit_generation/check_input_access`, [drafts.py](../../server/app/services/drafts.py) `submit_draft/show_draft` | Preserve protected-card skipping, revision checks, fixed inputs, cost preflight and confirmed-only assembly. The agent cannot rewrite these rules. |
 | [versioned.py](../../server/app/services/versioned.py) `audit()`; [shared provenance](../../server/app/schemas/agent_provenance.py) `AgentProvenance`; [migration](../../server/migrations/versions/0041_builtin_agent.py) `agent_origin_guard` | Preserve immediate actor and immutable invocation origin separately. Database-validated Job/audit columns supply A01/A02 provenance; public card, generation and draft views do not trust client-supplied identity. |
-| [Confidential values](../notes/confidential-values.md), [model input rules](../notes/model-drafting-redaction.md) | Disabling task redaction also disables registered-value replacement. Agent outbound calls require redaction enabled and checked at every admission; the agent never changes the switch. |
+| [Confidential fields (保密字段)](../notes/confidential-values.md), [model input rules](../notes/model-drafting-redaction.md) | Disabling task redaction (遮挡) also disables registered-value replacement. Agent outbound calls require redaction enabled and checked at every admission; the agent never changes the switch. |
 
 The design's `evidence fetch/stamp` names do not map to complete commands of those
-names; collection and annotation have staged commands. They and existing
+names; evidence capture and annotation have staged commands. They and existing
 check/score commands are outside this tool set. The design proposes external CLI
 agents before an SDK; this approved slice uses the existing worker with a narrow
 Provider, without an SDK. Card state alone cannot recover a paid decision or a
@@ -136,7 +140,7 @@ model-selected local files.
 Resolve material grants through real `check_input_access`/material resolution;
 the three fixed generation scopes alone are insufficient. `AgentScope` permits
 only these reading, generation and assembly paths. Existing services still skip
-protected, pending, confirmed and human comply-only cards. Models cannot convert
+protected, pending, confirmed and human comply-only (须遵守) cards. Models cannot convert
 recorded negative deviations (负偏离) to compliance. Revalidate the parent chain of
 every task/job/card/draft/requirement ID; a prior response does not make it trusted.
 Models cannot control `--wait/--timeout`, credentials, URL, method, retry count or
@@ -166,18 +170,19 @@ nor stored evidence.
 
 ## Identity, permissions and human gates
 
-An authenticated human session creates persistent `agent_principals` at start,
+The initiator (发起人) uses an authenticated human session to create persistent
+`agent_principals` at start,
 bound to valid Membership/user/org, authority expiry and a scope snapshot.
 `actor_kind=agent`; no reusable user Bearer/Cookie is stored. At each step,
 effective permissions are **initial human grants ∩ current Membership/role grants
 ∩ requested reduced scopes ∩ server A01 allowlist**. Any missing grant rejects the
-action. Later role increases cannot expand a session. Even for an admin/bidder
-owner, permanently remove confirmation, export, confidential write/reveal,
+action. Later role increases cannot expand a session. Even for an owner with the
+`admin` or `bidder` role, permanently remove confirmation, export, confidential write/reveal,
 provider/token/resource management, redline switches and human disposition.
 Scope reduction alone cannot protect human responsibility; retain actor_kind.
 
-`agent:read/run/cancel` are human-only: admin/bidder/technical can run/cancel;
-viewer can read. Sessions are owner-only; another org member gets 404, including
+`agent:read/run/cancel` are human-only: `admin`, `bidder` and `technical` can run/cancel;
+`viewer` can read. Sessions are owner-only; another org member gets 404, including
 an administrator. Run also requires the workflow's business grants; a role alone
 does not establish material access. Demotion blocks resume while a valid owner
 retains cancellation of their session. Membership removal or org disablement
@@ -341,14 +346,14 @@ do not hold locks while waiting, preventing a parent/child deadlock with one
 worker slot. Persisted settled decisions are never regenerated. If an admitted
 request lacks a persisted decision, or VendorCall is pending/unknown, mark
 step=uncertain, pause for recovery and preserve holds. Do not claim exactly-once
-vendor HTTP or silently pay again. Verify the ledger/stored results; unprovable
+provider HTTP or silently pay again. Verify the ledger/stored results; unprovable
 steps terminate and the human opens a new session. A01 grants no automatic
 reconciliation or unknown-hold-release authority.
 
 `services/jobs.status/cancel` adds session/current-identity checks for kind=agent
 and linked children. Every cancellation path fences parent admission. Automatically
 cancel only owned=true jobs; reused historical jobs cannot cancel other work.
-Admitted calls may settle within their original vendor deadline, then cannot
+Admitted calls may settle within their original provider deadline, then cannot
 publish business results. Cancellation is not a refund; do not interrupt
 accounting and report zero cost.
 
@@ -360,7 +365,7 @@ accounting and report zero cost.
 tools. `AgentToolProvider.definitions/invoke/recover` discovers tools, submits
 under authorization and recovers idempotently. `AgentRecoveryProvider.wake` is an
 internal scheduling protocol, not a tool. Declaring protocols is not implementation
-and does not authorize vendor SDK imports in business modules.
+and does not authorize provider SDK imports in business modules.
 
 Implement under providers; `resolve_llm/with_reasoning` selects/fixes model,
 configuration and price revisions. Reuse structured.json_request/json_call,
@@ -368,7 +373,7 @@ HTTPExtractor.post and accounted_call. Preserve json_call's wire-result return
 contract; add a shared Provider helper returning
 `(validated_decision, trusted_provider_usage)`. **Only AgentDecision is the model
 output schema.** Build AgentDecisionOutput from trusted HTTP usage; the model
-cannot fill ProviderUsage and the wrapper is not the wire schema. Expand vendor
+cannot fill ProviderUsage and the wrapper is not the wire schema. Expand provider
 strict schemas using concrete selected-tool branches. Do not call strict_schema
 on arbitrary dict arguments: it closes objects and destroys open-dictionary
 semantics. Tool JSON Schemas are trusted model input; returned AgentDecision is
@@ -381,7 +386,7 @@ limits. Before every outbound call replace registered values, then apply
 [redaction.py](../../server/app/services/redaction.py). Require redaction on and
 fix its revision; disablement/change pauses. Exclude original files, signed URLs,
 value suffixes, credentials, unrelated materials, whole job.submission and raw
-vendor outputs. Store encrypted original messages; public messages are redacted.
+provider outputs. Store encrypted original messages; public messages are redacted.
 Never echo bodies in refusal logs. A message is at most 8,000 characters, a result
 projection 64 KiB, a serialized model request 128 KiB. Exceeding bounds pauses to
 reduce selection; never silently truncate citations or claim complete reading.
@@ -396,7 +401,7 @@ truncation and post-cancel responses, follows
 Account before interpreting responses; preserve `(org_id,job_id,run_id,call_id)`
 uniqueness. Import ProviderUsage directly. Job execution already settles it;
 AgentDecisionOutput.usage describes this call and consumers insert no duplicate
-UsageRecord. Reads/assembly without real vendor calls create no empty usage rows.
+UsageRecord. Reads/assembly without real provider calls create no empty usage rows.
 
 Session cost is **direct decision usage plus owned tool-child usage, deduplicated
 by usage ID**. Never copy UsageRecord or debit again. Each controller
@@ -406,14 +411,14 @@ owned=false have zero new session cost; their old job cost remains readable but
 excluded. Do not take over another running job; after completion only reference
 its result, without cancellation or assigning its bill to two sessions.
 
-Keep vendor USD separate from platform currency. Result.cost.usd is vendor cost;
+Keep provider USD separate from platform currency. Result.cost.usd is provider cost;
 AgentCostView holds platform charge, unresolved holds, currency and
 unpriced/unresolved counts. BYOK retains provider_config_id, tokens and cost with
 zero platform charge; external expense still matters. Unknown price remains null;
 reject paid admission without an enforceable upper bound rather than treating it
 as zero. Admission, settlement failure and bound overruns follow the
 [prepaid ledger](../notes/prepaid-billing.md#admission-and-the-spending-bound).
-Do not promise control over a vendor ignoring token caps. Retain real overrun cost
+Do not promise control over a provider ignoring token caps. Retain real overrun cost
 and stop subsequent calls.
 
 ## Budget pauses and hard limits
@@ -442,10 +447,10 @@ trigger automatic model switching or splitting to avoid asking. Permanent budget
 rejection stops work; independent valid outputs may yield partial completion.
 
 AgentLimits are additional immutable session ceilings, never a task-budget
-replacement. Adopt defaults of 24 steps, 32 actual vendor calls, 900 active seconds
+replacement. Adopt defaults of 24 steps, 32 actual provider calls, 900 active seconds
 and a 24-hour lifetime; server maxima are 64 steps, 64 calls and 3,600 active
 seconds. Humans explicitly provide max_vendor_usd, max_platform_charge and currency.
-A vendor USD 2 input suggestion is permitted; platform amount is explicit in the
+A provider USD 2 input suggestion is permitted; platform amount is explicit in the
 org currency, without implied exchange conversion. Paid platform work cannot
 admit charge=0; BYOK may use zero platform charge.
 
@@ -453,7 +458,7 @@ Counters span controllers, children, attempts, recovery and resume. All paid
 descendant admissions check remaining session steps/time/cost/holds and task
 budget, then existing job/balance gates; checking only tool submission is
 insufficient. Shared admission must follow budget lock ordering before A01 is
-enabled. Enforce both vendor USD and platform charge; unknown prices block.
+enabled. Enforce both provider USD and platform charge; unknown prices block.
 A job's batch-expanded call ceiling cannot enlarge its parent session ceiling.
 
 Active time includes queued/running/waiting_job, retry backoff and downtime;
@@ -549,7 +554,7 @@ read failures uniformly return 404 without leaking another session's existence.
 | Prompt injection, forged commands/IDs, sensitive reads/confirmation/export | Allowlist plus parent-chain/actor rejection; safe action needs become human tasks; do not echo malicious input. |
 | Changed card/material/model/schema/redaction revision | Pause/re-preflight; do not expand input or overwrite human confirmation. |
 | Lost dispatch, worker restart, duplicate dispatch, old lease returns | Recover persistent step/link with live run fences; never repeat completed steps/charges. |
-| Unknown vendor outcome or accounting persistence failure | Retain hold, stop for recovery, no automatic resend/zeroing. |
+| Unknown provider outcome or accounting persistence failure | Retain hold, stop for recovery, no automatic resend/zeroing. |
 | Missing budget dependency, task cap, prepaid insufficiency | Block admission/pause for human/existing ledger rejection respectively; these gates cannot substitute for one another. |
 | Hard ceiling, cancellation, Membership/delegation expiry | Fence new calls; settle admitted calls without publication. Same human may renew authority within remaining ceilings. |
 | Provider refusal/invalid JSON/context overflow | Fixed safe error; no arbitrary output persistence. Bounded temporary retries cannot expand input/price/authority. |
@@ -609,12 +614,12 @@ inputs and JUnit outside `docs/`.
    `artifacts/` or an allowed temporary directory, never docs logs/screenshots,
    so the same commands reproduce verification.
 
-CI uses fake Providers/MockTransport, never real vendors. Fake ledgers do not
+CI uses fake Providers/MockTransport, never real providers. Fake ledgers do not
 prove RLS or concurrent debit safety. Authorized real model/site evaluations live
 in evals with public inputs, fixed model/schema and actual cost, under all budget
 and human gates. Approval alone does not establish that these requirements passed.
 
-## Decided decisions
+## Decisions
 
 All recommended defaults are approved. The alternatives remain here to preserve
 the reviewed choice and reason; they are not open implementation decisions.
@@ -625,8 +630,8 @@ the reviewed choice and reason; they are not open implementation decisions.
 | Loop location | Checkpoint controller jobs in existing worker | Reuse leases/cancellation/metering and release slots for humans/children. No API-request loop or new SDK service/dependency. |
 | Session visibility | Initiating owner only | Task-member permissions have no complete sharing entry point; do not implicitly expose conversations to the org. Shared/admin visibility requires a later role contract. |
 | Authority duration | Earlier of original session expiry and eight hours; same-human renewal | Store no session secrets; reduce unattended authority. Renewal keeps cumulative limits and cannot promise logout revocation. Independent long-lived delegation is excluded. |
-| Default limits | 24 steps / 32 calls / 900 active seconds / 24-hour lifetime; explicit money | Test parent/child and recovery ceilings. Suggest vendor USD 2; platform currency amount is separately explicit. Task budget changes cannot increase session hard limits. |
-| Uncertain recovery | Pause to verify; terminate and open another session if unprovable | Existing ledger has no automatic vendor reconciliation. Lease expiry cannot justify freeing holds or repeating paid work. Automatic uncertain resends are excluded. |
+| Default limits | 24 steps / 32 calls / 900 active seconds / 24-hour lifetime; explicit money | Test parent/child and recovery ceilings. Suggest provider USD 2; platform currency amount is separately explicit. Task budget changes cannot increase session hard limits. |
+| Uncertain recovery | Pause to verify; terminate and open another session if unprovable | Existing ledger has no automatic provider reconciliation. Lease expiry cannot justify freeing holds or repeating paid work. Automatic uncertain resends are excluded. |
 | Outbound redaction/unknown prices | Redaction enabled and enforceable cost bound required | Agent has no confidential-value access; changes pause without rewriting human config. No redaction-off authorization or unbounded BYOK path. |
 | A02 marker granularity | Token automation with verified token ID | Existing authentication proves the identity. External-agent registration/product names need A02's own contract; client self-identification is untrusted. |
 | Content retention | Encrypted append-only retention, no automatic deletion | Preserve recovery and accounting history. Configurable expiry/deletion requires a later contract for audit/ledger references and recovery. |

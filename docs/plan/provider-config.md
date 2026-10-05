@@ -2,82 +2,68 @@
 kind: plan
 ---
 
-# 单位自带模型与平台模型选择契约
+# Contract for org BYOK models and platform model selection
 
-状态：**后端与 CLI 已实施。** 单位后台界面属于
-[单位后台契约](org-console.md)。实现机制见
-[provider-config.md](../notes/provider-config.md)，本页记录范围、已解决决定和验收要求。
+Status: **backend and CLI implemented.** The org (organization/tenant, 单位) console UI belongs to the [org console contract](org-console.md). See [provider-config.md](../notes/provider-config.md) for the mechanism; this page records scope, decisions, and acceptance requirements.
 
-## 交付范围
+## Delivery scope
 
-- 单位管理员选择平台目录模型，或配置自带密钥的 Anthropic / OpenAI 兼容模型。
-  自带模型声明服务商、模型、HTTPS base URL、JSON 模式、官方推理档位及可选成本单价。
-- 抽取与卡片起草共享 `llm_extract` 配置、调用准入和即时用量记账。
-- 配置采用不可变修订；使用 `expected_revision` 防止覆盖并发更新，保留历史作业引用。
-- 服务端以独立 `BID_SECRETS_KEY` 加密密钥，响应只显示末四位。CLI 从
-  `BID_PROVIDER_KEY` 或当前用户所有、权限为 0600 的 `--key-file` 读取密钥。
-- `provider set/list/history/test` API 与 CLI；测试使用合成连接检查页，不写入招标资料。
-- DeepSeek 余额查询、自带密钥的额度错误提示、UTC 本月实际记录的 token 和估算成本。
+- Org administrators select a platform catalog model or configure a BYOK Anthropic/OpenAI-compatible model. BYOK declares provider, model, HTTPS base URL, JSON mode, official reasoning levels, and optional unit cost prices.
+- Extraction and response card (响应卡) drafting share `llm_extract` configuration, admission, and immediate usage accounting.
+- Configuration uses immutable revisions and `expected_revision` to prevent concurrent overwrites while retaining historical job references.
+- The server encrypts keys with independent `BID_SECRETS_KEY`; responses show only the last four characters. CLI reads keys from `BID_PROVIDER_KEY` or a current-user-owned `--key-file` with mode 0600.
+- `provider set/list/history/test` API and CLI; tests use synthetic connection-check content without tender documents (招标文件).
+- DeepSeek balance queries, BYOK quota-error guidance, and this system's actual recorded tokens and estimated cost for the current UTC month.
 
-不包含任务级模型覆盖、OCR/视觉/搜索配置、网页实现、密钥轮换工具或月度厂商预算限制。
+Exclude task-level model overrides, OCR/vision/search configuration, web implementation, key-rotation tools, and monthly vendor budget limits.
 
-## 输入与输出
+## Inputs and outputs
 
-权威模型是 [provider_contracts.py](../../server/app/schemas/provider_contracts.py) 中的
-`ProviderConfigInput`、`ProviderConfigSet`、`ProviderConfigView` 和 `ProviderTest`。
-CLI JSON 文件使用 `ProviderConfigInput`，不允许把密钥写进 JSON。API 使用
-`ProviderConfigSet.api_key` 写入密钥；该字段没有输出表示。
+The authoritative models are `ProviderConfigInput`, `ProviderConfigSet`, `ProviderConfigView`, and `ProviderTest` in [provider_contracts.py](../../server/app/schemas/provider_contracts.py). CLI JSON files use `ProviderConfigInput` and cannot contain keys. API writes keys through `ProviderConfigSet.api_key`, which has no output representation.
 
-| 命令 | 路由 | 权限与行为 |
+| Command | Route | Permission and behavior |
 | --- | --- | --- |
-| `bid provider list` | `GET /providers` | `provider:read`；可选目录、生效修订、实时余额及本月用量 |
-| `bid provider history` | `GET /providers?history=true` | `provider:read`；全部修订及各修订本月用量，不查询历史密钥余额 |
-| `bid provider set --input FILE [--key-file FILE]` | `POST /providers` | 人工 admin 的 `provider:write`；新增修订，冲突返回 409 |
-| `bid provider test --capability llm_extract [--reasoning LEVEL]` | `POST /providers/test` | 人工 admin 的 `provider:write`；运行一次有准入和记账的探测调用，等待结果 |
+| `bid provider list` | `GET /providers` | `provider:read`; selectable catalog, effective revision, live balance, current-month usage |
+| `bid provider history` | `GET /providers?history=true` | `provider:read`; all revisions and monthly usage by revision; no historical-key balance queries |
+| `bid provider set --input FILE [--key-file FILE]` | `POST /providers` | Human admin `provider:write`; append a revision; conflicts return 409 |
+| `bid provider test --capability llm_extract [--reasoning LEVEL]` | `POST /providers/test` | Human admin `provider:write`; perform one admitted/accounted probe call and wait for the result |
 
-所有命令沿用 Result 的七字段结构，注册到 `bid schema`。测试失败返回
-`ok=false`、安全错误、作业 ID 和已记账费用，CLI 使用错误指定的退出码。
-权限不足返回 403；跨单位身份或对象仍统一不可见。
+All commands retain Result's seven-field structure and register in `bid schema`. Test failures return `ok=false`, safe errors, job ID, and accounted charges; CLI uses the error's specified exit code. Insufficient permissions return 403; cross-org identities and objects remain uniformly invisible.
 
-## 已解决决定
+## Decisions
 
-| 问题 | 决定 |
+| Question | Decision |
 | --- | --- |
-| 付费方式 | 沿用[预付计费](../notes/prepaid-billing.md)：平台调用提交时预检，每次调用前预留，收到用量后立即扣费 |
-| 自带密钥是否受限 | 平台 `charge=0`，不检查预付余额；仍计入作业累计调用上限，保存准入记录与实际用量；可选厂商成本不视作平台费用 |
-| 模型解析顺序 | 单位最新修订 → 平台已启用默认模型 → 未配置；API/worker 不再使用 `BID_LLM_*` 作为隐式模型回退，独立 adapter/eval 仍可使用这些设置 |
-| 能力名称 | 保留 `llm_extract`，同时用于抽取和模型卡片起草，不新增另一份起草配置 |
-| 推理档位 | 复用平台 `ReasoningLevel` 与请求选项校验，默认档位必须存在，不允许覆盖 adapter 的输出上限 |
-| 作业固定时点 | 提交时固定配置修订和模型身份，worker 按固定修订解析；换单位配置不改变已排队作业，换目录修订会使旧作业明确失败并要求重新提交 |
-| 旧缓存 | 模型版本包含配置修订身份；新配置产生新抽取与起草缓存，旧作业保留旧引用 |
-| 省略密钥 | 仅相同服务商、相同 base URL 的自带配置更新可以复用并重新加密旧密钥；首次配置、跨服务商或跨端点必须提供密钥 |
-| 生效配置 | 每能力最新修订生效；选择平台模型也产生单位修订；不提供删除历史或重置为自动跟随平台默认的操作 |
-| 测试作业 | 使用无 task/document 的 `provider_test`，仍通过 Processor 和 JobExecution；不重试、不制造业务资料，每次显式测试是新作业 |
-| 余额查询 | 仅 DeepSeek 官方 HTTPS 主机的已知 base URL 查询 `/user/balance`，不跟随重定向；其他服务商显示 unsupported；查询失败不阻塞抽取 |
-| 本月用量 | UTC 月份，按所有配置及各修订聚合本系统记录；缺成本单价时成本为 null 并列出未定价调用数，不伪造为零 |
-| 历史凭据 | 密文绑定单位和修订，保留历史调用所需密钥；丢失独立加密密钥后明确失败，不回退其他密钥或模型 |
+| Payment | Reuse [prepaid billing](../notes/prepaid-billing.md): precheck platform calls at submission, reserve before each call, charge immediately when usage arrives |
+| BYOK limits | Platform `charge=0`, no prepaid-balance check; still count toward cumulative job call limits, retain admission/usage records; optional vendor costs are not platform charges |
+| Model resolution order | Latest org revision → enabled platform-default model → unconfigured; API/worker no longer use `BID_LLM_*` as implicit model fallback; standalone adapter/eval settings were permitted by this contract, then superseded by [ADR 0006](../adr/0006-platform-credentials.md) |
+| Capability name | Keep `llm_extract` for both extraction and model card drafting; no separate drafting configuration |
+| Reasoning levels | Reuse platform `ReasoningLevel` and request-option validation; default level must exist; adapter output limits cannot be overridden |
+| Job binding time | Fix configuration revision/model identity at submission; workers resolve that revision. Org configuration changes do not change queued jobs; catalog revision changes explicitly fail old jobs and require resubmission |
+| Old cache | Model version includes configuration revision identity; new configurations create new extraction/drafting caches; old jobs retain old references |
+| Omitted key | Only BYOK updates with the same provider and base URL can reuse and re-encrypt the old key. First configuration, provider changes, and endpoint changes require a key |
+| Effective configuration | Latest revision per capability is effective; selecting a platform model also creates an org revision. No history deletion or reset to automatically follow platform defaults |
+| Test jobs | `provider_test` has no task/document, still uses Processor/JobExecution; no retries or business material; every explicit test is a new job |
+| Balance queries | Only known base URLs on DeepSeek's official HTTPS host query `/user/balance`, without redirects. Other providers show unsupported; query failures do not block extraction |
+| Monthly usage | UTC month, aggregate this system's records across all configurations and per revision. Missing prices yield null cost and an unpriced-call count, never fabricated zero |
+| Historical credentials | Ciphertext binds org/revision; retain keys needed for historical calls. Losing the independent encryption key fails explicitly, without another key/model fallback |
 
-## 数据与权限边界
+## Data and permission boundaries
 
-唯一迁移为 `0020`，分支基线 `down_revision="0019"`，合并时由维护者重新串联。
-迁移细节及代码位置见[机制笔记](../notes/provider-config.md#how-it-works)。
+The configuration migration is [0020_provider_configs.py](../../server/migrations/versions/0020_provider_configs.py), with `down_revision="0019"`. See the [mechanism note](../notes/provider-config.md#how-it-works) for migration details and code locations.
 
-`provider:read` 对所有现有角色开放，也可授予 API 令牌；`provider:write` 只授予
-人工 admin，在令牌签发服务和数据库 CHECK 两层禁止。数据库触发器还核验配置写入、
-探测作业创建的人工 admin 上下文；配置修订不可更新或删除。配置和测试均写不含密钥的审计。
+All existing roles may use `provider:read`, and API tokens may receive it. Only human admins receive `provider:write`; both token issuance and database CHECK constraints forbid it for tokens. Database triggers also verify human-admin context for configuration writes and probe-job creation. Revisions cannot be updated/deleted. Configuration and tests both write key-free audit entries.
 
-## 验收
+## Acceptance
 
-[API/processor 关口测试](../../server/tests/test_provider_config.py) 和
-[CLI 与外部 HTTP 边界测试](../../server/tests/test_provider_client.py) 覆盖：
+[API/processor gate tests](../../server/tests/test_provider_config.py) and [CLI/external HTTP boundary tests](../../server/tests/test_provider_client.py) cover:
 
-1. 双单位配置、历史、作业及用量隔离；无上下文读不到，跨单位引用失败。
-2. 自带配置、平台指定、平台默认、未配置四条解析路径；抽取与起草共享配置。
-3. 人工 admin、其他角色与令牌权限；数据库拒绝非法配置写入和令牌范围。
-4. 修订冲突、历史不可变、排队任务固定旧修订、更新后新缓存。
-5. 密钥加密、上下文绑定、CLI 私有文件、输出与错误无明文密钥。
-6. 自带密钥零平台费用、无预付检查，仍通过调用上限和即时记账；平台调用仍受余额约束。
-7. 额度错误不重试，按付费方提示处理；DeepSeek 余额返回类型严格校验，重定向不被跟随。
+1. Two-org isolation for configuration, history, jobs, and usage; no-context reads return nothing; cross-org references fail.
+2. BYOK, explicit platform selection, platform default, and unconfigured resolution; extraction/drafting share configuration.
+3. Human admins, other roles, and token permissions; the database rejects illegal configuration writes and token scopes.
+4. Revision conflicts, immutable history, queued jobs bound to old revisions, and new caches after updates.
+5. Encryption/context binding, private CLI files, and no plaintext keys in outputs/errors.
+6. BYOK zero platform charges/no prepaid checks, with call limits and immediate accounting; platform calls retain balance constraints.
+7. No retry for quota errors; guidance follows the payer. DeepSeek balance response types are strictly checked and redirects are not followed.
 
-数据库迁移、FORCE RLS、API 到 processor 的数据库流程必须在维护者的隔离 PostgreSQL
-测试实例中运行；当前沙盒无法连接该实例，非数据库检查不能代替这些验收。
+Migration, FORCE RLS, and the database flow from API to processor require the maintainer's isolated PostgreSQL test instance. Nondatabase checks cannot replace these acceptance checks; the original implementation report recorded a sandbox connection limitation rather than a database-test pass.

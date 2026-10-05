@@ -43,7 +43,7 @@ confirm, classify, revise, or exclude anything.
 Rubric sets, sections, items, requirement coverage, normalized coverage links, and append-only review
 events use tenant-bound composite keys and forced row-level security. Revisions create a new candidate
 set with new child IDs; they never rewrite an earlier set. Expected revision and input hash checks stop
-stale decisions. Session-only review scopes and stored review domains enforce the human role boundary;
+stale decisions. Session-only review scopes and stored review domains (职责) enforce the human role boundary;
 tokens, agents, and workers cannot perform review actions.
 
 Completeness is deterministic. Every extracted scoring requirement needs an explicit coverage result;
@@ -57,19 +57,41 @@ submission binds the dry-run input hash and follows the shared queue, lease, ret
 provider resolution, redaction, usage, and prepaid charge controls. Cached input returns the retained
 job without duplicating review or usage history.
 
-Rubric extraction submits the entire selected scoring table in one model request so section and
-overall rules share the same context. Admission counts the complete serialized HTTP JSON in UTF-8
-bytes, including prompts, schema and vendor options, using `Settings.rubric_max_request_bytes`.
-The [deployment template](../../deploy/.env.example) explains the long-context budget and its token
-limitations. An oversized request returns `rubric_context_limit` in preview and is refused on
-submission without jobs or calls. Malformed or truncated output fails with occurred usage retained;
-it never triggers table splitting. Acceptance requires exactly one complete response with the
-fixed table's ID/ref allowlist, then verifies each candidate citation and detects duplicate keys,
-orphan sections and missing requirement output. Ordinary HTTP retries retain the whole request.
+Rubric generation uses two stages. Stage 1 sends the entire fixed scoring table in one request, with
+no table splitting. Admission enforces `BID_RUBRIC_MAX_REQUEST_BYTES` against the entire serialized
+HTTP request body. If the limit is exceeded, preview reports a capacity blocker and submission is
+refused before any Provider call. Stage 1 sees every scoring Requirement and proposes section
+keys/titles/order, section aggregation, section bounds/caps/weights/inclusion, review domains (职责),
+and the overall rule. Each proposed section and the overall rule require verified citations; stage 1
+does not propose item order, and is not required to cite every Requirement. The service validates the proposed structure
+and citations against the full Requirement/ref allowlist before admitting stage 2. Invalid or failed
+stage 1 fails the job without item-generation calls.
+
+Stage 2 generates item details in batches using `llm_batch_chars`; batching and concurrency are
+implemented in the Provider. Every batch receives the entire fixed stage-1 section list as immutable
+context, and its structure hash is included in the call/input manifest. Item generation cannot alter
+that structure. Unknown section references, cross-batch references, and unresolved Requirements are
+rejected. A stage-2 failure retains other valid sections/items as partial output with exit 5, including
+validated sections when no item was accepted. Ordinary HTTP retries repeat the same fixed request or
+batch.
+
+The write-free preview upper bound covers both stages, including the entire fixed section list
+repeated in each stage-2 batch. Because the structure is unknown at preview time, the item-call
+input bound conservatively uses twice the enforced compact request-byte ceiling plus the shared
+framing allowance. Each actual item batch must fit the configured byte ceiling before admission. Stage-specific prompt and schema versions are part of preview
+cache/input identity. Old queued jobs with incompatible versions fail explicitly and must be
+resubmitted. The published rubric hash derives from the manifest containing stage-1 output and its
+structure hash. The queued job `cache_key` remains the preview input; submission stores
+`preview_input_hash` as provenance. The existing rubric `input_manifest` stores the verified proposal.
+Each call continues through shared per-call admission, reservation, metering, and settlement. Preflight carries a quote for the structure
+call and each planned item batch; actual calls obtain quotes for their exact request bodies. Shared
+[task-budget admission](task-budgets.md) reserves platform charges or direct-provider liability.
+Cached previews resolve the same actor-bound cache key as submission, independently of the final
+published structure hash.
 
 Scoring fixes the rubric set, coverage decisions, section/item revisions and DraftRun partitions.
 Only fixed confirmed response text and deviation notes become bid-side inputs; all confirmed
-response rows are candidate support, including rows for other requirements. Comply-only and gap
+response rows are candidate support, including rows for other requirements. Comply-only (须遵守) and gap
 anchors contribute metadata and tender text. Current card revision numbers are used only to detect
 staleness; current card pointers, candidate text, material bodies, released documents, templates and
 page images are not scoring inputs.
@@ -83,13 +105,13 @@ and redacted-value dependence stay unassessable. Unsafe reasons and unknown plac
 saved. Verified supporting responses have normalized database links.
 
 Aggregation uses Decimal without intermediate rounding. Sum, weighted sum and capped sum round only
-final section and overall outputs to eight decimal places with ROUND_HALF_UP. Weights must sum
+final section (正式件) and overall outputs to eight decimal places with ROUND_HALF_UP. Weights must sum
 exactly to one at their own node. Unassessable included children and unsupported aggregations make
 the parent unavailable; assessed subtotals remain visibly separate from totals.
 
-The score worker shares per-call admission and settlement with rubric/check jobs. A later provider
-or admission failure can retain earlier valid batches in a partial report. Cancellation, lease loss,
-input changes or accounting failure prevent publication without erasing occurred usage. Publication
+The rubric and score workers share per-call admission and settlement with check jobs. A later provider
+or admission failure can retain earlier valid stage-2 batches or score batches in a partial result.
+Cancellation, lease loss, input changes or accounting failure prevent publication without erasing occurred usage. Publication
 rechecks rubric confirmation and draft currency under locks and database triggers. Report reads
 reauthorize fixed parents and recompute staleness without rewriting history. Section and overall
 aggregates are stored on the immutable report; item support and citations use separate RLS tables.
@@ -100,10 +122,17 @@ A complete rubric means that it covers the scoring requirements saved by the spe
 It does not prove that extraction found every scoring rule in the tender. Generation never scans the
 document or adjacent chunks to discover missing requirements.
 
-Rubric confirmation and advisory scoring do not modify response cards, confirm evidence, fill
+The real-provider evidence and decision rationale are recorded in the
+[score-generation changelog](../changelog.md#2026-10-05-two-stage-score-rubric-generation).
+
+Rubric confirmation and advisory scoring do not modify response cards (响应卡), confirm evidence, fill
 confidential values, or produce an official tender score. The boundaries are fixed in the
 [score contract](../plan/score.md). Formula text is retained as text and is never evaluated.
 Rejected or ambiguous model citations are not repaired into another source.
+
+Generated item keys use the fixed tender-ref prefix and a local item ordinal, such as `r1.item-1`.
+Embedding numeric local UUIDs in free-text keys can match bank-account or phone redaction rules and
+leave valid items unresolved. Identifiers must be chosen without weakening sensitive-text checks.
 
 Phase A has one narrower implementation limitation than the approved redacted-provider flow. If
 redaction would change a fixed `Source.quote` or `Source.location`, preview reports

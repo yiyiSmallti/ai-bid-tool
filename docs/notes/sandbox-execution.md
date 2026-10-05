@@ -123,7 +123,7 @@ restart the supervisor; configure that before enabling production admission.
 Source HTML can depend on external assets. Offline requests are blocked; complete
 prototype outputs can carry an internal warning. A vendor capture whose entry
 document loads succeeds even when some resources fail, with the
-`vendor_resources_incomplete` warning. A valid image and HTTP receipt do not certify manufacturer claims
+`vendor_resources_incomplete` warning. A valid image and HTTP receipt do not certify vendor claims
 or detect every login, CAPTCHA or soft error page.
 
 Storage writes precede database publication. Failed transactions may leave

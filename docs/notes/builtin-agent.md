@@ -2,9 +2,10 @@
 
 ## Problem
 
-A built-in agent (内置 agent) must turn a human goal into bounded command work
-without inheriting the human's confirmation, export or confidential-value powers.
-Paid decisions, child jobs and human pauses (人工暂停) need durable state so a
+A built-in agent (内置 agent) must turn a human goal into bounded command work.
+It must not gain authority for human confirmation (人工确认), export, or writing
+or revealing confidential field (保密字段) values. Paid decisions, child background
+jobs (后台作业) and human pauses (人工暂停) need durable state so a
 restart cannot duplicate work, forget cost or treat an uncertain request as free.
 The approved boundaries and acceptance requirements are in the
 [agent contract](../plan/agent.md); task admission and human budget changes belong
@@ -12,7 +13,8 @@ to [Task budgets](task-budgets.md).
 
 ## Usage
 
-Start from an existing task and a successful extraction of a real tender document.
+Start from an existing task (任务) and a successful extraction of a real tender
+document (招标文件).
 Use a human login session; API tokens cannot create or control built-in sessions.
 Prepare a JSON request with extraction_job_id, message, requested_scopes, limits
 and a caller-generated idempotency_key, using
@@ -43,14 +45,14 @@ Mutations use expected_revision and distinct endpoint-scoped UUID keys; start
 uses its creation key. Replaying the same normalized request returns its saved
 receipt; changed input with the same key conflicts. A message can be appended only
 while paused and does not resume execution. Read the pause and perform the
-required action through the existing human card or budget commands, then resume
+required action through the existing human response-card (响应卡) or budget commands, then resume
 with the observed pause ID and revision. Resume verifies current facts; a written
 “approved” message cannot confirm a card. A controller job reaching succeeded
 means one checkpoint completed. Agent show reports the overall session outcome.
 For a review pause, inspect `bid card list --task TASK_UUID --job EXTRACTION_UUID
 --json` and follow the existing
 [human review workflow](../guides/cli.md#review-responses-and-assemble-a-draft).
-Confirmation stays with the card's commercial or technical responsibility.
+Confirmation stays with the card's commercial (商务) or technical (技术) review domain (职责).
 If review changes its stored revisions, resume can return a refreshed pause;
 inspect that response before resuming with the new pause/revision pair.
 
@@ -64,7 +66,8 @@ cancel/start a new session if it cannot be proved.
 
 ## How it works
 
-A persistent agent principal binds the owner, Membership, org, original grants,
+A persistent agent principal binds the initiator (发起人), who owns the session,
+Membership, org (organization/tenant; 单位), original grants,
 reduced scopes and authority expiry. Each admission intersects original grants,
 current Membership/role, requested scope reduction and the A01 allowlist. Owner
 sessions alone can read/control the conversation; other org members receive 404.
@@ -76,15 +79,16 @@ draft show and job status, with invocation schemas derived from the CLI registry
 It validates arguments and every parent relation, then invokes the same protected
 command services as the API. It has no shell, arbitrary HTTP, model-selected file
 access or browser. Generation first previews cost and fixes the input hash;
-proposals remain unconfirmed. Human review uses original card responsibilities,
-then deterministic draft assembly copies only confirmed responses and reports
-remaining gaps. A01 does not retrieve memory, including in its generation path.
+proposals remain unconfirmed. Human review uses the existing card review domains,
+then deterministic draft (初稿) table assembly (组表) copies only confirmed responses
+(响应) and reports remaining gaps (缺口). A01 does not retrieve memory (记忆),
+including in its generation path.
 
 Decision and tool steps retain fixed schemas, inputs, invocation identities,
-results and attempt provenance. Six org tables use FORCE RLS and composite org/
+results and attempt provenance (溯源). Six org tables use FORCE RLS and composite org/
 task/session constraints. Original messages, arguments and receipts are encrypted;
 public views contain bounded redacted fields. Model inputs first replace registered
-confidential values, then apply outbound redaction. A changed or disabled setting
+confidential values, then apply outbound redaction (遮挡). A changed or disabled setting
 pauses. Model decisions use a closed schema; trusted HTTP usage is attached by
 the adapter, never supplied by the model. Hidden reasoning is not persisted.
 
@@ -107,12 +111,12 @@ boundary. Task budgets, prepaid availability, original job ceilings and immutabl
 parent session ceilings all apply to child retries, splitting and recovery.
 Session cost aggregates direct decisions and owned child usage IDs; it creates
 neither copied UsageRecords nor an extra debit. Reused historical jobs are
-nonowned and add zero new session expense. Vendor USD and platform currency stay
-separate; BYOK's zero platform charge does not erase vendor cost. Unknown paid
+nonowned and add zero new session expense. Provider USD and platform currency stay
+separate; BYOK's zero platform charge does not erase provider cost. Unknown paid
 prices block admission. Cancellation fences dispatch/publication but preserves
 settlement of already issued calls and their fees.
 
-Audit distinguishes the immediate worker from its built-in-agent origin and
+Audit (审计) distinguishes the immediate worker from its built-in-agent origin and
 retains the verified principal/session/step/invocation/job/run references.
 Public provenance survives later human edits while actual human confirmation
 keeps its human actor. External token calls use verified token identity and the
@@ -130,8 +134,8 @@ Vue agent pages and external-agent product registration are separate scope.
 - A fresh controller, retry, restart or resume cannot clear time, calls, steps,
   fees or holds. Active time includes queue waits, child waits, backoff and
   downtime; human pause time is excluded but total lifetime still expires.
-- A lost lease is not proof that vendor HTTP was unsent. Do not release unknown
-  holds, regenerate settled decisions or promise vendor exactly-once execution.
+- A lost lease is not proof that provider HTTP was unsent. Do not release unknown
+  holds, regenerate settled decisions or promise provider exactly-once execution.
   Unprovable steps require termination rather than automatic paid replay.
 - Scope checks alone do not make a human-only action safe for an agent. Keep
   actor_kind and database gates; confirmations, exports, prototype decisions and
@@ -141,7 +145,7 @@ Vue agent pages and external-agent product registration are separate scope.
   fence new work. Do not claim logout instantly revokes delegation.
 - Context overflow or changed fixed inputs pause without silently shrinking
   requirements or adopting a different extraction/model. Do not truncate
-  citations, save raw vendor responses or fabricate memory retrieval. Negative deviations
+  citations, save raw provider responses or fabricate memory retrieval. Negative deviations
   (负偏离), protected cards and draft gaps must remain visible.
 - Recovery during a database outage retains durable work but cannot promise
   progress within the sweep interval. Retain active sessions' last wake until

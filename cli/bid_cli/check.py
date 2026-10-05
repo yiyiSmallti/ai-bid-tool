@@ -8,6 +8,14 @@ from uuid import UUID
 import typer
 from app.core.errors import ServiceError
 from app.schemas.check_contracts import CheckJobResult, CheckRequest, FindingDecisionRequest
+from app.schemas.console_assessments import (
+    AssessmentHistoryPage,
+    CheckPage,
+    CheckPageRequest,
+    CheckSummaryData,
+)
+
+from bid_cli.assessments import history_params, projection_exit, show_params, validated
 
 app = typer.Typer()
 JsonOption = Annotated[
@@ -166,24 +174,62 @@ def check_list(
     task: Annotated[UUID, typer.Option()],
     cursor: Annotated[str | None, typer.Option()] = None,
     limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
+    view: Annotated[str | None, typer.Option()] = None,
+    extraction_job: Annotated[UUID | None, typer.Option("--extraction-job")] = None,
     json_output: JsonOption = False,
 ):
     cli = _helpers()
-    cli.emit(
-        cli.call("GET", f"/tasks/{task}/checks", params=_page(cursor, limit)),
-        "check list",
-        json_output,
-    )
+    params = history_params(view, extraction_job, cursor, limit)
+    body = cli.call("GET", f"/tasks/{task}/checks", params=params)
+    if view is not None:
+        validated(body, "check list", page_model=AssessmentHistoryPage[CheckSummaryData])
+    cli.emit(body, "check list", json_output, projection_exit(body) if view else 0)
 
 
 @app.command("show")
 def check_show(
     id: Annotated[UUID, typer.Option("--id")],
+    view: Annotated[str | None, typer.Option()] = None,
+    part: Annotated[str | None, typer.Option()] = None,
+    cursor: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int | None, typer.Option(min=1, max=100)] = None,
+    severity: Annotated[str | None, typer.Option()] = None,
+    domain: Annotated[str | None, typer.Option()] = None,
+    status: Annotated[str | None, typer.Option()] = None,
+    requirement: Annotated[UUID | None, typer.Option("--requirement")] = None,
+    entry: Annotated[UUID | None, typer.Option("--entry")] = None,
     json_output: JsonOption = False,
 ):
     cli = _helpers()
-    body = cli.call("GET", f"/checks/{id}")
-    cli.emit(body, "check show", json_output, _report_exit(body))
+    params = show_params(
+        view,
+        part,
+        CheckPageRequest,
+        cursor=cursor,
+        limit=limit,
+        severity=severity,
+        domain=domain,
+        status=status,
+        requirement_id=requirement,
+        entry_id=entry,
+    )
+    if params is None:
+        body = cli.call("GET", f"/checks/{id}")
+        exit_code = _report_exit(body)
+    else:
+        if params["part"] == "replacement":
+            raise ServiceError(
+                "invalid_input", "Check reports do not have a replacement projection", 400, 2
+            )
+        body = cli.call("GET", f"/checks/{id}", params=params)
+        validated(
+            body,
+            "check show",
+            data_model=CheckSummaryData if params["part"] == "summary" else None,
+            page_model=CheckPage if params["part"] != "summary" else None,
+        )
+        exit_code = projection_exit(body)
+    cli.emit(body, "check show", json_output, exit_code)
 
 
 @app.command("decide")

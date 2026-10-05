@@ -6,10 +6,9 @@ No rendering, routes, permissions, command registration or persistence occurs he
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
-from pydantic import Field, field_validator, model_validator
-
 from app.schemas.contracts import Contract
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive, EvidenceSourcePreview
+from pydantic import Field, field_validator, model_validator
 
 
 class PixelRect(Contract):
@@ -70,14 +69,19 @@ class SourceAnnotationReceipt(SourceAnnotationRendering):
         if self.plan.crop is not None and crop != self.plan.crop:
             raise ValueError("mapping differs from the approved crop")
         if self.plan.crop is None and crop != PixelRect(
-            x=0, y=0,
-            width=self.source.preview.width_px, height=self.source.preview.height_px,
+            x=0,
+            y=0,
+            width=self.source.preview.width_px,
+            height=self.source.preview.height_px,
         ):
             raise ValueError("the uncropped mapping must preserve the full source")
         for box in self.plan.boxes:
-            if (box.x < crop.x or box.y < crop.y
+            if (
+                box.x < crop.x
+                or box.y < crop.y
                 or box.x + box.width > crop.x + crop.width
-                or box.y + box.height > crop.y + crop.height):
+                or box.y + box.height > crop.y + crop.height
+            ):
                 raise ValueError("box must be inside the original crop")
         if self.file.width_px != max(crop.width, 1024):
             raise ValueError("the canvas width differs from the profile")

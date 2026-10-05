@@ -360,8 +360,8 @@ BEGIN
      IF NEW.state<>'queued' OR NEW.revision<>1 OR NEW.steps_used<>0 OR NEW.vendor_calls_used<>0 OR NEW.active_seconds_used<>0 THEN
        RAISE EXCEPTION 'new agent session requires initial checkpoint' USING ERRCODE='23514'; END IF;
      IF NOT public.agent_owner(NEW.org_id,NEW.owner_user_id) OR NOT EXISTS(
-       SELECT FROM public.jobs WHERE org_id=NEW.org_id AND id=NEW.extraction_job_id
-         AND task_id=NEW.task_id AND document_id=NEW.document_id AND kind='extract' AND status='succeeded') THEN
+       SELECT FROM public.jobs x WHERE x.org_id=NEW.org_id AND x.id=NEW.extraction_job_id
+         AND x.task_id=NEW.task_id AND x.document_id=NEW.document_id AND x.kind='extract' AND x.status='succeeded') THEN
        RAISE EXCEPTION 'agent requires human and successful extraction' USING ERRCODE='42501'; END IF;
    ELSE
      IF kind IN ('agent','worker') THEN

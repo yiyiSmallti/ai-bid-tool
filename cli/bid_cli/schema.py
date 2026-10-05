@@ -35,18 +35,40 @@ from app.schemas.certificate_file_contracts import CertificateFileCreate
 from app.schemas.check_contracts import (
     AssessmentJobAccepted,
     AssessmentListData,
+    CheckCertificateView,
+    CheckItemView,
     CheckJobResult,
     CheckPreview,
     CheckReportData,
     CheckRequest,
     FindingDecisionData,
     FindingDecisionRequest,
+    FindingView,
 )
 from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.confidential_contracts import (
     ConfidentialFieldCreate,
     ConfidentialFieldUpdate,
     ConfidentialValueSet,
+)
+from app.schemas.console_assessments import (
+    AssessmentHistoryQuery,
+    AssessmentInputsData,
+    AssessmentJobPageData,
+    AssessmentJobQuery,
+    AssessmentJobView,
+    CheckPageRequest,
+    CheckSummaryData,
+    CitationContextData,
+    CitationRequest,
+    ConsoleRubricSectionView,
+    Notice,
+    PageData,
+    RubricPageRequest,
+    RubricReplacementData,
+    RubricSummaryData,
+    ScorePageRequest,
+    ScoreSummaryData,
 )
 from app.schemas.contracts import (
     JobAction,
@@ -144,16 +166,20 @@ from app.schemas.score_contracts import (
     RubricGenerateRequest,
     RubricGenerateResult,
     RubricItemDecisionRequest,
+    RubricItemView,
     RubricPreview,
     RubricReportData,
+    RubricRequirementCoverageView,
     RubricReviseRequest,
     RubricSectionDecisionRequest,
     RubricSetDecisionRequest,
     RubricSetView,
+    ScoreItemView,
     ScoreJobResult,
     ScorePreview,
     ScoreReportData,
     ScoreRequest,
+    ScoreSectionSummary,
 )
 from app.schemas.screenshot_contracts import (
     PrototypeDecisionBatch,
@@ -173,6 +199,9 @@ from pydantic import TypeAdapter
 
 # Only implemented commands are advertised; future commands are deliberately absent.
 COMMANDS = {
+    "assessment inputs": None,
+    "assessment citation": CitationRequest,
+    "assessment jobs": AssessmentJobQuery,
     "provider list": None,
     "provider history": None,
     "provider set": ProviderConfigInput,
@@ -338,6 +367,9 @@ EXPORT_OUTPUTS = {
 }
 
 CHECK_OUTPUTS = {
+    "assessment inputs": TypeAdapter(AssessmentInputsData),
+    "assessment citation": TypeAdapter(CitationContextData),
+    "assessment jobs": TypeAdapter(AssessmentJobPageData),
     "check run": TypeAdapter(CheckPreview | AssessmentJobAccepted | CheckJobResult),
     "check list": TypeAdapter(AssessmentListData),
     "check show": TypeAdapter(CheckReportData),
@@ -467,6 +499,75 @@ OUTPUTS = (
 )
 
 
+def console_variant(input_model, output_model, items_model=None) -> dict:
+    return {
+        "input": input_model.model_json_schema() if input_model else None,
+        "output": TypeAdapter(output_model).json_schema(),
+        "items": TypeAdapter(items_model).json_schema()
+        if items_model
+        else {"type": "array", "maxItems": 0},
+    }
+
+
+CONSOLE_VARIANTS = {
+    "score list": {
+        "console": console_variant(AssessmentHistoryQuery, AssessmentListData, ScoreSummaryData)
+    },
+    "score show": {
+        "console": {
+            "summary": console_variant(None, ScoreSummaryData),
+            **{
+                part: console_variant(ScorePageRequest, PageData, model)
+                for part, model in {
+                    "sections": ScoreSectionSummary,
+                    "items": ScoreItemView,
+                    "notices": Notice,
+                }.items()
+            },
+        }
+    },
+    "score rubric list": {
+        "console": console_variant(AssessmentHistoryQuery, AssessmentListData, RubricSummaryData)
+    },
+    "score rubric show": {
+        "console": {
+            "summary": console_variant(None, RubricSummaryData),
+            "replacement": console_variant(None, RubricReplacementData),
+            **{
+                part: console_variant(RubricPageRequest, PageData, model)
+                for part, model in {
+                    "sections": ConsoleRubricSectionView,
+                    "items": RubricItemView,
+                    "coverage": RubricRequirementCoverageView,
+                    "blockers": Notice,
+                }.items()
+            },
+        }
+    },
+    "score rubric revise": {"console": console_variant(RubricReviseRequest, RubricSummaryData)},
+    "score rubric decide": {
+        "console": console_variant(RubricSetDecisionRequest, RubricSummaryData)
+    },
+    "check list": {
+        "console": console_variant(AssessmentHistoryQuery, AssessmentListData, CheckSummaryData)
+    },
+    "check show": {
+        "console": {
+            "summary": console_variant(None, CheckSummaryData),
+            **{
+                part: console_variant(CheckPageRequest, PageData, model)
+                for part, model in {
+                    "findings": FindingView,
+                    "coverage": CheckItemView,
+                    "certificates": CheckCertificateView,
+                    "notices": Notice,
+                }.items()
+            },
+        }
+    },
+}
+
+
 LEGACY_COMMANDS = dict(COMMANDS)
 COMMANDS.update(
     {
@@ -576,12 +677,35 @@ def command_schema(app=None, version: str = "4.0") -> dict:
             for name, model in commands.items()
             if name not in NEW_COMMANDS and name not in AGENT_INPUTS
         }
+        commands = {
+            name: model for name, model in commands.items() if not name.startswith("assessment ")
+        }
         legacy_options = {"budget", "budget_currency", "test_org", "contract_version"}
+        console_options = {
+            "view",
+            "part",
+            "extraction_job",
+            "severity",
+            "domain",
+            "status",
+            "requirement",
+            "entry",
+            "section",
+            "group",
+            "state",
+            "section_key",
+            "outcome",
+        }
         for name, items in parameters.items():
             parameters[name] = [
                 item
                 for item in items
                 if item["name"] not in legacy_options
+                and not (name in CONSOLE_VARIANTS and item["name"] in console_options)
+                and not (
+                    name in {"check show", "score show", "score rubric show"}
+                    and item["name"] in {"cursor", "limit"}
+                )
                 and not (name == "provider test" and item["name"] == "dry_run")
                 and not (name == "platform model test" and item["name"] == "dry_run")
             ]
@@ -599,6 +723,16 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     else {}
                 ),
                 **({"items": AGENT_ITEMS[name].model_json_schema()} if name in AGENT_ITEMS else {}),
+                **(
+                    {"variants": CONSOLE_VARIANTS[name]}
+                    if version == "4.0" and name in CONSOLE_VARIANTS
+                    else {}
+                ),
+                **(
+                    {"items": TypeAdapter(AssessmentJobView).json_schema()}
+                    if name == "assessment jobs"
+                    else {}
+                ),
                 **(
                     {"items": TypeAdapter(CredentialView).json_schema()}
                     if name == "platform credential list"

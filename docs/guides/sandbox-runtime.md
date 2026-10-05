@@ -5,7 +5,7 @@ kind: howto
 # Prepare and verify a sandbox execution node
 
 Use this procedure to provision the optional BrowserProvider execution boundary defined in
-[the approved sandbox contract](../plan/sandbox.md#运行时必须强制的限制).
+[the approved sandbox contract](../plan/sandbox.md#runtime-enforced-restrictions).
 The API and business workers use [SocketBrowserProvider](../../server/app/providers/browser.py).
 The execution node runs [sandbox_supervisor.py](../../scripts/sandbox_supervisor.py).
 
@@ -84,7 +84,7 @@ The execution node runs [sandbox_supervisor.py](../../scripts/sandbox_supervisor
    `BID_SANDBOX_RUNTIME_ACCEPTED=1` for business inputs.
 
 The runtime combination and its rationale are recorded in
-[the sandbox contract](../plan/sandbox.md#已定决定).
+[the sandbox contract](../plan/sandbox.md#decisions).
 
 ## Build and pin the image
 
@@ -238,7 +238,7 @@ It does not start a VM, install Docker, build images or silently substitute a fa
 Without the opt-in flag the real case is skipped; that skip provides no isolation evidence.
 
 Run the broader attack and lifecycle acceptance in
-[the contract acceptance section](../plan/sandbox.md#批准后的端到端验收) before setting a
+[the contract acceptance section](../plan/sandbox.md#end-to-end-acceptance-after-approval) before setting a
 production acceptance assertion. Preserve packet counters, runtime identity, resource peaks,
 container inventories, hashes and machine-readable results outside `docs/`.
 
@@ -375,7 +375,7 @@ instance.
    The CLI automatically repeats preflight before real submission. A blocked
    preflight does not execute a container or create a storage object. Download
    destinations must be new files. Session/token scopes are defined in the
-   [sandbox contract](../plan/sandbox.md#cliapi-与身份).
+   [sandbox contract](../plan/sandbox.md#cliapi-and-identity).
 4. Cancel through `bid job cancel JOB_ID --json`. Reconcile an interrupted run by
    retrying the same request with `--retry` after the supervisor has recovered.
    Cleanup confirmation cannot reset consumed budgets. A changed selection,

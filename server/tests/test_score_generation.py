@@ -13,15 +13,25 @@ import pytest
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
+from app.providers.calls import current_accounting
+from app.providers.rubric import HTTPRubricProvider
 from app.schemas.score_contracts import (
     RubricAnsweredBatch,
+    RubricCoverageDecisionRequest,
     RubricGenerateRequest,
-    RubricWireOutput,
+    RubricItemsWireOutput,
+    RubricReviseRequest,
+    RubricStructureOutput,
 )
 from app.services import redaction, score_generation, score_inputs
 from app.services.auth import Identity
+from cryptography.fernet import Fernet
 from sqlalchemy import select
+from test_check_combined import semantic_llm
 from test_rls import seeded as seeded  # noqa: F401
+from test_score_api import RubricVendor
+from test_score_provider import Accounting
+from test_score_review import replacement
 
 REAL_REQUIREMENT = UUID("00000000-0000-0000-0000-000000000101")
 PROVIDER_REQUIREMENT = UUID("00000000-0000-0000-0000-000000000001")
@@ -47,45 +57,161 @@ def fixed_secret(*, source_original: str = "联系人：Synthetic Secret。内�
     }
 
 
-def candidate(*, quote: str = "内存 64 GB 得 5 分") -> RubricWireOutput:
-    return RubricWireOutput.model_validate(
-        {
-            "sections": [
-                {
-                    "key": "technical",
-                    "title": "技术评分",
-                    "order": 1,
-                    "aggregation": "sum",
-                    "aggregation_rule_text": None,
-                    "score_range": {"minimum": "0", "maximum": "5"},
-                    "weight": None,
-                    "cap": None,
-                    "included_in_overall_total": True,
-                    "ambiguity_reason": None,
-                    "citations": [{"ref": "r1.tender", "quote": quote}],
-                }
-            ],
-            "items": [
-                {
-                    "requirement_id": str(PROVIDER_REQUIREMENT),
-                    "section_key": "technical",
-                    "key": "memory",
-                    "title": "内存",
-                    "rule_text": "内存 64 GB 得 5 分。",
-                    "order": 1,
-                    "assessment_mode": "model_assessable",
-                    "score_range": {"minimum": "0", "maximum": "5"},
-                    "weight": None,
-                    "ambiguity_reason": None,
-                    "citations": [{"ref": "r1.tender", "quote": quote}],
-                }
-            ],
-            "overall_aggregation": "sum",
-            "overall_rule_text": None,
-            "overall_score_range": {"minimum": "0", "maximum": "5"},
-            "overall_cap": None,
-        }
+def candidate(*, quote: str = "内存 64 GB 得 5 分") -> dict:
+    return {
+        "sections": [
+            {
+                "key": "technical",
+                "title": "技术评分",
+                "order": 1,
+                "aggregation": "sum",
+                "aggregation_rule_text": None,
+                "score_range": {"minimum": "0", "maximum": "5"},
+                "weight": None,
+                "cap": None,
+                "included_in_overall_total": True,
+                "ambiguity_reason": None,
+                "citations": [{"ref": "r1.tender", "quote": quote}],
+            }
+        ],
+        "items": [
+            {
+                "requirement_id": str(PROVIDER_REQUIREMENT),
+                "section_key": "technical",
+                "key": "memory",
+                "title": "内存",
+                "rule_text": "内存 64 GB 得 5 分。",
+                "order": 1,
+                "assessment_mode": "model_assessable",
+                "score_range": {"minimum": "0", "maximum": "5"},
+                "weight": None,
+                "ambiguity_reason": None,
+                "citations": [{"ref": "r1.tender", "quote": quote}],
+            }
+        ],
+        "overall_aggregation": "sum",
+        "overall_rule_text": None,
+        "overall_score_range": {"minimum": "0", "maximum": "5"},
+        "overall_cap": None,
+        "overall_citations": [{"ref": "r1.tender", "quote": quote}],
+    }
+
+
+def verified_structure(secret, outbound):
+    wire = candidate()
+    wire.pop("items")
+    return score_generation.accept_structure(
+        secret, outbound, RubricStructureOutput.model_validate(wire)
     )
+
+
+@pytest.mark.parametrize("requirement_count", [1, 3])
+async def test_two_stage_generation_keeps_items_for_existing_human_review_contracts(
+    tmp_path, requirement_count
+):
+    """Run the shared API fixture vendor through both stages and review request building.
+
+    Failures: generated keys collide with redaction, batch numbering loses items,
+    coverage maps to an empty item list, or replacement items no longer validate.
+    """
+    import json
+
+    secret = {"requirements": []}
+    for index in range(1, requirement_count + 1):
+        clause = f"Synthetic criterion {index} earns 5 points. " + "x" * 650
+        row = fixed_secret(source_original=clause)["requirements"][0]
+        row |= {
+            "requirement_id": str(UUID(int=100 + index)),
+            "provider_id": str(score_inputs.provider_id(index)),
+            "text": clause,
+            "source": {**row["source"], "chunk_id": str(UUID(int=200 + index)), "quote": clause},
+        }
+        secret["requirements"].append(row)
+    outbound = score_generation.build_outbound(secret, [], [])
+    vendor = RubricVendor()
+    provider = HTTPRubricProvider(
+        semantic_llm(
+            tmp_path,
+            vendor,
+            llm_batch_chars=1000,
+            database_url="postgresql+psycopg://unused/unused",
+            encryption_key=Fernet.generate_key().decode(),
+            token_key=Fernet.generate_key().decode(),
+        )
+    )
+    accounting = Accounting()
+    token = current_accounting.set(accounting)
+    try:
+        proposed = await provider.extract_structure(score_generation.provider_request(outbound))
+        assert proposed.failure is None and proposed.output is not None
+        structure = score_generation.accept_structure(secret, outbound, proposed.output)
+        generated = await provider.extract_items(
+            score_generation.items_request(outbound, structure)
+        )
+    finally:
+        current_accounting.reset(token)
+    assert generated.failure is None
+    accepted = score_generation.accept_batches(secret, outbound, structure, generated.batches)
+    assert accepted["normalization_errors"] == []
+    assert len(accepted["items"]) == requirement_count
+    assert accepted["unresolved_requirement_ids"] == []
+    assert vendor.stages == ["structure", *(["items"] * requirement_count)]
+    assert len(accounting.completed) == requirement_count + 1
+
+    sections = [{**section, "id": str(uuid4())} for section in accepted["sections"]]
+    by_key = {section["key"]: section["id"] for section in sections}
+    report = {
+        "rubric": {
+            "revision": 1,
+            "input_hash": "a" * 64,
+            **{
+                key: accepted[key]
+                for key in (
+                    "overall_aggregation",
+                    "overall_rule_text",
+                    "overall_score_range",
+                    "overall_cap",
+                )
+            },
+        },
+        "sections": sections,
+        "items": [
+            {**item, "id": str(uuid4()), "section_id": by_key[item["section_key"]]}
+            for item in accepted["items"]
+        ],
+        "coverage": [
+            {"requirement_id": row["requirement_id"], "source": row["source"]}
+            for row in secret["requirements"]
+        ],
+    }
+    revision = RubricReviseRequest.model_validate(replacement(report))
+    decisions = [
+        RubricCoverageDecisionRequest(
+            expected_revision=1,
+            expected_input_hash=report["rubric"]["input_hash"],
+            action="mapped",
+            rubric_item_ids=[
+                UUID(item["id"])
+                for item in report["items"]
+                if item["requirement_id"] == row["requirement_id"]
+            ],
+            reason="Synthetic human coverage review",
+        )
+        for row in report["coverage"]
+    ]
+    artifact = tmp_path / "two-stage-review-contracts.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "stages": vendor.stages,
+                "accepted": accepted,
+                "revision": revision.model_dump(mode="json"),
+                "coverage_decisions": [decision.model_dump(mode="json") for decision in decisions],
+            },
+            indent=2,
+        )
+    )
+    assert len(json.loads(artifact.read_text())["revision"]["items"]) == requirement_count
 
 
 def test_outbound_redaction_and_dual_citation_acceptance_use_local_ids_only():
@@ -102,12 +228,15 @@ def test_outbound_redaction_and_dual_citation_acceptance_use_local_ids_only():
     assert outbound["requirements"] == {str(PROVIDER_REQUIREMENT): str(REAL_REQUIREMENT)}
     assert "condition" not in str(outbound)
 
+    secret = fixed_secret()
+    structure = verified_structure(secret, outbound)
     batch = RubricAnsweredBatch(
         requested_requirement_ids=[PROVIDER_REQUIREMENT],
         sent_refs=["r1.tender"],
-        output=candidate(),
+        structure_hash=structure["structure_hash"],
+        output=RubricItemsWireOutput(items=candidate()["items"]),
     )
-    accepted = score_generation.accept_batches(fixed_secret(), outbound, [batch])
+    accepted = score_generation.accept_batches(secret, outbound, structure, [batch])
     assert accepted["normalization_errors"] == []
     assert accepted["unresolved_requirement_ids"] == []
     assert accepted["sections"][0]["requirement_id"] == str(REAL_REQUIREMENT)
@@ -117,22 +246,12 @@ def test_outbound_redaction_and_dual_citation_acceptance_use_local_ids_only():
     assert "Synthetic Secret" not in str(accepted)
 
 
-def test_invalid_or_ambiguous_citation_stays_unresolved_without_repair():
+def test_invalid_or_ambiguous_structure_citation_fails_before_items():
     secret = fixed_secret(source_original="内存 64 GB 得 5 分。重复说明：内存 64 GB 得 5 分。")
     outbound = score_generation.build_outbound(secret, [], [])
-    batch = RubricAnsweredBatch(
-        requested_requirement_ids=[PROVIDER_REQUIREMENT],
-        sent_refs=["r1.tender"],
-        output=candidate(),
-    )
-
-    accepted = score_generation.accept_batches(secret, outbound, [batch])
-
-    assert accepted["sections"] == []
-    assert accepted["items"] == []
-    assert accepted["unresolved_requirement_ids"] == [str(REAL_REQUIREMENT)]
-    assert "invalid_section_citation" in accepted["normalization_errors"]
-    assert "invalid_item_citation" in accepted["normalization_errors"]
+    with pytest.raises(ServiceError) as failure:
+        verified_structure(secret, outbound)
+    assert failure.value.code == "invalid_overall_citation"
 
 
 @pytest.mark.parametrize(
@@ -151,7 +270,7 @@ def test_invalid_or_ambiguous_citation_stays_unresolved_without_repair():
 def test_untrusted_candidate_attacks_remain_unresolved(attack, expected_error):
     secret = fixed_secret()
     outbound = score_generation.build_outbound(secret, [], [])
-    wire = candidate().model_dump(mode="json")
+    wire = candidate()
     item = wire["items"][0]
     if attack == "unknown_id":
         item["requirement_id"] = str(uuid4())
@@ -169,13 +288,15 @@ def test_untrusted_candidate_attacks_remain_unresolved(attack, expected_error):
         wire["items"] = []
     elif attack == "duplicate_candidate":
         wire["items"] = [item, deepcopy(item)]
+    structure = verified_structure(secret, outbound)
     batch = RubricAnsweredBatch(
         requested_requirement_ids=[PROVIDER_REQUIREMENT],
         sent_refs=["r1.tender"],
-        output=RubricWireOutput.model_validate(wire),
+        structure_hash=structure["structure_hash"],
+        output=RubricItemsWireOutput(items=wire["items"]),
     )
 
-    accepted = score_generation.accept_batches(secret, outbound, [batch])
+    accepted = score_generation.accept_batches(secret, outbound, structure, [batch])
 
     assert expected_error in accepted["normalization_errors"]
     assert accepted["unresolved_requirement_ids"] == [str(REAL_REQUIREMENT)]
@@ -200,15 +321,17 @@ def test_cross_requirement_ref_cannot_bind_a_model_uuid_to_another_source():
     }
     secret["requirements"].append(second)
     outbound = score_generation.build_outbound(secret, [], [])
-    wire = candidate().model_dump(mode="json")
+    wire = candidate()
     wire["items"][0]["citations"] = [{"ref": "r2.tender", "quote": "处理器性能得 5 分。"}]
+    structure = verified_structure(secret, outbound)
     batch = RubricAnsweredBatch(
         requested_requirement_ids=[PROVIDER_REQUIREMENT, second_provider],
         sent_refs=["r1.tender", "r2.tender"],
-        output=RubricWireOutput.model_validate(wire),
+        structure_hash=structure["structure_hash"],
+        output=RubricItemsWireOutput(items=wire["items"]),
     )
 
-    accepted = score_generation.accept_batches(secret, outbound, [batch])
+    accepted = score_generation.accept_batches(secret, outbound, structure, [batch])
 
     assert "invalid_item_citation" in accepted["normalization_errors"]
     assert set(accepted["unresolved_requirement_ids"]) == {
@@ -217,14 +340,14 @@ def test_cross_requirement_ref_cannot_bind_a_model_uuid_to_another_source():
     }
 
 
-def test_no_completed_batch_is_an_explicit_failure():
+def test_no_completed_item_batch_retains_verified_structure_and_unresolved_requirements():
     secret = fixed_secret()
     outbound = score_generation.build_outbound(secret, [], [])
-
-    with pytest.raises(ServiceError) as failure:
-        score_generation.accept_batches(secret, outbound, [])
-
-    assert failure.value.code == "invalid_provider_output"
+    structure = verified_structure(secret, outbound)
+    accepted = score_generation.accept_batches(secret, outbound, structure, [])
+    assert accepted["sections"] == structure["sections"]
+    assert accepted["items"] == []
+    assert accepted["unresolved_requirement_ids"] == [str(REAL_REQUIREMENT)]
 
 
 async def test_redacted_source_location_is_a_zero_call_admission_blocker():

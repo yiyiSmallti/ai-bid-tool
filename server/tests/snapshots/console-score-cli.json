@@ -1,0 +1,890 @@
+{
+  "range_only": {
+    "local": {
+      "score items": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "items",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score list": {
+        "command": "score list",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "next_cursor": null,
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1
+        },
+        "duration_ms": 0,
+        "items": [
+          {
+            "assessed_items": 1,
+            "assessed_subtotal": "0",
+            "estimated_total": null,
+            "overall_aggregation": "sum",
+            "overall_aggregation_assessable": true,
+            "overall_cap": null,
+            "overall_rule_text": null,
+            "possible_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "report": {
+              "advisory_only": true,
+              "assessment_date": "2026-10-04",
+              "completion": "partial",
+              "created_at": "2026-10-04T00:00:00Z",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "draft_id": "00000000-0000-0000-0000-000000000002",
+              "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+              "id": "00000000-0000-0000-0000-000000000001",
+              "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "invalidation_codes": [
+                "draft_changed"
+              ],
+              "job_id": "00000000-0000-0000-0000-000000000001",
+              "notice_count": 1,
+              "org_id": "00000000-0000-0000-0000-000000000001",
+              "task_id": "00000000-0000-0000-0000-000000000001",
+              "validity": "stale"
+            },
+            "rubric_id": "00000000-0000-0000-0000-000000000002",
+            "rubric_version": 1,
+            "section_count": 1,
+            "total_status": "range_only",
+            "unassessable_items": 1
+          }
+        ],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score notices": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "notices",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score sections": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "sections",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score summary": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "assessed_items": 1,
+          "assessed_subtotal": "0",
+          "estimated_total": null,
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "report": {
+            "advisory_only": true,
+            "assessment_date": "2026-10-04",
+            "completion": "partial",
+            "created_at": "2026-10-04T00:00:00Z",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "invalidation_codes": [
+              "draft_changed"
+            ],
+            "job_id": "00000000-0000-0000-0000-000000000001",
+            "notice_count": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "task_id": "00000000-0000-0000-0000-000000000001",
+            "validity": "stale"
+          },
+          "rubric_id": "00000000-0000-0000-0000-000000000002",
+          "rubric_version": 1,
+          "section_count": 1,
+          "total_status": "range_only",
+          "unassessable_items": 1
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      }
+    },
+    "remote": {
+      "score items": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "items",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score list": {
+        "command": "score list",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "next_cursor": null,
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1
+        },
+        "duration_ms": 0,
+        "items": [
+          {
+            "assessed_items": 1,
+            "assessed_subtotal": "0",
+            "estimated_total": null,
+            "overall_aggregation": "sum",
+            "overall_aggregation_assessable": true,
+            "overall_cap": null,
+            "overall_rule_text": null,
+            "possible_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "report": {
+              "advisory_only": true,
+              "assessment_date": "2026-10-04",
+              "completion": "partial",
+              "created_at": "2026-10-04T00:00:00Z",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "draft_id": "00000000-0000-0000-0000-000000000002",
+              "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+              "id": "00000000-0000-0000-0000-000000000001",
+              "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "invalidation_codes": [
+                "draft_changed"
+              ],
+              "job_id": "00000000-0000-0000-0000-000000000001",
+              "notice_count": 1,
+              "org_id": "00000000-0000-0000-0000-000000000001",
+              "task_id": "00000000-0000-0000-0000-000000000001",
+              "validity": "stale"
+            },
+            "rubric_id": "00000000-0000-0000-0000-000000000002",
+            "rubric_version": 1,
+            "section_count": 1,
+            "total_status": "range_only",
+            "unassessable_items": 1
+          }
+        ],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score notices": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "notices",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score sections": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "sections",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score summary": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "assessed_items": 1,
+          "assessed_subtotal": "0",
+          "estimated_total": null,
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "report": {
+            "advisory_only": true,
+            "assessment_date": "2026-10-04",
+            "completion": "partial",
+            "created_at": "2026-10-04T00:00:00Z",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "invalidation_codes": [
+              "draft_changed"
+            ],
+            "job_id": "00000000-0000-0000-0000-000000000001",
+            "notice_count": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "task_id": "00000000-0000-0000-0000-000000000001",
+            "validity": "stale"
+          },
+          "rubric_id": "00000000-0000-0000-0000-000000000002",
+          "rubric_version": 1,
+          "section_count": 1,
+          "total_status": "range_only",
+          "unassessable_items": 1
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      }
+    }
+  },
+  "unavailable": {
+    "local": {
+      "score items": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "items",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score list": {
+        "command": "score list",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "next_cursor": null,
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1
+        },
+        "duration_ms": 0,
+        "items": [
+          {
+            "assessed_items": 1,
+            "assessed_subtotal": "0",
+            "estimated_total": null,
+            "overall_aggregation": "sum",
+            "overall_aggregation_assessable": true,
+            "overall_cap": null,
+            "overall_rule_text": null,
+            "possible_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "report": {
+              "advisory_only": true,
+              "assessment_date": "2026-10-04",
+              "completion": "partial",
+              "created_at": "2026-10-04T00:00:00Z",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "draft_id": "00000000-0000-0000-0000-000000000002",
+              "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+              "id": "00000000-0000-0000-0000-000000000001",
+              "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "invalidation_codes": [
+                "draft_changed"
+              ],
+              "job_id": "00000000-0000-0000-0000-000000000001",
+              "notice_count": 1,
+              "org_id": "00000000-0000-0000-0000-000000000001",
+              "task_id": "00000000-0000-0000-0000-000000000001",
+              "validity": "stale"
+            },
+            "rubric_id": "00000000-0000-0000-0000-000000000002",
+            "rubric_version": 1,
+            "section_count": 1,
+            "total_status": "unavailable",
+            "unassessable_items": 1
+          }
+        ],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score notices": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "notices",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score sections": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "sections",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score summary": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "assessed_items": 1,
+          "assessed_subtotal": "0",
+          "estimated_total": null,
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "report": {
+            "advisory_only": true,
+            "assessment_date": "2026-10-04",
+            "completion": "partial",
+            "created_at": "2026-10-04T00:00:00Z",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "invalidation_codes": [
+              "draft_changed"
+            ],
+            "job_id": "00000000-0000-0000-0000-000000000001",
+            "notice_count": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "task_id": "00000000-0000-0000-0000-000000000001",
+            "validity": "stale"
+          },
+          "rubric_id": "00000000-0000-0000-0000-000000000002",
+          "rubric_version": 1,
+          "section_count": 1,
+          "total_status": "unavailable",
+          "unassessable_items": 1
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      }
+    },
+    "remote": {
+      "score items": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "items",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score list": {
+        "command": "score list",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "next_cursor": null,
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1
+        },
+        "duration_ms": 0,
+        "items": [
+          {
+            "assessed_items": 1,
+            "assessed_subtotal": "0",
+            "estimated_total": null,
+            "overall_aggregation": "sum",
+            "overall_aggregation_assessable": true,
+            "overall_cap": null,
+            "overall_rule_text": null,
+            "possible_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "report": {
+              "advisory_only": true,
+              "assessment_date": "2026-10-04",
+              "completion": "partial",
+              "created_at": "2026-10-04T00:00:00Z",
+              "document_id": "00000000-0000-0000-0000-000000000001",
+              "draft_id": "00000000-0000-0000-0000-000000000002",
+              "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+              "id": "00000000-0000-0000-0000-000000000001",
+              "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "invalidation_codes": [
+                "draft_changed"
+              ],
+              "job_id": "00000000-0000-0000-0000-000000000001",
+              "notice_count": 1,
+              "org_id": "00000000-0000-0000-0000-000000000001",
+              "task_id": "00000000-0000-0000-0000-000000000001",
+              "validity": "stale"
+            },
+            "rubric_id": "00000000-0000-0000-0000-000000000002",
+            "rubric_version": 1,
+            "section_count": 1,
+            "total_status": "unavailable",
+            "unassessable_items": 1
+          }
+        ],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score notices": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "notices",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score sections": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "filtered_total": 0,
+          "next_cursor": null,
+          "parent_id": "00000000-0000-0000-0000-000000000001",
+          "parent_revision": null,
+          "part": "sections",
+          "returned": 0,
+          "snapshot": "score-snapshot",
+          "subject_actions": [],
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "total": 1200,
+          "validity": "stale"
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      },
+      "score summary": {
+        "command": "score show",
+        "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "data": {
+          "assessed_items": 1,
+          "assessed_subtotal": "0",
+          "estimated_total": null,
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "report": {
+            "advisory_only": true,
+            "assessment_date": "2026-10-04",
+            "completion": "partial",
+            "created_at": "2026-10-04T00:00:00Z",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "invalidation_codes": [
+              "draft_changed"
+            ],
+            "job_id": "00000000-0000-0000-0000-000000000001",
+            "notice_count": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "task_id": "00000000-0000-0000-0000-000000000001",
+            "validity": "stale"
+          },
+          "rubric_id": "00000000-0000-0000-0000-000000000002",
+          "rubric_version": 1,
+          "section_count": 1,
+          "total_status": "unavailable",
+          "unassessable_items": 1
+        },
+        "duration_ms": 0,
+        "items": [],
+        "ok": false,
+        "warnings": [
+          "unassessable_items"
+        ]
+      }
+    }
+  }
+}

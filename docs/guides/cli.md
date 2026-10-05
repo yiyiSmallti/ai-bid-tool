@@ -193,7 +193,7 @@ audit boundary are described in
 
    One conflict rejects the entire batch. Read the latest revisions and retry
    the whole intended batch. Withdraw pending cards or reopen confirmed cards
-   first. Change a comply-only decision back to `respond` before editing it.
+   first. Change a comply-only (须遵守) decision back to `respond` before editing it.
 
 5. Preview and then assemble all requirements from the chosen extraction:
 
@@ -297,7 +297,7 @@ With `--json`, every command prints one object with exactly the keys `ok`,
 in `data.error` with a stable `code` and the exit code. The models are
 `Result` in [server/app/schemas/contracts.py](../../server/app/schemas/contracts.py),
 and exit code meanings are fixed by the CLI contract in
-[agent.md](../../agent.md#硬性规则任何情况下都不得违反).
+[agent.md](../../agent.md#hard-rules-must-never-be-violated).
 
 | Exit | What to do next |
 | --- | --- |

@@ -8,6 +8,16 @@ from uuid import UUID
 
 import typer
 from app.core.errors import ServiceError
+from app.schemas.console_assessments import (
+    AssessmentHistoryPage,
+    RubricPage,
+    RubricPageRequest,
+    RubricReplacementData,
+    RubricSummaryData,
+    ScorePage,
+    ScorePageRequest,
+    ScoreSummaryData,
+)
 from app.schemas.score_contracts import (
     RubricClassifyRequest,
     RubricCoverageDecisionRequest,
@@ -19,6 +29,14 @@ from app.schemas.score_contracts import (
     RubricSetDecisionRequest,
     ScoreJobResult,
     ScoreRequest,
+)
+
+from bid_cli.assessments import (
+    history_params,
+    projection_exit,
+    require_console,
+    show_params,
+    validated,
 )
 
 app = typer.Typer()
@@ -219,25 +237,61 @@ def score_list(
     task: Annotated[UUID, typer.Option()],
     cursor: Annotated[str | None, typer.Option()] = None,
     limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
+    view: Annotated[str | None, typer.Option()] = None,
+    extraction_job: Annotated[UUID | None, typer.Option("--extraction-job")] = None,
     json_output: JsonOption = False,
 ):
     cli = _helpers()
-    cli.emit(
-        cli.call("GET", f"/tasks/{task}/scores", params=_page(cursor, limit)),
-        "score list",
-        json_output,
-    )
+    params = history_params(view, extraction_job, cursor, limit)
+    body = cli.call("GET", f"/tasks/{task}/scores", params=params)
+    if view is not None:
+        validated(body, "score list", page_model=AssessmentHistoryPage[ScoreSummaryData])
+    cli.emit(body, "score list", json_output, projection_exit(body) if view else 0)
 
 
 @app.command("show")
 def score_show(
     task: Annotated[UUID, typer.Option()],
     report: Annotated[UUID, typer.Option()],
+    view: Annotated[str | None, typer.Option()] = None,
+    part: Annotated[str | None, typer.Option()] = None,
+    cursor: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int | None, typer.Option(min=1, max=100)] = None,
+    section_key: Annotated[str | None, typer.Option("--section-key")] = None,
+    outcome: Annotated[str | None, typer.Option()] = None,
+    requirement: Annotated[UUID | None, typer.Option("--requirement")] = None,
+    entry: Annotated[UUID | None, typer.Option("--entry")] = None,
     json_output: JsonOption = False,
 ):
     cli = _helpers()
-    body = cli.call("GET", f"/tasks/{task}/scores/{report}")
-    cli.emit(body, "score show", json_output, _score_report_exit(body))
+    params = show_params(
+        view,
+        part,
+        ScorePageRequest,
+        cursor=cursor,
+        limit=limit,
+        section_key=section_key,
+        outcome=outcome,
+        requirement_id=requirement,
+        entry_id=entry,
+    )
+    if params is None:
+        body = cli.call("GET", f"/tasks/{task}/scores/{report}")
+        exit_code = _score_report_exit(body)
+    else:
+        if params["part"] == "replacement":
+            raise ServiceError(
+                "invalid_input", "Score reports do not have a replacement projection", 400, 2
+            )
+        body = cli.call("GET", f"/tasks/{task}/scores/{report}", params=params)
+        validated(
+            body,
+            "score show",
+            data_model=ScoreSummaryData if params["part"] == "summary" else None,
+            page_model=ScorePage if params["part"] != "summary" else None,
+        )
+        exit_code = projection_exit(body)
+    cli.emit(body, "score show", json_output, exit_code)
 
 
 @rubric_app.command("generate")
@@ -314,28 +368,62 @@ def rubric_list(
     task: Annotated[UUID, typer.Option()],
     cursor: Annotated[str | None, typer.Option()] = None,
     limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
+    view: Annotated[str | None, typer.Option()] = None,
+    extraction_job: Annotated[UUID | None, typer.Option("--extraction-job")] = None,
     json_output: JsonOption = False,
 ):
     cli = _helpers()
-    cli.emit(
-        cli.call("GET", f"/tasks/{task}/score-rubrics", params=_page(cursor, limit)),
-        "score rubric list",
-        json_output,
-    )
+    params = history_params(view, extraction_job, cursor, limit)
+    body = cli.call("GET", f"/tasks/{task}/score-rubrics", params=params)
+    if view is not None:
+        validated(body, "score rubric list", page_model=AssessmentHistoryPage[RubricSummaryData])
+    cli.emit(body, "score rubric list", json_output, projection_exit(body) if view else 0)
 
 
 @rubric_app.command("show")
 def rubric_show(
     task: Annotated[UUID, typer.Option()],
     rubric: Annotated[UUID, typer.Option()],
+    view: Annotated[str | None, typer.Option()] = None,
+    part: Annotated[str | None, typer.Option()] = None,
+    cursor: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int | None, typer.Option(min=1, max=100)] = None,
+    state: Annotated[str | None, typer.Option()] = None,
+    domain: Annotated[str | None, typer.Option()] = None,
+    section: Annotated[UUID | None, typer.Option()] = None,
+    requirement: Annotated[UUID | None, typer.Option("--requirement")] = None,
+    entry: Annotated[UUID | None, typer.Option("--entry")] = None,
+    group: Annotated[str | None, typer.Option()] = None,
     json_output: JsonOption = False,
 ):
     cli = _helpers()
-    cli.emit(
-        cli.call("GET", f"/tasks/{task}/score-rubrics/{rubric}"),
-        "score rubric show",
-        json_output,
+    params = show_params(
+        view,
+        part,
+        RubricPageRequest,
+        cursor=cursor,
+        limit=limit,
+        state=state,
+        domain=domain,
+        section_id=section,
+        requirement_id=requirement,
+        entry_id=entry,
+        group_id=group,
     )
+    if params is None:
+        body = cli.call("GET", f"/tasks/{task}/score-rubrics/{rubric}")
+    else:
+        body = cli.call("GET", f"/tasks/{task}/score-rubrics/{rubric}", params=params)
+        single = {"summary": RubricSummaryData, "replacement": RubricReplacementData}.get(
+            params["part"]
+        )
+        validated(
+            body,
+            "score rubric show",
+            data_model=single,
+            page_model=RubricPage if single is None else None,
+        )
+    cli.emit(body, "score rubric show", json_output, projection_exit(body) if view else 0)
 
 
 @rubric_app.command("revise")
@@ -343,19 +431,21 @@ def rubric_revise(
     task: Annotated[UUID, typer.Option()],
     rubric: Annotated[UUID, typer.Option()],
     input: Annotated[Path, typer.Option()],
+    view: Annotated[str | None, typer.Option()] = None,
     json_output: JsonOption = False,
 ):
     cli = _helpers()
+    console = require_console(view)
     request = cli.input_contract(input, RubricReviseRequest, max_bytes=512 * 1024)
-    cli.emit(
-        cli.call(
-            "POST",
-            f"/tasks/{task}/score-rubrics/{rubric}/revisions",
-            json=request,
-        ),
-        "score rubric revise",
-        json_output,
+    body = cli.call(
+        "POST",
+        f"/tasks/{task}/score-rubrics/{rubric}/revisions",
+        json=request,
+        **({"params": {"view": "console"}} if console else {}),
     )
+    if console:
+        validated(body, "score rubric revise", data_model=RubricSummaryData)
+    cli.emit(body, "score rubric revise", json_output, projection_exit(body) if console else 0)
 
 
 @rubric_app.command("classify")
@@ -395,10 +485,17 @@ def _decide(
     input: Path,
     model,
     json_output: bool,
+    view: str | None = None,
 ):
     cli = _helpers()
+    console = require_console(view)
     request = cli.input_contract(input, model)
-    cli.emit(cli.call("POST", path, json=request), command, json_output)
+    body = cli.call(
+        "POST", path, json=request, **({"params": {"view": "console"}} if console else {})
+    )
+    if console:
+        validated(body, command, data_model=RubricSummaryData)
+    cli.emit(body, command, json_output, projection_exit(body) if console else 0)
 
 
 @section_app.command("decide")
@@ -457,6 +554,7 @@ def rubric_decide(
     task: Annotated[UUID, typer.Option()],
     rubric: Annotated[UUID, typer.Option()],
     input: Annotated[Path, typer.Option()],
+    view: Annotated[str | None, typer.Option()] = None,
     json_output: JsonOption = False,
 ):
     _decide(
@@ -465,6 +563,7 @@ def rubric_decide(
         input=input,
         model=RubricSetDecisionRequest,
         json_output=json_output,
+        view=view,
     )
 
 
