@@ -151,7 +151,10 @@ for _role, _scopes in ROLE_SCOPES.items():
     if _role in {"admin", "bidder"}:
         _scopes.update({"confidential:write", "confidential:reveal"})
     if _role in {"bidder", "technical"}:
-        _scopes.update({"check:decide", "score:run", "score:rubric:generate"})
+        _scopes.add("check:decide")
+    if _role != "viewer":
+        # Advisory jobs, like check:run; admins issue the tokens that may carry them.
+        _scopes.update({"score:run", "score:rubric:generate"})
     if _role != "viewer":
         _scopes.update(
             {

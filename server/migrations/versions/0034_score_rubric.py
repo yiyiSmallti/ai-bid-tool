@@ -403,7 +403,7 @@ BEGIN
    OR job_row.result->'submission'->>'input_hash' IS DISTINCT FROM NEW.input_hash
    OR job_row.result->'submission'->'input_manifest' IS DISTINCT FROM NEW.input_manifest
    OR job_row.result->'submission'->>'encrypted_input' IS DISTINCT FROM NEW.encrypted_input
-   OR NOT EXISTS(SELECT 1 FROM public.memberships WHERE org_id=NEW.org_id AND user_id=NEW.actor_user_id AND active AND role IN ('bidder','technical'))
+   OR NOT EXISTS(SELECT 1 FROM public.memberships WHERE org_id=NEW.org_id AND user_id=NEW.actor_user_id AND active AND role IN ('admin','bidder','technical'))
    OR (NEW.actor_token_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM public.api_tokens WHERE org_id=NEW.org_id AND id=NEW.actor_token_id AND scopes ? 'score:rubric:generate')) THEN
    RAISE EXCEPTION 'Rubric publication requires owning live worker attempt' USING ERRCODE='42501'; END IF;
  ELSE

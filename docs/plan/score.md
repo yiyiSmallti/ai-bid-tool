@@ -288,7 +288,8 @@ CLI、HTTP 或 Job 处理器：
 
 - `score:read` 可按现有四种单位角色授予，也可进入 token allowlist；仍与 Membership 和任务读取
   权限取交集。
-- `score:run` 与 `score:rubric:generate` 可授予 bidder/technical，并可显式进入 token allowlist，
+- `score:run` 与 `score:rubric:generate` 授予 admin/bidder/technical（与 `check:run` 相同；令牌只能由 admin
+  签发且不能超出签发人权限），并可显式进入 token allowlist，
   使外部 agent 能预览和发起 advisory 作业；它们不能做人工决定。
 - `score:rubric:review` 只属于登录的人类 session，不进入 token `SCOPES`。数据库 CHECK/触发器
   与 service 双重拒绝 token/agent/worker actor。technical 只能确认或修订 technical 内容，bidder
