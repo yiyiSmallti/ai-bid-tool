@@ -39,8 +39,12 @@ OPERATOR_PASSWORD = "synthetic-operator-password"
 OPERATOR_SECRET = generate_secret()
 
 
-def prepare_database(url: str) -> None:
-    """Create the application role if missing and migrate the database at `url` to head."""
+def prepare_database(url: str, *, configure_logins: bool = True) -> None:
+    """Create the application role if missing and migrate the database at `url` to head.
+
+    Role passwords are cluster-wide, so concurrent xdist workers must not set them; only the
+    locked `pytest_configure` path and single-process runs configure logins.
+    """
     if not (make_url(url).database or "").startswith("bid_test"):
         raise RuntimeError("Tests refuse to mutate a database without the bid_test prefix")
     engine = create_engine(url, hide_parameters=True)
@@ -61,7 +65,7 @@ def prepare_database(url: str) -> None:
     command.upgrade(Config("alembic.ini"), "head")
     # CI uses password authentication instead of the local test socket's trust policy.
     # These roles exist only after migration and use the isolated test runtime password.
-    if os.environ.get("BID_DATABASE_PASSWORD"):
+    if configure_logins and os.environ.get("BID_DATABASE_PASSWORD"):
         from psycopg import sql
         from sqlalchemy.exc import SQLAlchemyError
 
@@ -136,7 +140,8 @@ def admin_engine():
     if not url:
         # Failing instead of skipping keeps a run without the database from looking green.
         pytest.fail("BID_TEST_ADMIN_URL must point at an isolated PostgreSQL test runtime")
-    prepare_database(url)
+    # Under xdist, pytest_configure already prepared this worker's copy under a lock.
+    prepare_database(url, configure_logins=not os.environ.get("PYTEST_XDIST_WORKER"))
     engine = create_engine(url, hide_parameters=True)
     yield engine
     engine.dispose()
