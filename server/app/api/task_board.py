@@ -189,11 +189,15 @@ def create_router(context, db, storage, queue, settings):
                 yield session, actor
 
     async def read(credentials, org_id, operation):
+        deadline = asyncio.timeout(2)
         try:
-            async with asyncio.timeout(2), snapshot(credentials, org_id) as (session, actor):
+            async with deadline, snapshot(credentials, org_id) as (session, actor):
                 return await operation(session, actor)
         except DBAPIError as error:
-            if getattr(error.orig, "sqlstate", None) == "57014":
+            # Cancelling an in-flight psycopg query leaves the connection busy, so the
+            # rollback on exit raises a DBAPIError that replaces the timeout's
+            # CancelledError; the pool discards that connection.
+            if deadline.expired() or getattr(error.orig, "sqlstate", None) == "57014":
                 raise ServiceError("board_busy", "Snapshot timed out; retry", 503, 3) from None
             raise
         except TimeoutError:
