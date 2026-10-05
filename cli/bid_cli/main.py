@@ -61,6 +61,8 @@ from bid_cli.export import app as export_app
 from bid_cli.providers import app as provider_app
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
 from bid_cli.schema import command_schema
+from bid_cli.score import app as score_app
+from bid_cli.score import rubric_job_exit
 from bid_cli.screenshots import register as register_screenshot_commands
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
@@ -68,6 +70,7 @@ app.add_typer(provider_app, name="provider")
 app.add_typer(export_app, name="export")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(check_app, name="check")
+app.add_typer(score_app, name="score")
 org_app, task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(6))
 resource_app, product_app, task_resource_app = (typer.Typer() for _ in range(3))
 feature_app, task_feature_app = typer.Typer(), typer.Typer()
@@ -1158,7 +1161,10 @@ def job_status(job_id: UUID, json_output: JsonOption = False):
         body,
         "job status",
         json_output,
-        sandbox_job_exit(body) or check_job_exit(body) or partial_completion_exit(body),
+        sandbox_job_exit(body)
+        or check_job_exit(body)
+        or rubric_job_exit(body)
+        or partial_completion_exit(body),
     )
 
 

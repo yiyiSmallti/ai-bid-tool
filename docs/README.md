@@ -25,6 +25,7 @@ kind: readme
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。
 - [response-cards.md](notes/response-cards.md)：人工响应卡片、证据确认、原子处置与三表初稿。
 - [check.md](notes/check.md)：已确认初稿的确定性风险校验、证书日期、引用与人工误报决定。
+- [score.md](notes/score.md)：评分 rubric 的固定输入、人工分类、覆盖决定、逐项确认与不可变历史。
 - [model-drafting-redaction.md](notes/model-drafting-redaction.md)：模型起草输入快照、外发遮挡和双文本引用核验。
 - [confidential-values.md](notes/confidential-values.md)：保密字段、外发占位替换与导出时填入。
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
@@ -69,4 +70,5 @@ kind: readme
 - [单位后台契约](plan/org-console.md)（plan）：网页端招标、抽取与响应卡审阅流程，已实施。
 - [起草预览绑定契约](plan/drafting-binding.md)（plan）：付费起草绑定预览哈希与用户消费上限，已实施。
 - [初稿校验契约](plan/check.md)（plan）：阶段一确定性规则已实施；阶段二语义校验待实施。
+- [评分契约](plan/score.md)（plan）：已批准；阶段 A rubric 规范化与人工确认已实施，阶段 B 评分执行待实施。
 - [变更记录](changelog.md)（changelog）：已交付范围。

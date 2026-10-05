@@ -197,19 +197,17 @@ class Client:
             error = data.get("error", {})
             job_id = None
             parts = path.split("?", 1)[0].split("/")
-            if (
-                method.upper() == "POST"
-                and len(parts) == 4
-                and parts[1::2] == ["tasks", "checks"]
-                and "job_id" in data
-            ):
+            queued_submission = (len(parts) == 4 and parts[1::2] == ["tasks", "checks"]) or (
+                len(parts) == 4 and parts[1] == "tasks" and parts[3] == "score-rubrics"
+            )
+            if method.upper() == "POST" and queued_submission and "job_id" in data:
                 try:
                     UUID(parts[2])
                     job_id = str(UUID(data["job_id"]))
                 except (TypeError, ValueError) as exc:
                     raise ServiceError(
                         "invalid_server_response",
-                        "Server returned an invalid check job identifier",
+                        "Server returned an invalid job identifier",
                         502,
                         4,
                     ) from exc

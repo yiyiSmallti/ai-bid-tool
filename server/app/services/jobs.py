@@ -45,6 +45,10 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.check import job_access as check_access
 
         await check_access(session, identity, job, storage)
+    if job.kind == "score_rubric":
+        from app.services.score_generation import job_access as rubric_access
+
+        await rubric_access(session, identity, job)
     await sandbox_guard_job(session, identity, job)
     payload = Result(
         ok=True,
@@ -78,7 +82,7 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         identity.require("provider:read")
         payload["data"]["result"] = _public_result(job)
         payload["cost"] = job.result.get("cost", payload["cost"])
-    if job.kind == "check":
+    if job.kind in {"check", "score_rubric"}:
         public = _public_result(job)
         for internal_envelope_field in ("cost", "warnings", "exit_code"):
             public.pop(internal_envelope_field, None)
@@ -136,8 +140,27 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.check import job_access as check_access
 
         await check_access(session, identity, job, storage, cancel=True)
+    if job.kind == "score_rubric":
+        from app.services.score_generation import job_access as rubric_access
+
+        await rubric_access(session, identity, job, cancel=True)
     await sandbox_guard_job(session, identity, job, cancel=True)
     if job.status not in {"cancelled", "queued", "running"}:
         raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
+    if job.kind == "score_rubric" and job.status != "cancelled":
+        from app.services.versioned import audit
+
+        audit(
+            session,
+            identity,
+            "score_rubric.cancelled",
+            job.id,
+            {
+                "task_id": str(job.task_id),
+                "job_id": str(job.id),
+                "actor_kind": identity.actor_kind,
+                "input_hash": job.result["submission"]["input_hash"],
+            },
+        )
     job.status, job.finished_at = "cancelled", datetime.now(UTC)
     return job

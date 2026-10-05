@@ -84,6 +84,9 @@ class ApiToken(Tenant, Base):
         CheckConstraint("NOT (scopes ? 'provider:write')", name="token_no_provider_write"),
         CheckConstraint("NOT (scopes ? 'check:decide')", name="token_forbidden_check_scopes"),
         CheckConstraint(
+            "NOT (scopes ? 'score:rubric:review')", name="token_forbidden_score_scopes"
+        ),
+        CheckConstraint(
             "NOT (scopes ? 'confidential:write') AND NOT (scopes ? 'confidential:reveal')",
             name="token_forbidden_confidential_scopes",
         ),

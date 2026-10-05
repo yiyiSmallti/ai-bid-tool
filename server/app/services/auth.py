@@ -137,16 +137,21 @@ SCOPES.update({"screenshot:read", "screenshot:write"})
 # confidential:write and confidential:reveal are deliberately absent from SCOPES:
 # tokens and agents can name a confidential field but never set or read its value.
 SCOPES.update({"confidential:read", "check:read", "check:run"})
+# Rubric review is a session-only capability, including admin classification.
+SCOPES.update({"score:read", "score:run", "score:rubric:generate"})
 
 for _role, _scopes in ROLE_SCOPES.items():
     _scopes.update({"provider:read", "screenshot:read"})
     if _role != "viewer":
         _scopes.update({"screenshot:write", "screenshot:ingest"})
     _scopes.update({"card:read", "draft:read", "sandbox:read", "confidential:read", "check:read"})
+    _scopes.add("score:read")
+    if _role != "viewer":
+        _scopes.add("score:rubric:review")
     if _role in {"admin", "bidder"}:
         _scopes.update({"confidential:write", "confidential:reveal"})
     if _role in {"bidder", "technical"}:
-        _scopes.add("check:decide")
+        _scopes.update({"check:decide", "score:run", "score:rubric:generate"})
     if _role != "viewer":
         _scopes.update(
             {
