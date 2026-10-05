@@ -13,16 +13,25 @@ import pytest
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
+from app.providers.calls import current_accounting
+from app.providers.rubric import HTTPRubricProvider
 from app.schemas.score_contracts import (
     RubricAnsweredBatch,
+    RubricCoverageDecisionRequest,
     RubricGenerateRequest,
     RubricItemsWireOutput,
+    RubricReviseRequest,
     RubricStructureOutput,
 )
 from app.services import redaction, score_generation, score_inputs
 from app.services.auth import Identity
+from cryptography.fernet import Fernet
 from sqlalchemy import select
+from test_check_combined import semantic_llm
 from test_rls import seeded as seeded  # noqa: F401
+from test_score_api import RubricVendor
+from test_score_provider import Accounting
+from test_score_review import replacement
 
 REAL_REQUIREMENT = UUID("00000000-0000-0000-0000-000000000101")
 PROVIDER_REQUIREMENT = UUID("00000000-0000-0000-0000-000000000001")
@@ -94,6 +103,115 @@ def verified_structure(secret, outbound):
     return score_generation.accept_structure(
         secret, outbound, RubricStructureOutput.model_validate(wire)
     )
+
+
+@pytest.mark.parametrize("requirement_count", [1, 3])
+async def test_two_stage_generation_keeps_items_for_existing_human_review_contracts(
+    tmp_path, requirement_count
+):
+    """Run the shared API fixture vendor through both stages and review request building.
+
+    Failures: generated keys collide with redaction, batch numbering loses items,
+    coverage maps to an empty item list, or replacement items no longer validate.
+    """
+    import json
+
+    secret = {"requirements": []}
+    for index in range(1, requirement_count + 1):
+        clause = f"Synthetic criterion {index} earns 5 points. " + "x" * 650
+        row = fixed_secret(source_original=clause)["requirements"][0]
+        row |= {
+            "requirement_id": str(UUID(int=100 + index)),
+            "provider_id": str(score_inputs.provider_id(index)),
+            "text": clause,
+            "source": {**row["source"], "chunk_id": str(UUID(int=200 + index)), "quote": clause},
+        }
+        secret["requirements"].append(row)
+    outbound = score_generation.build_outbound(secret, [], [])
+    vendor = RubricVendor()
+    provider = HTTPRubricProvider(
+        semantic_llm(
+            tmp_path,
+            vendor,
+            llm_batch_chars=1000,
+            database_url="postgresql+psycopg://unused/unused",
+            encryption_key=Fernet.generate_key().decode(),
+            token_key=Fernet.generate_key().decode(),
+        )
+    )
+    accounting = Accounting()
+    token = current_accounting.set(accounting)
+    try:
+        proposed = await provider.extract_structure(score_generation.provider_request(outbound))
+        assert proposed.failure is None and proposed.output is not None
+        structure = score_generation.accept_structure(secret, outbound, proposed.output)
+        generated = await provider.extract_items(
+            score_generation.items_request(outbound, structure)
+        )
+    finally:
+        current_accounting.reset(token)
+    assert generated.failure is None
+    accepted = score_generation.accept_batches(secret, outbound, structure, generated.batches)
+    assert accepted["normalization_errors"] == []
+    assert len(accepted["items"]) == requirement_count
+    assert accepted["unresolved_requirement_ids"] == []
+    assert vendor.stages == ["structure", *(["items"] * requirement_count)]
+    assert len(accounting.completed) == requirement_count + 1
+
+    sections = [{**section, "id": str(uuid4())} for section in accepted["sections"]]
+    by_key = {section["key"]: section["id"] for section in sections}
+    report = {
+        "rubric": {
+            "revision": 1,
+            "input_hash": "a" * 64,
+            **{
+                key: accepted[key]
+                for key in (
+                    "overall_aggregation",
+                    "overall_rule_text",
+                    "overall_score_range",
+                    "overall_cap",
+                )
+            },
+        },
+        "sections": sections,
+        "items": [
+            {**item, "id": str(uuid4()), "section_id": by_key[item["section_key"]]}
+            for item in accepted["items"]
+        ],
+        "coverage": [
+            {"requirement_id": row["requirement_id"], "source": row["source"]}
+            for row in secret["requirements"]
+        ],
+    }
+    revision = RubricReviseRequest.model_validate(replacement(report))
+    decisions = [
+        RubricCoverageDecisionRequest(
+            expected_revision=1,
+            expected_input_hash=report["rubric"]["input_hash"],
+            action="mapped",
+            rubric_item_ids=[
+                UUID(item["id"])
+                for item in report["items"]
+                if item["requirement_id"] == row["requirement_id"]
+            ],
+            reason="Synthetic human coverage review",
+        )
+        for row in report["coverage"]
+    ]
+    artifact = tmp_path / "two-stage-review-contracts.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "stages": vendor.stages,
+                "accepted": accepted,
+                "revision": revision.model_dump(mode="json"),
+                "coverage_decisions": [decision.model_dump(mode="json") for decision in decisions],
+            },
+            indent=2,
+        )
+    )
+    assert len(json.loads(artifact.read_text())["revision"]["items"]) == requirement_count
 
 
 def test_outbound_redaction_and_dual_citation_acceptance_use_local_ids_only():

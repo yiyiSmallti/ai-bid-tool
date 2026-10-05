@@ -70,9 +70,6 @@ PARTIAL_STOPS = {
     "spend_cap_reached",
     "job_charge_limit_exceeded",
     "job_call_limit_exceeded",
-    "task_budget_exceeded",
-    "task_budget_unpriced",
-    "task_budget_currency_review_required",
 }
 HARD_STOPS = {
     "job_attempt_stopped",
@@ -415,6 +412,17 @@ async def _submit_rubric(
     llm = await resolve(session, settings) if fixed.manifest["model_redaction_enabled"] else None
     llm = await prepare(session, fixed, llm, body.reasoning, settings)
     estimate = await preview_cost(session, fixed, llm, body, settings)
+    cache_key = drafts.digest(
+        {
+            "kind": "score_rubric",
+            "org_id": str(actor.org_id),
+            "task_id": str(task_id),
+            "actor_user_id": str(actor.user_id),
+            "actor_token_id": str(actor.token_id) if actor.token_id else None,
+            "actor_kind": actor.actor_kind,
+            "input_hash": fixed.input_hash,
+        }
+    )
     requirement_ids = [UUID(entry["requirement_id"]) for entry in fixed.manifest["requirements"]]
     if body.dry_run:
         data = RubricPreview.model_validate(
@@ -455,9 +463,7 @@ async def _submit_rubric(
         ):
             adapter = rubric_provider(llm)
             if isinstance(adapter, HTTPRubricProvider):
-                quotes = [
-                    llm.quote(adapter.validate_request(provider_request(fixed.secret["outbound"])))
-                ]
+                quotes = adapter.preview_quotes(provider_request(fixed.secret["outbound"]))
         data = await budget_preflight.attach(
             session,
             data,
@@ -472,6 +478,7 @@ async def _submit_rubric(
             or estimate.get("cost_basis_reason") in {"no_assessable_items", "test_provider"}
             else None,
             max_charge=body.max_charge,
+            cached_job=await session.scalar(select(Job).where(Job.cache_key == cache_key)),
         )
         return data, None
     if estimate.get("admission_blocker") == "redaction_required":
@@ -482,17 +489,6 @@ async def _submit_rubric(
             "Inputs changed since preview; preview the scoring requirements again",
             409,
         )
-    cache_key = drafts.digest(
-        {
-            "kind": "score_rubric",
-            "org_id": str(actor.org_id),
-            "task_id": str(task_id),
-            "actor_user_id": str(actor.user_id),
-            "actor_token_id": str(actor.token_id) if actor.token_id else None,
-            "actor_kind": actor.actor_kind,
-            "input_hash": fixed.input_hash,
-        }
-    )
     job = await session.scalar(select(Job).where(Job.cache_key == cache_key).with_for_update())
     cached = job is not None
     if job is None:

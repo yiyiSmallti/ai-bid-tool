@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from decimal import ROUND_CEILING, Decimal
+from decimal import Decimal
 from typing import TYPE_CHECKING, cast
 
 import httpx
@@ -12,6 +12,7 @@ import httpx
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import current_accounting, plan_calls
 from app.providers.structured import json_call, json_request, strict_schema
+from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.check_contracts import AssessmentFailure, OutboundContext
 from app.schemas.contracts import Contract, ProviderUsage
 from app.schemas.score_contracts import (
@@ -32,7 +33,7 @@ RUBRIC_ADAPTER_VERSION = "http-score-rubric-v3"
 RUBRIC_PROMPT_VERSION = "score-rubric-v3"
 RUBRIC_SCHEMA_VERSION = "score-rubric-wire-v2"
 STRUCTURE_PROMPT_VERSION = "score-rubric-structure-v1"
-ITEMS_PROMPT_VERSION = "score-rubric-items-v1"
+ITEMS_PROMPT_VERSION = "score-rubric-items-v2"
 ADAPTER_VERSION = RUBRIC_ADAPTER_VERSION
 PROMPT_VERSION = RUBRIC_PROMPT_VERSION
 SCHEMA_VERSION = RUBRIC_SCHEMA_VERSION
@@ -63,7 +64,8 @@ structure_hash 是该上下文的固定绑定。不得新建、重命名或修�
 “招标原文”区块，不能引用摘要、位置或 sections。quote 必须逐字复制该 tender_ref 中唯一连续
 招标原文片段，不得拼接、改写、补全或引用遮挡占位符。item.requirement_id 必须逐字使用本批
 requirements 中与引用对应的 UUID。同一要求可有多个独立评分项；没有明确评分项时不得编造。
-item.key 使用 requirement_id 加冒号及该要求内的子项序号，确保不同批次的 key 不会重复。
+item.key 使用 tender_ref 的 rN 前缀加 .item- 和该要求内的子项序号，例如 r1.item-1、r1.item-2、
+r2.item-1，确保不同批次的 key 不会重复；不要把 UUID 放进 key。
 item.order 使用 tender_ref 中 r 后的全表序号乘以 1000 再加子项序号，不按本批从 1 重新编号。
 不能确定上下限、权重或规则时，保留原文并使用 ambiguous、unsupported_formula 等明确不可执行
 状态，写明原因，不得编造数字。价格比较、其他投标人、基准价、排名、现场演示、评委主观判断或
@@ -208,36 +210,30 @@ class HTTPRubricProvider:
             groups.append(subset(indexes))
         return groups
 
-    def preview_bounds(self, request: RubricProviderRequest) -> tuple[int, int, Decimal, Decimal]:
-        """Bound both stages without inventing or requesting section context."""
+    def preview_quotes(self, request: RubricProviderRequest) -> list[BudgetCallQuote]:
+        """Read-only first-pass bounds; stage-two quotes are not dispatchable requests."""
         body = self.validate_request(request)
         groups = self.item_groups(request)
-        first_input = len(json.dumps(body, ensure_ascii=False).encode()) + 4096
-        output_per_call = self.llm.output_token_bound(body)
-        first_charge = self.llm.reservation(body)
-        # Every actual stage-two body must fit the compact byte ceiling. Default
-        # JSON adds at most one space per separator, each already occupying one
-        # compact byte; therefore its size is at most twice the compact ceiling.
-        # This bounds unknown fixed section context without tokenizer assumptions.
+        first = self.llm.quote(body)
+        # Stage-two sections are unknown before the structure call. Preserve the
+        # conservative whole-request ceiling instead of omitting that repeated
+        # context. Actual calls quote their exact bodies at the HTTP boundary.
         item_input = 2 * self.llm.settings.rubric_max_request_bytes + 4096
-        item_charge = Decimal(0)
-        if self.llm.platform_model_id is not None:
-            # reservation above checks that the pinned selling prices exist and
-            # are finite/nonnegative; use the same per-call rounding boundary.
-            assert self.llm.sale is not None
-            item_charge = (
-                (
-                    item_input * Decimal(str(self.llm.sale[0]))
-                    + output_per_call * Decimal(str(self.llm.sale[1]))
-                )
-                / 1_000_000
-            ).quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
-        count = len(groups)
+        return [first] + [
+            self.llm.quote(
+                body, input_tokens=item_input, output_tokens=first.output_tokens_upper_bound
+            )
+            for _ in groups
+        ]
+
+    def preview_bounds(self, request: RubricProviderRequest) -> tuple[int, int, Decimal, Decimal]:
+        """Use the same per-call prices and rounding as the shared budget preview."""
+        quotes = self.preview_quotes(request)
         return (
-            first_input + count * item_input,
-            (1 + count) * output_per_call,
-            first_charge + count * item_charge,
-            first_charge,
+            sum(quote.input_tokens_upper_bound for quote in quotes),
+            sum(quote.output_tokens_upper_bound for quote in quotes),
+            sum((quote.reserved_charge for quote in quotes), Decimal(0)),
+            quotes[0].reserved_charge,
         )
 
     async def _call[T: Contract](

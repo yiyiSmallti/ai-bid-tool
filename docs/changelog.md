@@ -10,6 +10,12 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 - Unified developer and agent documentation in English using the [glossary](glossary.md), renamed the [design document](design.md), and conservatively corrected stale statuses and superseded decisions against implementation and later decisions. The [roadmap](plan/roadmap.md) remains the home for remaining scope and open decisions.
 
+## 2026-10-05: Rubric review compatibility and budget preflight
+
+- Generate stage-2 item keys from their fixed tender refs rather than numeric local UUIDs. UUID-derived keys matched the sensitive-number redaction rules, discarded valid items, and left downstream coverage and replacement requests empty. The item prompt version advances; queued jobs using the previous prompt must be resubmitted. Human review request contracts and redaction checks are unchanged.
+- Adapt the budget-admission test seam to `BudgetCallQuote`. Rubric cost preflight carries one structure quote and a conservative quote for every item batch, including direct-provider task liability. Cached previews use the same actor-bound cache key as submission despite the published structure changing the final input hash.
+- Add DB-free acceptance from the shared two-stage fake provider through citation validation to existing human coverage and revision request construction, plus platform/direct-provider budget-preflight and accounting coverage. Mechanism: [Human-reviewed rubrics](notes/score.md).
+
 ## 2026-10-05: Two-stage score rubric generation
 
 - Stage 1 sends the full fixed scoring table once and proposes only section structure and the overall rule. It sees every scoring Requirement; each proposed section and the overall rule must have verified citations. The entire serialized HTTP body is checked against `BID_RUBRIC_MAX_REQUEST_BYTES`; exceeding it blocks preview/submission before any calls and never triggers splitting.

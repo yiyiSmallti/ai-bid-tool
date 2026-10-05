@@ -77,15 +77,17 @@ batch.
 
 The write-free preview upper bound covers both stages, including the entire fixed section list
 repeated in each stage-2 batch. Because the structure is unknown at preview time, the item-call
-input bound uses twice the enforced compact request-byte ceiling plus the shared framing allowance;
-this also bounds the spaced JSON serialization used for per-call reservation. Each item batch must
-fit that ceiling before admission. Stage-specific prompt and schema versions are part of preview
+input bound conservatively uses twice the enforced compact request-byte ceiling plus the shared
+framing allowance. Each actual item batch must fit the configured byte ceiling before admission. Stage-specific prompt and schema versions are part of preview
 cache/input identity. Old queued jobs with incompatible versions fail explicitly and must be
 resubmitted. The published rubric hash derives from the manifest containing stage-1 output and its
 structure hash. The queued job `cache_key` remains the preview input; submission stores
-`preview_input_hash` as provenance. The existing rubric `input_manifest` stores the verified proposal. Each call continues through shared
-per-call admission, reservation, metering, and settlement. Task-budget enforcement is an external
-dependency governed by the [budget contract](../plan/budget.md), not a score-specific guarantee.
+`preview_input_hash` as provenance. The existing rubric `input_manifest` stores the verified proposal.
+Each call continues through shared per-call admission, reservation, metering, and settlement. Preflight carries a quote for the structure
+call and each planned item batch; actual calls obtain quotes for their exact request bodies. Shared
+[task-budget admission](task-budgets.md) reserves platform charges or direct-provider liability.
+Cached previews resolve the same actor-bound cache key as submission, independently of the final
+published structure hash.
 
 Scoring fixes the rubric set, coverage decisions, section/item revisions and DraftRun partitions.
 Only fixed confirmed response text and deviation notes become bid-side inputs; all confirmed
@@ -127,6 +129,10 @@ Rubric confirmation and advisory scoring do not modify response cards (响应卡
 confidential values, or produce an official tender score. The boundaries are fixed in the
 [score contract](../plan/score.md). Formula text is retained as text and is never evaluated.
 Rejected or ambiguous model citations are not repaired into another source.
+
+Generated item keys use the fixed tender-ref prefix and a local item ordinal, such as `r1.item-1`.
+Embedding numeric local UUIDs in free-text keys can match bank-account or phone redaction rules and
+leave valid items unresolved. Identifiers must be chosen without weakening sensitive-text checks.
 
 Phase A has one narrower implementation limitation than the approved redacted-provider flow. If
 redaction would change a fixed `Source.quote` or `Source.location`, preview reports

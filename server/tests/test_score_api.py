@@ -102,7 +102,7 @@ class RubricVendor:
                 {
                     "requirement_id": row["requirement_id"],
                     "section_key": "technical",
-                    "key": f"item-{row['requirement_id']}",
+                    "key": f"{row['tender_ref'].removesuffix('.tender')}.item-1",
                     "title": f"Synthetic score item {index}",
                     "rule_text": refs[row["tender_ref"]],
                     "order": int(row["tender_ref"].split(".")[0][1:]),
@@ -288,6 +288,8 @@ async def rubric_case(rubric_input_case):
     assert submitted.status_code == 200, submitted.text
     terminal = await finish_rubric(case, submitted.json()["data"])
     assert terminal["status"] == "succeeded", terminal
+    assert terminal["result"]["completion"] == "complete", terminal["result"]
+    assert terminal["result"]["candidate_items"] > 0, terminal["result"]
     report = await case["api"].get(
         f"/tasks/{case['task']}/score-rubrics/{terminal['result']['rubric_id']}",
         headers=case["header"],
@@ -335,6 +337,23 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
         "status": "succeeded",
         "cached": True,
     }
+    assert await rubric_counts(case) == after
+
+    cached_preview = await case["api"].post(
+        f"/v4/tasks/{case['task']}/score-rubrics/preview",
+        headers=case["header"],
+        json={"extraction_job_id": case["extraction"], "dry_run": True},
+    )
+    assert cached_preview.status_code == 200, cached_preview.text
+    preflight = cached_preview.json()["data"]["budget_preflight"]
+    assert preflight["cached_job_id"] == str(result.job_id)
+    assert preflight["planned_calls"] == 0
+    assert preflight["estimate"]["basis"] == "cache_hit"
+    assert Decimal(preflight["estimate"]["charge"]) == 0
+    assert Decimal(preflight["estimate"]["task_amount"]) == 0
+    assert preflight["cached_result_cost"] is not None
+    assert cached_preview.json()["cost"]["basis"] == "cache_hit"
+    assert len(case["vendor"].requests) == 2
     assert await rubric_counts(case) == after
 
     path = f"/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
@@ -693,10 +712,10 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
         # cumulative task-budget ledger enforcement belongs to its migration suite.
         original_admit = JobExecution.admit
 
-        async def budget_admit(execution, reserved_charge, platform_billed):
+        async def budget_admit(execution, quote):
             if len(vendor.requests) == 2:
                 raise execution.stop("task_budget_exceeded", "Synthetic task budget reached")
-            return await original_admit(execution, reserved_charge, platform_billed)
+            return await original_admit(execution, quote)
 
         monkeypatch.setattr(JobExecution, "admit", budget_admit)
     llm = platform_llm(case["app"].state.processor.settings, vendor)
@@ -760,11 +779,15 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
             mode, server, state, case["app"].state.processor.settings
         ),
     )
+    # The terminal job reports the partial generation (exit 5 for `generate --wait`); showing
+    # the retained candidate rubric afterwards is a successful read.
+    job_exit, job_body = await asyncio.to_thread(invoke_live_cli, ["job", "status", terminal["id"]])
+    assert job_exit == 5 and job_body["data"]["result"]["completion"] == "partial"
     exit_code, cli_body = await asyncio.to_thread(
         invoke_live_cli,
         ["score", "rubric", "show", "--task", case["task"], "--rubric", result["rubric_id"]],
     )
-    assert exit_code == 5 and cli_body["data"] == report
+    assert exit_code == 0 and cli_body["data"] == report
     artifact = case["tmp_path"] / "rubric-item-batch-partial.json"
     artifact.write_text(
         json.dumps(
@@ -823,7 +846,11 @@ async def test_rubric_item_batches_run_concurrently_after_structure_verification
 
 @pytest.mark.parametrize(
     "version_field,old_version",
-    [("prompt_version", "score-rubric-v2"), ("schema_version", "score-rubric-wire-v1")],
+    [
+        ("prompt_version", "score-rubric-v2"),
+        ("schema_version", "score-rubric-wire-v1"),
+        ("items_prompt_version", "score-rubric-items-v1"),
+    ],
 )
 async def test_rubric_old_queued_versions_fail_before_resolution_or_vendor_calls(
     rubric_input_case, monkeypatch, version_field, old_version

@@ -3,6 +3,8 @@
 import asyncio
 import json
 from decimal import ROUND_CEILING, Decimal
+from types import SimpleNamespace
+from typing import cast
 from uuid import UUID, uuid4
 
 import httpx
@@ -21,6 +23,7 @@ from app.providers.rubric import (
     rubric_provider,
     supports_rubric,
 )
+from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.check_contracts import OutboundContext, OutboundText
 from app.schemas.score_contracts import (
     RubricItemsRequest,
@@ -29,6 +32,7 @@ from app.schemas.score_contracts import (
     RubricSectionContext,
 )
 from cryptography.fernet import Fernet
+from sqlalchemy.ext.asyncio import AsyncSession
 
 REQ_1 = UUID("00000000-0000-0000-0000-000000000001")
 REQ_2 = UUID("00000000-0000-0000-0000-000000000002")
@@ -41,6 +45,7 @@ class Accounting:
     ) -> None:
         self.planned: list[int] = []
         self.reservations: list[Decimal] = []
+        self.quotes: list[BudgetCallQuote] = []
         self.completed = []
         self.unknown_calls = []
         self.not_sent_calls = []
@@ -51,12 +56,13 @@ class Accounting:
     def plan(self, first_pass_calls: int) -> None:
         self.planned.append(first_pass_calls)
 
-    async def admit(self, quote):
+    async def admit(self, quote: BudgetCallQuote):
         reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
         assert platform_billed is self.platform_billed
         if self.block_after is not None and len(self.reservations) >= self.block_after:
             raise ProviderFailure("Synthetic budget stop", code=self.block_code)
         self.reservations.append(reserved_charge)
+        self.quotes.append(quote)
         return uuid4()
 
     async def complete(self, call_id, usage) -> None:
@@ -584,3 +590,223 @@ async def test_unknown_item_ids_are_preserved_for_service_rejection(tmp_path):
     finally:
         current_accounting.reset(token)
     assert result.batches[0].output.items[0].requirement_id == UUID(int=999)
+
+
+@pytest.mark.parametrize("platform", [False, True])
+async def test_service_preflight_bounds_both_stages_and_preserves_quote_accounting(
+    tmp_path, monkeypatch, platform
+):
+    from app.models.entities import Document, Job, OrgBalance, Task, UsageRecord
+    from app.services import score_generation, score_inputs
+    from app.services.auth import Identity
+
+    sent = []
+    provider = adapter(
+        tmp_path,
+        [structure_wire(), items_wire([REQ_1]), items_wire([REQ_2]), items_wire([UUID(int=3)])],
+        sent,
+        platform=platform,
+        llm_batch_chars=1000,
+        llm_input_usd_per_mtok=1,
+        llm_output_usd_per_mtok=2,
+    )
+    whole = request(3, padding=650)
+    first = provider.llm.quote(provider.validate_request(whole))
+    assert first.reserved_task_amount is not None and first.reserved_task_amount > 0
+    actor = Identity(uuid4(), uuid4(), {"score:rubric:generate"}, "bidder")
+    budget_limit = first.reserved_task_amount * 2
+    task = Task(
+        id=uuid4(),
+        org_id=actor.org_id,
+        budget_currency="USD",
+        budget_state="active",
+        budget_limit=budget_limit,
+        budget_revision=1,
+    )
+    extraction = Job(id=uuid4())
+    document = Document(id=uuid4())
+    fixed = score_inputs.RubricSnapshot(
+        task=task,
+        extraction=extraction,
+        document=document,
+        requirements=[],
+        input_hash="b" * 64,
+        manifest={
+            "org_id": str(actor.org_id),
+            "task_id": str(task.id),
+            "extraction_job_id": str(extraction.id),
+            "document_id": str(document.id),
+            "model_redaction_enabled": True,
+            "model_redaction_revision": 1,
+            "redaction_rule_version": "synthetic-redaction",
+            "provider_source": "platform" if platform else "org",
+            "model": {"model": provider.model},
+            "reasoning": None,
+            "requirements": [entry.model_dump(mode="json") for entry in whole.requirements],
+        },
+        secret={
+            "outbound": {
+                "redacted_requirements": [],
+                "context": whole.context.model_dump(mode="json"),
+                "requirements": [str(entry.requirement_id) for entry in whole.requirements],
+                "refs": {
+                    entry.tender_ref: {"provider_id": str(entry.requirement_id)}
+                    for entry in whole.requirements
+                },
+            }
+        },
+    )
+
+    class ReadOnlySession:
+        info = {"actor": actor}
+        cached_job = None
+
+        async def get(self, model, key):
+            assert model is Task and key == task.id
+            return task
+
+        async def scalar(self, statement):
+            entity = statement.column_descriptions[0]["entity"]
+            if entity is OrgBalance:
+                return OrgBalance(balance=Decimal(10), currency="USD")
+            if entity is Job:
+                if self.cached_job is not None and "jobs.cache_key =" in str(statement):
+                    assert self.cached_job.cache_key in statement.compile().params.values()
+                    return self.cached_job
+                return None
+            return Decimal(0)
+
+        async def execute(self, statement):
+            entity = statement.column_descriptions[0]["entity"]
+            return SimpleNamespace(one=lambda: (0, 0, 0) if entity is UsageRecord else (0, 0, 0, 0))
+
+    async def access(session, selected_actor, scope):
+        selected_actor.require(scope)
+        return selected_actor
+
+    async def lock_inputs(*args):
+        pass
+
+    async def snapshot(*args):
+        return fixed
+
+    async def resolve(*args):
+        return provider.llm
+
+    async def prepare(session, fixed_input, llm, reasoning, settings):
+        return llm
+
+    monkeypatch.setattr(score_inputs, "access", access)
+    monkeypatch.setattr(score_inputs, "lock_inputs", lock_inputs)
+    monkeypatch.setattr(score_inputs, "snapshot", snapshot)
+    monkeypatch.setattr(score_generation, "resolve", resolve)
+    monkeypatch.setattr(score_generation, "prepare", prepare)
+    from app.schemas.score_contracts import RubricGenerateRequest
+
+    preview, job = await score_generation._submit_rubric(
+        cast(AsyncSession, ReadOnlySession()),
+        actor,
+        task.id,
+        RubricGenerateRequest(extraction_job_id=extraction.id, dry_run=True),
+        provider.llm.settings,
+    )
+    assert job is None and not sent
+    preflight = preview["budget_preflight"]
+    assert preflight["planned_calls"] == 4
+    assert preflight["admission_blocker"] is None
+    assert preflight["first_pass_fits"] is False
+    assert preflight["next_call"] == first.model_dump(mode="json")
+    assert Decimal(preflight["estimate"]["task_amount"]) > budget_limit
+    assert Decimal(preflight["estimate"]["charge"]) == Decimal(preview["estimated_charge"])
+    assert preflight["estimate"]["llm_tokens"] == preview["estimated_cost"]["llm_tokens"]
+
+    accounting = Accounting(platform_billed=platform)
+    token = current_accounting.set(accounting)
+    try:
+        structure = await provider.extract_structure(whole)
+        items = await provider.extract_items(items_request(whole))
+    finally:
+        current_accounting.reset(token)
+    assert structure.failure is items.failure is None
+    assert len(sent) == len(accounting.completed) == 4
+    task_reservations = []
+    for quote in accounting.quotes:
+        assert quote.reserved_task_amount is not None
+        task_reservations.append(quote.reserved_task_amount)
+    assert Decimal(preflight["estimate"]["task_amount"]) >= sum(task_reservations)
+    assert not accounting.unknown_calls and not accounting.not_sent_calls
+    for quote, (_, usage), body in zip(accounting.quotes, accounting.completed, sent, strict=True):
+        assert quote == provider.llm.quote(body)
+        assert usage.payer == quote.payer
+        assert usage.price_revision == quote.price_revision
+        assert usage.billing_currency == quote.currency
+        assert usage.task_amount is not None and 0 < usage.task_amount <= quote.reserved_task_amount
+
+    from app.jobs import execution
+    from app.schemas.contracts import Cost
+
+    cache_key = score_generation.drafts.digest(
+        {
+            "kind": "score_rubric",
+            "org_id": str(actor.org_id),
+            "task_id": str(task.id),
+            "actor_user_id": str(actor.user_id),
+            "actor_token_id": None,
+            "actor_kind": "session",
+            "input_hash": fixed.input_hash,
+        }
+    )
+    cached_job = Job(
+        id=uuid4(),
+        status="succeeded",
+        cache_key=cache_key,
+        result={"submission": {"input_hash": "c" * 64, "preview_input_hash": fixed.input_hash}},
+    )
+    cached_session = ReadOnlySession()
+    cached_session.cached_job = cached_job
+    usages = [usage for _, usage in accounting.completed]
+
+    async def cached_cost(session, job_id, currency):
+        assert session is cached_session and job_id == cached_job.id and currency == "USD"
+        return Cost(
+            basis="actual",
+            llm_tokens=sum(usage.tokens for usage in usages),
+            usd=sum(usage.usd for usage in usages),
+            charge=sum(usage.charge for usage in usages),
+            task_amount=sum(usage.task_amount for usage in usages),
+        ).model_dump(mode="json")
+
+    monkeypatch.setattr(execution, "job_cost", cached_cost)
+    cached_preview, job = await score_generation._submit_rubric(
+        cast(AsyncSession, cached_session),
+        actor,
+        task.id,
+        RubricGenerateRequest(extraction_job_id=extraction.id, dry_run=True),
+        provider.llm.settings,
+    )
+    cached = cached_preview["budget_preflight"]
+    assert job is None and len(sent) == 4
+    assert cached["cached_job_id"] == str(cached_job.id)
+    assert (
+        cached["input_hash"]
+        == fixed.input_hash
+        == cached_job.result["submission"]["preview_input_hash"]
+    )
+    assert cached_job.result["submission"]["input_hash"] == "c" * 64
+    assert cached["planned_calls"] == 0 and cached["estimate"]["basis"] == "cache_hit"
+    assert cached["next_call"] is cached["admission_blocker"] is None
+    assert cached["first_pass_fits"] is True
+    assert Decimal(cached["estimate"]["charge"]) == Decimal(cached["estimate"]["task_amount"]) == 0
+    assert cached["cached_result_cost"]["llm_tokens"] == sum(usage.tokens for usage in usages)
+    (tmp_path / "preflight-accounting.json").write_text(
+        json.dumps(
+            {
+                "preview": preview,
+                "cached_preview": cached_preview,
+                "quotes": [quote.model_dump(mode="json") for quote in accounting.quotes],
+                "usages": [usage.model_dump(mode="json") for _, usage in accounting.completed],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
