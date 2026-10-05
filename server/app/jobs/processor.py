@@ -260,7 +260,7 @@ class Processor:
                             "content_mismatch", "Stored document hash does not match", 409, 4
                         )
                     pages, _, warnings = await parse_document(
-                        content, suffix, RecordingOCR(), self.settings.max_pages
+                        content, suffix, RecordingOCR(), self.settings.max_pages, self.settings
                     )
                     requirements = None
                 elif kind == "extract":

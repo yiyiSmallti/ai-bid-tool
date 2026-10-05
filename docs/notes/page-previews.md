@@ -31,9 +31,10 @@ export and 403 for roles that cannot download exports.
 ## How it works
 
 [page_previews.py](../../server/app/services/page_previews.py) reads the stored
-original, checks its hash, and renders one page with PyMuPDF inside the shared
-[PDF raster budget](pdf-parsing.md#how-it-works) and the PNG byte limit in
-`MAX_PNG_BYTES`. Archived certificate pages use the same raster budget.
+original, checks its hash, and renders one page with PyMuPDF in a disposable
+child process. The shared [PDF process and raster limits](pdf-parsing.md#how-it-works)
+and the PNG byte limit in `MAX_PNG_BYTES` apply. Archived certificate pages use
+the same process boundary and raster budget.
 
 Opening an export preview passes the same gate as a download, then creates or
 reuses one `export_preview` job keyed by export ID and file hash, and records
@@ -42,7 +43,7 @@ storage key, size and hash, because the worker role cannot read exports. The
 worker checks the bytes against that hash and sends them only to the private
 converter in [converter.py](../../server/app/providers/converter.py), a
 Gotenberg (LibreOffice) service set by `BID_CONVERTER_URL`. The returned PDF is
-opened and bounded by `BID_PREVIEW_MAX_PAGES` before it is stored encrypted
+opened in a disposable PDF child and bounded by `BID_PREVIEW_MAX_PAGES` before it is stored encrypted
 under the org's prefix and recorded in the job result. An unreadable, oversized
 or failed conversion stores nothing; the job stays failed until an explicit
 retry. The generic job reader applies export access to these jobs and omits the

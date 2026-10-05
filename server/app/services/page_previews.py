@@ -7,19 +7,18 @@ file hash; the PDF is stored encrypted like the export and rendered page by page
 
 from __future__ import annotations
 
-import asyncio
+import base64
 import hashlib
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
-import pymupdf
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
+from app.core.config import PDFSettings, Settings
 from app.core.errors import ServiceError, not_found
-from app.core.pdf_raster import raster_dimensions
+from app.core.pdf_process import run_pdf_operation, run_pdf_operation_async
 from app.models.entities import Document, Job
 from app.models.exports import Export, ExportRun
 from app.providers.base import ProviderFailure
@@ -32,51 +31,98 @@ from app.services.versioned import audit
 if TYPE_CHECKING:
     from app.jobs.execution import JobExecution
 
-# Pixel and byte bounds for one rendered page, as for archived certificate pages.
-ZOOM_DPI = {1: 110, 2: 200}
+# Byte bound for one rendered page, as for archived certificate pages.
 MAX_PNG_BYTES = 40 * 1024 * 1024
 JOB_KIND = "export_preview"
 
 
-def render_pdf_page(content: bytes, page_number: int, zoom: int) -> bytes:
-    dpi = ZOOM_DPI.get(zoom)
-    if dpi is None:
-        raise ServiceError("invalid_input", "Zoom must be 1 or 2", 422, 2)
+def _preview_arguments(page_number: int, zoom: int) -> dict:
+    return {"page_number": page_number, "zoom": zoom, "max_png_bytes": MAX_PNG_BYTES}
+
+
+def _preview_result(records: list[dict]) -> bytes:
     try:
-        with pymupdf.open(stream=content, filetype="pdf") as pdf:
-            if page_number < 1 or page_number > pdf.page_count:
-                raise ServiceError("invalid_page", "Page is outside the document", 400, 2)
-            page = pdf[page_number - 1]
-            raster_dimensions(
-                page.rect.width,
-                page.rect.height,
-                dpi / 72,
-                code="preview_limits",
-            )
-            png = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csRGB, alpha=False).tobytes("png")
-    except ServiceError:
-        raise
-    except Exception as exc:
-        raise ServiceError("preview_render_failed", "Cannot render the page", 422, 2) from exc
-    if len(png) > MAX_PNG_BYTES:
-        raise ServiceError("preview_limits", "Preview exceeds file limit", 413, 2)
-    return png
+        png = base64.b64decode(records[0]["image"], validate=True)
+        if len(png) > MAX_PNG_BYTES or not png.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("invalid PNG")
+        return png
+    except (IndexError, KeyError, TypeError, ValueError) as exc:
+        raise ServiceError(
+            "pdf_resource_limits", "PDF renderer returned invalid output", 502, 4
+        ) from exc
 
 
-def pdf_page_count(content: bytes, max_pages: int) -> int:
+def render_pdf_page(
+    content: bytes,
+    page_number: int,
+    zoom: int,
+    settings: PDFSettings | None = None,
+) -> bytes:
+    records = run_pdf_operation(
+        content, "preview", _preview_arguments(page_number, zoom), settings=settings
+    )
+    return _preview_result(records)
+
+
+async def render_pdf_page_async(
+    content: bytes,
+    page_number: int,
+    zoom: int,
+    settings: PDFSettings | None = None,
+) -> bytes:
+    records = await run_pdf_operation_async(
+        content, "preview", _preview_arguments(page_number, zoom), settings=settings
+    )
+    return _preview_result(records)
+
+
+def _provider_failure(exc: ServiceError) -> ProviderFailure | None:
+    messages = {
+        "converter_invalid_output": "Converter returned an unreadable PDF",
+        "preview_too_large": "Converted PDF has too many pages",
+    }
+    if exc.code in messages:
+        return ProviderFailure(messages[exc.code], code=exc.code)
+    return None
+
+
+def _page_count_result(records: list[dict], max_pages: int) -> int:
+    try:
+        count = records[0]["page_count"]
+        if not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= max_pages:
+            raise TypeError("invalid page count")
+        return count
+    except (IndexError, KeyError, TypeError, ValueError) as exc:
+        raise ServiceError(
+            "pdf_resource_limits", "PDF renderer returned invalid output", 502, 4
+        ) from exc
+
+
+def pdf_page_count(content: bytes, max_pages: int, settings: PDFSettings | None = None) -> int:
     """Open converter output as untrusted input and bound it before it is stored."""
     try:
-        with pymupdf.open(stream=content, filetype="pdf") as pdf:
-            if not pdf.is_pdf or pdf.needs_pass or pdf.is_encrypted:
-                raise ValueError("not a plain PDF")
-            count = pdf.page_count
-    except Exception as exc:
-        raise ProviderFailure(
-            "Converter returned an unreadable PDF", code="converter_invalid_output"
-        ) from exc
-    if count < 1 or count > max_pages:
-        raise ProviderFailure("Converted PDF has too many pages", code="preview_too_large")
-    return count
+        records = run_pdf_operation(
+            content, "page_count", {"max_pages": max_pages}, settings=settings
+        )
+    except ServiceError as exc:
+        if failure := _provider_failure(exc):
+            raise failure from exc
+        raise
+    return _page_count_result(records, max_pages)
+
+
+async def pdf_page_count_async(
+    content: bytes, max_pages: int, settings: PDFSettings | None = None
+) -> int:
+    try:
+        records = await run_pdf_operation_async(
+            content, "page_count", {"max_pages": max_pages}, settings=settings
+        )
+    except ServiceError as exc:
+        if failure := _provider_failure(exc):
+            raise failure from exc
+        raise
+    return _page_count_result(records, max_pages)
 
 
 async def document_page(
@@ -86,6 +132,7 @@ async def document_page(
     page: int,
     zoom: int,
     storage: Storage,
+    settings: PDFSettings | None = None,
 ) -> bytes:
     actor.require("task:read")
     document: Document = await documents.require_document(session, document_id)
@@ -94,7 +141,7 @@ async def document_page(
     content = await storage.read(actor.org_id, document.storage_key)
     if hashlib.sha256(content).hexdigest() != document.sha256:
         raise ServiceError("content_mismatch", "Stored document hash does not match", 409, 4)
-    return await asyncio.to_thread(render_pdf_page, content, page, zoom)
+    return await render_pdf_page_async(content, page, zoom, settings)
 
 
 async def certificate_page(
@@ -104,13 +151,14 @@ async def certificate_page(
     page: int,
     zoom: int,
     storage: Storage,
+    settings: PDFSettings | None = None,
 ) -> bytes:
     content, descriptor = await certificate_files.read_revision(
         session, actor, revision_id, storage
     )
     if page > descriptor.page_count:
         raise ServiceError("invalid_page", "Page is outside the document", 400, 2)
-    return await asyncio.to_thread(render_pdf_page, content, page, zoom)
+    return await render_pdf_page_async(content, page, zoom, settings)
 
 
 def cache_key(row: Export) -> str:
@@ -215,7 +263,13 @@ async def show_export_preview(
 
 
 async def export_page(
-    session: AsyncSession, actor: Identity, export_id: UUID, page: int, zoom: int, storage: Storage
+    session: AsyncSession,
+    actor: Identity,
+    export_id: UUID,
+    page: int,
+    zoom: int,
+    storage: Storage,
+    settings: PDFSettings | None = None,
 ) -> bytes:
     actor, row = await exports.get_export(session, actor, export_id)
     actor, _ = await exports.download_gate(session, actor, row, storage)
@@ -228,7 +282,7 @@ async def export_page(
     content = await exports.checked_content(
         actor, preview["object_key"], preview["size_bytes"], preview["sha256"], storage
     )
-    return await asyncio.to_thread(render_pdf_page, content, page, zoom)
+    return await render_pdf_page_async(content, page, zoom, settings)
 
 
 async def convert(execution: JobExecution, storage: Storage, converter, settings: Settings) -> None:
@@ -249,7 +303,7 @@ async def convert(execution: JobExecution, storage: Storage, converter, settings
     if converter is None:
         raise ProviderFailure("Export previews are not configured", code="preview_unavailable")
     pdf = await converter.docx_to_pdf(content, "export.docx")
-    page_count = await asyncio.to_thread(pdf_page_count, pdf, settings.preview_max_pages)
+    page_count = await pdf_page_count_async(pdf, settings.preview_max_pages, settings)
     object_key = f"org/{org_id}/export-previews/{submission['export_id']}/{execution.run_id}.pdf"
     await storage.put(org_id, object_key, pdf)
     async with execution.db.transaction(org_id) as session:
