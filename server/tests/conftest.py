@@ -72,8 +72,8 @@ def prepare_database(url: str) -> None:
                         sql.Identifier(role), sql.Literal(os.environ["BID_DATABASE_PASSWORD"])
                     )
                     connection.exec_driver_sql(statement.as_string())
-        except SQLAlchemyError:
-            raise RuntimeError("Could not configure isolated credential test logins") from None
+        except SQLAlchemyError as exc:
+            raise RuntimeError("Could not configure isolated credential test logins") from exc
         finally:
             engine.dispose()
 
