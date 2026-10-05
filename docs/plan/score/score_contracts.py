@@ -5,11 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Literal, Protocol, Self
 from uuid import UUID
 
-from app.schemas.contracts import Category, Contract, ProviderUsage, Result, Source
-from app.schemas.response_card_contracts import ModelEvidenceRef, ReviewDomain
-from pydantic import AwareDatetime, Field, model_validator
-
-from docs.plan.check.check_contracts import (
+from app.schemas.check_contracts import (
     AssessmentFailure,
     AssessmentInput,
     AssessmentJobAccepted,
@@ -23,6 +19,9 @@ from docs.plan.check.check_contracts import (
     Sha256,
     VerifiedCitation,
 )
+from app.schemas.contracts import Category, Contract, ProviderUsage, Result, Source
+from app.schemas.response_card_contracts import ModelEvidenceRef, ReviewDomain
+from pydantic import AwareDatetime, Field, model_validator
 
 type ScoreCLIResult = Result
 type RubricJobAccepted = AssessmentJobAccepted

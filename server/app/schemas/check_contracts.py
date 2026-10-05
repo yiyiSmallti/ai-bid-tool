@@ -1,14 +1,15 @@
-"""待批准的 B09 契约；不注册到 API、CLI 或作业处理器。"""
+"""Confirmed-draft rules assessment contracts and shared score input types."""
 
 from datetime import date
 from decimal import Decimal
-from typing import Annotated, Literal, Protocol, Self
+from typing import Annotated, Literal, Self
 from uuid import UUID
 
-from app.schemas.confidential_contracts import ConfidentialKind
-from app.schemas.contracts import Contract, Cost, ProviderUsage, Result, Source
-from app.schemas.response_card_contracts import ModelEvidenceRef, ReviewDomain
 from pydantic import AwareDatetime, Field, StringConstraints, model_validator
+
+from app.schemas.confidential_contracts import ConfidentialKind
+from app.schemas.contracts import Contract, Cost, Result, Source
+from app.schemas.response_card_contracts import ReviewDomain
 
 type Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 type NonBlank = Annotated[
@@ -173,7 +174,7 @@ class AssessmentFailure(Contract):
 
 
 class CheckRequest(AssessmentRequest):
-    mode: Literal["rules", "combined"] = "combined"
+    mode: Literal["rules", "combined"] = "rules"
 
     @model_validator(mode="after")
     def rules_have_no_model_options(self) -> Self:
@@ -183,7 +184,7 @@ class CheckRequest(AssessmentRequest):
 
 
 class CheckPreview(AssessmentPreview[AssessmentInput]):
-    mode: Literal["rules", "combined"]
+    mode: Literal["rules"]
     rule_version: NonBlank
     prompt_version: str | None
     schema_version: NonBlank
@@ -298,7 +299,7 @@ class CheckRunView(Contract):
     job_id: UUID
     run_id: UUID
     input: AssessmentInput
-    mode: Literal["rules", "combined"]
+    mode: Literal["rules"]
     rule_version: NonBlank
     prompt_version: str | None
     schema_version: NonBlank
@@ -324,82 +325,3 @@ class CheckJobResult(AssessmentJobResult):
     checked_requirements: int = Field(ge=0)
     finding_count: int = Field(ge=0)
     unassessed_requirements: int = Field(ge=0)
-
-
-class CheckProviderItem(Contract):
-    requirement_id: UUID
-    tender_ref: NonBlank
-    bid_refs: list[NonBlank]
-    coverage: Literal["response", "comply_only", "gap"]
-
-
-class CheckProviderRequest(Contract):
-    items: list[CheckProviderItem] = Field(min_length=1, max_length=2000)
-    context: OutboundContext
-
-    @model_validator(mode="after")
-    def items_use_sent_context(self) -> Self:
-        ids = [item.requirement_id for item in self.items]
-        if len(ids) != len(set(ids)):
-            raise ValueError("request requirement IDs must be unique")
-        refs = {text.ref for text in self.context.texts}
-        for item in self.items:
-            if not {item.tender_ref, *item.bid_refs}.issubset(refs):
-                raise ValueError("request refs must belong to outbound context")
-            if len(item.bid_refs) != len(set(item.bid_refs)):
-                raise ValueError("bid refs must be unique")
-            if item.coverage != "response" and item.bid_refs:
-                raise ValueError("gap and comply-only items cannot supply proposed response text")
-        return self
-
-
-class ProposedFinding(Contract):
-    code: Literal["semantic_contradiction", "insufficient_support", "obligation_coverage_uncertain"]
-    severity: RiskLevel
-    reason: NonBlank
-    citations: list[ModelEvidenceRef] = Field(min_length=1, max_length=20)
-
-
-class CheckProviderAssessment(Contract):
-    requirement_id: UUID
-    outcome: Literal["no_risk_found", "risk", "unknown"]
-    findings: list[ProposedFinding] = Field(max_length=20)
-    reason_code: str | None = None
-    supporting_references: list[ModelEvidenceRef]
-
-    @model_validator(mode="after")
-    def explicit_outcome(self) -> Self:
-        if (self.outcome == "risk") != bool(self.findings):
-            raise ValueError("only risk assessments contain findings")
-        if self.outcome == "unknown" and not self.reason_code:
-            raise ValueError("unknown requires a reason code")
-        if self.outcome == "no_risk_found" and not self.supporting_references:
-            raise ValueError("a clear semantic result requires supporting references")
-        return self
-
-
-class CheckWireOutput(Contract):
-    items: list[CheckProviderAssessment]
-
-
-class CheckAnsweredBatch(Contract):
-    """保留 wire 候选以逐项拒绝漏答/串答；不代表输出已经通过引用验证。"""
-
-    requested_requirement_ids: list[UUID]
-    sent_refs: list[str]
-    output: CheckWireOutput
-
-
-class CheckProviderResult(Contract):
-    batches: list[CheckAnsweredBatch]
-    usages: list[ProviderUsage]
-    failure: AssessmentFailure | None = None
-
-
-class CheckProvider(Protocol):
-    name: str
-    model: str
-    version: str
-    test_only: bool
-
-    async def check(self, request: CheckProviderRequest) -> CheckProviderResult: ...

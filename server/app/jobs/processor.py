@@ -115,6 +115,7 @@ class Processor:
                 if kind
                 in {
                     "draft",
+                    "check",
                     "card_generate",
                     "provider_test",
                     "export_render",
@@ -225,6 +226,11 @@ class Processor:
                     await generate_prototype(execution, self.storage, llm, browser_for(self))
                     return
                 assert task_id is not None and document_id is not None
+                if kind == "check":
+                    from app.jobs.check import process as process_check
+
+                    await process_check(execution, self.storage)
+                    return
                 if kind == "card_generate":
                     from app.services.card_generation import generate
 
@@ -438,6 +444,7 @@ class Processor:
                     # Exit code 3 marks transient failures such as object storage outages.
                     retryable = exc.exit_code == 3 and exc.code not in {
                         "draft_input_changed",
+                        "check_input_changed",
                         "export_input_changed",
                         "generation_input_changed",
                         "generation_model_changed",

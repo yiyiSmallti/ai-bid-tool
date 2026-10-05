@@ -4,6 +4,16 @@ from app.schemas.certificate_contracts import (
     TaskCertificateSelection,
 )
 from app.schemas.certificate_file_contracts import CertificateFileCreate
+from app.schemas.check_contracts import (
+    AssessmentJobAccepted,
+    AssessmentListData,
+    CheckJobResult,
+    CheckPreview,
+    CheckReportData,
+    CheckRequest,
+    FindingDecisionData,
+    FindingDecisionRequest,
+)
 from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.confidential_contracts import (
     ConfidentialFieldCreate,
@@ -105,6 +115,11 @@ COMMANDS = {
     "draft": DraftRequest,
     "draft show": None,
     "draft list": None,
+    "check run": CheckRequest,
+    "check list": None,
+    "check show": None,
+    "check decide": FindingDecisionRequest,
+    "check history": None,
     "evidence source add": EvidenceSourceCreate,
     "evidence source list": None,
     "evidence source download": None,
@@ -217,6 +232,15 @@ EXPORT_OUTPUTS = {
     "export template-sample": TypeAdapter(TemplateSample),
 }
 
+CHECK_OUTPUTS = {
+    "check run": TypeAdapter(CheckPreview | AssessmentJobAccepted | CheckJobResult),
+    "check list": TypeAdapter(AssessmentListData),
+    "check show": TypeAdapter(CheckReportData),
+    "check decide": TypeAdapter(FindingDecisionData),
+    "check history": TypeAdapter(AssessmentListData),
+}
+OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS
+
 
 def command_schema(app=None) -> dict:
     parameters = {}
@@ -271,9 +295,7 @@ def command_schema(app=None) -> dict:
             name: {
                 "input": model.model_json_schema() if model else None,
                 "cli_parameters": parameters.get(name, []),
-                **(
-                    {"output": EXPORT_OUTPUTS[name].json_schema()} if name in EXPORT_OUTPUTS else {}
-                ),
+                **({"output": OUTPUTS[name].json_schema()} if name in OUTPUTS else {}),
             }
             for name, model in COMMANDS.items()
         },

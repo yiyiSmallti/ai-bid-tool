@@ -193,12 +193,32 @@ class Client:
                 "invalid_server_response", "Server returned an invalid response", 502, 3
             ) from exc
         if not response.is_success:
-            error = body.get("data", {}).get("error", {})
+            data = body.get("data", {})
+            error = data.get("error", {})
+            job_id = None
+            parts = path.split("?", 1)[0].split("/")
+            if (
+                method.upper() == "POST"
+                and len(parts) == 4
+                and parts[1::2] == ["tasks", "checks"]
+                and "job_id" in data
+            ):
+                try:
+                    UUID(parts[2])
+                    job_id = str(UUID(data["job_id"]))
+                except (TypeError, ValueError) as exc:
+                    raise ServiceError(
+                        "invalid_server_response",
+                        "Server returned an invalid check job identifier",
+                        502,
+                        4,
+                    ) from exc
             raise ServiceError(
                 error.get("code", "server_error"),
                 error.get("message", "Server request failed"),
                 response.status_code,
                 error.get("exit_code", 4),
+                job_id=job_id,
             )
         return body
 

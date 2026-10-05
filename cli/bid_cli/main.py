@@ -53,6 +53,8 @@ from app.services.certificate_files import read_file as read_certificate_file
 from app.services.template_files import read_template
 from pydantic import ValidationError
 
+from bid_cli.check import app as check_app
+from bid_cli.check import check_job_exit
 from bid_cli.client import Client, State, new_output_path, save_download
 from bid_cli.confidential import register as register_confidential_commands
 from bid_cli.export import app as export_app
@@ -65,6 +67,7 @@ app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 app.add_typer(provider_app, name="provider")
 app.add_typer(export_app, name="export")
 app.add_typer(sandbox_app, name="sandbox")
+app.add_typer(check_app, name="check")
 org_app, task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(6))
 resource_app, product_app, task_resource_app = (typer.Typer() for _ in range(3))
 feature_app, task_feature_app = typer.Typer(), typer.Typer()
@@ -1151,7 +1154,12 @@ def req_repair_citations(
 @job_app.command("status")
 def job_status(job_id: UUID, json_output: JsonOption = False):
     body = call("GET", f"/jobs/{job_id}")
-    emit(body, "job status", json_output, sandbox_job_exit(body) or partial_completion_exit(body))
+    emit(
+        body,
+        "job status",
+        json_output,
+        sandbox_job_exit(body) or check_job_exit(body) or partial_completion_exit(body),
+    )
 
 
 @job_app.command("wait")
@@ -1486,13 +1494,16 @@ def main(args: list[str] | None = None):
     try:
         app(args=arguments, standalone_mode=False)
     except ServiceError as exc:
+        data: dict = {
+            "error": {"code": exc.code, "message": exc.message, "exit_code": exc.exit_code}
+        }
+        if exc.job_id is not None:
+            data["job_id"] = exc.job_id
         emit(
             Result(
                 ok=False,
                 command=command_name(arguments),
-                data={
-                    "error": {"code": exc.code, "message": exc.message, "exit_code": exc.exit_code}
-                },
+                data=data,
             ).model_dump(mode="json"),
             command_name(arguments),
             "--json" in arguments,

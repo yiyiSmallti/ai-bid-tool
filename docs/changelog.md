@@ -6,6 +6,19 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-04：已确认初稿的确定性校验
+
+- 新增 `bid check run/list/show/decide/history` 与对应 HTTP 接口。`rules` 模式固定一个 current
+  初稿、抽取、要求、已确认响应与材料、证书和配置修订，预检返回输入哈希，worker 发布带 PDF/Word
+  可核验引用的不可变报告；相同输入复用作业，取消、显式重试、租约和输入变化沿既有作业栅栏处理。
+- 阶段一报告覆盖 ★/实质性缺项、已确认负偏离、未完成人工复核的缺口和证书声明日期；边界日包含，
+  缺日期为 unknown，未被已确认响应引用的证书不绑定无关要求。未确认候选正文不进入快照或报告，
+  规则执行不调用 Provider、不写 UsageRecord，也不产生费用。
+- 风险只作建议。商务和技术责任人可带理由追加 dismiss/reopen 决定；管理员、令牌和 worker 均不能决定，
+  历史报告输入失效后仍可读但不能继续决定。新增迁移 `0032` 与 `check:read`、`check:run`、`check:decide` 权限；
+  `combined` 语义模式保留到阶段二，当前明确返回 `check_mode_unavailable`。机制见
+  [Confirmed-draft checks](notes/check.md)。
+
 ## 2026-10-04：PDF 子进程资源隔离与背景图片 OCR 排除
 
 - PDF 上传验证、整份解析、在线预览及证据页渲染改用短生命周期子进程；设置墙钟、CPU、Linux 内存及输出上限，超时终止回收，资源超限或崩溃以不可重试的 `pdf_resource_limits` 结束。OCR 与用量记账保留在父进程，机制和 macOS 限制见 [PDF parsing](notes/pdf-parsing.md)。

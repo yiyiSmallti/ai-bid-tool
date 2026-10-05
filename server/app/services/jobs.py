@@ -18,8 +18,12 @@ FIELDS = ("id", "kind", "status", "result", "error", "attempts", "reasoning")
 
 
 def _public_result(job: Job) -> dict:
-    # Submission authorization data is internal worker state.
-    return {key: value for key, value in job.result.items() if key != "submission"}
+    # Submission authorization and encrypted snapshots are internal worker state.
+    return {
+        key: value
+        for key, value in job.result.items()
+        if key not in {"submission", "encrypted_input"}
+    }
 
 
 async def status(session: AsyncSession, identity: Identity, job_id: UUID, storage: Storage) -> dict:
@@ -37,6 +41,10 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.page_previews import job_access as preview_access
 
         await preview_access(session, identity, job)
+    if job.kind == "check":
+        from app.services.check import job_access as check_access
+
+        await check_access(session, identity, job, storage)
     await sandbox_guard_job(session, identity, job)
     payload = Result(
         ok=True,
@@ -70,6 +78,15 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         identity.require("provider:read")
         payload["data"]["result"] = _public_result(job)
         payload["cost"] = job.result.get("cost", payload["cost"])
+    if job.kind == "check":
+        public = _public_result(job)
+        for internal_envelope_field in ("cost", "warnings", "exit_code"):
+            public.pop(internal_envelope_field, None)
+        payload["data"]["result"] = public
+        payload["warnings"] = job.result.get("warnings", [])
+        payload["cost"] = job.result.get("cost", payload["cost"])
+        if job.status in {"failed", "cancelled"} or job.result.get("completion") == "partial":
+            payload["ok"] = False
     if job.kind == "export_render":
         payload["data"]["result"] = _public_result(job)
         return payload
@@ -115,6 +132,10 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.page_previews import job_access as preview_access
 
         await preview_access(session, identity, job)
+    if job.kind == "check":
+        from app.services.check import job_access as check_access
+
+        await check_access(session, identity, job, storage, cancel=True)
     await sandbox_guard_job(session, identity, job, cancel=True)
     if job.status not in {"cancelled", "queued", "running"}:
         raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)

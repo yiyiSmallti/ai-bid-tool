@@ -24,6 +24,7 @@ kind: readme
 
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。
 - [response-cards.md](notes/response-cards.md)：人工响应卡片、证据确认、原子处置与三表初稿。
+- [check.md](notes/check.md)：已确认初稿的确定性风险校验、证书日期、引用与人工误报决定。
 - [model-drafting-redaction.md](notes/model-drafting-redaction.md)：模型起草输入快照、外发遮挡和双文本引用核验。
 - [confidential-values.md](notes/confidential-values.md)：保密字段、外发占位替换与导出时填入。
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
@@ -67,4 +68,5 @@ kind: readme
 - [沙盒契约](plan/sandbox.md)（plan）：不可信生成内容与内置 agent 的隔离执行环境，已实施；开发节点隔离子集与真实厂家采集已验证，代理攻防与完整生命周期验收待执行。
 - [单位后台契约](plan/org-console.md)（plan）：网页端招标、抽取与响应卡审阅流程，已实施。
 - [起草预览绑定契约](plan/drafting-binding.md)（plan）：付费起草绑定预览哈希与用户消费上限，已实施。
+- [初稿校验契约](plan/check.md)（plan）：阶段一确定性规则已实施；阶段二语义校验待实施。
 - [变更记录](changelog.md)（changelog）：已交付范围。
