@@ -23,6 +23,7 @@ kind: readme
 英文，结构为 Problem / Usage / How it works / Pitfalls / Code。
 
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。
+- [memory.md](notes/memory.md)：单位记忆人工审批、关键词检索、逐调用追溯、缓存失效与反馈候选。
 - [response-cards.md](notes/response-cards.md)：人工响应卡片、证据确认、原子处置与三表初稿。
 - [check.md](notes/check.md)：已确认初稿的确定性风险校验、证书日期、引用与人工误报决定。
 - [score.md](notes/score.md)：评分 rubric 的固定输入、人工分类、覆盖决定、逐项确认与不可变历史。
@@ -71,4 +72,5 @@ kind: readme
 - [起草预览绑定契约](plan/drafting-binding.md)（plan）：付费起草绑定预览哈希与用户消费上限，已实施。
 - [初稿校验契约](plan/check.md)（plan）：阶段一确定性规则已实施；阶段二语义校验待实施。
 - [评分契约](plan/score.md)（plan）：已批准；rubric 规范化与人工确认、confirmed DraftRun 评分执行与报告已实施。
+- [记忆契约](plan/memory.md)（plan）：已批准的单位层首片与后续作用域边界。
 - [变更记录](changelog.md)（changelog）：已交付范围。

@@ -1,9 +1,13 @@
 from collections.abc import Sequence
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from app.providers.base import ProviderFailure
 from app.providers.drafting import DraftingOutput
 from app.schemas.contracts import LLMResult
+
+if TYPE_CHECKING:
+    from app.schemas.memory_contracts import MemoryPromptContext
 
 
 class DisabledLLM:
@@ -19,6 +23,11 @@ class DisabledLLM:
         )
 
     async def draft(
-        self, requirements: list[dict], materials: list[dict], fields: Sequence[dict] = ()
+        self,
+        requirements: list[dict],
+        materials: list[dict],
+        fields: Sequence[dict] = (),
+        *,
+        memory: "MemoryPromptContext | None" = None,
     ) -> DraftingOutput:
         raise ProviderFailure("No approved drafting model is configured")

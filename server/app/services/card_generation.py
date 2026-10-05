@@ -14,6 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets
 from app.jobs.execution import JobExecution, job_cost
+from app.memory import retrieval as memory_retrieval
+from app.memory.safety import reject_sensitive, sanitize
 from app.models.entities import (
     EvidenceSource,
     Job,
@@ -36,6 +38,11 @@ from app.providers.drafting import (
 )
 from app.providers.llm import HTTPExtractor, billable, with_reasoning
 from app.providers.storage import Storage
+from app.schemas.memory_contracts import (
+    MemoryPromptContext,
+    MemoryRetrievalOutput,
+    MemoryRetrievalRequest,
+)
 from app.schemas.response_card_contracts import (
     CardContent,
     CardGeneratePreview,
@@ -206,7 +213,31 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning, 
             {key: entry[key] for key in ("ref", "kind", "field_path", "page") if key in entry}
             | {"text": sent}
         )
+    memory_request = MemoryRetrievalRequest(
+        org_id=actor.org_id,
+        scopes=["org"],
+        task_id=task.id,
+        query=(
+            await sanitize(
+                session, actor, " ".join(row["quote"] for row in original_requirements), settings
+            )
+        )[:2000]
+        or "drafting",
+        keywords=list(
+            dict.fromkeys(
+                word
+                for row in sent_requirements
+                for word in row["quote"].split()
+                if len(word) <= 40
+            )
+        )[:20],
+        tags=["drafting"],
+    )
+    memory_output = await memory_retrieval.retrieve(
+        session, actor, memory_request, settings, preview=True
+    )
     manifest = {
+        "memory": memory_retrieval.public_manifest(memory_output),
         "org_id": str(actor.org_id),
         "task_id": str(task.id),
         "requirements": [
@@ -240,6 +271,9 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning, 
         "schema_version": SCHEMA_VERSION,
     }
     secret = {
+        "memory": memory_retrieval.prompt_context(memory_output).model_dump(mode="json"),
+        "memory_request": memory_request.model_dump(mode="json"),
+        "memory_output": memory_output.model_dump(mode="json"),
         "requirements": sent_requirements,
         "materials": sent_materials,
         "fields": fields,
@@ -263,8 +297,22 @@ def estimate(llm, secret: dict) -> dict:
             "cost_basis": "unknown",
             "cost_basis_reason": "model_unavailable",
         }
-    batches = groups(secret["requirements"], secret["materials"], batch_budget(llm.settings))
-    bodies = [request_body(llm, batch, secret["materials"], secret["fields"]) for batch in batches]
+    batches = groups(
+        secret["requirements"],
+        secret["materials"],
+        batch_budget(llm.settings),
+        memory=MemoryPromptContext.model_validate(secret["memory"]),
+    )
+    bodies = [
+        request_body(
+            llm,
+            batch,
+            secret["materials"],
+            secret["fields"],
+            memory=MemoryPromptContext.model_validate(secret["memory"]),
+        )
+        for batch in batches
+    ]
     # A conservative first-pass allowance, not a promise about retries or halving.
     input_tokens = sum(len(json.dumps(body, ensure_ascii=False).encode()) + 4096 for body in bodies)
     output_tokens = sum(llm.output_token_bound(body) for body in bodies)
@@ -329,10 +377,19 @@ async def submit_generation(
                 warnings.append(blocker)
             if blocker is None and isinstance(llm, HTTPExtractor):
                 first = groups(
-                    secret["requirements"], secret["materials"], batch_budget(llm.settings)
+                    secret["requirements"],
+                    secret["materials"],
+                    batch_budget(llm.settings),
+                    memory=MemoryPromptContext.model_validate(secret["memory"]),
                 )[0]
                 reserved = llm.reservation(
-                    request_body(llm, first, secret["materials"], secret["fields"])
+                    request_body(
+                        llm,
+                        first,
+                        secret["materials"],
+                        secret["fields"],
+                        memory=MemoryPromptContext.model_validate(secret["memory"]),
+                    )
                 )
                 held = await session.scalar(
                     select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
@@ -427,9 +484,22 @@ async def submit_generation(
     else:
         if selected and billable(llm):
             await billing.require_funds(session, settings.billing_currency)
+        await memory_retrieval.require_current(session, actor.org_id, manifest["memory"], lock=True)
+        memory_output = MemoryRetrievalOutput.model_validate(secret["memory_output"])
+        await memory_retrieval.persist(
+            session,
+            actor,
+            MemoryRetrievalRequest.model_validate(secret["memory_request"]),
+            memory_output,
+            settings,
+        )
+        secret["memory"] = memory_retrieval.prompt_context(memory_output).model_dump(mode="json")
+        secret.pop("memory_output")
+        secret.pop("memory_request")
         crypto = Secrets.for_data(settings)
+        generation_id = uuid4()
         job = Job(
-            id=uuid4(),
+            id=generation_id,
             org_id=actor.org_id,
             task_id=task_id,
             document_id=extraction.document_id,
@@ -441,13 +511,23 @@ async def submit_generation(
             provider_identity=model_identity(llm),
             result={
                 "submission": {
+                    "memory_retrieval_id": str(memory_output.data.retrieval_id),
                     "input_manifest": manifest,
                     "input_hash": input_hash,
                     "target_revisions": targets,
                     "selected_requirements": selected,
                     "skipped": skipped,
                     "warnings": warnings,
-                    "encrypted_input": crypto.encrypt(json.dumps(secret, ensure_ascii=False)),
+                    "encrypted_input": crypto.encrypt(
+                        json.dumps(
+                            {
+                                "org_id": str(actor.org_id),
+                                "job_id": str(generation_id),
+                                "payload": secret,
+                            },
+                            ensure_ascii=False,
+                        )
+                    ),
                     "actor_user_id": str(actor.user_id),
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
@@ -501,6 +581,13 @@ def worker(job: Job) -> Identity:
 
 
 async def check_input_access(session, actor, task_id, manifest, *, active=False):
+    if "memory" in manifest:
+        actor.require("memory:read")
+        actor.require("memory:retrieve")
+    if active:
+        await memory_retrieval.require_current(
+            session, actor.org_id, manifest.get("memory"), lock=True
+        )
     for entry in manifest["materials"] + manifest["unavailable_pages"]:
         if entry["kind"] == "certificate_pdf_page":
             source, selected, _ = await require_source(
@@ -546,10 +633,14 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
             cards.fail("generation_model_changed", "Model catalog changed; submit again", 409, 3)
         if (
             manifest["prompt_version"] != PROMPT_VERSION
+            or manifest.get("schema_version") != SCHEMA_VERSION
             or manifest["redaction_rule_version"] != redaction.RULE_VERSION
         ):
             cards.fail("generation_rules_changed", "Drafting rules changed; submit again", 409, 3)
-        secret = json.loads(Secrets.for_data(settings).decrypt(submitted["encrypted_input"]))
+        envelope = json.loads(Secrets.for_data(settings).decrypt(submitted["encrypted_input"]))
+        if envelope.get("org_id") != str(org_id) or envelope.get("job_id") != str(job_id):
+            cards.fail("memory_snapshot_invalid", "Fixed input binding is invalid", 409, 4)
+        secret = envelope["payload"]
 
     async def before_admit(session):
         # Recheck grants and the switch for retries/halves as well as the first call.
@@ -565,6 +656,13 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
                     "Redaction setting changed; submit again", code="generation_input_changed"
                 )
             await check_input_access(session, live, task.id, manifest, active=True)
+            memory = MemoryPromptContext.model_validate(secret["memory"])
+            await reject_sensitive(
+                session,
+                live,
+                [item.text for item in (*memory.rules, *memory.preferences)],
+                settings,
+            )
         except ServiceError as exc:
             raise ProviderFailure(
                 "Drafting authorization or inputs changed", code=exc.code
@@ -576,7 +674,12 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
             raise ProviderFailure(
                 "Drafting requires per-call accounting", code="drafting_accounting_required"
             )
-        output = await llm.draft(secret["requirements"], secret["materials"], secret["fields"])
+        output = await llm.draft(
+            secret["requirements"],
+            secret["materials"],
+            secret["fields"],
+            memory=MemoryPromptContext.model_validate(secret["memory"]),
+        )
     else:
         output = DraftingOutput()
     if output.failure and (
@@ -608,10 +711,13 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
 async def publish(session, actor, job, output, secret, storage, settings):
     submitted = job.result["submission"]
     manifest = submitted["input_manifest"]
+    await memory_retrieval.require_current(session, actor.org_id, manifest.get("memory"), lock=True)
     mappings = {entry["ref"]: entry for entry in manifest["materials"]}
     selected = set(submitted["selected_requirements"])
     skipped, rejected, needs_material, created, seen = dict(submitted["skipped"]), {}, [], [], set()
     warnings = list(submitted["warnings"])
+    revision_calls = {}
+    requirement_calls = {}
     for batch in output.batches:
         sent_requirements = {entry["requirement_id"] for entry in batch.requirements}
         sent_materials = {entry["ref"]: entry["text"] for entry in batch.materials}
@@ -782,6 +888,8 @@ async def publish(session, actor, job, output, secret, storage, settings):
                 },
             )
             created.append(str(revision.id))
+            revision_calls[str(revision.id)] = str(batch.call_id) if batch.call_id else None
+            requirement_calls[key] = str(batch.call_id) if batch.call_id else None
             if proposal.deviation == "negative":
                 warnings.append(f"negative_deviation:{key}")
     for key in selected - seen - set(skipped):
@@ -840,7 +948,12 @@ async def publish(session, actor, job, output, secret, storage, settings):
         actor_user_id=actor.user_id,
         actor_token_id=actor.token_id,
         actor_kind="worker",
-        input_manifest=manifest,
+        input_manifest={
+            **manifest,
+            "memory_retrieval_id": submitted["memory_retrieval_id"],
+            "revision_calls": revision_calls,
+            "requirement_calls": requirement_calls,
+        },
         target_revisions=submitted["target_revisions"],
         platform_model_id=manifest["model"]["platform_model_id"],
         model_revision=manifest["model"]["model_revision"],

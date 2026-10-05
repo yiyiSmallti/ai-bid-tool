@@ -261,6 +261,14 @@ async def test_profile_roles_preserve_old_grants(
             "score:run",
             "score:rubric:generate",
             "score:rubric:review",
+            "memory:read",
+            "memory:write",
+            "memory:retrieve",
+            "memory:candidate:run",
+            "memory:approve",
+            "memory:manage",
+            "memory:eval:read",
+            "memory:eval:review",
         }
     } == old_expected[role]
     row, task_id = await profile(api, headers[0]), await task(api, headers[0])

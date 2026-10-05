@@ -87,6 +87,10 @@ class ApiToken(Tenant, Base):
             "NOT (scopes ? 'score:rubric:review')", name="token_forbidden_score_scopes"
         ),
         CheckConstraint(
+            "NOT (scopes ?| ARRAY['memory:approve','memory:manage','memory:eval:read','memory:eval:review'])",
+            name="token_forbidden_memory_scopes",
+        ),
+        CheckConstraint(
             "NOT (scopes ? 'confidential:write') AND NOT (scopes ? 'confidential:reveal')",
             name="token_forbidden_confidential_scopes",
         ),
@@ -210,6 +214,9 @@ class UsageRecord(Tenant, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "job_id", "run_id", "call_id"),
+        UniqueConstraint(
+            "org_id", "id", "job_id", "run_id", "call_id", name="memory_usage_call_binding"
+        ),
         ForeignKeyConstraint(
             ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
         ),

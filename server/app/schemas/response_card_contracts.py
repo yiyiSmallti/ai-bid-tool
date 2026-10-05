@@ -405,6 +405,7 @@ class CardView(_TimestampContract):
     reason: str | None = Field(default=None, min_length=1, max_length=10000)
     reviewed_warning_codes: list[str] = Field(default_factory=list, max_length=100)
     warning_codes: list[str]
+    memory_lineage: dict = Field(default_factory=dict)
     eligibility: Literal[
         "eligible",
         "comply_only",
@@ -566,6 +567,8 @@ class DraftView(_TrimmedContract):
     comply_only: list[ComplyOnlyEntry]
     gaps: list[DraftGap]
     invalidated_requirements: list[UUID]
+    memory_warnings: list[str] = Field(default_factory=list)
+    memory_lineage: list[dict] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def complete_partition(self):
@@ -603,6 +606,8 @@ class DraftSummary(_TimestampContract):
     validity: Literal["current", "stale"]
     input_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     invalidated_requirements: list[UUID]
+    memory_warnings: list[str] = Field(default_factory=list)
+    memory_lineage: list[dict] = Field(default_factory=list)
     summary: dict[Literal["rows", "comply_only", "gaps", "negative_deviations"], int]
 
     @model_validator(mode="after")

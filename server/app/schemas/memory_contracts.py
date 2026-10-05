@@ -1,4 +1,4 @@
-"""Review-only memory contracts; no runtime registration, persistence or provider calls."""
+"""Memory HTTP, CLI, retrieval and provider contracts."""
 
 from collections.abc import Sequence
 from datetime import datetime
@@ -6,10 +6,11 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 from uuid import UUID
 
+from pydantic import AwareDatetime, Field, field_validator, model_validator
+
 from app.providers.base import LLMProvider
 from app.schemas.contracts import Contract, Cost, JobAction, ProviderUsage, Result
 from app.schemas.response_card_contracts import ReviewDomain
-from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
     from app.providers.drafting import DraftingOutput
@@ -28,7 +29,7 @@ type Revision = Annotated[int, Field(strict=True, ge=1)]
 
 
 class MemoryTarget(Contract):
-    scope: TenantMemoryScope
+    scope: MemoryScope
     user_id: UUID | None = None
     task_id: UUID | None = None
 

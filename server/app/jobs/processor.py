@@ -86,6 +86,12 @@ class Processor:
                 and current.lease_until > datetime.now(UTC)
             ):
                 return
+            if current.kind == "card_generate":
+                from app.memory.retrieval import recover_unsettled_calls
+
+                # The job row is locked; preserve old reservations and lineage
+                # before issuing a new run ID after a retry or expired lease.
+                await recover_unsettled_calls(session, current)
             current.status = "running"
             current.attempts += 1
             run_id = uuid4()
@@ -119,6 +125,7 @@ class Processor:
                     "score_rubric",
                     "score",
                     "card_generate",
+                    "memory_candidate",
                     "provider_test",
                     "export_render",
                     "export_preview",
@@ -173,6 +180,11 @@ class Processor:
                 }:
                     async with self.db.transaction(org_id) as session:
                         llm = await self.resolve(session, current)
+                if kind == "memory_candidate":
+                    from app.jobs.memory_candidate import process as propose_memories
+
+                    await propose_memories(execution)
+                    return
                 if kind == "provider_test":
                     from app.services.provider_configs import execute_test
 

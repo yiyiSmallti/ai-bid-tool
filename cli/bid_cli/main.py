@@ -58,6 +58,8 @@ from bid_cli.check import check_job_exit
 from bid_cli.client import Client, State, new_output_path, save_download
 from bid_cli.confidential import register as register_confidential_commands
 from bid_cli.export import app as export_app
+from bid_cli.memory import app as memory_app
+from bid_cli.memory import memory_job_exit
 from bid_cli.providers import app as provider_app
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
 from bid_cli.schema import command_schema
@@ -70,6 +72,7 @@ app.add_typer(provider_app, name="provider")
 app.add_typer(export_app, name="export")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(check_app, name="check")
+app.add_typer(memory_app, name="memory")
 app.add_typer(score_app, name="score")
 org_app, task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(6))
 resource_app, product_app, task_resource_app = (typer.Typer() for _ in range(3))
@@ -1165,6 +1168,7 @@ def job_status(job_id: UUID, json_output: JsonOption = False):
         or check_job_exit(body)
         or rubric_job_exit(body)
         or score_job_exit(body)
+        or memory_job_exit(body)
         or partial_completion_exit(body),
     )
 

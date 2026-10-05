@@ -17,7 +17,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.models.entities import Job, OrgBalance, UsageRecord, VendorCall
 from app.providers.base import ProviderFailure
-from app.providers.calls import current_accounting
+from app.providers.calls import current_accounting, current_drafting_input
 from app.schemas.contracts import ProviderUsage
 from app.services import billing
 
@@ -210,6 +210,11 @@ class JobExecution:
                     reserved_charge=reserved_charge,
                 )
             )
+            await session.flush()
+            if job.kind == "card_generate":
+                from app.memory.retrieval import attach_call
+
+                await attach_call(session, self, call_id, current_drafting_input.get())
         return call_id
 
     async def _complete_once(self, call_id: UUID, usage: ProviderUsage) -> bool:
@@ -254,6 +259,12 @@ class JobExecution:
                 )
                 call.state, call.charge = "completed", amount
                 job.result = {**job.result, "cost": await job_cost(session, self.job_id)}
+            if job.kind == "card_generate":
+                from app.memory.retrieval import settle_call
+
+                await settle_call(
+                    session, self.org_id, self.job_id, self.run_id, call_id, "completed"
+                )
             exceeded = amount > call.reserved_charge
         return exceeded
 
@@ -291,6 +302,9 @@ class JobExecution:
     async def unknown(self, call_id: UUID) -> None:
         try:
             async with self.db.transaction(self.org_id) as session:
+                # Match completion's job -> call lock order. Late settlement is
+                # allowed even when the original lease or membership has ended.
+                await session.scalar(select(Job).where(Job.id == self.job_id).with_for_update())
                 await session.execute(
                     update(VendorCall)
                     .where(
@@ -300,6 +314,11 @@ class JobExecution:
                         VendorCall.state == "pending",
                     )
                     .values(state="unknown")
+                )
+                from app.memory.retrieval import settle_call
+
+                await settle_call(
+                    session, self.org_id, self.job_id, self.run_id, call_id, "unknown"
                 )
         except SQLAlchemyError:
             # A failed marker leaves the durable pending reservation in place.

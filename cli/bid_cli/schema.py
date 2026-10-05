@@ -43,6 +43,25 @@ from app.schemas.export_contracts import (
     TemplateSample,
 )
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
+from app.schemas.memory_contracts import (
+    MemoryCallData,
+    MemoryCandidateJobRequest,
+    MemoryCandidateJobResult,
+    MemoryCreate,
+    MemoryData,
+    MemoryDecision,
+    MemoryDelete,
+    MemoryDisable,
+    MemoryEvalData,
+    MemoryEvalDetailData,
+    MemoryEvalReview,
+    MemoryJobSubmissionData,
+    MemoryListRequest,
+    MemoryPageData,
+    MemoryRetrievalData,
+    MemoryRetrievalRequest,
+    MemoryUpdate,
+)
 from app.schemas.platform_contracts import (
     CardRedeem,
     OrgLookup,
@@ -289,7 +308,55 @@ SCORE_OUTPUTS = {
     "score rubric decide": TypeAdapter(RubricSetView),
     "score rubric history": TypeAdapter(AssessmentListData),
 }
-OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS
+MEMORY_INPUTS = {
+    "memory add": MemoryCreate,
+    "memory list": MemoryListRequest,
+    "memory show": None,
+    "memory update": MemoryUpdate,
+    "memory history": None,
+    "memory approve": MemoryDecision,
+    "memory reject": MemoryDecision,
+    "memory disable": MemoryDisable,
+    "memory delete": MemoryDelete,
+    "memory retrieve": MemoryRetrievalRequest,
+    "memory retrieval show": None,
+    "memory used": None,
+    "memory feedback list": None,
+    "memory candidates run": MemoryCandidateJobRequest,
+    "memory samples list": None,
+    "memory samples show": None,
+    "memory samples review": MemoryEvalReview,
+}
+COMMANDS.update(MEMORY_INPUTS)
+MEMORY_OUTPUTS: dict[str, TypeAdapter] = {
+    name: TypeAdapter(MemoryData)
+    for name in (
+        "memory add",
+        "memory show",
+        "memory update",
+        "memory approve",
+        "memory reject",
+        "memory disable",
+        "memory delete",
+    )
+}
+MEMORY_OUTPUTS.update(
+    {
+        name: TypeAdapter(MemoryPageData)
+        for name in ("memory list", "memory history", "memory feedback list", "memory samples list")
+    }
+)
+MEMORY_OUTPUTS.update(
+    {
+        "memory retrieve": TypeAdapter(MemoryRetrievalData),
+        "memory retrieval show": TypeAdapter(MemoryRetrievalData),
+        "memory used": TypeAdapter(MemoryCallData),
+        "memory candidates run": TypeAdapter(MemoryJobSubmissionData | MemoryCandidateJobResult),
+        "memory samples show": TypeAdapter(MemoryEvalDetailData),
+        "memory samples review": TypeAdapter(MemoryEvalData),
+    }
+)
+OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS | MEMORY_OUTPUTS
 
 
 def command_schema(app=None) -> dict:

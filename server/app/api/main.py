@@ -241,6 +241,7 @@ def create_app(
         async with db.transaction(x_org_id) as session:
             identity = await authenticate(session, credentials.credentials, x_org_id, crypto)
             await set_actor_context(session, identity)
+            session.info["memory_settings"] = settings
             yield session, identity
 
     app.include_router(create_org_console_router(context))
@@ -266,5 +267,8 @@ def create_app(
     app.include_router(create_confidential_router(context, settings))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))
+    from app.api.memory import create_router as create_memory_router
+
+    app.include_router(create_memory_router(context, db, queue, settings, storage))
     app.include_router(create_job_router(context, storage))
     return app

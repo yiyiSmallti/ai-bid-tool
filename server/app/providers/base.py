@@ -7,6 +7,7 @@ from app.schemas.contracts import LLMResult, OCRText, ProviderUsage
 if TYPE_CHECKING:
     from app.providers.checking import CheckProviderRequest, CheckProviderResult
     from app.providers.drafting import DraftingOutput
+    from app.schemas.memory_contracts import MemoryPromptContext
 
 
 class ProviderFailure(Exception):
@@ -59,7 +60,12 @@ class LLMProvider(Protocol):
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult: ...
 
     async def draft(
-        self, requirements: list[dict], materials: list[dict], fields: Sequence[dict] = ()
+        self,
+        requirements: list[dict],
+        materials: list[dict],
+        fields: Sequence[dict] = (),
+        *,
+        memory: "MemoryPromptContext | None" = None,
     ) -> "DraftingOutput": ...
 
 

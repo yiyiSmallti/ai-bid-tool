@@ -58,11 +58,25 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
             "card create", await cards.create_card(ctx[0], ctx[1], task_id, body, storage)
         )
 
+    async def dispatch_feedback(session, actor):
+        from app.memory.candidates import dispatch
+        from app.memory.feedback import take_pending_jobs
+
+        jobs = take_pending_jobs(session)
+        if not jobs:
+            return []
+        await session.commit()
+        warnings = []
+        for job in jobs:
+            warnings.extend(await dispatch(db, queue, actor.org_id, job))
+        return warnings
+
     @router.put("/cards/{card_id}", name="card_update", response_model=Result)
     async def card_update(card_id: UUID, body: CardUpdate, ctx=Depends(context, scope="function")):
-        return result(
-            "card update", await cards.update_card(ctx[0], ctx[1], card_id, body, storage)
-        )
+        ctx[0].info["memory_settings"] = settings
+        view = await cards.update_card(ctx[0], ctx[1], card_id, body, storage)
+        warnings = await dispatch_feedback(ctx[0], ctx[1])
+        return result("card update", view, warnings=warnings)
 
     @router.post("/cards/{card_id}/classification", name="card_classify", response_model=Result)
     async def card_classify(
@@ -80,6 +94,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.post("/cards/{card_id}/actions", name="card_action", response_model=Result)
     async def card_action(card_id: UUID, body: CardAction, ctx=Depends(context, scope="function")):
+        ctx[0].info["memory_settings"] = settings
         view = await cards.card_action(ctx[0], ctx[1], card_id, body, storage)
         warnings = list(view["warning_codes"])
         if body.action == "submit":
@@ -87,6 +102,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
                 warnings.append("incomplete_response")
             if view["content"]["response_kind"] == "evidence" and not view["evidence"]:
                 warnings.append("missing_evidence")
+        warnings.extend(await dispatch_feedback(ctx[0], ctx[1]))
         return result(f"card {body.action.replace('_', '-')}", view, warnings=warnings)
 
     @router.put(

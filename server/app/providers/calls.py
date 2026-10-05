@@ -27,6 +27,10 @@ current_accounting: ContextVar[CallAccounting | None] = ContextVar(
 )
 
 
+current_drafting_input: ContextVar[dict | None] = ContextVar("current_drafting_input", default=None)
+last_admitted_call: ContextVar[UUID | None] = ContextVar("last_admitted_call", default=None)
+
+
 def plan_calls(first_pass_calls: int) -> None:
     """Tell the active job how many calls a full first pass needs, to size its call ceiling."""
     accounting = current_accounting.get()
@@ -43,6 +47,7 @@ async def accounted_call[T](
     if accounting is None:
         return await operation()
     call_id = await accounting.admit(reserved_charge, platform_billed)
+    last_admitted_call.set(call_id)
 
     async def finish():
         settled = False
