@@ -187,10 +187,22 @@ class FakeQueue:
     def __init__(self):
         self.calls = []
         self.processor = None
+        self.wakes = []
 
     async def enqueue(self, org_id: str, job_id: str):
         self.calls.append((org_id, job_id))
         return len(self.calls)
+
+    async def enqueue_in_transaction(self, session, org_id: str, job_id: str):
+        return await self.enqueue(org_id, job_id)
+
+    async def enqueue_agent_wake(self, session, org_id: str, session_id: str, *, delay=30):
+        self.wakes.append((org_id, session_id))
+        return len(self.wakes)
+
+    async def ensure_process_delivery(self, session, job):
+        if job.queue_id is None:
+            job.queue_id = await self.enqueue(str(job.org_id), str(job.id))
 
 
 @pytest.fixture

@@ -27,6 +27,8 @@ def legacy_projection(
         command = value.get("command", command)
 
     def added_attachment(key, item):
+        if key == "agent_provenance":
+            return True
         if key == "budget_preflight" and path == ("data",):
             return True
         if key != "budget":

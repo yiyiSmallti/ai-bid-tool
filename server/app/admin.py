@@ -126,6 +126,14 @@ def bootstrap(org_name: str, email: str):
 
 # Every column written with Secrets.encrypt. A new encrypted column must be added here.
 ENCRYPTED_COLUMNS = (
+    ("agent_sessions", "start_receipt_enc"),
+    ("agent_sessions", "cancel_receipt_enc"),
+    ("agent_messages", "content_enc"),
+    ("agent_messages", "receipt_enc"),
+    ("agent_steps", "arguments_enc"),
+    ("agent_steps", "result_enc"),
+    ("agent_pauses", "question_enc"),
+    ("agent_pauses", "receipt_enc"),
     ("check_runs", "encrypted_input"),
     ("score_rubric_sets", "encrypted_input"),
     ("score_reports", "encrypted_input"),

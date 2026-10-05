@@ -244,11 +244,24 @@ class Client:
                         502,
                         4,
                     ) from exc
+            transmitted_exit = response.headers.get("X-Bid-Exit-Code")
+            failure_exit = (
+                int(transmitted_exit)
+                if transmitted_exit in {"2", "3", "4", "5"}
+                else error.get(
+                    "exit_code",
+                    3
+                    if error.get("retryable")
+                    else 2
+                    if response.status_code in {400, 409, 422}
+                    else 4,
+                )
+            )
             raise ServiceError(
                 error.get("code", "server_error"),
                 error.get("message", "Server request failed"),
                 response.status_code,
-                error.get("exit_code", 4),
+                failure_exit,
                 job_id=job_id,
             )
         return body

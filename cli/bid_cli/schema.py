@@ -1,3 +1,24 @@
+from app.schemas.agent_contracts import (
+    AgentCancelRequest,
+    AgentFailureData,
+    AgentListRequest,
+    AgentMessageRequest,
+    AgentMessageView,
+    AgentMutationData,
+    AgentPageData,
+    AgentPreviewData,
+    AgentResumeRequest,
+    AgentSessionView,
+    AgentShowData,
+    AgentStartRequest,
+    AgentStepView,
+    CardGenerateArguments,
+    CardShowArguments,
+    DraftArguments,
+    DraftShowArguments,
+    ExtractionArguments,
+    JobStatusArguments,
+)
 from app.schemas.budget_contracts import (
     BudgetPlatformModelTest,
     BudgetProviderTest,
@@ -452,7 +473,51 @@ CREDENTIAL_OUTPUTS.update(
         "platform credential import-env": TypeAdapter(CredentialImportData | CredentialErrorData),
     }
 )
-OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS | MEMORY_OUTPUTS | CREDENTIAL_OUTPUTS
+AGENT_INPUTS = {
+    "agent start": AgentStartRequest,
+    "agent list": AgentListRequest,
+    "agent show": None,
+    "agent messages": AgentListRequest,
+    "agent steps": AgentListRequest,
+    "agent message": AgentMessageRequest,
+    "agent resume": AgentResumeRequest,
+    "agent cancel": AgentCancelRequest,
+}
+COMMANDS.update(AGENT_INPUTS)
+AGENT_OUTPUTS = {
+    "agent start": TypeAdapter(AgentMutationData | AgentPreviewData | AgentFailureData),
+    "agent show": TypeAdapter(AgentShowData | AgentFailureData),
+    **{
+        "agent " + action: TypeAdapter(AgentMutationData | AgentFailureData)
+        for action in ("message", "resume", "cancel")
+    },
+    **{
+        "agent " + action: TypeAdapter(AgentPageData | AgentFailureData)
+        for action in ("list", "messages", "steps")
+    },
+}
+AGENT_ITEMS = {
+    "agent list": AgentSessionView,
+    "agent messages": AgentMessageView,
+    "agent steps": AgentStepView,
+}
+INVOCATION_INPUTS = {
+    "req list": ExtractionArguments,
+    "card list": ExtractionArguments,
+    "card show": CardShowArguments,
+    "card generate": CardGenerateArguments,
+    "draft": DraftArguments,
+    "draft show": DraftShowArguments,
+    "job status": JobStatusArguments,
+}
+OUTPUTS = (
+    EXPORT_OUTPUTS
+    | CHECK_OUTPUTS
+    | SCORE_OUTPUTS
+    | MEMORY_OUTPUTS
+    | CREDENTIAL_OUTPUTS
+    | AGENT_OUTPUTS
+)
 
 
 WORKFLOW_COMMANDS = {
@@ -661,7 +726,11 @@ def command_schema(app=None, version: str = "4.0") -> dict:
             }
         )
     else:
-        commands = {name: model for name, model in commands.items() if name not in NEW_COMMANDS}
+        commands = {
+            name: model
+            for name, model in commands.items()
+            if name not in NEW_COMMANDS and name not in AGENT_INPUTS
+        }
         commands = {
             name: model for name, model in commands.items() if not name.startswith("assessment ")
         }
@@ -702,6 +771,12 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                 "input": model.model_json_schema() if model else None,
                 "cli_parameters": parameters.get(name, []),
                 **({"output": outputs[name].json_schema()} if name in outputs else {}),
+                **(
+                    {"invocation_input": INVOCATION_INPUTS[name].model_json_schema()}
+                    if version == "4.0" and name in INVOCATION_INPUTS
+                    else {}
+                ),
+                **({"items": AGENT_ITEMS[name].model_json_schema()} if name in AGENT_ITEMS else {}),
                 **(
                     {"variants": CONSOLE_VARIANTS[name]}
                     if version == "4.0" and name in CONSOLE_VARIANTS
@@ -794,6 +869,10 @@ def command_schema(app=None, version: str = "4.0") -> dict:
 
         def legacy_schema(value):
             if isinstance(value, dict):
+                if "properties" in value:
+                    value["properties"].pop("agent_provenance", None)
+                if "$defs" in value:
+                    value["$defs"].pop("AgentProvenance", None)
                 if "$defs" in value and "Cost" in value["$defs"]:
                     value["$defs"]["Cost"] = legacy_cost
                 for child in value.values():

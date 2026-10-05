@@ -1,7 +1,7 @@
 """Job status and cancellation with each job kind's own access checks."""
 
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +18,49 @@ from app.services.task_authorization import task_authorized
 FIELDS = ("id", "kind", "status", "result", "error", "attempts", "reasoning")
 
 
+async def agent_access(session, identity, job):
+    from sqlalchemy import select
+
+    from app.models.agent import AgentJobLink, AgentSession
+
+    linked = await session.scalar(
+        select(AgentJobLink).where(AgentJobLink.job_id == job.id, AgentJobLink.owned.is_(True))
+    )
+    if linked is None:
+        if job.kind == "agent" or job.agent_session_id is not None:
+            raise not_found()
+        return None
+    row = await session.get(AgentSession, linked.session_id)
+    if row is None or identity.user_id != row.owner_user_id:
+        raise not_found()
+    if (
+        identity.actor_kind == "agent"
+        and identity.principal_id == row.principal_id
+        and identity.session_id == row.id
+    ):
+        return row
+    if identity.actor_kind == "agent" and job.status == "succeeded":
+        # A later session by the same owner may reference a completed job without
+        # owning its cost or cancellation. Its broker must have saved that link.
+        reference = await session.scalar(
+            select(AgentSession)
+            .join(AgentJobLink, AgentJobLink.session_id == AgentSession.id)
+            .where(
+                AgentSession.id == identity.session_id,
+                AgentSession.principal_id == identity.principal_id,
+                AgentSession.owner_user_id == identity.user_id,
+                AgentJobLink.job_id == job.id,
+                AgentJobLink.owned.is_(False),
+            )
+        )
+        if reference is not None:
+            return reference
+    if identity.actor_kind != "session" or identity.token_id is not None:
+        raise not_found()
+    identity.require("agent:read")
+    return row
+
+
 def _public_result(job: Job) -> dict:
     # Submission authorization and encrypted snapshots are internal worker state.
     return {
@@ -32,6 +75,7 @@ async def read_access(
 ) -> None:
     """Same kind-specific authorization for status, boards and event replay."""
     identity.require("job:read")
+    await agent_access(session, identity, job)
     if job.task_id is not None:
         identity.require("task:read")
     if job.kind == "export_render":
@@ -99,6 +143,11 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         command="job status",
         data=jsonable_encoder({field: getattr(job, field) for field in FIELDS}),
     ).model_dump(mode="json")
+    from app.services.agent_tools import provenance
+
+    origin = await provenance(session, job.id)
+    if origin is not None:
+        payload["data"]["agent_provenance"] = origin
     settings = session.info.get("memory_settings")
     payload["cost"] = await job_cost(
         session, job.id, settings.billing_currency if settings else None
@@ -207,6 +256,17 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
             **payload["data"]["result"]["budget"],
             "cost": payload["cost"],
         }
+    if job.kind == "agent":
+        from app.schemas.agent_contracts import AgentJobResult
+
+        if "session_id" in job.result:
+            payload["data"]["result"] = {
+                key: value
+                for key, value in payload["data"]["result"].items()
+                if key in AgentJobResult.model_fields
+            }
+        if isinstance(job.result.get("budget"), dict):
+            payload["data"]["budget"] = {**job.result["budget"], "cost": payload["cost"]}
     return payload
 
 
@@ -214,10 +274,31 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
 async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storage: Storage) -> Job:
     from app.jobs.execution import locked_job
 
-    identity.require("job:cancel")
     job = await locked_job(session, job_id)
     if job is None:
         raise not_found()
+    linked = await agent_access(session, identity, job)
+    if linked is not None:
+        from app.schemas.agent_contracts import AgentCancelRequest
+        from app.services import agents
+
+        settings = session.info.get("memory_settings")
+        if settings is None:
+            raise ServiceError(
+                "agent_settings_unavailable", "Agent settings are unavailable", 503, 4
+            )
+        await agents.cancel(
+            session,
+            identity,
+            linked.id,
+            AgentCancelRequest(
+                expected_revision=linked.revision,
+                idempotency_key=identity.invocation_id or uuid4(),
+            ),
+            settings,
+        )
+        return job
+    identity.require("job:cancel")
     if job.kind == "export_render":
         from app.services.exports import job_access
 

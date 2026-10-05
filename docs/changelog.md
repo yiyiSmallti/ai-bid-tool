@@ -6,6 +6,39 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Queued agent authority-loss cleanup
+
+- Persist a rejected controller Job as failed before clearing its transaction
+  execution binding and saving the authority pause. A queued Job has no admitted
+  run; cleanup uses the existing no-execution fence without weakening the
+  [agent recovery guards](plan/agent.md#worker-recovery-and-cancellation).
+
+## 2026-10-05: Agent and task authority integration
+
+- Apply the [agent task boundary](plan/agent.md#identity-permissions-and-human-gates)
+  to session admission, continuation, tools, model calls and child publication.
+  Preserve authority-loss cleanup and the current step's execution identity while
+  refreshing live task grants. Retain team event production and batched citations.
+- Combine the team workflow and agent scopes, routes, job access and worker
+  fences. Keep the migration chain at team workflow `0041` then builtin agent
+  `0042`; distinguish historical ownership from current task admission in guards.
+
+## 2026-10-05: Controller identity after child-result reads
+
+- Recheck and restore the live controller identity after the command broker reads a child result and after the final draft validity read, before writing steps, completion messages or checkpoints. Keep the existing execution fence and immutable creator fields required by the [agent recovery contract](plan/agent.md#worker-recovery-and-cancellation).
+- Record a failed collection step and its audit event when an integrity error interrupts collection of a terminal child. Preserve already published results and the contract's partial-session outcome with an explicit stop reason; controller checkpoint success does not imply goal completion.
+
+## 2026-10-05: Atomic agent checkpoints and pause references
+
+- Read controller costs before the terminal transition, then persist the complete session checkpoint and cleared execution binding in one UPDATE. Preserve the live step/message fence and [terminal-state immutability](plan/agent.md#worker-recovery-and-cancellation).
+- Bind absent pause budget references as SQL NULL instead of JSON `null`, retaining the existing budget-only reference CHECK. Strengthen checkpoint receipts and pause-persistence coverage without changing hard-limit termination or unknown-request recovery semantics.
+
+## 2026-10-05: Agent integration regression fixes
+
+- Restore private candidate rendering for a verified human export submission while preserving worker identity, current attempt/lease checks and the separate [human release gate](plan/export.md#human-identity-and-release-gate). Automated actors still cannot invoke human-only export actions.
+- Restore verified actor context in the separate transactions that record rubric and score denials, so [invocation provenance](plan/agent.md#audit-and-a02-provenance) is validated without replacing the original authorization error. Human-only scope errors identify the required human session.
+- Batch draft-history provenance reads without increasing the query bound. Align regression expectations with the approved provenance and legacy-output contracts, and use known synthetic provider prices and zero remaining allowance in agent budget scenarios rather than erasing prior task expenditure.
+
 ## 2026-10-05: Team workflow slice 1
 
 - Batched board, response-card and scoring citation validation by bound source,
@@ -66,6 +99,15 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Preview remains zero-write and zero-call, with an upper bound for both stages and the complete section list repeated in each stage-2 batch. Prompt/schema versions enter preview cache/input identity; incompatible queued work fails explicitly and must be resubmitted. The published rubric `input_hash` derives from the manifest containing stage-1 output and its structure hash. The queued job `cache_key` remains the preview input, while submission stores `preview_input_hash` as provenance; no migration is required.
 - The design follows a real `glm-5.3-flash` attempt over 89 Requirements and about 25,000 tokens: low reasoning at about 21,000 tokens returned `invalid_provider_output`, while high reasoning at about 32,000 tokens was truncated. Those whole-table attempts followed earlier blind batching, which produced orphan sections and left 80/89 Requirements unresolved. Existing redaction, refusal, metering, attempt ownership and human-review gates remain in force.
 - Rubric and scoring calls use shared per-call admission and settlement. Task-budget enforcement remains an external dependency governed by the [budget contract](plan/budget.md), not a score-specific guarantee. See the [score contract](plan/score.md) and [mechanism note](notes/score.md).
+
+## 2026-10-05: Built-in agent command orchestration
+
+- Chain [agent migration `0042`](../server/migrations/versions/0042_builtin_agent.py) after [team-workflow migration `0041`](../server/migrations/versions/0041_team_workflow.py); add persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
+- Register authenticated API and CLI session start/list/show/messages/steps/message/resume/cancel commands with shared Result, invocation schemas, revision checks and endpoint-scoped idempotency.
+- Connect the structured decision adapter and seven protected command services to checkpoint controller jobs, transactional child/queue dispatch and durable recovery wakes. Safe retries reuse uniquely proved owned jobs; unknown paid outcomes pause without redispatch.
+- Apply immutable cumulative session limits to decisions and descendants through the existing task-budget, prepaid and per-job admission/settlement boundary. Preserve fixed input/model/redaction checks, original human review/confirmation, no-memory A01 generation and confirmed-only draft assembly.
+- Add verified built-in-agent/token-automation invocation provenance to jobs/audit and public card/generation/draft views, retaining origin through human edits and immediate worker identity.
+- Adopt the defaults in the English [agent contract](plan/agent.md); mechanism and source entry points are in [Built-in agent orchestration](notes/builtin-agent.md). PostgreSQL/RLS, queue crash recovery, concurrent budget and full human-review workflow acceptance remain required; Vue agent pages, MCP and later tools are outside this slice.
 
 ## 2026-10-05: Task budget enforcement and cost preflight
 

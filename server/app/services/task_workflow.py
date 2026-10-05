@@ -1,5 +1,6 @@
 """Current task access, one-owner membership and atomic archive transitions."""
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from hashlib import sha256
 from typing import NoReturn
@@ -22,7 +23,7 @@ from app.schemas.team_workflow import (
     TaskMemberView,
     TaskWorkflowView,
 )
-from app.services.auth import ROLE_SCOPES, SCOPES, Identity, set_actor_context
+from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES, Identity, set_actor_context
 from app.services.versioned import audit
 
 HUMAN_SCOPES = {
@@ -69,11 +70,23 @@ async def live_actor(session, actor):
         ):
             fail("forbidden", "Permission denied", 403, 4)
         scopes &= set(token.scopes) & SCOPES
-    elif actor.actor_kind != "session":
-        scopes -= HUMAN_SCOPES | {"evidence:confirm", "export"}
-    return Identity(
-        actor.user_id, actor.org_id, scopes, member.role, actor.token_id, actor.actor_kind
-    )
+    if actor.actor_kind in {"agent", "worker"} and actor.principal_id is not None:
+        from app.models.agent import AgentPrincipal
+        from app.services.auth import agent_identity
+
+        principal = await session.get(AgentPrincipal, actor.principal_id, populate_existing=True)
+        if (
+            principal is None
+            or principal.org_id != actor.org_id
+            or principal.user_id != actor.user_id
+        ):
+            raise not_found()
+        delegated = await agent_identity(session, principal)
+        scopes &= delegated.scopes
+    if actor.actor_kind != "session" or actor.token_id is not None:
+        scopes -= HUMAN_ONLY_SCOPES
+    # Refresh grants without dropping the immediate actor or immutable agent/job origin.
+    return replace(actor, scopes=scopes, role=member.role)
 
 
 async def access(
@@ -86,6 +99,8 @@ async def access(
     domain=None,
     lock: bool | None = None,
     management=False,
+    require_member=False,
+    bind_context=True,
 ):
     # Preparation paths may check write authority without holding a task lock;
     # they must repeat this gate with the default write lock before publication.
@@ -114,7 +129,7 @@ async def access(
         .execution_options(populate_existing=True)
     )
     recovery = live.actor_kind == "session" and live.token_id is None and live.role == "admin"
-    if workflow is None or (member is None and not recovery):
+    if workflow is None or (member is None and (require_member or not recovery)):
         raise not_found()
     # A visible object is established before scope errors reveal which action was denied.
     live.require("task:read")
@@ -141,7 +156,9 @@ async def access(
     if write and workflow.state == "archived":
         fail("task_archived", "Task is archived")
     actor.scopes, actor.role = live.scopes, live.role
-    await set_actor_context(session, live)
+    # Pure authority checks must not replace an installed worker's execution fence.
+    if bind_context:
+        await set_actor_context(session, live)
     return task, workflow, member
 
 

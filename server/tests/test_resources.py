@@ -183,7 +183,7 @@ async def test_tokens_require_explicit_new_scopes_and_audit_actor(api, headers, 
         ).json()["data"]
         return {**headers[0], "Authorization": "Bearer " + value["token"]}, value["id"]
 
-    old, _ = await token(["task:read"])
+    old, old_token_id = await token(["task:read"])
     assert (await api.get("/resources/products", headers=old)).status_code == 403
     writer, token_id = await token(["resource:write", "resource:read"])
     product = await create(api, writer)
@@ -195,8 +195,25 @@ async def test_tokens_require_explicit_new_scopes_and_audit_actor(api, headers, 
         )
     ).status_code == 403
     async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
-        record = await session.scalar(select(AuditLog))
+        record = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "resource.product.create",
+                AuditLog.object_id == UUID(product["product_id"]),
+            )
+        )
+        assert record is not None
         assert str(record.actor_token_id) == token_id
+        assert record.actor_kind == "token" and record.initiated_by == "external_agent"
+        assert record.on_behalf_of_user_id == record.actor_user_id
+        assert record.invocation_id is not None
+        denied = await session.scalar(
+            select(AuditLog).where(
+                AuditLog.action == "command.failed",
+                AuditLog.actor_token_id == UUID(old_token_id),
+            )
+        )
+        assert denied is not None and denied.details["reason_code"] == "forbidden"
+        assert denied.actor_kind == "token" and denied.initiated_by == "external_agent"
 
 
 @pytest.mark.parametrize(

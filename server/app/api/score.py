@@ -36,6 +36,7 @@ from app.services import (
     score_generation,
 )
 from app.services.assessment_bounds import bounded_result, query_model
+from app.services.auth import set_actor_context
 from app.services.versioned import audit
 
 
@@ -94,6 +95,10 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                 object_id = UUID(details.pop("object_id"))
                 action = details.pop("action", "score_rubric.decision_denied")
                 async with db.transaction(actor.org_id) as audit_session:
+                    # SET LOCAL identity was rolled back with the failed request.
+                    # Rebind the verified actor before persisting its separate audit.
+                    audit_session.info["command"] = session.info.get("command", "")
+                    await set_actor_context(audit_session, actor)
                     audit(audit_session, actor, action, object_id, details)
             raise
 
@@ -108,6 +113,8 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
                 object_id = UUID(details.pop("object_id"))
                 action = details.pop("action", "score.failed")
                 async with db.transaction(actor.org_id) as audit_session:
+                    audit_session.info["command"] = session.info.get("command", "")
+                    await set_actor_context(audit_session, actor)
                     audit(audit_session, actor, action, object_id, details)
             raise
 

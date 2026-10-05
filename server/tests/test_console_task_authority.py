@@ -92,7 +92,7 @@ async def rubric_business_counts(case):
 async def rubric_denial(
     case, report, path, body, header, user, *, code="forbidden", status=403, actor_kind="session"
 ):
-    """A visible rejected write preserves business state and records one hashed denial."""
+    """Preserve business state and distinguish its hashed denial from token invocation audit."""
     before = await rubric_business_counts(case)
     org = UUID(header["X-Org-Id"])
     async with case["app"].state.db.transaction(org) as session:
@@ -102,16 +102,35 @@ async def rubric_denial(
             if actor_kind == "token"
             else None
         )
-    await post_error(case, path, body, header, code=code, status=status)
+        if actor_kind == "token":
+            assert token_id is not None
+    response = await post_error(case, path, body, header, code=code, status=status)
+    command = response.json()["command"]
     assert await rubric_business_counts(case) == before
     async with case["app"].state.db.transaction(org) as session:
         added = list(await session.scalars(select(AuditLog).where(AuditLog.id.not_in(audit_ids))))
-        assert len(added) == 1
-        entry = added[0]
-        assert entry.action == "score_rubric.decision_denied"
+        expected_actions = ["score_rubric.decision_denied"]
+        if actor_kind == "token":
+            # The failed request rolls back command.invoked; A02 retains a
+            # separate command.failed receipt alongside the business denial.
+            expected_actions.append("command.failed")
+        assert sorted(entry.action for entry in added) == sorted(expected_actions)
+        for entry in added:
+            assert entry.org_id == org
+            assert entry.actor_user_id == user
+            assert entry.actor_token_id == token_id
+            assert entry.actor_kind == actor_kind
+            assert entry.command == command
+            assert entry.invocation_id is not None
+            assert entry.initiated_by == ("external_agent" if token_id else "human")
+            assert entry.on_behalf_of_user_id == user
+            assert entry.agent_principal_id is None
+            assert entry.agent_session_id is None
+            assert entry.agent_step_id is None
+            assert entry.job_id is None
+            assert entry.run_id is None
+        entry = next(entry for entry in added if entry.action == "score_rubric.decision_denied")
         assert entry.object_id == UUID(report["rubric"]["id"])
-        assert entry.actor_user_id == user
-        assert entry.actor_token_id == token_id
         assert entry.details == {
             "task_id": case["task"],
             "rubric_id": report["rubric"]["id"],
@@ -121,6 +140,11 @@ async def rubric_denial(
             "error_code": code,
             "actor_kind": actor_kind,
         }
+        if actor_kind == "token":
+            invocation = next(entry for entry in added if entry.action == "command.failed")
+            assert invocation.invocation_id == entry.invocation_id
+            assert invocation.object_id == invocation.invocation_id
+            assert invocation.details == {"command": command, "reason_code": code}
 
 
 def rubric_writes(case, report):

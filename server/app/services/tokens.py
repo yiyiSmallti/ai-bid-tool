@@ -20,7 +20,8 @@ async def create_token(
     # A token cannot mint tokens, and never gains confirmation, export or the issuer's
     # missing scopes.
     if (
-        identity.token_id is not None
+        identity.actor_kind != "session"
+        or identity.token_id is not None
         or not set(body.scopes) <= SCOPES
         or not set(body.scopes) <= identity.scopes
     ):

@@ -214,31 +214,35 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning, 
             {key: entry[key] for key in ("ref", "kind", "field_path", "page") if key in entry}
             | {"text": sent}
         )
-    memory_request = MemoryRetrievalRequest(
-        org_id=actor.org_id,
-        scopes=["org"],
-        task_id=task.id,
-        query=(
-            await sanitize(
-                session, actor, " ".join(row["quote"] for row in original_requirements), settings
-            )
-        )[:2000]
-        or "drafting",
-        keywords=list(
-            dict.fromkeys(
-                word
-                for row in sent_requirements
-                for word in row["quote"].split()
-                if len(word) <= 40
-            )
-        )[:20],
-        tags=["drafting"],
-    )
-    memory_output = await memory_retrieval.retrieve(
-        session, actor, memory_request, settings, preview=True
-    )
+    memory_request = memory_output = None
+    if actor.principal_id is None:
+        memory_request = MemoryRetrievalRequest(
+            org_id=actor.org_id,
+            scopes=["org"],
+            task_id=task.id,
+            query=(
+                await sanitize(
+                    session,
+                    actor,
+                    " ".join(row["quote"] for row in original_requirements),
+                    settings,
+                )
+            )[:2000]
+            or "drafting",
+            keywords=list(
+                dict.fromkeys(
+                    word
+                    for row in sent_requirements
+                    for word in row["quote"].split()
+                    if len(word) <= 40
+                )
+            )[:20],
+            tags=["drafting"],
+        )
+        memory_output = await memory_retrieval.retrieve(
+            session, actor, memory_request, settings, preview=True
+        )
     manifest = {
-        "memory": memory_retrieval.public_manifest(memory_output),
         "org_id": str(actor.org_id),
         "task_id": str(task.id),
         "requirements": [
@@ -272,15 +276,36 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning, 
         "schema_version": SCHEMA_VERSION,
     }
     secret = {
-        "memory": memory_retrieval.prompt_context(memory_output).model_dump(mode="json"),
-        "memory_request": memory_request.model_dump(mode="json"),
-        "memory_output": memory_output.model_dump(mode="json"),
         "requirements": sent_requirements,
         "materials": sent_materials,
         "fields": fields,
         "originals": originals,
     }
+    if memory_output is not None and memory_request is not None:
+        manifest["memory"] = memory_retrieval.public_manifest(memory_output)
+        secret.update(
+            {
+                "memory": memory_retrieval.prompt_context(memory_output).model_dump(mode="json"),
+                "memory_request": memory_request.model_dump(mode="json"),
+                "memory_output": memory_output.model_dump(mode="json"),
+            }
+        )
     return manifest, secret, targets, selected, skipped
+
+
+def prompt_memory(secret: dict) -> MemoryPromptContext | None:
+    """A01 has no memory capability; absence stays absent throughout paid calls."""
+    value = secret.get("memory")
+    return MemoryPromptContext.model_validate(value) if value is not None else None
+
+
+def provenance_fields(actor: Identity) -> dict:
+    return {
+        "agent_principal_id": str(actor.principal_id) if actor.principal_id else None,
+        "agent_session_id": str(actor.session_id) if actor.session_id else None,
+        "agent_step_id": str(actor.step_id) if actor.step_id else None,
+        "invocation_id": str(actor.invocation_id) if actor.invocation_id else None,
+    }
 
 
 def estimate(llm, secret: dict) -> dict:
@@ -302,7 +327,7 @@ def estimate(llm, secret: dict) -> dict:
         secret["requirements"],
         secret["materials"],
         batch_budget(llm.settings),
-        memory=MemoryPromptContext.model_validate(secret["memory"]),
+        memory=prompt_memory(secret),
     )
     bodies = [
         request_body(
@@ -310,7 +335,7 @@ def estimate(llm, secret: dict) -> dict:
             batch,
             secret["materials"],
             secret["fields"],
-            memory=MemoryPromptContext.model_validate(secret["memory"]),
+            memory=prompt_memory(secret),
         )
         for batch in batches
     ]
@@ -400,7 +425,7 @@ async def submit_generation(
                     secret["requirements"],
                     secret["materials"],
                     batch_budget(llm.settings),
-                    memory=MemoryPromptContext.model_validate(secret["memory"]),
+                    memory=prompt_memory(secret),
                 )[0]
                 try:
                     reserved = llm.reservation(
@@ -409,7 +434,7 @@ async def submit_generation(
                             first,
                             secret["materials"],
                             secret["fields"],
-                            memory=MemoryPromptContext.model_validate(secret["memory"]),
+                            memory=prompt_memory(secret),
                         )
                     )
                 except ProviderFailure as error:
@@ -470,13 +495,13 @@ async def submit_generation(
                     batch,
                     secret["materials"],
                     secret["fields"],
-                    memory=MemoryPromptContext.model_validate(secret["memory"]),
+                    memory=prompt_memory(secret),
                 )
                 for batch in groups(
                     secret["requirements"],
                     secret["materials"],
                     batch_budget(llm.settings),
-                    memory=MemoryPromptContext.model_validate(secret["memory"]),
+                    memory=prompt_memory(secret),
                 )
             ]
             if selected and isinstance(llm, HTTPExtractor)
@@ -530,18 +555,24 @@ async def submit_generation(
     else:
         if selected and billable(llm):
             await billing.require_funds(session, settings.billing_currency)
-        await memory_retrieval.require_current(session, actor.org_id, manifest["memory"], lock=True)
-        memory_output = MemoryRetrievalOutput.model_validate(secret["memory_output"])
-        await memory_retrieval.persist(
-            session,
-            actor,
-            MemoryRetrievalRequest.model_validate(secret["memory_request"]),
-            memory_output,
-            settings,
-        )
-        secret["memory"] = memory_retrieval.prompt_context(memory_output).model_dump(mode="json")
-        secret.pop("memory_output")
-        secret.pop("memory_request")
+        memory_output = None
+        if "memory" in manifest:
+            await memory_retrieval.require_current(
+                session, actor.org_id, manifest["memory"], lock=True
+            )
+            memory_output = MemoryRetrievalOutput.model_validate(secret["memory_output"])
+            await memory_retrieval.persist(
+                session,
+                actor,
+                MemoryRetrievalRequest.model_validate(secret["memory_request"]),
+                memory_output,
+                settings,
+            )
+            secret["memory"] = memory_retrieval.prompt_context(memory_output).model_dump(
+                mode="json"
+            )
+            secret.pop("memory_output")
+            secret.pop("memory_request")
         crypto = Secrets.for_data(settings)
         generation_id = uuid4()
         job = Job(
@@ -550,6 +581,7 @@ async def submit_generation(
             task_id=task_id,
             document_id=extraction.document_id,
             kind="card_generate",
+            command="card generate",
             cache_key=cache_key,
             status="queued",
             reasoning=reasoning,
@@ -557,7 +589,11 @@ async def submit_generation(
             provider_identity=model_identity(llm),
             result={
                 "submission": {
-                    "memory_retrieval_id": str(memory_output.data.retrieval_id),
+                    **(
+                        {"memory_retrieval_id": str(memory_output.data.retrieval_id)}
+                        if memory_output is not None
+                        else {}
+                    ),
                     "input_manifest": manifest,
                     "input_hash": input_hash,
                     "target_revisions": targets,
@@ -577,6 +613,7 @@ async def submit_generation(
                     "actor_user_id": str(actor.user_id),
                     "actor_token_id": str(actor.token_id) if actor.token_id else None,
                     "actor_kind": actor.actor_kind,
+                    **provenance_fields(actor),
                     "scopes": sorted(actor.scopes),
                     "max_charge": str(body.max_charge) if body.max_charge is not None else None,
                 }
@@ -623,6 +660,14 @@ def worker(job: Job) -> Identity:
         "viewer",
         UUID(submitted["actor_token_id"]) if submitted["actor_token_id"] else None,
         "worker",
+        principal_id=UUID(submitted["agent_principal_id"])
+        if submitted.get("agent_principal_id")
+        else None,
+        session_id=UUID(submitted["agent_session_id"])
+        if submitted.get("agent_session_id")
+        else None,
+        step_id=UUID(submitted["agent_step_id"]) if submitted.get("agent_step_id") else None,
+        invocation_id=UUID(submitted["invocation_id"]) if submitted.get("invocation_id") else None,
     )
 
 
@@ -630,7 +675,7 @@ async def check_input_access(session, actor, task_id, manifest, *, active=False)
     if "memory" in manifest:
         actor.require("memory:read")
         actor.require("memory:retrieve")
-    if active:
+    if active and "memory" in manifest:
         await memory_retrieval.require_current(
             session, actor.org_id, manifest.get("memory"), lock=True
         )
@@ -702,13 +747,14 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
                     "Redaction setting changed; submit again", code="generation_input_changed"
                 )
             await check_input_access(session, live, task.id, manifest, active=True)
-            memory = MemoryPromptContext.model_validate(secret["memory"])
-            await reject_sensitive(
-                session,
-                live,
-                [item.text for item in (*memory.rules, *memory.preferences)],
-                settings,
-            )
+            memory = prompt_memory(secret)
+            if memory is not None:
+                await reject_sensitive(
+                    session,
+                    live,
+                    [item.text for item in (*memory.rules, *memory.preferences)],
+                    settings,
+                )
         except ServiceError as exc:
             raise ProviderFailure(
                 "Drafting authorization or inputs changed", code=exc.code
@@ -724,7 +770,7 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
             secret["requirements"],
             secret["materials"],
             secret["fields"],
-            memory=MemoryPromptContext.model_validate(secret["memory"]),
+            memory=prompt_memory(secret),
         )
     else:
         output = DraftingOutput()
@@ -757,7 +803,8 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
 async def publish(session, actor, job, output, secret, storage, settings):
     submitted = job.result["submission"]
     manifest = submitted["input_manifest"]
-    await memory_retrieval.require_current(session, actor.org_id, manifest.get("memory"), lock=True)
+    if "memory" in manifest:
+        await memory_retrieval.require_current(session, actor.org_id, manifest["memory"], lock=True)
     mappings = {entry["ref"]: entry for entry in manifest["materials"]}
     selected = set(submitted["selected_requirements"])
     skipped, rejected, needs_material, created, seen = dict(submitted["skipped"]), {}, [], [], set()
@@ -988,6 +1035,9 @@ async def publish(session, actor, job, output, secret, storage, settings):
         if output.failure.code == "provider_quota_exhausted":
             warnings.append(str(output.failure))
     result |= {"warnings": warnings, "exit_code": 5 if partial else 0}
+    from app.services.agent_tools import provenance
+
+    result["agent_provenance"] = await provenance(session, job.id)
     run = CardGenerationRun(
         id=uuid4(),
         org_id=job.org_id,
@@ -1001,7 +1051,11 @@ async def publish(session, actor, job, output, secret, storage, settings):
         actor_kind="worker",
         input_manifest={
             **manifest,
-            "memory_retrieval_id": submitted["memory_retrieval_id"],
+            **(
+                {"memory_retrieval_id": submitted["memory_retrieval_id"]}
+                if "memory_retrieval_id" in submitted
+                else {}
+            ),
             "revision_calls": revision_calls,
             "requirement_calls": requirement_calls,
         },

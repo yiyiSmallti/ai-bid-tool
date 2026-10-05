@@ -55,6 +55,7 @@ async def test_sandbox_admission_uses_pinned_purpose_token_scope(monkeypatch, pu
     user, token = uuid4(), uuid4()
     job = SimpleNamespace(
         id=uuid4(),
+        run_id=uuid4(),
         task_id=uuid4(),
         org_id=uuid4(),
         kind="sandbox",
@@ -62,15 +63,17 @@ async def test_sandbox_admission_uses_pinned_purpose_token_scope(monkeypatch, pu
         actor_token_id=token,
         actor_scopes=["task:read", scope],
         actor_kind="token",
+        agent_principal_id=None,
     )
     checked = []
 
-    async def task_access(session, worker, task_id, *, write=False):
+    async def task_access(session, worker, task_id, *, write=False, bind_context=True):
         # This isolated admission test models one active task contributor. The
         # real membership/RLS boundaries are exercised by workflow acceptance.
         assert task_id == job.task_id and write is True
         assert worker.user_id == job.actor_user_id and worker.org_id == job.org_id
         assert worker.token_id == job.actor_token_id and worker.actor_kind == "worker"
+        assert worker.job_id == job.id and worker.run_id == job.run_id
         assert worker.role == "technical" and worker.scopes == {"task:read", scope}
         worker.require("task:read")
         checked.append(worker)
@@ -92,6 +95,7 @@ async def test_wrong_sandbox_scope_never_admits(monkeypatch, purpose):
     wrong = "sandbox:render" if purpose == "vendor_capture" else "sandbox:capture"
     job = SimpleNamespace(
         id=uuid4(),
+        run_id=uuid4(),
         task_id=uuid4(),
         org_id=uuid4(),
         kind="sandbox",
@@ -99,6 +103,7 @@ async def test_wrong_sandbox_scope_never_admits(monkeypatch, purpose):
         actor_token_id=token,
         actor_scopes=["task:read", wrong],
         actor_kind="token",
+        agent_principal_id=None,
     )
     with pytest.raises(ServiceError) as caught:
         await execution.authorized_job(Session(user, token, ["task:read", wrong], purpose), job)
@@ -114,6 +119,7 @@ async def test_missing_pinned_sandbox_input_has_no_default_permission(monkeypatc
     scopes = ["task:read", "sandbox:render", "sandbox:capture"]
     job = SimpleNamespace(
         id=uuid4(),
+        run_id=uuid4(),
         task_id=uuid4(),
         org_id=uuid4(),
         kind="sandbox",
@@ -121,6 +127,7 @@ async def test_missing_pinned_sandbox_input_has_no_default_permission(monkeypatc
         actor_token_id=token,
         actor_scopes=scopes,
         actor_kind="token",
+        agent_principal_id=None,
     )
     with pytest.raises(ProviderFailure) as caught:
         await execution.authorized_job(Session(user, token, scopes, None), job)

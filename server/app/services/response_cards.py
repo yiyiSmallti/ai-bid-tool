@@ -5,7 +5,7 @@ import hashlib
 import re
 from collections import defaultdict
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import NoReturn
 from uuid import UUID, uuid4
@@ -138,9 +138,20 @@ async def access(session: AsyncSession, actor: Identity, scope: str) -> Identity
         ):
             fail("forbidden", "Permission denied", 403, 4)
         scopes &= set(token.scopes) & SCOPES
-    live = Identity(
-        actor.user_id, actor.org_id, scopes, member.role, actor.token_id, actor.actor_kind
-    )
+    if actor.actor_kind in {"agent", "worker"} and actor.principal_id is not None:
+        from app.models.agent import AgentPrincipal
+        from app.services.auth import agent_identity
+
+        principal = await session.get(AgentPrincipal, actor.principal_id, populate_existing=True)
+        if (
+            principal is None
+            or principal.org_id != actor.org_id
+            or principal.user_id != actor.user_id
+        ):
+            raise not_found()
+        delegated = await agent_identity(session, principal)
+        scopes &= delegated.scopes
+    live = replace(actor, scopes=scopes, role=member.role)
     live.require(scope)
     live.require("task:read")
     await set_actor_context(session, live)
@@ -569,7 +580,7 @@ async def card_view(
     )
     if memory_warning:
         image_warnings.add(memory_warning)
-    return card_view_data(
+    view = card_view_data(
         card,
         revision,
         requirement,
@@ -580,6 +591,23 @@ async def card_view(
         image_warnings,
         memory_lineage,
     )
+    from app.services.agent_tools import provenance
+
+    origin_job = revision.model_job_id
+    if origin_job is None:
+        # Human edits intentionally clear model dependencies; historical origin survives.
+        origin_job = await session.scalar(
+            select(ResponseCardRevision.model_job_id)
+            .where(
+                ResponseCardRevision.card_id == card.id,
+                ResponseCardRevision.revision <= revision.revision,
+                ResponseCardRevision.model_job_id.is_not(None),
+            )
+            .order_by(ResponseCardRevision.revision.desc())
+            .limit(1)
+        )
+    view["agent_provenance"] = await provenance(session, origin_job)
+    return view
 
 
 async def image_state(

@@ -191,6 +191,8 @@ async def validate_materials(
 async def submit_draft(
     session: AsyncSession, actor: Identity, task_id: UUID, body: DraftRequest, storage: Storage
 ):
+    from app.services.card_generation import provenance_fields
+
     actor = await cards.access(session, actor, "draft:run")
     actor.require("card:read")
     await cards.task_lock(session, task_id)
@@ -246,6 +248,7 @@ async def submit_draft(
             task_id=task_id,
             document_id=extraction.document_id,
             kind="draft",
+            command="draft",
             cache_key=cache_key,
             status="queued",
             result={},
@@ -267,6 +270,7 @@ async def submit_draft(
                 "actor_user_id": str(actor.user_id),
                 "actor_token_id": str(actor.token_id) if actor.token_id else None,
                 "actor_kind": actor.actor_kind,
+                **provenance_fields(actor),
                 "scopes": sorted(actor.scopes),
             }
         }
@@ -294,15 +298,10 @@ async def submit_draft(
 
 
 async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
+    from app.services.card_generation import worker
+
     submitted = job.result["submission"]
-    actor = Identity(
-        UUID(submitted["actor_user_id"]),
-        job.org_id,
-        set(submitted["scopes"]),
-        "viewer",
-        UUID(submitted["actor_token_id"]) if submitted["actor_token_id"] else None,
-        "worker",
-    )
+    actor = worker(job)
     actor = await cards.access(session, actor, "draft:run")
     actor.require("card:read")
     assert job.task_id is not None  # Only provider_test jobs may omit the task.
@@ -374,12 +373,15 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
         for reason in item.get("gap_reasons", [])
     )
     warnings.extend(await cards.scope_warnings(session, extraction_id))
+    from app.services.agent_tools import provenance
+
     return {
         "draft_id": str(run.id),
         "completion": completion,
         "warnings": warnings,
         "cost": Cost().model_dump(mode="json"),
         "exit_code": 5 if completion == "partial" else 0,
+        "agent_provenance": await provenance(session, job.id),
     }
 
 
@@ -564,7 +566,11 @@ async def show_draft(
     batch, grouped, current_inputs = await load_draft_reads(
         session, actor, [run], requirements, storage
     )
-    return draft_view(run, grouped[run.id], batch, current_inputs)
+    from app.services.agent_tools import provenance
+
+    view = draft_view(run, grouped[run.id], batch, current_inputs)
+    view["agent_provenance"] = await provenance(session, run.generation_job_id)
+    return view
 
 
 @task_authorized("draft:read")
@@ -589,9 +595,13 @@ async def list_drafts(
     batch, grouped, current_inputs = await load_draft_reads(
         session, actor, list(runs), requirements, storage
     )
+    from app.services.agent_tools import provenance_many
+
+    origins = await provenance_many(session, (run.generation_job_id for run in runs))
     items = []
     for run in runs:
         view = draft_view(run, grouped[run.id], batch, current_inputs)
+        view["agent_provenance"] = origins.get(run.generation_job_id)
         items.append(
             {
                 key: view[key]
@@ -607,6 +617,7 @@ async def list_drafts(
                     "invalidated_requirements",
                     "memory_warnings",
                     "memory_lineage",
+                    "agent_provenance",
                 )
             }
             | {"summary": run.summary}

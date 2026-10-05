@@ -51,6 +51,20 @@ def audit(session: AsyncSession, actor: Identity, action: str, object_id: UUID, 
             action=action,
             object_id=object_id,
             details=details,
+            actor_kind=actor.actor_kind,
+            initiated_by="builtin_agent"
+            if actor.principal_id
+            else "external_agent"
+            if actor.token_id
+            else None,
+            on_behalf_of_user_id=actor.user_id if actor.principal_id or actor.token_id else None,
+            agent_principal_id=actor.principal_id,
+            agent_session_id=actor.session_id,
+            agent_step_id=actor.step_id,
+            invocation_id=actor.invocation_id,
+            job_id=actor.job_id,
+            run_id=actor.run_id,
+            command=details.get("command") or session.info.get("command"),
         )
     )
 

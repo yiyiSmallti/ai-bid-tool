@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Protocol
 from uuid import UUID
@@ -121,7 +122,14 @@ async def accounted_call[T](
             if before_send is not None:
                 await before_send()
             prepared = True
-            result, usage = await invoke()
+            deadline = getattr(accounting, "call_deadline", None)
+            if deadline is None:
+                result, usage = await invoke()
+            else:
+                # Drain/settle remains outside this deadline. Only the actual
+                # dispatch is bounded by the session's remaining active lifetime.
+                async with asyncio.timeout(max(0, (deadline - datetime.now(UTC)).total_seconds())):
+                    result, usage = await invoke()
             if isinstance(quote, BudgetCallQuote):
                 usage = _fixed_usage(quote, usage)
             await accounting.complete(call_id, usage)

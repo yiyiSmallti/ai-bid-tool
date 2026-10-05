@@ -22,7 +22,7 @@ from app.models.entities import (
     VendorCall,
 )
 from app.services import platform
-from app.services.auth import Identity
+from app.services.auth import Identity, set_actor_context
 
 # Base32 without I, O, 0 and 1, so codes survive being read aloud or retyped.
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
@@ -121,6 +121,7 @@ async def overview(
 async def record_failure(db: Database, actor: Identity) -> None:
     # Committed separately: the request transaction rolls back on the error.
     async with db.transaction(actor.org_id) as session:
+        await set_actor_context(session, actor)
         session.add(
             AuditLog(
                 org_id=actor.org_id,
@@ -154,6 +155,7 @@ async def redeem(db: Database, actor: Identity, raw_code: str, currency: str) ->
         await record_failure(db, actor)
         raise invalid
     async with db.transaction(actor.org_id) as session:
+        await set_actor_context(session, actor)
         row = (
             await session.execute(
                 text("SELECT * FROM redeem_card(:hash, :org, :user, :currency)"),
