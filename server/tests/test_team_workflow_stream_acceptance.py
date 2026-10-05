@@ -196,6 +196,7 @@ def is_auth_statement(statement):
     )
 
 
+@pytest.mark.latency
 @pytest.mark.parametrize("count", [0, 5000, 5001])
 async def test_board_complete_bounds_and_query_plan(
     api, headers, tenants, admin_engine, application, count
@@ -205,6 +206,7 @@ async def test_board_complete_bounds_and_query_plan(
     )
 
 
+@pytest.mark.latency
 async def test_board_5000_requirements_across_300_realistic_page_chunks(
     api, headers, tenants, admin_engine, application
 ):
