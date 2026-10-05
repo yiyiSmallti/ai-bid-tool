@@ -21,8 +21,8 @@ opens of the same file reuse that conversion.
 | `GET /documents/{id}/pages/{page}/preview` | `task:read`; PDF originals only |
 | `GET /resources/certificates/revisions/{id}/file/pages/{page}/preview` | certificate file read |
 | `POST /exports/{id}/preview` (`?retry=true` after a failure) | the export download gate |
-| `GET /exports/{id}/preview` | export access |
-| `GET /exports/{id}/preview/pages/{page}` | export access; conversion succeeded |
+| `GET /exports/{id}/preview` | export access; live export validity |
+| `GET /exports/{id}/preview/pages/{page}` | the export download gate; conversion succeeded |
 
 Page routes return `image/png` with `no-store`; `zoom=1` renders at 110 DPI and
 `zoom=2` at 200 DPI. Export routes answer 404 for another org's or an unknown
@@ -46,6 +46,17 @@ under the org's prefix and recorded in the job result. An unreadable, oversized
 or failed conversion stores nothing; the job stays failed until an explicit
 retry. The generic job reader applies export access to these jobs and omits the
 stored PDF location.
+
+Every cached page read calls `exports.download_gate`, the same function as the
+DOCX download. It rechecks current inputs, initiator authorization and file
+integrity, then locks inputs and rechecks for concurrent invalidation before
+the cached PDF is read and rendered. Refusals use the download's error unchanged.
+The status route reuses `exports.export_view` for `validity`, `issues` and
+`invalidated_requirement_ids`; stale exports report `status=invalidated` and no
+`page_count`, so the console stops offering their pages. The conversion worker
+checks the immutable file bytes and job ownership, not the live human gate. A
+conversion started before invalidation may finish, but its cached pages still
+have to pass the read-time gate. The underlying conversion job keeps its status.
 
 Converted pages follow LibreOffice's layout with the converter's CJK fonts, so
 line breaks and pagination can differ slightly from Word; the downloaded DOCX
