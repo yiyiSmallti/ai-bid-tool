@@ -38,8 +38,10 @@ async def resident_bytes(pid: int) -> int:
     if sys.platform == "linux":
         try:
             values = (await asyncio.to_thread(Path(f"/proc/{pid}/statm").read_text)).split()
-        except FileNotFoundError:
-            return 0  # Exited processes have no resident allocation.
+        except (FileNotFoundError, ProcessLookupError):
+            # Exited processes have no resident allocation; a renderer that exits between
+            # open and read makes the read fail with ESRCH instead of ENOENT.
+            return 0
         return int(values[1]) * os.sysconf("SC_PAGE_SIZE")
     process = await asyncio.create_subprocess_exec(
         "/bin/ps",
