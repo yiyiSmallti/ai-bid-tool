@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import not_found
 from app.models.entities import Chunk, Job, Requirement, Task
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 
 
 def latest_extractions(task_id: UUID):
@@ -25,6 +26,7 @@ def _fields(row, names: tuple[str, ...]) -> dict:
     return jsonable_encoder({name: getattr(row, name) for name in names})
 
 
+@task_authorized("task:read")
 async def list_requirements(
     session: AsyncSession, identity: Identity, task_id: UUID, job: UUID | None
 ) -> list[dict]:
@@ -74,6 +76,7 @@ async def list_requirements(
     ]
 
 
+@task_authorized("task:read")
 async def extraction_history(
     session: AsyncSession, identity: Identity, task_id: UUID, document: UUID | None
 ) -> list[dict]:

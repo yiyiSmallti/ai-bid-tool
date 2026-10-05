@@ -86,6 +86,9 @@ def create_router(context, db, storage, queue, settings, crypto):
     @router.get("/tasks/{task_id}/exports", name="export_list", response_model=Result)
     async def list_exports(task_id: UUID, ctx=Depends(context, scope="function")):
         session, actor = ctx
+        from app.services.task_workflow import access as task_access
+
+        await task_access(session, actor, task_id, scope="export")
         actor = await exports.human_access(session, actor)
         if await session.get(Task, task_id) is None:
             raise not_found()

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { confirmAction, display, downloadOriginal, errorText, orgAccess, orgRequest, simulatedSelections } from "../org.js";
+import { useProvidedTaskAuthority, canEditTask } from "../task-authority.js";
 import PageViewer from "./PageViewer.vue";
 const props = defineProps({ taskId: String, editable: Boolean });
 const emit = defineEmits(["add", "changed"]);
@@ -21,7 +22,8 @@ const loadCertificatePage = (pageNumber, zoom) => orgRequest("GET", `/resources/
 let previewEpoch = 0;
 const selection = computed(() => selections.value.find(s => s.id === chosen.value));
 const allowedFields = computed(() => selection.value ? kinds[selection.value.kind].fields.filter(key => typeof selection.value.data[key] === "string") : []);
-const writable = computed(() => orgAccess.role && orgAccess.role !== "viewer");
+const authority = useProvidedTaskAuthority();
+const writable = computed(() => canEditTask(authority.value) && orgAccess.role && orgAccess.role !== "viewer");
 async function load() {
   busy.value = true; error.value = ""; loaded.value = false;
   try {

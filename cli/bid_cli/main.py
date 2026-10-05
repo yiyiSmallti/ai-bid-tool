@@ -69,6 +69,7 @@ from bid_cli.schema import command_schema
 from bid_cli.score import app as score_app
 from bid_cli.score import rubric_job_exit, score_job_exit
 from bid_cli.screenshots import register as register_screenshot_commands
+from bid_cli.team_workflow import register as register_team_workflow_commands
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 app.add_typer(provider_app, name="provider")
@@ -1416,6 +1417,7 @@ platform_app.add_typer(platform_card_app, name="card")
 app.add_typer(billing_app, name="billing")
 
 register_budget_commands(task_app, billing_app)
+register_team_workflow_commands(task_app)
 
 
 @platform_card_app.command("create")

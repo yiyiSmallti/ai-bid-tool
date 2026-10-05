@@ -25,6 +25,7 @@ from app.schemas.evidence_source_contracts import (
     EvidenceSourcePreview,
 )
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 RENDER_PROFILE = "pdf-page-preview-v1"
@@ -227,6 +228,7 @@ async def bounded_render_async(*args) -> tuple[bytes, EvidenceSourcePreview, dat
         RENDER_SLOTS.release()
 
 
+@task_authorized("evidence:source:write", write=True, lock=False)
 async def create_source(
     session: AsyncSession,
     actor: Identity,
@@ -254,8 +256,9 @@ async def create_source(
     )
     # Certificate selection locks the task first; after taking the same lock, re-read
     # what selection or a concurrent archive may have changed during rendering.
-    if await session.scalar(select(Task).where(Task.id == task_id).with_for_update()) is None:
-        raise not_found()
+    from app.services.task_workflow import access as task_access
+
+    await task_access(session, actor, task_id, scope="evidence:source:write", write=True)
     snapshot, original, existing = await source_inputs(session, task_id, body)
     if existing is not None:
         return {"source": source_data(existing, snapshot, original), "duplicate": True}
@@ -292,6 +295,7 @@ async def create_source(
     return {"source": source_data(row, snapshot, original), "duplicate": False}
 
 
+@task_authorized("evidence:source:read")
 async def list_sources(
     session: AsyncSession, actor: Identity, task_id: UUID, *, history: bool = False
 ):
@@ -322,6 +326,7 @@ async def list_sources(
     )
 
 
+@task_authorized("evidence:source:read", parent=("source_id", "evidence_sources"))
 async def require_source(session: AsyncSession, actor: Identity, source_id: UUID):
     require_access(actor, "evidence:source:read")
     row = (await session.execute(joined_sources().where(EvidenceSource.id == source_id))).first()

@@ -42,8 +42,10 @@ from app.services.assessment_bounds import (
 )
 from app.services.assessment_reads import dated_anchor
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 
 
+@task_authorized("score:read")
 async def get_run(
     session: AsyncSession, actor: Identity, task_id: UUID, report_id: UUID
 ) -> tuple[Identity, ScoreReport]:
@@ -371,6 +373,7 @@ async def page(
     return projected.model_copy(update={"data": data, "items": items})
 
 
+@task_authorized("score:read")
 async def history(
     session: AsyncSession,
     actor: Identity,

@@ -3,6 +3,8 @@
 import asyncio
 import hashlib
 import re
+from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import NoReturn
@@ -58,6 +60,7 @@ from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_act
 from app.services.evidence_sources import joined_sources, require_source, source_data
 from app.services.evidence_sources import require_access as require_source_access
 from app.services.extraction import locate_quote
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 # Only explicit scalar declaration fields can be cited. URLs and identifiers are not proof.
@@ -266,6 +269,59 @@ def citation_valid_in_chunk(requirement: Requirement, chunk: Chunk | None) -> bo
     )
 
 
+def _citation_location_key(value):
+    """Hash JSON locations with the same scalar equality as the persisted dictionaries."""
+    if isinstance(value, dict):
+        return frozenset((key, _citation_location_key(item)) for key, item in value.items())
+    if isinstance(value, list):
+        return tuple(_citation_location_key(item) for item in value)
+    return value
+
+
+def citation_validity_batch(
+    requirements: Iterable[Requirement], chunks: Mapping[UUID, Chunk]
+) -> dict[UUID, bool]:
+    """The scalar citation predicate, grouped by source rather than requirement UUID.
+
+    Keep page and full Word-location bindings before matching. A block's ambiguity
+    is independent of other blocks, including blocks with identical locations.
+    Every source gets one literal/normalized batch; a result is never persisted or
+    reused across projections, so mutable citation corrections remain visible.
+    """
+    from app.services.extraction import locate_spans
+
+    grouped: dict[UUID, list[Requirement]] = defaultdict(list)
+    valid: dict[UUID, bool] = {}
+    for requirement in requirements:
+        grouped[requirement.chunk_id].append(requirement)
+        valid[requirement.id] = False
+    for chunk_id, members in grouped.items():
+        chunk = chunks.get(chunk_id)
+        if chunk is None or not chunk.citation_verified:
+            continue
+        sources: dict[str, list[Requirement]] = defaultdict(list)
+        locations: dict[object, list[Requirement]] = defaultdict(list)
+        for requirement in members:
+            if chunk.task_id != requirement.task_id or chunk.document_id != requirement.document_id:
+                continue
+            if requirement.page is not None:
+                if chunk.page == requirement.page and requirement.location is None:
+                    sources[chunk.text].append(requirement)
+            elif requirement.location and chunk.blocks:
+                locations[_citation_location_key(requirement.location)].append(requirement)
+        for block in chunk.blocks or []:
+            location = {key: value for key, value in block.items() if key != "text"}
+            for requirement in locations.get(_citation_location_key(location), ()):
+                if location == requirement.location:
+                    sources[block["text"]].append(requirement)
+        for original, located in sources.items():
+            spans = locate_spans(original, (row.quote for row in located), require_verbatim=True)
+            for requirement in located:
+                if spans[requirement.quote][0] is not None:
+                    valid[requirement.id] = True
+    return valid
+
+
 async def location_label(session: AsyncSession, requirement: Requirement) -> str:
     return location_label_for(requirement, await session.get(Document, requirement.document_id))
 
@@ -412,6 +468,7 @@ async def resolve_material(
     }
 
 
+@task_authorized("card:read", task="row.task_id")
 async def evidence_view(session: AsyncSession, actor: Identity, row: Evidence) -> dict:
     if row.kind == "image_region":
         from app.services.screenshots import image_evidence_view
@@ -545,6 +602,32 @@ async def image_state(
     return warnings, False
 
 
+def card_eligibility(
+    revision,
+    requirement,
+    *,
+    valid_citation,
+    generation_stale=False,
+    invalid_image=False,
+    inactive_evidence=False,
+):
+    """Single eligibility precedence for content views and board metadata reads."""
+    if not valid_citation:
+        return "invalid_citation"
+    elif revision_quote_hash(revision, requirement) != quote_hash(requirement.quote):
+        return "needs_reconfirmation"
+    elif revision.disposition == "comply_only":
+        return "comply_only"
+    elif generation_stale or invalid_image or inactive_evidence:
+        return "stale_material"
+    elif revision.review_domain is None:
+        return "unclassified"
+    elif revision.state != "confirmed":
+        return "unconfirmed"
+    else:
+        return "eligible"
+
+
 def card_view_data(
     card: ResponseCard,
     revision: ResponseCardRevision,
@@ -557,20 +640,14 @@ def card_view_data(
     memory_lineage: dict | None = None,
 ) -> dict:
     """One projection/eligibility rule for both single-card and batched reads."""
-    if not valid_citation:
-        eligibility = "invalid_citation"
-    elif revision_quote_hash(revision, requirement) != quote_hash(requirement.quote):
-        eligibility = "needs_reconfirmation"
-    elif revision.disposition == "comply_only":
-        eligibility = "comply_only"
-    elif generation_stale or invalid_image or any(not row["active_selection"] for row in evidence):
-        eligibility = "stale_material"
-    elif revision.review_domain is None:
-        eligibility = "unclassified"
-    elif revision.state != "confirmed":
-        eligibility = "unconfirmed"
-    else:
-        eligibility = "eligible"
+    eligibility = card_eligibility(
+        revision,
+        requirement,
+        valid_citation=valid_citation,
+        generation_stale=generation_stale,
+        invalid_image=invalid_image,
+        inactive_evidence=any(not row["active_selection"] for row in evidence),
+    )
     return CardView.model_validate(
         dict(
             id=card.id,
@@ -842,6 +919,7 @@ class CardReadBatch:
             generation_manifests=generation_manifests,
             by_requirement={row.requirement_id: row for row in loaded_cards.values()},
             images=images,
+            _citations=citation_validity_batch(requirements, chunks),
         )
 
     def citation_valid(self, requirement: Requirement) -> bool:
@@ -1078,6 +1156,7 @@ async def build_evidence(
     return rows
 
 
+@task_authorized("card:write", write=True)
 async def create_card(
     session: AsyncSession, actor: Identity, task_id: UUID, body: CardCreate, storage: Storage
 ):
@@ -1108,6 +1187,7 @@ async def create_card(
     return await card_view(session, actor, card, revision, requirement)
 
 
+@task_authorized("card:write", parent=("card_id", "response_cards"), write=True)
 async def update_card(
     session: AsyncSession, actor: Identity, card_id: UUID, body: CardUpdate, storage: Storage
 ):
@@ -1142,6 +1222,7 @@ async def update_card(
     return await card_view(session, actor, card, revision, requirement)
 
 
+@task_authorized("card:read", parent=("card_id", "response_cards"))
 async def show_card(
     session: AsyncSession, actor: Identity, card_id: UUID, *, history: bool = False
 ):
@@ -1163,6 +1244,7 @@ async def show_card(
     }
 
 
+@task_authorized("card:read")
 async def list_cards(session: AsyncSession, actor: Identity, task_id: UUID, job_id: UUID):
     actor = await access(session, actor, "card:read")
     _, requirements = await extraction_scope(session, task_id, job_id)
@@ -1188,6 +1270,7 @@ async def list_cards(session: AsyncSession, actor: Identity, task_id: UUID, job_
     return {"task_id": str(task_id), "extraction_job_id": str(job_id)}, slots
 
 
+@task_authorized("evidence:confirm", parent=("card_id", "response_cards"), write=True)
 async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, body: CardClassify):
     actor = await access(session, actor, "evidence:confirm")
     human(actor, admin=True)
@@ -1212,6 +1295,15 @@ async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, b
     return await card_view(session, actor, card, revision, requirement)
 
 
+@task_authorized(
+    lambda values: (
+        "evidence:confirm"
+        if values["body"].action in {"confirm", "reject", "needs_material", "reopen"}
+        else "card:write"
+    ),
+    parent=("card_id", "response_cards"),
+    write=True,
+)
 async def card_action(
     session: AsyncSession, actor: Identity, card_id: UUID, body: CardAction, storage: Storage
 ):
@@ -1221,6 +1313,16 @@ async def card_action(
     expected(card, body.expected_revision)
     view = await card_view(session, actor, card, previous, requirement)
     if decision:
+        from app.services.task_workflow import access as task_access
+
+        await task_access(
+            session,
+            actor,
+            card.task_id,
+            scope="evidence:confirm",
+            write=True,
+            domain=previous.review_domain,
+        )
         human(actor, previous.review_domain)
     transitions = {
         "submit": ("draft", "pending_review"),
@@ -1340,6 +1442,7 @@ async def card_action(
     return await card_view(session, actor, card, revision, requirement)
 
 
+@task_authorized("evidence:confirm", write=True, review=True)
 async def dispose_cards(
     session: AsyncSession, actor: Identity, task_id: UUID, body: DispositionBatch
 ):
@@ -1413,6 +1516,7 @@ async def dispose_cards(
     }
 
 
+@task_authorized("evidence:confirm", write=True)
 async def set_redaction(
     session: AsyncSession, actor: Identity, task_id: UUID, body: TaskRedactionSet
 ):

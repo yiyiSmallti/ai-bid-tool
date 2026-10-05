@@ -56,15 +56,13 @@ DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.docu
 
 
 def actor(session, org, user, kind="session", *, run=None, attempt=None):
+    from task_fixtures import actor_context
+
+    actor_context(session, org, user, kind=kind)
     session.execute(
-        text("""SELECT set_config('app.current_org',:org,true),
-          set_config('app.actor_user_id',:user,true),set_config('app.actor_kind',:kind,true),
-          set_config('app.actor_token_id','',true),set_config('app.export_run_id',:run,true),
+        text("""SELECT set_config('app.export_run_id',:run,true),
           set_config('app.export_attempt_id',:attempt,true)"""),
         {
-            "org": str(org),
-            "user": str(user),
-            "kind": kind,
             "run": str(run) if run else "",
             "attempt": str(attempt) if attempt else "",
         },

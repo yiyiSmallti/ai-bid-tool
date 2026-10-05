@@ -6,7 +6,39 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Team workflow slice 1
+
+- Batched board, response-card and scoring citation validation by bound source,
+  sharing exact/normalized searches while preserving verbatim, ambiguity and
+  Unicode-unit checks. Added a 300-page, 5,000-requirement board bound and frozen
+  predicate equivalence coverage; see [bulk citations](notes/docx-citations.md#how-it-works).
+- Corrected offline event production to derive missing org context only for the
+  effective privileged database role, preserving strict runtime/direct-append
+  checks. Fixed disabled-owner recovery autoflush and released task locks during
+  local source rendering, with live authorization rechecked at publication.
+- Updated existing SQL/API fixtures to establish explicit task members through
+  the real workflow services, retained permission and tenant-isolation assertions,
+  and corrected Element Plus reason/checkbox selectors in the browser scenarios.
+- Added task owners, explicit task members and bounded review domains, intersected
+  with current org roles and token scopes. Human org administrators retain the
+  approved read/member-recovery exception; existing task, document, card, resource,
+  job, check, score, export and signed-download services apply the task boundary.
+- Added revision-checked handover, archive and explicit unarchive. Busy tasks
+  cannot archive; active-state checks fence submission, worker admission and
+  publication while preserving settlement of dispatched vendor calls.
+- Migration `0041` adds FORCE RLS workflow/member/event tables and reviewed
+  owner/member import, preflight and cutover administration. Unresolved legacy
+  tasks block cutover; no historical activity grants implicit task access.
+- Added bounded task-board/progress/activity reads, encrypted continuation and
+  event cursors, same-transaction metadata events, SSE reconnection and polling.
+  Added Chinese Element Plus board/member pages and slice 1 CLI/schema commands.
+- Approved all team-workflow defaults and the ADR 0005 co-sign amendment. Assignment,
+  discussion and co-sign execution remain later slices. Added API/PostgreSQL,
+  CLI and mocked-API browser acceptance; see [Team workflow](notes/team-workflow.md).
+
 ## 2026-10-05: Check and score console assessments
+
+- Integrated task membership, archival and task responsibility domains into assessment discovery, console projections and shared review mutations. Capability hints use the same task policy; authorized denials retain their audited error semantics.
 
 - Implemented the approved rules-check, combined-check, rubric-review and score-report console flow with Element Plus, Chinese labels, explicit preview/consent, durable job recovery and links to the responsible response-card review.
 - Added bounded assessment input, job and verified-citation reads plus opt-in check/rubric/score projections. SQL keysets precede narrative hydration; principal/snapshot-bound cursors, complete-row byte limits and two-org API tests preserve existing authorization. No migration or Provider algorithm change was introduced.

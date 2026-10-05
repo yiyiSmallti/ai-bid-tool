@@ -71,6 +71,19 @@ block. An inner `5mm插孔` match in `3.5mm插孔` therefore does not prevent re
 of the single standalone `5mm插孔` occurrence. The same rule distinguishes
 `内存：≥16 GB` from its occurrence inside `扩展内存：≥16 GB`.
 
+Bulk service reads use `citation_validity_batch` in
+[response_cards.py](../../server/app/services/response_cards.py). It checks each
+requirement's task, document, verified chunk, page or complete Word location before
+grouping quotes by that source. `locate_spans` normalizes each source once and
+shares searches for normalized aliases. Large sources with many quotes use an
+Aho-Corasick scan; smaller batches use Python's native substring search. Both
+retain overlapping matches, whole normalization units and the boundary preference
+above. Verbatim presence is checked independently: the boundary-selected normalized
+span need not have the quote's exact typography if it also occurs verbatim elsewhere
+in the same source. An identity-NFKC source with only identity-NFKC, non-combining
+characters uses singleton offsets; other text retains the normalization-unit walk.
+Validity results live only in the read graph, so a later read sees citation repairs.
+
 The ★ rule (`★`, 实质性要求, 否决投标, 废标) splits each block on Chinese or ASCII
 semicolons and newlines. It uses the located original quote interval to mark
 every extracted item contained in the explicitly marked segment, leaves adjacent
@@ -105,6 +118,7 @@ cannot be located uniquely remain unchanged.
 
 - [server/app/services/docx_blocks.py](../../server/app/services/docx_blocks.py): `parse_docx`, `Walker`, `skipped_content`.
 - [server/app/services/extraction.py](../../server/app/services/extraction.py): `normalize`, `locate_quote`, `location_of`, `split_cited`, `merge_starred`.
+- [server/app/services/response_cards.py](../../server/app/services/response_cards.py): `citation_validity_batch` and the scalar citation predicate.
 - [server/app/providers/llm.py](../../server/app/providers/llm.py): block rendering and `ref` mapping.
 - [server/migrations/versions/0013_docx_locations.py](../../server/migrations/versions/0013_docx_locations.py): schema.
 - [server/migrations/versions/0017_exact_citations.py](../../server/migrations/versions/0017_exact_citations.py): exact-source quote provenance for new and legacy requirements.

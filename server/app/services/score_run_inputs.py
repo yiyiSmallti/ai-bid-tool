@@ -141,6 +141,9 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
         else {}
     )
     secret_items, manifest_items = [], []
+    citations = cards.citation_validity_batch(
+        (requirement for requirement, _ in located), {chunk.id: chunk for _, chunk in located}
+    )
     for requirement, chunk in located:
         row = by_requirement[requirement.id]
         entry = fixed[str(requirement.id)]
@@ -155,7 +158,7 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
             != entry["card_revision_id"]
         ):
             integrity()
-        if not cards.citation_valid_in_chunk(requirement, chunk):
+        if not citations[requirement.id]:
             cards.fail("invalid_input_citation", "Requirement source cannot be verified", 409, 4)
         revision = None
         if row.card_revision_id:

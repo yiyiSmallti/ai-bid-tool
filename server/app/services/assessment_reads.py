@@ -68,16 +68,23 @@ from app.services.assessment_bounds import (
     cursor,
     digest,
     fit_items,
+    principal,
     read_cursor,
     snapshot_token,
     text_window,
 )
 from app.services.auth import Identity
 from app.services.extraction import source_text
+from app.services.task_authorization import task_authorized
+from app.services.task_workflow import access as task_access
+
+type ActionChecks = dict[tuple[str, UUID, str, str | None], tuple[str, ...]]
 
 
-def action(
+async def action(
+    session: AsyncSession,
     actor: Identity,
+    task_id: UUID,
     name: Any,
     scope: str,
     *,
@@ -85,9 +92,31 @@ def action(
     domain: Any = None,
     valid: bool = True,
     human: bool = False,
+    checks: ActionChecks | None = None,
 ) -> ActionAvailability:
-    blockers = []
-    if scope not in actor.scopes:
+    key = (digest(principal(actor)), task_id, scope, domain)
+    cached = checks.get(key) if checks is not None else None
+    if cached is None:
+        blockers = []
+        # Reuse only task-policy outcomes within this projection. Row state and
+        # human/role hints stay uncached; every write independently reauthorizes.
+        try:
+            await task_access(
+                session, actor, task_id, scope=scope, write=True, domain=domain, lock=False
+            )
+        except ServiceError as error:
+            if error.status == 404:
+                raise
+            if error.code not in {"forbidden", "task_archived"}:
+                raise
+            blockers.append(error.code)
+        if checks is not None:
+            # access may refresh the actor's live role/scopes.
+            key = (digest(principal(actor)), task_id, scope, domain)
+            checks[key] = tuple(blockers)
+    else:
+        blockers = list(cached)
+    if scope not in actor.scopes and "forbidden" not in blockers:
         blockers.append("forbidden")
     if actor.role == "viewer" or (role is not None and actor.role != role):
         blockers.append("wrong_role")
@@ -104,6 +133,7 @@ def action(
     )
 
 
+@task_authorized("check:read")
 async def inputs(
     session: AsyncSession,
     actor: Identity,
@@ -112,6 +142,7 @@ async def inputs(
     storage: Storage,
     settings: Settings,
 ) -> AssessmentInputsData:
+    checks: ActionChecks = {}
     actor = await check_inputs.access(session, actor, "check:read")
     actor.require("score:read")
     task = await session.get(Task, task_id)
@@ -177,9 +208,15 @@ async def inputs(
         redaction_revision=task.model_redaction_revision,
         task_budget=await budgets.view(session, task, settings),
         actions=[
-            action(actor, "check_run", "check:run", valid=available),
-            action(actor, "rubric_generate", "score:rubric:generate"),
-            action(actor, "score_run", "score:run", valid=available),
+            await action(
+                session, actor, task_id, "check_run", "check:run", valid=available, checks=checks
+            ),
+            await action(
+                session, actor, task_id, "rubric_generate", "score:rubric:generate", checks=checks
+            ),
+            await action(
+                session, actor, task_id, "score_run", "score:run", valid=available, checks=checks
+            ),
         ],
     )
 
@@ -224,6 +261,7 @@ def dated_anchor(anchor: dict[str, Any] | None) -> tuple[datetime, UUID] | None:
         ) from None
 
 
+@task_authorized("job:read")
 async def jobs(
     session: AsyncSession,
     actor: Identity,
@@ -232,6 +270,7 @@ async def jobs(
     storage: Storage,
     settings: Settings,
 ) -> AssessmentJobPage:
+    checks: ActionChecks = {}
     actor = await cards.access(session, actor, "job:read")
     if await session.get(Task, task_id) is None:
         raise not_found()
@@ -285,7 +324,7 @@ async def jobs(
             "score": "score:run",
             "score_rubric": "score:rubric:generate",
         }[job.kind]
-        cancel = action(actor, "job_cancel", cancel_scope)
+        cancel = await action(session, actor, task_id, "job_cancel", cancel_scope, checks=checks)
         if "job:cancel" not in actor.scopes or job.status not in {"queued", "running", "cancelled"}:
             cancel = cancel.model_copy(
                 update={
@@ -433,6 +472,7 @@ async def check_page(
     storage: Storage,
     settings: Settings,
 ) -> CheckPage:
+    checks: ActionChecks = {}
     actor, run = await check.get_run(session, actor, report_id, storage)
     snapshot = await check_snapshot(session, run)
     binding = {
@@ -770,12 +810,15 @@ async def check_page(
     if query.part == "findings":
         for value in values:
             role = {"commercial": "bidder", "technical": "technical"}.get(value.review_domain)
-            availability = action(
+            availability = await action(
+                session,
                 actor,
+                run.task_id,
                 "finding_reopen" if value.status == "dismissed" else "finding_dismiss",
                 "check:decide",
                 role=role,
                 domain=value.review_domain,
+                checks=checks,
                 valid=not invalidated,
                 human=True,
             )
@@ -809,6 +852,7 @@ async def check_page(
     )
 
 
+@task_authorized("check:read")
 async def check_history(
     session: AsyncSession,
     actor: Identity,
@@ -892,6 +936,7 @@ async def check_history(
     return data, items
 
 
+@task_authorized("task:read")
 async def citation(
     session: AsyncSession,
     actor: Identity,

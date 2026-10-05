@@ -29,6 +29,7 @@ from app.models.entities import (
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_fixtures import finish_scope, seed_task
 
 TABLES = (
     "products",
@@ -58,6 +59,7 @@ def resource_rows(tenants, admin_engine):
     with Session(admin_engine) as session, session.begin():
         for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
             task = Task(id=uuid4(), org_id=org, created_by=user, name="Synthetic RLS task")
+            seed_task(session, task)
             product = Product(id=uuid4(), org_id=org, created_by=user, current_revision=1)
             session.add_all([task, product])
             session.flush()
@@ -252,6 +254,7 @@ def resource_rows(tenants, admin_engine):
                 "feature_revision": feature_revision.id,
                 "feature_snapshot": feature_snapshot.id,
             }
+            finish_scope(session)
     return {**tenants, "ids": ids}
 
 

@@ -18201,6 +18201,11 @@
                     "default": null,
                     "title": "Proposal Run Id"
                   },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
+                  },
                   "task_id": {
                     "anyOf": [
                       {
@@ -18700,6 +18705,11 @@
                     ],
                     "default": null,
                     "title": "Proposal Run Id"
+                  },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
                   },
                   "task_id": {
                     "anyOf": [
@@ -19601,6 +19611,11 @@
                     "default": null,
                     "title": "Proposal Run Id"
                   },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
+                  },
                   "task_id": {
                     "anyOf": [
                       {
@@ -20091,6 +20106,11 @@
                     ],
                     "default": null,
                     "title": "Proposal Run Id"
+                  },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
                   },
                   "task_id": {
                     "anyOf": [
@@ -20954,6 +20974,11 @@
                     ],
                     "default": null,
                     "title": "Proposal Run Id"
+                  },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
                   },
                   "task_id": {
                     "anyOf": [
@@ -22461,6 +22486,11 @@
                     "default": null,
                     "title": "Proposal Run Id"
                   },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
+                  },
                   "task_id": {
                     "anyOf": [
                       {
@@ -23009,6 +23039,11 @@
                     ],
                     "default": null,
                     "title": "Proposal Run Id"
+                  },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
                   },
                   "task_id": {
                     "anyOf": [
@@ -45808,6 +45843,1735 @@
             "type": "object"
           }
         },
+        "task activity": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "WorkflowAction": {
+                "enum": [
+                  "member_set",
+                  "member_removed",
+                  "owner_handed_over",
+                  "task_archived",
+                  "task_restored",
+                  "assignment_set",
+                  "thread_created",
+                  "comment_replied",
+                  "cosign_policy_set",
+                  "task_rule_set",
+                  "review_signed",
+                  "review_invalidated",
+                  "card_changed",
+                  "job_changed"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "$ref": "#/$defs/WorkflowAction"
+              },
+              "actor_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Actor User Id"
+              },
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Card Id"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "job_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Job Id"
+              },
+              "requirement_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Requirement Id"
+              },
+              "thread_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Thread Id"
+              }
+            },
+            "required": [
+              "id",
+              "actor_user_id",
+              "action",
+              "created_at"
+            ],
+            "title": "BoardActivityView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Card Id"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "thread_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Thread Id"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "next_cursor",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "task archive": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "reason"
+            ],
+            "title": "WorkflowMutation",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "workflow"
+            ],
+            "title": "TaskWorkflowData",
+            "type": "object"
+          }
+        },
+        "task board": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "bucket",
+              "options": [
+                "--bucket"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "category",
+              "options": [
+                "--category"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "starred",
+              "options": [
+                "--starred"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "owner",
+              "options": [
+                "--owner"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "unassigned",
+              "options": [
+                "--unassigned"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "domain",
+              "options": [
+                "--domain"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "blocker",
+              "options": [
+                "--blocker"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "mine",
+              "options": [
+                "--mine"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "BoardBlocker": {
+                "enum": [
+                  "missing_card",
+                  "unclassified",
+                  "invalid_citation",
+                  "stale_material",
+                  "needs_reconfirmation",
+                  "unconfirmed",
+                  "rejected",
+                  "needs_material",
+                  "pending_cosign",
+                  "invalidated_cosign",
+                  "task_archived",
+                  "unconfirmed_evidence",
+                  "expired_certificate",
+                  "certificate_inactive",
+                  "prototype_undecided",
+                  "prototype_replacement_pending",
+                  "missing_reviewer",
+                  "unassigned",
+                  "assignee_unavailable",
+                  "job_failed",
+                  "insufficient_balance",
+                  "spend_cap_reached",
+                  "job_charge_limit_exceeded",
+                  "job_call_limit_exceeded"
+                ],
+                "type": "string"
+              },
+              "BoardBucket": {
+                "enum": [
+                  "gap",
+                  "draft_card",
+                  "pending_review",
+                  "needs_material",
+                  "confirmed",
+                  "comply_only"
+                ],
+                "type": "string"
+              },
+              "Category": {
+                "enum": [
+                  "qualification",
+                  "technical",
+                  "scoring",
+                  "substantive"
+                ],
+                "title": "Category",
+                "type": "string"
+              },
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "blocker": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/BoardBlocker"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "bucket": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/BoardBucket"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "category": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Category"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "mine": {
+                "default": false,
+                "title": "Mine",
+                "type": "boolean"
+              },
+              "owner_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Owner User Id"
+              },
+              "review_domain": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ReviewDomain"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "starred": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Starred"
+              },
+              "unassigned": {
+                "default": false,
+                "title": "Unassigned",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "extraction_job_id"
+            ],
+            "title": "BoardQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "BoardActionTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "task",
+                      "requirement",
+                      "card",
+                      "job",
+                      "thread",
+                      "evidence"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id"
+                ],
+                "title": "BoardActionTarget",
+                "type": "object"
+              },
+              "BoardActionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "$ref": "#/$defs/BoardNextAction"
+                  },
+                  "eligible_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "eligible_user_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Eligible User Ids",
+                    "type": "array"
+                  },
+                  "target": {
+                    "$ref": "#/$defs/BoardActionTarget"
+                  }
+                },
+                "required": [
+                  "code",
+                  "target",
+                  "eligible_user_ids"
+                ],
+                "title": "BoardActionView",
+                "type": "object"
+              },
+              "BoardBlocker": {
+                "enum": [
+                  "missing_card",
+                  "unclassified",
+                  "invalid_citation",
+                  "stale_material",
+                  "needs_reconfirmation",
+                  "unconfirmed",
+                  "rejected",
+                  "needs_material",
+                  "pending_cosign",
+                  "invalidated_cosign",
+                  "task_archived",
+                  "unconfirmed_evidence",
+                  "expired_certificate",
+                  "certificate_inactive",
+                  "prototype_undecided",
+                  "prototype_replacement_pending",
+                  "missing_reviewer",
+                  "unassigned",
+                  "assignee_unavailable",
+                  "job_failed",
+                  "insufficient_balance",
+                  "spend_cap_reached",
+                  "job_charge_limit_exceeded",
+                  "job_call_limit_exceeded"
+                ],
+                "type": "string"
+              },
+              "BoardBucket": {
+                "enum": [
+                  "gap",
+                  "draft_card",
+                  "pending_review",
+                  "needs_material",
+                  "confirmed",
+                  "comply_only"
+                ],
+                "type": "string"
+              },
+              "BoardNextAction": {
+                "enum": [
+                  "create_card",
+                  "edit_card",
+                  "classify",
+                  "submit",
+                  "confirm",
+                  "cosign",
+                  "supply_material",
+                  "repair_citation",
+                  "refresh_material",
+                  "reopen",
+                  "view",
+                  "assign",
+                  "find_reviewer",
+                  "view_job",
+                  "resolve_budget",
+                  "prototype_decide",
+                  "unarchive"
+                ],
+                "type": "string"
+              },
+              "BoardRowFlags": {
+                "additionalProperties": false,
+                "properties": {
+                  "certificate_date_advisory": {
+                    "title": "Certificate Date Advisory",
+                    "type": "boolean"
+                  },
+                  "final_export_prototype_blocked": {
+                    "title": "Final Export Prototype Blocked",
+                    "type": "boolean"
+                  },
+                  "human_needs_material": {
+                    "title": "Human Needs Material",
+                    "type": "boolean"
+                  },
+                  "model_needs_material_hint": {
+                    "title": "Model Needs Material Hint",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "human_needs_material",
+                  "model_needs_material_hint",
+                  "certificate_date_advisory",
+                  "final_export_prototype_blocked"
+                ],
+                "title": "BoardRowFlags",
+                "type": "object"
+              },
+              "CardEligibility": {
+                "enum": [
+                  "eligible",
+                  "comply_only",
+                  "unconfirmed",
+                  "unclassified",
+                  "stale_material",
+                  "invalid_citation",
+                  "needs_reconfirmation"
+                ],
+                "type": "string"
+              },
+              "CardState": {
+                "enum": [
+                  "draft",
+                  "pending_review",
+                  "confirmed",
+                  "rejected",
+                  "needs_material"
+                ],
+                "type": "string"
+              },
+              "Category": {
+                "enum": [
+                  "qualification",
+                  "technical",
+                  "scoring",
+                  "substantive"
+                ],
+                "title": "Category",
+                "type": "string"
+              },
+              "CoSignSummary": {
+                "additionalProperties": false,
+                "properties": {
+                  "pending_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "required_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "round_revision": {
+                    "minimum": 0,
+                    "title": "Round Revision",
+                    "type": "integer"
+                  },
+                  "signed_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "status": {
+                    "enum": [
+                      "not_required",
+                      "pending",
+                      "partial",
+                      "complete",
+                      "invalidated"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "round_revision",
+                  "required_domains"
+                ],
+                "title": "CoSignSummary",
+                "type": "object"
+              },
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "assignment_revision": {
+                "minimum": 0,
+                "title": "Assignment Revision",
+                "type": "integer"
+              },
+              "blockers": {
+                "items": {
+                  "$ref": "#/$defs/BoardBlocker"
+                },
+                "maxItems": 20,
+                "title": "Blockers",
+                "type": "array"
+              },
+              "bucket": {
+                "$ref": "#/$defs/BoardBucket"
+              },
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Card Id"
+              },
+              "card_revision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "card_state": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CardState"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "category": {
+                "$ref": "#/$defs/Category"
+              },
+              "co_sign": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CoSignSummary"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "comment_thread_count": {
+                "minimum": 0,
+                "title": "Comment Thread Count",
+                "type": "integer"
+              },
+              "eligibility": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CardEligibility"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "flags": {
+                "$ref": "#/$defs/BoardRowFlags"
+              },
+              "next_actions": {
+                "items": {
+                  "$ref": "#/$defs/BoardActionView"
+                },
+                "maxItems": 20,
+                "title": "Next Actions",
+                "type": "array"
+              },
+              "owner_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Owner User Id"
+              },
+              "requirement_id": {
+                "format": "uuid",
+                "title": "Requirement Id",
+                "type": "string"
+              },
+              "review_domain": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ReviewDomain"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "starred": {
+                "title": "Starred",
+                "type": "boolean"
+              },
+              "title": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Title",
+                "type": "string"
+              }
+            },
+            "required": [
+              "requirement_id",
+              "title",
+              "category",
+              "starred",
+              "bucket",
+              "card_id",
+              "card_revision",
+              "card_state",
+              "eligibility",
+              "review_domain",
+              "owner_user_id",
+              "assignment_revision",
+              "co_sign",
+              "flags",
+              "blockers",
+              "next_actions",
+              "comment_thread_count"
+            ],
+            "title": "BoardRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "BoardActivityView": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/WorkflowAction"
+                  },
+                  "actor_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Actor User Id"
+                  },
+                  "card_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Card Id"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "requirement_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Requirement Id"
+                  },
+                  "thread_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Thread Id"
+                  }
+                },
+                "required": [
+                  "id",
+                  "actor_user_id",
+                  "action",
+                  "created_at"
+                ],
+                "title": "BoardActivityView",
+                "type": "object"
+              },
+              "BoardCounts": {
+                "additionalProperties": false,
+                "properties": {
+                  "comply_only": {
+                    "minimum": 0,
+                    "title": "Comply Only",
+                    "type": "integer"
+                  },
+                  "confirmed": {
+                    "minimum": 0,
+                    "title": "Confirmed",
+                    "type": "integer"
+                  },
+                  "draft_card": {
+                    "minimum": 0,
+                    "title": "Draft Card",
+                    "type": "integer"
+                  },
+                  "gap": {
+                    "minimum": 0,
+                    "title": "Gap",
+                    "type": "integer"
+                  },
+                  "needs_material": {
+                    "minimum": 0,
+                    "title": "Needs Material",
+                    "type": "integer"
+                  },
+                  "pending_review": {
+                    "minimum": 0,
+                    "title": "Pending Review",
+                    "type": "integer"
+                  },
+                  "total": {
+                    "maximum": 5000,
+                    "minimum": 0,
+                    "title": "Total",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "total",
+                  "gap",
+                  "draft_card",
+                  "pending_review",
+                  "needs_material",
+                  "confirmed",
+                  "comply_only"
+                ],
+                "title": "BoardCounts",
+                "type": "object"
+              },
+              "BoardJobView": {
+                "additionalProperties": false,
+                "properties": {
+                  "attempts": {
+                    "minimum": 0,
+                    "title": "Attempts",
+                    "type": "integer"
+                  },
+                  "extraction_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Extraction Job Id"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "progress": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/JobProgress"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Run Id"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/JobState"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "extraction_job_id",
+                  "state",
+                  "run_id",
+                  "attempts",
+                  "progress",
+                  "updated_at"
+                ],
+                "title": "BoardJobView",
+                "type": "object"
+              },
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "JobProgress": {
+                "additionalProperties": false,
+                "properties": {
+                  "completed": {
+                    "minimum": 0,
+                    "title": "Completed",
+                    "type": "integer"
+                  },
+                  "total": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Total"
+                  }
+                },
+                "required": [
+                  "completed"
+                ],
+                "title": "JobProgress",
+                "type": "object"
+              },
+              "JobState": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "succeeded",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskBudgetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "available": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Available"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "history_complete": {
+                    "title": "History Complete",
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reserved": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "spent": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Spent"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "currency_review_required"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "limit",
+                  "currency",
+                  "state",
+                  "spent",
+                  "reserved",
+                  "available",
+                  "unpriced_calls",
+                  "unresolved_calls",
+                  "history_complete",
+                  "as_of"
+                ],
+                "title": "TaskBudgetView",
+                "type": "object"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              },
+              "WorkflowAction": {
+                "enum": [
+                  "member_set",
+                  "member_removed",
+                  "owner_handed_over",
+                  "task_archived",
+                  "task_restored",
+                  "assignment_set",
+                  "thread_created",
+                  "comment_replied",
+                  "cosign_policy_set",
+                  "task_rule_set",
+                  "review_signed",
+                  "review_invalidated",
+                  "card_changed",
+                  "job_changed"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "activity": {
+                "items": {
+                  "$ref": "#/$defs/BoardActivityView"
+                },
+                "maxItems": 20,
+                "title": "Activity",
+                "type": "array"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "budget": {
+                "$ref": "#/$defs/TaskBudgetView"
+              },
+              "counts": {
+                "$ref": "#/$defs/BoardCounts"
+              },
+              "event_cursor": {
+                "$ref": "#/$defs/Cursor"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "jobs": {
+                "items": {
+                  "$ref": "#/$defs/BoardJobView"
+                },
+                "maxItems": 20,
+                "title": "Jobs",
+                "type": "array"
+              },
+              "matching": {
+                "minimum": 0,
+                "title": "Matching",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "refresh_by": {
+                "format": "date-time",
+                "title": "Refresh By",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "extraction_job_id",
+              "workflow",
+              "counts",
+              "matching",
+              "returned",
+              "budget",
+              "event_cursor",
+              "as_of",
+              "refresh_by",
+              "jobs",
+              "activity"
+            ],
+            "title": "BoardData",
+            "type": "object"
+          }
+        },
         "task budget history": {
           "cli_parameters": [
             {
@@ -46713,6 +48477,459 @@
             "type": "object"
           }
         },
+        "task events": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "100",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "0",
+              "multiple": false,
+              "name": "wait_seconds",
+              "options": [
+                "--wait-seconds"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 100,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "wait_seconds": {
+                "default": 0,
+                "maximum": 25,
+                "minimum": 0,
+                "title": "Wait Seconds",
+                "type": "integer"
+              }
+            },
+            "title": "EventReplayQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "BoardChanged": {
+                "additionalProperties": false,
+                "properties": {
+                  "card_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Card Ids",
+                    "type": "array"
+                  },
+                  "comment_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Comment Id"
+                  },
+                  "extraction_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Extraction Job Id"
+                  },
+                  "invalidate_all": {
+                    "default": false,
+                    "title": "Invalidate All",
+                    "type": "boolean"
+                  },
+                  "requirement_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Requirement Ids",
+                    "type": "array"
+                  },
+                  "thread_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Thread Id"
+                  },
+                  "type": {
+                    "const": "board_changed",
+                    "default": "board_changed",
+                    "title": "Type",
+                    "type": "string"
+                  }
+                },
+                "title": "BoardChanged",
+                "type": "object"
+              },
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "JobProgress": {
+                "additionalProperties": false,
+                "properties": {
+                  "completed": {
+                    "minimum": 0,
+                    "title": "Completed",
+                    "type": "integer"
+                  },
+                  "total": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Total"
+                  }
+                },
+                "required": [
+                  "completed"
+                ],
+                "title": "JobProgress",
+                "type": "object"
+              },
+              "JobProgressChanged": {
+                "additionalProperties": false,
+                "properties": {
+                  "attempts": {
+                    "minimum": 0,
+                    "title": "Attempts",
+                    "type": "integer"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "progress": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/JobProgress"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Run Id"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/JobState"
+                  },
+                  "type": {
+                    "const": "job_progress",
+                    "default": "job_progress",
+                    "title": "Type",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "state",
+                  "run_id",
+                  "attempts",
+                  "progress"
+                ],
+                "title": "JobProgressChanged",
+                "type": "object"
+              },
+              "JobState": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "succeeded",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskAccessChanged": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "type": {
+                    "const": "access_changed",
+                    "default": "access_changed",
+                    "title": "Type",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "state",
+                  "access_epoch"
+                ],
+                "title": "TaskAccessChanged",
+                "type": "object"
+              },
+              "TaskEventPayload": {
+                "discriminator": {
+                  "mapping": {
+                    "access_changed": "#/$defs/TaskAccessChanged",
+                    "board_changed": "#/$defs/BoardChanged",
+                    "job_progress": "#/$defs/JobProgressChanged"
+                  },
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/BoardChanged"
+                  },
+                  {
+                    "$ref": "#/$defs/JobProgressChanged"
+                  },
+                  {
+                    "$ref": "#/$defs/TaskAccessChanged"
+                  }
+                ]
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "cursor": {
+                "$ref": "#/$defs/Cursor"
+              },
+              "event_id": {
+                "format": "uuid",
+                "title": "Event Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "payload": {
+                "$ref": "#/$defs/TaskEventPayload"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "event_id",
+              "org_id",
+              "task_id",
+              "cursor",
+              "payload",
+              "created_at"
+            ],
+            "title": "TaskEventView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "StreamResetRequired": {
+                "additionalProperties": false,
+                "properties": {
+                  "head_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "reason": {
+                    "enum": [
+                      "retention_expired",
+                      "snapshot_expired",
+                      "initial_snapshot_required",
+                      "access_changed"
+                    ],
+                    "title": "Reason",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "reset_required",
+                    "default": "reset_required",
+                    "title": "Type",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "reason",
+                  "head_cursor"
+                ],
+                "title": "StreamResetRequired",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "head_cursor": {
+                "$ref": "#/$defs/Cursor"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reset_required": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/StreamResetRequired"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "next_cursor",
+              "head_cursor",
+              "has_more"
+            ],
+            "title": "EventReplayData",
+            "type": "object"
+          }
+        },
         "task feature add": {
           "cli_parameters": [
             {
@@ -46823,6 +49040,252 @@
           ],
           "input": null
         },
+        "task handover": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "to_user",
+              "options": [
+                "--to-user"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "previous_owner_role",
+              "options": [
+                "--previous-owner-role"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "previous_domain",
+              "options": [
+                "--previous-domain"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "MemberRole": {
+                "enum": [
+                  "contributor",
+                  "reviewer",
+                  "observer"
+                ],
+                "type": "string"
+              },
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "previous_owner_review_domains": {
+                "$ref": "#/$defs/Domains"
+              },
+              "previous_owner_role": {
+                "$ref": "#/$defs/MemberRole"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              },
+              "target_user_id": {
+                "format": "uuid",
+                "title": "Target User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "reason",
+              "target_user_id",
+              "previous_owner_role"
+            ],
+            "title": "TaskOwnerHandover",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "workflow"
+            ],
+            "title": "TaskWorkflowData",
+            "type": "object"
+          }
+        },
         "task list": {
           "cli_parameters": [
             {
@@ -46837,6 +49300,929 @@
             }
           ],
           "input": null
+        },
+        "task member candidates": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "description": "Only active verified same-org Membership labels, never a global user directory.",
+            "properties": {
+              "active": {
+                "const": true,
+                "default": true,
+                "title": "Active",
+                "type": "boolean"
+              },
+              "display_label": {
+                "maxLength": 254,
+                "minLength": 1,
+                "title": "Display Label",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "org_role": {
+                "enum": [
+                  "admin",
+                  "bidder",
+                  "technical",
+                  "viewer"
+                ],
+                "title": "Org Role",
+                "type": "string"
+              },
+              "user_id": {
+                "format": "uuid",
+                "title": "User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "user_id",
+              "display_label",
+              "org_role"
+            ],
+            "title": "MemberCandidateView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Card Id"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "thread_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Thread Id"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "next_cursor",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "task member list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskRole": {
+                "enum": [
+                  "owner",
+                  "contributor",
+                  "reviewer",
+                  "observer"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "active": {
+                "title": "Active",
+                "type": "boolean"
+              },
+              "display_label": {
+                "anyOf": [
+                  {
+                    "maxLength": 254,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Display Label"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "review_domains": {
+                "$ref": "#/$defs/Domains"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "role": {
+                "$ref": "#/$defs/TaskRole"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "user_id": {
+                "format": "uuid",
+                "title": "User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role",
+              "org_id",
+              "task_id",
+              "user_id",
+              "active",
+              "revision"
+            ],
+            "title": "TaskMemberView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Card Id"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "thread_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Thread Id"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "next_cursor",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "task member remove": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "user",
+              "options": [
+                "--user"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "reason"
+            ],
+            "title": "WorkflowMutation",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "workflow"
+            ],
+            "title": "TaskWorkflowData",
+            "type": "object"
+          }
+        },
+        "task member set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "user",
+              "options": [
+                "--user"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "MemberRole": {
+                "enum": [
+                  "contributor",
+                  "reviewer",
+                  "observer"
+                ],
+                "type": "string"
+              },
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              },
+              "review_domains": {
+                "$ref": "#/$defs/Domains"
+              },
+              "role": {
+                "$ref": "#/$defs/MemberRole"
+              }
+            },
+            "required": [
+              "role",
+              "expected_revision",
+              "reason"
+            ],
+            "title": "TaskMemberSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskMemberView": {
+                "additionalProperties": false,
+                "properties": {
+                  "active": {
+                    "title": "Active",
+                    "type": "boolean"
+                  },
+                  "display_label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 254,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Display Label"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "review_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "role": {
+                    "$ref": "#/$defs/TaskRole"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "user_id": {
+                    "format": "uuid",
+                    "title": "User Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role",
+                  "org_id",
+                  "task_id",
+                  "user_id",
+                  "active",
+                  "revision"
+                ],
+                "title": "TaskMemberView",
+                "type": "object"
+              },
+              "TaskRole": {
+                "enum": [
+                  "owner",
+                  "contributor",
+                  "reviewer",
+                  "observer"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "member": {
+                "$ref": "#/$defs/TaskMemberView"
+              },
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "workflow",
+              "member"
+            ],
+            "title": "TaskMemberData",
+            "type": "object"
+          }
         },
         "task profile add": {
           "cli_parameters": [
@@ -46947,6 +50333,339 @@
             }
           ],
           "input": null
+        },
+        "task progress": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "20",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 20,
+                "maximum": 20,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "TaskProgressQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "JobProgress": {
+                "additionalProperties": false,
+                "properties": {
+                  "completed": {
+                    "minimum": 0,
+                    "title": "Completed",
+                    "type": "integer"
+                  },
+                  "total": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Total"
+                  }
+                },
+                "required": [
+                  "completed"
+                ],
+                "title": "JobProgress",
+                "type": "object"
+              },
+              "JobState": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "succeeded",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "attempts": {
+                "minimum": 0,
+                "title": "Attempts",
+                "type": "integer"
+              },
+              "extraction_job_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Extraction Job Id"
+              },
+              "job_id": {
+                "format": "uuid",
+                "title": "Job Id",
+                "type": "string"
+              },
+              "progress": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/JobProgress"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "run_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Run Id"
+              },
+              "state": {
+                "$ref": "#/$defs/JobState"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id",
+              "extraction_job_id",
+              "state",
+              "run_id",
+              "attempts",
+              "progress",
+              "updated_at"
+            ],
+            "title": "BoardJobView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "event_cursor": {
+                "$ref": "#/$defs/Cursor"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 20,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "workflow",
+              "event_cursor",
+              "as_of",
+              "next_cursor",
+              "returned"
+            ],
+            "title": "TaskProgressData",
+            "type": "object"
+          }
         },
         "task redaction set": {
           "cli_parameters": [
@@ -47221,6 +50940,321 @@
             }
           ],
           "input": null
+        },
+        "task unarchive": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "reason"
+            ],
+            "title": "WorkflowMutation",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "workflow"
+            ],
+            "title": "TaskWorkflowData",
+            "type": "object"
+          }
+        },
+        "task workflow": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskWorkflowState": {
+                "enum": [
+                  "active",
+                  "archived"
+                ],
+                "type": "string"
+              },
+              "TaskWorkflowView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "archived_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived At"
+                  },
+                  "archived_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Archived By User Id"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "last_event_cursor": {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/TaskWorkflowState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "access_epoch",
+                  "co_sign_starred",
+                  "rule_revision",
+                  "last_event_cursor"
+                ],
+                "title": "TaskWorkflowView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "workflow": {
+                "$ref": "#/$defs/TaskWorkflowView"
+              }
+            },
+            "required": [
+              "workflow"
+            ],
+            "title": "TaskWorkflowData",
+            "type": "object"
+          }
         },
         "tender parse": {
           "budget_preflight": {

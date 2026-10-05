@@ -11,8 +11,8 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.errors import ServiceError
 from app.core.security import Secrets
-from app.jobs.execution import JobExecution
-from app.models.entities import Job, Task
+from app.jobs.execution import JobExecution, locked_job
+from app.models.entities import Job
 from app.models.sandbox import SandboxAttempt, SandboxInput, SandboxRun
 from app.providers.base import ProviderFailure
 from app.providers.sandbox_fetch import FetchDenied
@@ -111,9 +111,8 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
     cancelled = False
     try:
         async with processor.db.transaction(org_id) as session:
+            current = await locked_job(session, job_id)
             await service.org_lock(session, org_id)
-            await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
-            current = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
             assert current is not None
             if current.status in {"succeeded", "failed", "cancelled"}:
                 return True
@@ -243,9 +242,8 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
                 processor.storage, run, row, attempt, result, broker, source_url
             )
             async with processor.db.transaction(org_id) as session:
-                await service.org_lock(session, org_id)
-                await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
                 current = await execution.owned_job(session)
+                await service.org_lock(session, org_id)
                 run = await session.get(SandboxRun, run_id)
                 assert run is not None
                 row = await session.get(SandboxInput, run.input_id)
@@ -356,8 +354,8 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
                 failure_metrics = {key: 0 for key in service.SandboxMetrics.model_fields}
                 failure_versions = {"accounting": "no_instance_started"}
     async with processor.db.transaction(org_id) as session:
+        current = await locked_job(session, job_id)
         await service.org_lock(session, org_id)
-        current = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
         run = await session.get(SandboxRun, run_id)
         assert current is not None and run is not None
         # Failure audit keeps the initiating identity even when that membership was revoked.

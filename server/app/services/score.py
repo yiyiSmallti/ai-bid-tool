@@ -46,6 +46,8 @@ from app.schemas.score_contracts import (
 from app.services import drafts, score_generation, score_inputs, score_normalization
 from app.services import response_cards as cards
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
+from app.services.task_workflow import access as task_access
 from app.services.versioned import audit
 
 
@@ -53,6 +55,7 @@ async def access(session: AsyncSession, actor: Identity, scope: str = "score:rea
     return await cards.access(session, actor, scope)
 
 
+@task_authorized("score:read")
 async def get_set(
     session: AsyncSession, actor: Identity, task_id: UUID, rubric_id: UUID, *, lock: bool = False
 ) -> tuple[Identity, ScoreRubricSet]:
@@ -99,6 +102,7 @@ async def require_dependencies(session: AsyncSession, actor: Identity, row: Scor
             )
         )
     }
+    citations = cards.citation_validity_batch(requirements.values(), chunks)
     for entry in row.input_manifest["requirements"]:
         requirement = requirements.get(UUID(entry["requirement_id"]))
         chunk = chunks.get(UUID(entry["chunk_id"]))
@@ -112,7 +116,7 @@ async def require_dependencies(session: AsyncSession, actor: Identity, row: Scor
         ):
             raise not_found()
         if (
-            not cards.citation_valid_in_chunk(requirement, chunk)
+            not citations[requirement.id]
             or drafts.digest(cards.source(requirement)) != entry["source_sha256"]
             or drafts.digest(
                 {
@@ -446,6 +450,7 @@ def page(
     ), [row[2] for row in selected[:limit]]
 
 
+@task_authorized("score:read")
 async def list_rubrics(
     session: AsyncSession,
     actor: Identity,
@@ -504,11 +509,20 @@ async def list_rubrics(
 async def human_set(
     session: AsyncSession, actor: Identity, task_id: UUID, rubric_id: UUID
 ) -> tuple[Identity, ScoreRubricSet]:
-    actor, row = await get_set(session, actor, task_id, rubric_id, lock=True)
+    actor, row = await get_set(session, actor, task_id, rubric_id)
     if actor.actor_kind != "session" or actor.token_id is not None:
         cards.fail(
             "human_session_required", "A human session is required for rubric review", 403, 4
         )
+    await task_access(
+        session,
+        actor,
+        task_id,
+        scope="score:rubric:review",
+        write=True,
+        domain={"bidder": "commercial", "technical": "technical"}.get(actor.role),
+    )
+    actor, row = await get_set(session, actor, task_id, rubric_id, lock=True)
     actor = await access(session, actor, "score:rubric:review")
     extraction_id = row.extraction_job_id
     await score_inputs.lock_inputs(session, actor, task_id, extraction_id)
@@ -643,6 +657,36 @@ def review_denials(function):
                 arguments["actor"],
                 arguments["task_id"],
                 arguments["rubric_id"],
+            )
+            if "section_id" in arguments or "item_id" in arguments:
+                await subject(
+                    arguments["session"],
+                    bound,
+                    section_id=arguments.get("section_id"),
+                    item_id=arguments.get("item_id"),
+                )
+            if "requirement_id" in arguments and not await arguments["session"].scalar(
+                select(ScoreRubricCoverage.id).where(
+                    ScoreRubricCoverage.rubric_id == bound.id,
+                    ScoreRubricCoverage.requirement_id == arguments["requirement_id"],
+                )
+            ):
+                raise not_found()
+            actor = arguments["actor"]
+            if actor.actor_kind != "session" or actor.token_id is not None:
+                cards.fail(
+                    "human_session_required",
+                    "A human session is required for rubric review",
+                    403,
+                    4,
+                )
+            await task_access(
+                arguments["session"],
+                actor,
+                bound.task_id,
+                scope="score:rubric:review",
+                write=True,
+                domain={"bidder": "commercial", "technical": "technical"}.get(actor.role),
             )
             await validate_review_text(
                 arguments["session"],

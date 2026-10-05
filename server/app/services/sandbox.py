@@ -68,6 +68,7 @@ from app.schemas.sandbox_contracts import (
     VendorSpec,
 )
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 OFFLINE_POLICY = "offline-v1"
@@ -251,7 +252,16 @@ async def actor_for(session: AsyncSession, run: SandboxRun, *, lock: bool = Fals
                 "sandbox_actor_inactive", "Sandbox actor is no longer active", 403, 4
             )
         scopes &= set(token.scopes) & SCOPES
-    return Identity(run.requested_by, run.org_id, scopes, member.role, run.token_id, run.actor_kind)
+    from app.services.task_workflow import access as task_access
+
+    actor = Identity(
+        run.requested_by, run.org_id, scopes, member.role, run.token_id, run.actor_kind
+    )
+    worker = Identity(
+        actor.user_id, actor.org_id, actor.scopes, actor.role, actor.token_id, "worker"
+    )
+    await task_access(session, worker, run.task_id, write=True)
+    return actor
 
 
 async def check_live(
@@ -278,6 +288,7 @@ async def check_live(
     return selection, url
 
 
+@task_authorized("sandbox:read", parent=("run_id", "sandbox_runs"))
 async def require_run(
     session: AsyncSession, actor: Identity, run_id: UUID, *, action: str = "sandbox:read"
 ):
@@ -384,6 +395,7 @@ async def show_run(
     ).model_dump(mode="json")
 
 
+@task_authorized("task:read", write=True)
 async def submit(
     session: AsyncSession,
     actor: Identity,
@@ -592,6 +604,7 @@ async def submit(
     ), job
 
 
+@task_authorized("sandbox:read")
 async def list_runs(session: AsyncSession, actor: Identity, task_id: UUID, offset: int, limit: int):
     require_access(actor)
     if await session.get(Task, task_id) is None:
@@ -608,6 +621,7 @@ async def list_runs(session: AsyncSession, actor: Identity, task_id: UUID, offse
     return [await show_run(session, actor, row.id) for row in rows]
 
 
+@task_authorized("sandbox:read", parent=("artifact_id", "sandbox_artifacts"))
 async def require_artifact(session: AsyncSession, actor: Identity, artifact_id: UUID):
     require_access(actor)
     artifact = await session.get(SandboxArtifact, artifact_id)
@@ -1075,10 +1089,12 @@ async def reconcile_run(db, run_id: UUID, org_id: UUID, browser: BrowserProvider
     }:
         return
     async with db.transaction(org_id) as session:
-        await org_lock(session, org_id)
+        from app.jobs.execution import locked_job
+
         run = await session.get(SandboxRun, run_id)
         assert run is not None
-        job = await session.scalar(select(Job).where(Job.id == run.job_id).with_for_update())
+        job = await locked_job(session, run.job_id)
+        await org_lock(session, org_id)
         attempt = await session.get(SandboxAttempt, attempt.id)
         assert attempt is not None and job is not None
         if await cleanup_confirmed(session, attempt):

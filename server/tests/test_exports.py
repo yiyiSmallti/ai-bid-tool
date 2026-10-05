@@ -338,7 +338,10 @@ async def test_review_export_real_chain_and_every_route_isolated(
             response = await api.request(
                 method, path, headers=header, **({"json": request} if request is not None else {})
             )
-            assert response.status_code == 403
+            # Export-specific RLS hides files/runs from nonbidders; an explicit
+            # visible task is resolved before denying its export action.
+            expected_status = 403 if path.startswith("/tasks/") else 404
+            assert response.status_code == expected_status, (method, path, response.text)
 
 
 async def test_export_role_and_unknown_resource_boundaries(tenants, tmp_path, admin_engine):
@@ -352,7 +355,7 @@ async def test_export_role_and_unknown_resource_boundaries(tenants, tmp_path, ad
                 f"/exports/{unknown}/download-link",
                 f"/tasks/{unknown}/exports",
             ):
-                assert (await api.get(path, headers=headers[0])).status_code == 403
+                assert (await api.get(path, headers=headers[0])).status_code == 404
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         for path in (
             f"/export-runs/{unknown}",
@@ -678,7 +681,8 @@ async def test_token_cannot_use_export_or_generic_job_read_cancel(tenants, tmp_p
             result = await api.request(
                 method, path, headers=token_headers, **({"json": data} if data is not None else {})
             )
-            assert result.status_code == 403, result.text
+            expected_status = 404 if path.startswith("/export-runs/") else 403
+            assert result.status_code == expected_status, (method, path, result.text)
 
 
 @pytest.mark.parametrize("limit", ["memory", "deadline", "output"])

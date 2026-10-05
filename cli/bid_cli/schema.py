@@ -173,6 +173,27 @@ from app.schemas.screenshot_contracts import (
     VendorSearchInput,
 )
 from app.schemas.simulation_contracts import ProductSimulationInput
+from app.schemas.team_workflow import (
+    BoardActivityView,
+    BoardData,
+    BoardJobView,
+    BoardQuery,
+    BoardRow,
+    EventReplayData,
+    EventReplayQuery,
+    MemberCandidateView,
+    PageQuery,
+    TaskEventView,
+    TaskMemberData,
+    TaskMemberSet,
+    TaskMemberView,
+    TaskOwnerHandover,
+    TaskProgressData,
+    TaskProgressQuery,
+    TaskWorkflowData,
+    WorkflowMutation,
+)
+from app.schemas.team_workflow import PageData as WorkflowPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
@@ -434,6 +455,39 @@ CREDENTIAL_OUTPUTS.update(
 OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS | MEMORY_OUTPUTS | CREDENTIAL_OUTPUTS
 
 
+WORKFLOW_COMMANDS = {
+    "task workflow": None,
+    "task progress": TaskProgressQuery,
+    "task member list": PageQuery,
+    "task member candidates": PageQuery,
+    "task member set": TaskMemberSet,
+    "task member remove": WorkflowMutation,
+    "task handover": TaskOwnerHandover,
+    "task archive": WorkflowMutation,
+    "task unarchive": WorkflowMutation,
+    "task board": BoardQuery,
+    "task activity": PageQuery,
+    "task events": EventReplayQuery,
+}
+COMMANDS.update(WORKFLOW_COMMANDS)
+OUTPUTS.update(
+    {
+        "task workflow": TypeAdapter(TaskWorkflowData),
+        "task progress": TypeAdapter(TaskProgressData),
+        "task member list": TypeAdapter(WorkflowPageData),
+        "task member candidates": TypeAdapter(WorkflowPageData),
+        "task member set": TypeAdapter(TaskMemberData),
+        "task member remove": TypeAdapter(TaskWorkflowData),
+        "task handover": TypeAdapter(TaskWorkflowData),
+        "task archive": TypeAdapter(TaskWorkflowData),
+        "task unarchive": TypeAdapter(TaskWorkflowData),
+        "task board": TypeAdapter(BoardData),
+        "task activity": TypeAdapter(WorkflowPageData),
+        "task events": TypeAdapter(EventReplayData),
+    }
+)
+
+
 def console_variant(input_model, output_model, items_model=None) -> dict:
     return {
         "input": input_model.model_json_schema() if input_model else None,
@@ -680,6 +734,17 @@ def command_schema(app=None, version: str = "4.0") -> dict:
             "5": "partial",
         },
     }
+    workflow_items = {
+        "task board": BoardRow,
+        "task progress": BoardJobView,
+        "task activity": BoardActivityView,
+        "task events": TaskEventView,
+        "task member list": TaskMemberView,
+        "task member candidates": MemberCandidateView,
+    }
+    for name, model in workflow_items.items():
+        if name in schema["commands"]:
+            schema["commands"][name]["items"] = model.model_json_schema()
     if version == "4.0":
         from app.schemas.budget_contracts import (
             BudgetPreflightData,

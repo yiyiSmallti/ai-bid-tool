@@ -11,6 +11,9 @@ import OrgConfidential from "./views/OrgConfidential.vue";
 import OrgProfiles from "./views/OrgProfiles.vue";
 import OrgLogin from "./views/OrgLogin.vue";
 import OrgTasks from "./views/OrgTasks.vue";
+import OrgTaskBoard from "./views/OrgTaskBoard.vue";
+import OrgTaskProgress from "./views/OrgTaskProgress.vue";
+import OrgTaskMembers from "./views/OrgTaskMembers.vue";
 import OrgTask from "./views/OrgTask.vue";
 import OrgReview from "./views/OrgReview.vue";
 import OrgDrafts from "./views/OrgDrafts.vue";
@@ -33,6 +36,9 @@ export const router = createRouter({
     { path: "/org/login", component: OrgLogin, meta: { public: true, title: "单位登录" } },
     { path: "/org/tasks", component: OrgTasks, meta: { area: "org", title: "招标任务", nav: "tasks" } },
     { path: "/org/tasks/:taskId", component: OrgTask, meta: { area: "org", title: "任务详情", nav: "tasks" } },
+    { path: "/org/tasks/:taskId/board", component: OrgTaskBoard, meta: { area: "org", title: "任务看板", nav: "tasks" } },
+    { path: "/org/tasks/:taskId/progress", component: OrgTaskProgress, meta: { area: "org", title: "作业进度", nav: "tasks" } },
+    { path: "/org/tasks/:taskId/members", component: OrgTaskMembers, meta: { area: "org", title: "成员与归档", nav: "tasks" } },
     { path: "/org/tasks/:taskId/review", component: OrgReview, meta: { area: "org", title: "要求与响应审阅", nav: "tasks" } },
     { path: "/org/tasks/:taskId/drafts", component: OrgDrafts, meta: { area: "org", title: "响应表初稿", nav: "tasks" } },
     { path: "/org/tasks/:taskId/checks", component: () => import("./views/OrgChecks.vue"), meta: { area: "org", title: "检查风险", nav: "tasks" } },
@@ -54,10 +60,10 @@ router.beforeEach(async (to) => {
     try {
       const result = await orgRequest("GET", "/org/current");
       if (result.data.org_id !== orgSession.get()?.orgId || !["admin", "bidder", "technical", "viewer"].includes(result.data.role)) throw new Error("单位身份响应不符合契约");
-      orgAccess.role = result.data.role; orgAccess.error = "";
+      orgAccess.userId = result.data.user_id ?? null; orgAccess.role = result.data.role; orgAccess.error = "";
       if (to.meta.admin && result.data.role !== "admin") return "/org/tasks";
     } catch (exc) {
-      orgAccess.role = null; orgAccess.error = errorText(exc);
+      orgAccess.role = null; orgAccess.userId = null; orgAccess.error = errorText(exc);
       if (!orgSession.get()) return "/org/login";
     }
   }

@@ -144,6 +144,11 @@ SCOPES.update({"score:read", "score:run", "score:rubric:generate"})
 SCOPES.update({"memory:read", "memory:write", "memory:retrieve", "memory:candidate:run"})
 
 for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.add("card:comment")
+    if _role in {"admin", "bidder"}:
+        _scopes.update({"task:members:write", "task:archive", "card:assign", "task:review-policy"})
+    if _role in {"bidder", "technical"}:
+        _scopes.add("card:cosign")
     _scopes.update({"memory:read", "memory:retrieve"})
     if _role != "viewer":
         _scopes.update({"memory:write", "memory:candidate:run"})

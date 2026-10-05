@@ -59,6 +59,16 @@ class Processor:
                 and current.lease_until > datetime.now(UTC)
             ):
                 return
+            try:
+                await authorized_job(session, current)
+            except (ServiceError, ProviderFailure) as error:
+                current.status = "failed"
+                current.error = {
+                    "code": error.code,
+                    "message": "Submission authorization is no longer valid",
+                }
+                current.finished_at = datetime.now(UTC)
+                return
             if current.kind == "card_generate":
                 from app.memory.retrieval import recover_unsettled_calls
 
@@ -245,6 +255,7 @@ class Processor:
                             or current.run_id != run_id
                         ):
                             return
+                        await authorized_job(session, current)
                         result = await complete_draft(session, current, self.storage)
                         current.status, current.result, current.error = "succeeded", result, None
                         current.finished_at = datetime.now(UTC)

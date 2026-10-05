@@ -45,6 +45,9 @@ checks in CI on pull requests only; it skips the suite whose files a pull reques
 leaves unchanged and can be started by hand from the Actions tab. With `-n`, each
 pytest-xdist worker creates and migrates its own `bid_test_gwN` database in the same
 cluster, because tests truncate shared tables.
+Tests marked `latency` assert contractual wall-clock bounds; CI runs them in a
+separate serial step (`uv run pytest -q -m latency`) so other workers do not compete
+for the runner's cores.
 
 ## Provision a development database
 

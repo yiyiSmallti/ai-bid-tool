@@ -52,14 +52,9 @@ TABLES = (
 
 
 def actor(session, org, user, kind="worker"):
-    session.execute(
-        text(
-            "SELECT set_config('app.current_org',:org,true), "
-            "set_config('app.actor_user_id',:user,true), "
-            "set_config('app.actor_kind',:kind,true), set_config('app.actor_token_id','',true)"
-        ),
-        {"org": str(org), "user": str(user), "kind": kind},
-    )
+    from task_fixtures import actor_context
+
+    actor_context(session, org, user, kind=kind)
 
 
 def confirmed_certificate_draft(session, org, user, ids, selection, certificate_revision):
@@ -170,11 +165,10 @@ def confirmed_certificate_draft(session, org, user, ids, selection, certificate_
 
 
 def seed_check(session, org, user, ids):
+    from task_fixtures import set_role_in_session
+
+    set_role_in_session(session, org, user, "technical", task_ids=[ids["task"]])
     actor(session, org, user)
-    member = session.scalar(
-        select(Membership).where(Membership.org_id == org, Membership.user_id == user)
-    )
-    member.role = "technical"
     certificate = Certificate(id=uuid4(), org_id=org, created_by=user)
     session.add(certificate)
     session.flush()
@@ -421,10 +415,13 @@ def seed_check(session, org, user, ids):
 
 @pytest.fixture
 def check_seeded(seeded, admin_engine):
+    from task_fixtures import finish_scope
+
     ids = {}
     with Session(admin_engine) as session, session.begin():
         for org, user in zip(seeded["orgs"], seeded["users"], strict=True):
             ids[org] = seed_check(session, org, user, seeded["ids"][org])
+            finish_scope(session)
     return {**seeded, "checks": ids}
 
 
@@ -436,12 +433,10 @@ async def check_db(check_seeded):
 
 
 async def runtime_actor(session, data, kind="session", user=None, token=None):
-    await session.execute(
-        text(
-            "SELECT set_config('app.actor_kind',:kind,true), set_config('app.actor_user_id',:user,true), "
-            "set_config('app.actor_token_id',:token,true)"
-        ),
-        {"kind": kind, "user": str(user or data["users"][0]), "token": str(token) if token else ""},
+    from task_fixtures import actor_context_async
+
+    await actor_context_async(
+        session, data["orgs"][0], user or data["users"][0], kind=kind, token=token
     )
 
 
@@ -604,11 +599,20 @@ async def pending_report(session, data):
     ["old_attempt", "expired_lease", "cancelled", "changed_hash", "changed_manifest", "wrong_task"],
 )
 async def test_check_publication_requires_owning_live_attempt(failure, check_seeded, check_db):
-    from app.models.entities import Task
+    from task_fixtures import related_task
 
     org = check_seeded["orgs"][0]
     with pytest.raises(DBAPIError) as error:
         async with check_db.transaction(org) as session:
+            other_task = None
+            if failure == "wrong_task":
+                other_task = await related_task(
+                    session,
+                    org,
+                    check_seeded["users"][0],
+                    check_seeded["ids"][org]["task"],
+                    name="Another synthetic task",
+                )
             report, job = await pending_report(session, check_seeded)
             if failure == "old_attempt":
                 report.run_id = uuid4()
@@ -621,16 +625,8 @@ async def test_check_publication_requires_owning_live_attempt(failure, check_see
             elif failure == "changed_manifest":
                 report.input_manifest = {"unexpected": "manifest"}
             else:
-                task = Task(
-                    id=uuid4(),
-                    org_id=org,
-                    created_by=check_seeded["users"][0],
-                    name="Another synthetic task",
-                )
-                session.add(task)
-                # Flush the task independently, without publishing the pending report.
-                await session.flush([task])
-                report.task_id = task.id
+                assert other_task is not None
+                report.task_id = other_task.id
             await session.flush()
     assert error.value.orig.sqlstate in {"23514", "23503"}
 
@@ -684,20 +680,19 @@ async def test_check_decision_professional_domain(role, check_seeded, check_db, 
 @pytest.mark.parametrize("table", TABLES)
 async def test_check_tables_reject_same_org_cross_task(table, check_seeded, check_db):
     """All referenced parents exist in the same org; only task binding is changed."""
-    from app.models.entities import Task
+    from task_fixtures import related_task
 
     org = check_seeded["orgs"][0]
     original_report_id = check_seeded["checks"][org]["run"]
     with pytest.raises(DBAPIError) as error:
         async with check_db.transaction(org) as session:
-            other_task = Task(
-                id=uuid4(),
-                org_id=org,
-                created_by=check_seeded["users"][0],
+            other_task = await related_task(
+                session,
+                org,
+                check_seeded["users"][0],
+                check_seeded["ids"][org]["task"],
                 name="Synthetic other task",
             )
-            session.add(other_task)
-            await session.flush()
             if table == "check_decisions":
                 await runtime_actor(session, check_seeded)
                 original = await session.get(CheckDecision, check_seeded["checks"][org]["decision"])

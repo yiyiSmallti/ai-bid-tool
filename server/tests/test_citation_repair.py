@@ -38,12 +38,10 @@ import httpx
 import pymupdf
 import pytest
 from app.core.config import Settings
-from app.models.entities import Membership
 from app.providers.llm import AnthropicExtractor
 from conftest import PASSWORD, FakeQueue, credential_app
 from docx import Document
-from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from sqlalchemy import text
 from test_llm_providers import Vendor, anthropic_reply
 
 SYNTHETIC_KEY = "synthetic-citation-repair-key-not-real"
@@ -220,12 +218,9 @@ async def extract_fixture(api, app, header, tmp_path: Path, suffix: str):
 
 
 def set_role(admin_engine, org_id: UUID, user_id: UUID, role: str) -> None:
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(
-            select(Membership).where(Membership.org_id == org_id, Membership.user_id == user_id)
-        )
-        assert member is not None
-        member.role = role
+    from task_fixtures import set_role as set_task_actor_role
+
+    set_task_actor_role(admin_engine, org_id, user_id, role)
 
 
 async def create_commitment_card(api, header, task_id, job_id, requirement, label):

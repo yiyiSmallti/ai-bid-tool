@@ -21,6 +21,7 @@ from app.services.auth import ROLE_SCOPES
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_fixtures import seed_task
 
 TENANT_TABLES = (
     "orgs",
@@ -66,8 +67,7 @@ def seeded(tenants, admin_engine):
             task = Task(
                 id=uuid4(), org_id=org, created_by=tenants["users"][index], name="Synthetic task"
             )
-            session.add(task)
-            session.flush()
+            seed_task(session, task)
             document = Document(
                 id=uuid4(),
                 org_id=org,

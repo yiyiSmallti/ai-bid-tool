@@ -182,6 +182,13 @@ def create_router(context, db, storage, queue, crypto, processor):
     )
     async def submit(task_id: UUID, request: Request, ctx=Depends(context, scope="function")):
         session, actor = ctx
+        from app.services.task_workflow import access as task_access
+
+        _, workflow, member = await task_access(session, actor, task_id)
+        if member is None or member.role not in {"owner", "contributor"}:
+            raise ServiceError("forbidden", "Task role does not permit submission", 403, 4)
+        if workflow.state == "archived":
+            raise ServiceError("task_archived", "Task is archived", 409, 2)
         body, html = await parse_submission(request)
         if body.retry:
             sandbox.require_access(
@@ -195,6 +202,10 @@ def create_router(context, db, storage, queue, crypto, processor):
             previous = await session.scalar(
                 select(SandboxRun).where(SandboxRun.request_hash == body.expected_request_hash)
             )
+            if previous is not None and previous.task_id != task_id:
+                from app.core.errors import not_found
+
+                raise not_found()
             if previous is not None:
                 await sandbox.reconcile_run(
                     db, previous.id, actor.org_id, sandbox.browser_for(processor)

@@ -1,6 +1,6 @@
-"""Review-only team workflow contracts; no runtime registration or persistence.
+"""Approved team workflow contracts; importing this module registers no runtime handlers.
 
-The transport retains Result/CONTRACT_VERSION 3.0. Identity, org context and all
+The transport uses the shared Result/CONTRACT_VERSION 4.0 from the budget branch. Identity, org context and all
 actor IDs come from authentication, never mutation bodies. Services must recheck
 active org Membership, task access, org-role authority and archive state in the
 caller transaction; task roles cannot grant org scopes or human review authority.
@@ -10,6 +10,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
+from app.schemas.budget_contracts import TaskBudgetView as TaskBudgetStatus
 from app.schemas.contracts import Category, Contract, Cost, Result, Source
 from app.schemas.response_card_contracts import CardAction, CardState, CardView, ReviewDomain
 from app.schemas.screenshot_contracts import Sha256
@@ -572,12 +573,6 @@ class BoardRowFlags(Contract):
     model_needs_material_hint: bool
     certificate_date_advisory: bool
     final_export_prototype_blocked: bool
-
-
-class TaskBudgetStatus(Contract):
-    """Legacy budget_usd does not enforce a budget; no inferred balance/remaining amount."""
-
-    status: Literal["not_enforced"] = "not_enforced"
 
 
 class BoardRow(Contract):

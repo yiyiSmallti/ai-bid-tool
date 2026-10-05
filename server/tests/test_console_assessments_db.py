@@ -316,20 +316,26 @@ async def test_compact_mutation_routes_hide_foreign_parent(rubric_case, operatio
 async def test_check_cursor_snapshot_and_principal_change_require_reload(
     check_case, tenants, admin_engine
 ):
-    from test_response_cards import set_role
+    from task_fixtures import set_role
 
     case = check_case
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
+    set_role(
+        admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder", task_ids=[case["task"]]
+    )
     report = await published(case)
     path = f"/v4/checks/{report}?view=console&part=findings&limit=1"
     first = (await case["api"].get(path, headers=case["header"])).json()
     cursor = first["data"]["next_cursor"]
     assert cursor
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer")
+    set_role(
+        admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer", task_ids=[case["task"]]
+    )
     denied_cursor = await case["api"].get(path + "&cursor=" + cursor, headers=case["header"])
     assert denied_cursor.status_code == 400
     assert denied_cursor.json()["data"]["error"]["code"] == "invalid_cursor"
-    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
+    set_role(
+        admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder", task_ids=[case["task"]]
+    )
     full = (await case["api"].get(f"/checks/{report}", headers=case["header"])).json()
     finding = next(row for row in full["items"] if row["review_domain"] == "commercial")
     response = await case["api"].post(

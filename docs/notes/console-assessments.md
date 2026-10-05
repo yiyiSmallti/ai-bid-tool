@@ -37,7 +37,11 @@ additional reads needed by the console. Writes reuse the existing check and scor
 requests and services. No console persistence or independent assessment engine is added.
 
 Read services authorize the parent and its complete dependency graph before exposing
-counts. SQL selects keyset positions before hydrating selected row narratives.
+counts. Task visibility, lifecycle and responsibility domains follow the
+[task-workflow mechanism](team-workflow.md#how-it-works). Projections, capability
+hints and shared human writes reuse its authorization service; hints may reuse a
+permission result within one projection, while every mutation reauthorizes.
+SQL selects keyset positions before hydrating selected row narratives.
 Authenticated cursors bind the principal, org, parent, filters and review snapshot;
 a changed snapshot requires reloading the view. A separate stable snapshot identity
 lets a replacement editor verify sections, items and coverage belong to one revision.
@@ -93,4 +97,4 @@ overall percentage from elapsed time or an absent batch count.
 - [Check API](../../server/app/api/check.py), [score API](../../server/app/api/score.py) and [org-console API](../../server/app/api/org_console.py): existing writes and additive reads.
 - [CLI read adapter](../../cli/bid_cli/assessments.py) and [schema registry](../../cli/bid_cli/schema.py): remote/local parity and discovery.
 - [Console helpers](../../web/src/assessments.js), [check workspace](../../web/src/views/OrgChecks.vue), [rubric review](../../web/src/views/OrgRubricReview.vue) and [replacement editor](../../web/src/components/RubricReplacement.vue): explicit user transitions.
-- [Browser acceptance](../../web/e2e/console-assessments.spec.js) and [two-org API acceptance](../../server/tests/test_console_assessments_db.py): separate UI and isolation checks. Repeatable generated artifacts belong under `data/work/console-assessments-validation/`.
+- [Browser acceptance](../../web/e2e/console-assessments.spec.js), [two-org API acceptance](../../server/tests/test_console_assessments_db.py) and [task-authority acceptance](../../server/tests/test_console_task_authority.py): separate UI, org isolation and task-role checks. Repeatable generated artifacts belong under `data/work/console-assessments-validation/`.

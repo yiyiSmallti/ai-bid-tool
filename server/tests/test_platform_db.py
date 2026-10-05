@@ -13,6 +13,7 @@ from app.services.auth import ROLE_SCOPES
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_fixtures import actor_context, finish_scope, seed_task
 
 FUNCTIONS = {
     "platform_org_summaries",
@@ -83,11 +84,13 @@ def seed_usage(admin_engine, tenants):
             task = Task(
                 id=uuid4(), org_id=org, created_by=tenants["users"][index], name="Synthetic"
             )
-            session.add(task)
+            seed_task(session, task)
+            finish_scope(session)
             tasks.append(task)
         session.flush()
         documents = []
         for task in tasks:
+            actor_context(session, task.org_id, task.created_by)
             document = Document(
                 id=uuid4(),
                 org_id=task.org_id,
@@ -99,9 +102,11 @@ def seed_usage(admin_engine, tenants):
             )
             session.add(document)
             documents.append(document)
+            finish_scope(session)
         session.flush()
         for index, created, model_id, usd, charge, test_only in rows:
             org, user, run_id = tenants["orgs"][index], tenants["users"][index], uuid4()
+            actor_context(session, org, user)
             quote = BudgetCallQuote(
                 capability="llm",
                 payer="org_platform" if model_id else "org_direct",
@@ -177,6 +182,7 @@ def seed_usage(admin_engine, tenants):
             )
             session.flush()
             call.state, call.charge = "completed", Decimal(str(charge or 0))
+            finish_scope(session)
 
 
 async def test_usage_summary_aggregates_without_business_columns(runtime, admin_engine, tenants):

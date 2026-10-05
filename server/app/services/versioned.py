@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError, not_found
 from app.models.entities import AuditLog, Task
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,29 @@ async def update(
 ):
     """Append the next revision when the caller saw the current one."""
     actor.require(kind.write_scope)
+    # Shared library validity changes lock the affected tasks before library rows.
+    # These IDs remain internal: org library authority grants no task visibility.
+    affected = list(
+        await session.scalars(
+            select(kind.selection.task_id)
+            .where(
+                kind.selection.org_id == actor.org_id,
+                getattr(kind.selection, kind.key) == root_id,
+            )
+            .distinct()
+            .order_by(kind.selection.task_id)
+            .limit(101)
+        )
+    )
+    if len(affected) > 100:
+        raise ServiceError("affected_task_limit", "Shared update affects too many tasks", 409, 2)
+    if affected:
+        await session.execute(
+            select(Task.id)
+            .where(Task.org_id == actor.org_id, Task.id.in_(affected))
+            .order_by(Task.id)
+            .with_for_update()
+        )
     root = await session.scalar(select(kind.root).where(kind.root.id == root_id).with_for_update())
     if root is None:
         raise not_found()
@@ -200,6 +224,7 @@ async def update(
     return revision
 
 
+@task_authorized("task:read", write=True)
 async def select_revision(
     session: AsyncSession,
     actor: Identity,
@@ -276,6 +301,7 @@ async def select_revision(
     }
 
 
+@task_authorized("task:read")
 async def list_selections(
     session: AsyncSession, actor: Identity, kind: VersionedKind, task_id: UUID, *, history: bool
 ) -> tuple[dict, list[tuple[Any, Any]]]:

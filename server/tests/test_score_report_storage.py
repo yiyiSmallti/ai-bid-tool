@@ -11,7 +11,7 @@ from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
-from app.models.entities import Job, Task
+from app.models.entities import Job
 from app.models.response_cards import DraftRun, ResponseItem
 from app.models.score import (
     ScoreItemCitation,
@@ -351,19 +351,21 @@ async def test_score_publication_attempt_and_snapshot_fences(score_storage_case,
 
 @pytest.mark.parametrize("table", TABLES)
 async def test_score_composite_fk_rejects_cross_task(score_storage_case, table):
+    from task_fixtures import related_task
+
     case = score_storage_case
     org = case["tenants"]["orgs"][0]
     other_task = uuid4()
     async with case["app"].state.db.transaction(org) as session:
-        await pending_score(session, case)
-        session.add(
-            Task(
-                id=other_task,
-                org_id=org,
-                name="Other synthetic scoring task",
-                created_by=case["tenants"]["users"][0],
-            )
+        await related_task(
+            session,
+            org,
+            case["tenants"]["users"][0],
+            case["task"],
+            name="Other synthetic scoring task",
+            task_id=other_task,
         )
+        await pending_score(session, case)
     # Both tasks exist in the same tenant. Disable only the append-only user trigger
     # for this rolled-back transaction so the composite parent FK itself is tested.
     with pytest.raises(IntegrityError) as error, case["admin_engine"].begin() as connection:

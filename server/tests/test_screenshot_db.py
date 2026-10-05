@@ -37,7 +37,6 @@ from app.models.entities import (
     Feature,
     FeatureRevision,
     Job,
-    Membership,
     Requirement,
     TaskFeature,
     TaskResource,
@@ -101,20 +100,9 @@ def db_sqlstate(error: DBAPIError) -> str | None:
 
 
 def actor_context(session, org: UUID, user: UUID, *, kind="session", token=None):
-    session.execute(
-        text(
-            "SELECT set_config('app.current_org',:org,true), "
-            "set_config('app.actor_kind',:kind,true), "
-            "set_config('app.actor_user_id',:user,true), "
-            "set_config('app.actor_token_id',:token,true)"
-        ),
-        {
-            "org": str(org),
-            "kind": kind,
-            "user": str(user),
-            "token": str(token) if token else "",
-        },
-    )
+    from task_fixtures import actor_context as task_actor_context
+
+    task_actor_context(session, org, user, kind=kind, token=token)
 
 
 def clone_revision(previous, user, **changes):
@@ -331,11 +319,11 @@ def screenshot_rows(seeded, admin_engine):
     for index, org in enumerate(seeded["orgs"]):
         user = seeded["users"][index]
         with Session(admin_engine) as session, session.begin():
-            member = session.scalar(
-                select(Membership).where(Membership.org_id == org, Membership.user_id == user)
+            from task_fixtures import set_role_in_session
+
+            set_role_in_session(
+                session, org, user, "technical", task_ids=[seeded["ids"][org]["task"]]
             )
-            assert member is not None
-            member.role = "technical"
             actor_context(session, org, user)
             task_id = seeded["ids"][org]["task"]
             extraction = session.scalar(
@@ -960,14 +948,9 @@ async def test_direct_sql_rejects_invalid_fixed_image_binding(
     try:
         with pytest.raises(DBAPIError) as error:
             async with db.transaction(org) as session:
-                await session.execute(
-                    text(
-                        "SELECT set_config('app.actor_kind','session',true), "
-                        "set_config('app.actor_user_id',:user,true), "
-                        "set_config('app.actor_token_id','',true)"
-                    ),
-                    {"user": str(screenshot_rows["users"][0])},
-                )
+                from task_fixtures import actor_context_async
+
+                await actor_context_async(session, org, screenshot_rows["users"][0])
                 session.add(
                     Evidence(
                         id=uuid4(),
@@ -1001,14 +984,9 @@ async def test_prototype_decision_rejects_a_mismatched_fixed_html_hash(screensho
     try:
         with pytest.raises(DBAPIError) as error:
             async with db.transaction(org) as session:
-                await session.execute(
-                    text(
-                        "SELECT set_config('app.actor_kind','session',true), "
-                        "set_config('app.actor_user_id',:user,true), "
-                        "set_config('app.actor_token_id','',true)"
-                    ),
-                    {"user": str(screenshot_rows["users"][0])},
-                )
+                from task_fixtures import actor_context_async
+
+                await actor_context_async(session, org, screenshot_rows["users"][0])
                 session.add(
                     PrototypeEvidenceDecision(
                         id=uuid4(),
@@ -1043,14 +1021,9 @@ async def test_direct_sql_rejects_keep_decision_without_a_basis(screenshot_rows)
     try:
         with pytest.raises(DBAPIError) as error:
             async with db.transaction(org) as session:
-                await session.execute(
-                    text(
-                        "SELECT set_config('app.actor_kind','session',true), "
-                        "set_config('app.actor_user_id',:user,true), "
-                        "set_config('app.actor_token_id','',true)"
-                    ),
-                    {"user": str(user)},
-                )
+                from task_fixtures import actor_context_async
+
+                await actor_context_async(session, org, user)
                 target = {
                     "evidence_id": str(fixed["evidence"]),
                     "card_revision_id": str(fixed["revision"]),

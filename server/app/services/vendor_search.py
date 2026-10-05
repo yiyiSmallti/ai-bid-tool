@@ -23,6 +23,7 @@ from app.services import response_cards as cards
 from app.services import screenshots as images
 from app.services.card_generation import worker
 from app.services.screenshot_jobs import create_job
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 QUERY_VERSION = "vendor-search-v1"
@@ -90,6 +91,7 @@ async def inputs(session, actor, task_id, body, provider):
     return extraction, manifest
 
 
+@task_authorized("screenshot:write", write=True)
 async def submit(session, actor, task_id, body, provider):
     actor = await cards.access(session, actor, "screenshot:write")
     extraction, manifest = await inputs(session, actor, task_id, body, provider)
@@ -293,6 +295,7 @@ async def check_job_access(session, actor, job):
     return actor
 
 
+@task_authorized("screenshot:read", parent=("search_id", "screenshot_search_runs"))
 async def show(session, actor, search_id) -> ScreenshotSearchRun:
     actor = await cards.access(session, actor, "screenshot:read")
     actor.require("resource:read")
@@ -302,6 +305,9 @@ async def show(session, actor, search_id) -> ScreenshotSearchRun:
     return run
 
 
+@task_authorized(
+    "screenshot:write", parent=("candidate_id", "screenshot_search_candidates"), write=True
+)
 async def adopt(session, actor, candidate_id, body) -> dict:
     """Record a person's chosen URL as a new product revision and select it on the task."""
     actor = await cards.access(session, actor, "screenshot:write")
