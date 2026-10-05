@@ -6,6 +6,11 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Controller identity after child-result reads
+
+- Recheck and restore the live controller identity after the command broker reads a child result and after the final draft validity read, before writing steps, completion messages or checkpoints. Keep the existing execution fence and immutable creator fields required by the [agent recovery contract](plan/agent.md#worker-recovery-and-cancellation).
+- Record a failed collection step and its audit event when an integrity error interrupts collection of a terminal child. Preserve already published results and the contract's partial-session outcome with an explicit stop reason; controller checkpoint success does not imply goal completion.
+
 ## 2026-10-05: Atomic agent checkpoints and pause references
 
 - Read controller costs before the terminal transition, then persist the complete session checkpoint and cleared execution binding in one UPDATE. Preserve the live step/message fence and [terminal-state immutability](plan/agent.md#worker-recovery-and-cancellation).

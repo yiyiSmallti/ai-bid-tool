@@ -6,6 +6,7 @@ from datetime import timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ServiceError, log_unexpected
 from app.jobs.execution import ADMISSION_STOPS, JobExecution, job_cost, locked_job
@@ -734,12 +735,14 @@ async def decide(processor, execution):
                 session, row, job, actor, processor, "paused", step=step, pause=pending
             )
         elif isinstance(action, CompletionDecision):
-            await finish_goal(session, row, job, actor, processor, step, action)
+            await finish_goal(
+                session, row, job, actor, processor, step, action, execution=execution
+            )
         else:
             await checkpoint(session, row, job, actor, processor, "queued", step=step)
 
 
-async def finish_goal(session, row, job, actor, processor, step, action):
+async def finish_goal(session, row, job, actor, processor, step, action, *, execution):
     draft = await session.scalar(
         select(DraftRun)
         .join(AgentJobLink, AgentJobLink.job_id == DraftRun.generation_job_id)
@@ -767,6 +770,7 @@ async def finish_goal(session, row, job, actor, processor, step, action):
 
     live = await agent_limits.enforce(session, row, processor.settings)
     view = await show_draft(session, live, draft.id, processor.storage)
+    row, job, actor = await fence(session, execution, step=step)
     if view["validity"] != "current":
         raise ProviderFailure("Confirmed inputs changed", code="agent_inputs_changed")
     output_ref = AgentInputRef(
@@ -945,6 +949,9 @@ async def collect_child(processor, execution, step_id):
             execution=execution,
         )
         output = await broker.recover(await invocation_context(session, row, step, job))
+        # Command reads may install a delegated read identity without execution
+        # IDs. Recheck the live claim and restore the controller before any write.
+        row, job, actor = await fence(session, execution, step=step)
         if output is None:
             raise ProviderFailure(
                 "Tool submission cannot be verified", code="agent_request_uncertain"
@@ -1145,7 +1152,24 @@ async def fail_fragment(processor, execution, error):
             code = "agent_time_limit"
         if ambiguous and code not in agent_limits.HARD_STOPS:
             code = "agent_request_uncertain"
-        if last is not None and last.state not in {"completed", "failed", "waiting_job"}:
+        failed_collection = False
+        if (
+            isinstance(error, IntegrityError)
+            and last is not None
+            and last.state == "waiting_job"
+            and last.child_job_id is not None
+        ):
+            child = await session.get(Job, last.child_job_id)
+            # A published child survives the rolled-back collection transaction.
+            # Record that collection failed rather than claiming it is still waiting.
+            failed_collection = child is not None and child.status in {
+                "succeeded",
+                "failed",
+                "cancelled",
+            }
+        if last is not None and (
+            last.state not in {"completed", "failed", "waiting_job"} or failed_collection
+        ):
             advance_step(
                 last,
                 job,

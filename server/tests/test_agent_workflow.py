@@ -15,8 +15,9 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from app.models.agent import AgentJobLink, AgentMessage, AgentSession, AgentStep
-from app.models.entities import Job, VendorCall
-from sqlalchemy import select
+from app.models.entities import AuditLog, Job, VendorCall
+from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 from test_card_generation import DraftVendor, drafting_client, slots
 from test_response_cards import (
     create_tender,
@@ -148,7 +149,49 @@ async def checkpoint_receipt(app, header, session_id, expected_state, *, reason=
         }
 
 
-async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, admin_engine):
+@pytest.mark.parametrize(
+    "publication_error", [False, True], ids=["complete", "publication-failure"]
+)
+async def test_proposals_human_review_and_confirmed_draft(
+    tenants, tmp_path, admin_engine, monkeypatch, publication_error
+):
+    from app.jobs import agent as controller
+
+    record_output = controller.record_tool_output
+    publications = []
+
+    async def observe_output(session, state, step, job, output, settings):
+        # A nested command read may refresh its identity. The real SQL context
+        # must name the collecting controller again before its guarded writes.
+        context = (
+            await session.execute(
+                text(
+                    "SELECT current_setting('app.actor_kind') AS kind, "
+                    "current_setting('app.execution_job_id') AS job_id, "
+                    "current_setting('app.execution_run_id') AS run_id, "
+                    "current_setting('app.agent_step_id') AS step_id"
+                )
+            )
+        ).one()
+        assert context.kind == "worker"
+        assert (context.job_id, context.run_id, context.step_id) == (
+            str(job.id),
+            str(job.run_id),
+            str(step.id),
+        )
+        publications.append(
+            {
+                "command": step.command,
+                "step_id": str(step.id),
+                "created_by_job_id": str(step.created_by_job_id),
+                "transition_job_id": str(job.id),
+            }
+        )
+        if publication_error and step.command == "draft" and output.child_job_id is not None:
+            raise IntegrityError("Synthetic checkpoint publication failure", {}, Exception())
+        await record_output(session, state, step, job, output, settings)
+
+    monkeypatch.setattr(controller, "record_tool_output", observe_output)
     async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
         header = headers[0]
         task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
@@ -232,8 +275,50 @@ async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, adm
         )
         assert resumed.status_code == 200, resumed.text
         final = await advance(api, app, header, session_id)
-        assert final["session"]["state"] == "completed", final
-        final_checkpoint = await checkpoint_receipt(app, header, session_id, "completed")
+        expected = "partial" if publication_error else "completed"
+        assert final["session"]["state"] == expected, final
+        final_checkpoint = await checkpoint_receipt(
+            app,
+            header,
+            session_id,
+            expected,
+            reason="agent_processing_failed" if publication_error else None,
+        )
+        async with app.state.db.transaction(tenants["orgs"][0]) as db:
+            collected = list(
+                (
+                    await db.scalars(
+                        select(AgentStep)
+                        .where(
+                            AgentStep.session_id == UUID(session_id),
+                            AgentStep.child_job_id.is_not(None),
+                        )
+                        .order_by(AgentStep.ordinal)
+                    )
+                ).all()
+            )
+            assert [step.command for step in collected] == ["card generate", "draft"]
+            assert all(step.created_by_job_id != step.last_transition_job_id for step in collected)
+            assert collected[0].state == "completed"
+            assert collected[1].state == ("failed" if publication_error else "completed")
+            if publication_error:
+                assert collected[1].error_code == "agent_processing_failed"
+                failure = await db.scalar(
+                    select(AuditLog).where(
+                        AuditLog.action == "agent.tool.failed",
+                        AuditLog.object_id == collected[1].id,
+                    )
+                )
+                assert (
+                    failure is not None
+                    and failure.details["reason_code"] == "agent_processing_failed"
+                )
+            draft_job = await db.get(Job, collected[1].child_job_id)
+            assert draft_job is not None and draft_job.status == "succeeded"
+            draft_id = draft_job.result["draft_id"]
+        draft = await api.get(f"/v4/drafts/{draft_id}", headers=header)
+        assert draft.status_code == 200 and draft.json()["data"]["validity"] == "current"
+        assert draft.json()["data"]["completion"] == "complete"
         assert "synthetic-private-context-token" not in json.dumps(vendor.bodies)
         assert final["session"]["steps_used"] > paused["session"]["steps_used"]
         (tmp_path / "agent-review-draft.json").write_text(
@@ -245,6 +330,8 @@ async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, adm
                         "final": final,
                         "pause_checkpoint": paused_checkpoint,
                         "final_checkpoint": final_checkpoint,
+                        "publications": publications,
+                        "publication_error_injected": publication_error,
                         "rerun": "pytest -q server/tests/test_agent_workflow.py -k confirmed_draft",
                     }
                 ),
