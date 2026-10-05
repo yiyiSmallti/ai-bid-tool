@@ -10,6 +10,12 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 - Unified developer and agent documentation in English using the [glossary](glossary.md), renamed the [design document](design.md), and conservatively corrected stale statuses and superseded decisions against implementation and later decisions. The [roadmap](plan/roadmap.md) remains the home for remaining scope and open decisions.
 
+## 2026-10-05: Faster database citation verification
+
+- Added migration `0039` with a guarded fast path for unique exact quotes, retaining the original normalization, ambiguity and boundary behavior for other inputs.
+- Deduplicated live citation verification at check and score publication, preserving source bindings and rejecting additions after early deferred validation; see [check publication gates](notes/check.md#how-it-works).
+- Added database parity coverage against the original SQL and Python reference, gate call-count and mutation regressions, and a timed 1,500-requirement publication scenario including commit.
+
 ## 2026-10-05: Platform service credential management
 
 - Accepted ADR 0006 and added global-table/dedicated-role exceptions. Migration `0038` adds platform credentials, fixed management/resolver functions, catalog-reference validation, and migration-owner-only ciphertext rewrapping.

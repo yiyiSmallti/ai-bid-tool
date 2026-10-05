@@ -251,7 +251,16 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
     return secret_items, manifest_items
 
 
-async def snapshot(session, actor, task_id, draft_id, rubric_id, assessment_date: date):
+async def snapshot(
+    session,
+    actor,
+    task_id,
+    draft_id,
+    rubric_id,
+    assessment_date: date,
+    *,
+    defer_database_validation=False,
+):
     task = await session.get(Task, task_id)
     draft = await session.get(DraftRun, draft_id)
     if task is None or draft is None or draft.task_id != task_id:
@@ -281,9 +290,10 @@ async def snapshot(session, actor, task_id, draft_id, rubric_id, assessment_date
     items, fixed_items = await fixed_rows(session, actor, draft, require_current=True)
     if any(entry["document_id"] != str(document.id) for entry in fixed_items):
         integrity()
-    # Share the database's metadata-only current-input predicate with publication,
-    # so generation-material changes are caught before a paid call as well.
-    if not await session.scalar(
+    # Previews and paid admissions need the full database predicate immediately.
+    # Publication rechecks it in the mandatory deferred gate, including live
+    # citations, so that transaction must not locate every quote twice.
+    if not defer_database_validation and not await session.scalar(
         text("SELECT score_inputs_current(:org, :draft, :rubric, :revision)"),
         {
             "org": actor.org_id,

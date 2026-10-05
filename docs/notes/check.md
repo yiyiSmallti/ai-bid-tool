@@ -107,6 +107,8 @@ remain readable after their inputs become stale, with a warning, but stale
 findings cannot receive new decisions. All check tables use forced PostgreSQL
 RLS and organization-bound composite references.
 
+[Citation publication gates](../../server/migrations/versions/0039_fast_citation_locate.py) verify each distinct live source-text/quote pair once at deferred check or score publication, preserve exact-span and normalization-boundary checks, and reject child rows appended after early completion.
+
 ## Pitfalls
 
 - Coverage is relative to requirements saved by one extraction job. It does not
