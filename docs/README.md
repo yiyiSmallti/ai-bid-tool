@@ -30,7 +30,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [response-cards.md](notes/response-cards.md): human response cards (响应卡), evidence confirmation, atomic disposition and three-table drafts (初稿).
 - [check.md](notes/check.md): deterministic risk checks on confirmed drafts, certificate (证书) dates, citations and human false-positive decisions.
 - [task-budgets.md](notes/task-budgets.md): task liability, atomic reservations, human changes and low-balance notices.
-- [score.md](notes/score.md): fixed scoring-rubric inputs, human classification, coverage decisions, per-item confirmation and immutable history.
+- [score.md](notes/score.md): two-stage scoring-rubric generation, fixed inputs, human classification, coverage decisions, per-item confirmation and immutable history.
 - [model-drafting-redaction.md](notes/model-drafting-redaction.md): model-drafting input snapshots, outbound redaction (遮挡) and dual-text citation validation.
 - [confidential-values.md](notes/confidential-values.md): confidential fields (保密字段), outbound placeholder substitution and filling values at export.
 - [background-jobs.md](notes/background-jobs.md): job states, cancellation and retries.

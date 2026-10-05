@@ -10,6 +10,20 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 - Unified developer and agent documentation in English using the [glossary](glossary.md), renamed the [design document](design.md), and conservatively corrected stale statuses and superseded decisions against implementation and later decisions. The [roadmap](plan/roadmap.md) remains the home for remaining scope and open decisions.
 
+## 2026-10-05: Rubric review compatibility and budget preflight
+
+- Generate stage-2 item keys from their fixed tender refs rather than numeric local UUIDs. UUID-derived keys matched the sensitive-number redaction rules, discarded valid items, and left downstream coverage and replacement requests empty. The item prompt version advances; queued jobs using the previous prompt must be resubmitted. Human review request contracts and redaction checks are unchanged.
+- Adapt the budget-admission test seam to `BudgetCallQuote`. Rubric cost preflight carries one structure quote and a conservative quote for every item batch, including direct-provider task liability. Cached previews use the same actor-bound cache key as submission despite the published structure changing the final input hash.
+- Add DB-free acceptance from the shared two-stage fake provider through citation validation to existing human coverage and revision request construction, plus platform/direct-provider budget-preflight and accounting coverage. Mechanism: [Human-reviewed rubrics](notes/score.md).
+
+## 2026-10-05: Two-stage score rubric generation
+
+- Stage 1 sends the full fixed scoring table once and proposes only section structure and the overall rule. It sees every scoring Requirement; each proposed section and the overall rule must have verified citations. The entire serialized HTTP body is checked against `BID_RUBRIC_MAX_REQUEST_BYTES`; exceeding it blocks preview/submission before any calls and never triggers splitting.
+- `RubricProvider.extract_structure` and `RubricProvider.extract_items` expose the two calls. Service validation checks section keys/titles/order, aggregation, bounds, caps, weights, inclusion and review domains before stage 2. Item details use bounded Requirement batches using `llm_batch_chars`; Provider owns batching and concurrency. Every batch receives the entire fixed section list. Unknown/cross-batch references remain unresolved. Failed batches can retain valid sections even when no items were accepted; partial results exit 5.
+- Preview remains zero-write and zero-call, with an upper bound for both stages and the complete section list repeated in each stage-2 batch. Prompt/schema versions enter preview cache/input identity; incompatible queued work fails explicitly and must be resubmitted. The published rubric `input_hash` derives from the manifest containing stage-1 output and its structure hash. The queued job `cache_key` remains the preview input, while submission stores `preview_input_hash` as provenance; no migration is required.
+- The design follows a real `glm-5.3-flash` attempt over 89 Requirements and about 25,000 tokens: low reasoning at about 21,000 tokens returned `invalid_provider_output`, while high reasoning at about 32,000 tokens was truncated. Those whole-table attempts followed earlier blind batching, which produced orphan sections and left 80/89 Requirements unresolved. Existing redaction, refusal, metering, attempt ownership and human-review gates remain in force.
+- Rubric and scoring calls use shared per-call admission and settlement. Task-budget enforcement remains an external dependency governed by the [budget contract](plan/budget.md), not a score-specific guarantee. See the [score contract](plan/score.md) and [mechanism note](notes/score.md).
+
 ## 2026-10-05: Task budget enforcement and cost preflight
 
 - Add migration `0040`, task revision history, human admin/bidder budget changes, tenant constraints, safe audit and admin-controlled low-balance policies/notices.
@@ -41,7 +55,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 ## 2026-10-05: Semantic check scope and complete scoring-table requests
 
 - Combined check sends only response rows with confirmed bid (标书) text to CheckProvider. Gaps (缺口) and comply-only (须遵守) retain deterministic checks with semantic status `not_requested`; missing response text alone does not make the report partial. Precheck item counts, cost bounds, and job call plans use the same selection. No model calls without response text. Migration `0036` adjusts partition-specific semantic publication constraints; see [Confirmed-draft checks](notes/check.md).
-- Rubric generation sends all scoring Requirements from the selected extraction in one request, removing extraction-character-budget batching, structure-error splitting, and cross-batch overall merging. Added separate complete-request capacity configuration; excess preview returns `rubric_context_limit`, submission rejects before any calls. Per-item citation/structure/confirmation/redaction/call-billing gates remain; see [Human-reviewed score rubrics](notes/score.md).
+- Initial rubric implementation sent all scoring Requirements in one request, with a request-capacity gate and no splitting. This generation strategy was superseded by the approved two-stage design in [Two-stage score rubric generation](#2026-10-05-two-stage-score-rubric-generation); source citation, confirmation, redaction and call-billing gates remain.
 - Added API→worker and MockTransport acceptance for mixed partitions, zero semantic calls, full-table generation above old batching threshold, and capacity rejection. Replaced old batching assertions while preserving failure/billing gate coverage.
 
 ## 2026-10-05: Score execution for confirmed response drafts
