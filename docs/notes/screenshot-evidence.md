@@ -13,7 +13,7 @@ to another card or allow changed pixels to inherit an earlier decision.
 
 The product boundary and source classifications are defined in the
 [screenshot contract](../plan/screenshots.md). Human response review follows
-[response cards](response-cards.md); model reservations and settlement follow
+[response cards (响应卡)](response-cards.md); model reservations and settlement follow
 [prepaid billing](prepaid-billing.md).
 
 ## Usage
@@ -230,7 +230,7 @@ the expected product revision, so a stale adoption is refused.
   This explicit analysis path always masks requirement text before dispatch;
   ordinary text-only card generation does not acquire image input implicitly.
 - A prototype without a valid delivery decision can still enter a confirmed
-  draft and a review copy; formal export enforces the decision through
+  draft and a review copy (审阅件); formal export enforces the decision through
   [human-section-exports.md](human-section-exports.md).
 - A sandbox render failure after the model call fails the job; a retry pays for a
   new generation.

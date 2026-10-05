@@ -29,7 +29,7 @@ The input builder accepts one current `DraftRun` and fixes its extraction job,
 document, complete requirement partition, response rows, confirmed material,
 active certificate selections, confidential-value revisions, redaction setting
 and rule/schema versions. Every saved requirement must have exactly one response,
-comply-only or gap row. Candidate card text is absent from the fixed snapshot;
+comply-only (须遵守) or gap row. Candidate card text is absent from the fixed snapshot;
 only verbatim confirmed response fields and confirmed material can enter it.
 Submission must return the preview hash, and the worker recomputes the input and
 authorization before each model admission and publication. Combined input identity
@@ -116,7 +116,7 @@ RLS and organization-bound composite references.
 - The rules mode does not inspect semantic contradictions, weak explanations,
   confidential values filled during export, layout, headers, signatures,
   attachments or image contents. Its report is advisory and does not change an
-  export, response card, evidence or score gate.
+  export, response card (响应卡), evidence or score gate.
 - An unmapped certificate date is still shown, but it is not attached to an
   unrelated requirement. A missing date is unknown rather than valid.
 - Changing a card, material selection, certificate, confidential value or other

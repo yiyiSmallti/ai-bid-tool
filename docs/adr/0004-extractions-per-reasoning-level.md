@@ -2,33 +2,27 @@
 kind: adr
 ---
 
-# 0004 按官方档位选择推理强度，每次抽取独立保存
+# 0004 Use official reasoning levels and retain each extraction separately
 
-日期：2026-10-02。状态：已采纳。
+Date: 2026-10-02. Status: accepted.
 
-## 背景
+## Context
 
-推理强度决定抽取的完整度、耗时和用量，差距可达十倍。思考开关和批次大小原来是整个部署共用的
-环境变量，用户无法按需选择。要求按"同任务同指纹"合并，同一文档用不同强度抽取两次时，粒度不同的
-条目会混在一起。
+Reasoning effort affects extraction completeness, latency, and usage, with differences of up to tenfold. Thinking switches and batch sizes were deployment-wide environment variables, unavailable for user selection. Requirements merged by “same task, same fingerprint,” mixing entries at different granularities when a document was extracted twice at different effort levels.
 
-## 决定
+## Decision
 
-- 档位使用服务商为该模型公布的官方值（如智谱 GLM-5.3 的 `low`、`high`、`max`），不另设"快速/
-  深入"。服务商没有接口列出档位，由平台管理员按文档在模型目录中登记，每档带请求参数、批次大小和
-  Anthropic effort。
-- 用户省略档位时使用服务商的官方默认档位。
-- 档位写入作业并进入缓存键：换档是新作业，同档重复提交返回原作业。
-- 要求归属产生它的抽取作业。`req list` 默认显示每个文档最近一次成功的抽取，旧结果保留并可按作业
-  查看，`req history` 列出全部抽取。
-- `req list` 不再合并多次抽取，返回内容变化，Result 契约由 1.1 升为 1.2。
+- Use the provider's published official values for the model (for example, Zhipu GLM-5.3 `low`, `high`, `max`), without inventing “fast/deep” levels. Providers have no endpoint listing levels, so platform administrators register them in the model catalog from documentation. Each level includes request parameters, batch size, and Anthropic effort.
+- Use the provider's official default level when the user omits one.
+- Persist the level on the job and include it in the cache key: changing levels creates a new job; repeating the same level returns the original job.
+- Requirements belong to the extraction job that produced them. By default, `req list` shows the latest successful extraction per document. Retain older results for job-specific viewing; `req history` lists all extractions.
+- `req list` no longer merges extractions. Its returned content changes, so upgrade the Result contract from 1.1 to 1.2.
 
-## 权衡
+## Tradeoffs
 
-- 用户看到的是服务商的档位名，不同模型的档位不一致；换来的是不用维护一套映射，也不会把服务商的
-  档位压缩成失真的两档。
-- 官方默认档往往是最高档：抽得最全，但最慢、用量最大。
-- 智谱 Coding Plan 端点实际接受"关闭思考"，但文档写明 GLM-5.3 不能关闭，所以不登记为档位。
-- 旧的合并行为对重试有用，但会混入不同粒度的条目；现在重试只在同一作业内进行。
+- Users see provider-specific level names that differ between models, avoiding a maintained mapping and a misleading compression into two levels.
+- The official default is often the highest level: most complete, slowest, and highest usage.
+- Zhipu's Coding Plan endpoint accepts “disable thinking,” but the documentation says GLM-5.3 cannot disable it, so it is not registered as a level.
+- Merging helped retries but mixed entries at different granularities. Retries now stay within one job.
 
-机制见 [reasoning-levels.md](../notes/reasoning-levels.md)。
+See [reasoning-levels.md](../notes/reasoning-levels.md) for the mechanism.

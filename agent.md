@@ -1,124 +1,121 @@
 # agent.md
 
-本文件给 coding agent（Codex、Claude Code 等）阅读。动手前先读完本文件和 `docs/AI 标书工具设计文档.md`（AI 标书工具设计文档）。
+This file is for coding agents such as Codex and Claude Code. Read this entire file
+and [the design document](docs/design.md) before starting work. Use the terminology
+in [the glossary](docs/glossary.md).
 
-## 项目概述
+## Project overview
 
-AI 标书工具：帮投标单位解析招标文件、抽取要求、查证技术参数并截图取证、校验标书、预估得分。
-以 SaaS 方式部署，多个单位（租户）共用一套服务、数据互相隔离；CLI `bid` 是对外接口，网页看板、内置 agent 和外部 agent 都调用同一套命令。
+AI Bid Tool helps bidding orgs (organizations/tenants; 单位) parse tender documents
+(招标文件), extract requirements, verify technical parameters and capture screenshots
+as evidence (证据), check bids (bid documents; 标书), and estimate scores.
+It is deployed as SaaS: multiple orgs share one service with isolated data. The `bid`
+CLI is the external interface; the web dashboard, built-in agent and external agents
+all use the same commands.
 
-## 硬性规则（任何情况下都不得违反）
+## Hard rules (must never be violated)
 
-1. **单位隔离**
-   - 所有业务表必须有 `org_id`（NOT NULL）并启用 PostgreSQL 行级安全策略（RLS）。新建表时，同一次改动里必须带上 RLS 策略和隔离测试。
-   - `User` 是全局身份表，是单位 `org_id` 与 RLS 要求的唯一例外，仅保存登录身份与认证信息；一个全局账号可以加入多个单位。单位归属、角色和权限保存在 `Membership` 中，`Membership` 及其余单位业务表仍必须有 `org_id`（NOT NULL）并启用 RLS。
-   - 平台运营后台另有经批准的例外：全局表 `platform_models`（平台模型目录）、`platform_audit_logs`（只能新增、不能改删）和 `platform_cards`（充值卡密，只存哈希与末 4 位），以及 `NOLOGIN`、无 `BYPASSRLS` 的角色 `bid_platform_fn`。该角色只在 `orgs`、`memberships`、`usage_records`、`org_balances` 上有只读跨单位策略，只作为固定函数的属主；函数不得返回任何单位业务内容，入账只能经 `redeem_card` 和 `platform_adjust_balance`。决定与理由见 `docs/adr/0001-platform-console-access.md` 和 `docs/adr/0002-prepaid-billing.md`。
-   - [ADR 0006](docs/adr/0006-platform-credentials.md) 批准一个范围受限的新全局表 `platform_credentials`，无 `org_id`，不采用租户 RLS。它只保存平台持有的出站服务凭据、加密和管理元数据；不得保存单位 BYOK、业务内容、登录身份、平台管理员名单或用于解锁自身的密钥。不新增全局凭据历史明文/密文表。
-   - 沿用 `bid_platform_fn` 的受限函数属主模式，但不把新密文访问权扩大给该已有角色。新 `bid_platform_credentials_fn` 为 `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`，只拥有固定凭据函数所需的表权限，不获任何单位业务表权限。单位运行角色 `bid_app` 无该表的直接权限，也无这些函数的 EXECUTE/角色成员资格。`bid_platform_app`（平台管理专用连接）只可执行元数据和写函数；`bid_credential_reader`（API/worker 的凭据解析专用连接）只可执行按已验证消费对象定位的单条密文解析函数及 readiness 元数据函数。二者不获表的 SELECT/UPDATE，不继承属主，不拥有任何 `BYPASSRLS` 能力。函数固定 `search_path`、全限定对象名，撤销 PUBLIC EXECUTE，禁止动态 SQL。TOTP 在平台应用边界核验，数据库不把可伪造的 `SET app.*` 当作认证；不同连接角色是单位 SQL 路径的隔离边界，不宣称能隔离已被攻陷且持有根密钥的整个服务进程。
-   - 登录成功不代表可以访问任意单位；切换或访问单位前必须校验有效的 `Membership`，再设置该请求的单位上下文。
-   - 数据库会话通过 `SET app.current_org = ...` 设置单位上下文；应用代码不得使用绕过 RLS 的数据库角色。
-   - 对象存储路径一律以 `org/{org_id}/` 开头；下载只发放带签名的短期链接。
-   - 向量检索必须同时按 `org_id` 和记忆作用域过滤。
-   - 后台作业必须携带单位上下文执行，不允许在作业里"顺便"查询其他单位的数据。
-2. **人工确认关口**
-   - `Evidence.confirmed_by` 为空的证据，不得进入 `draft` 生成的响应表，也不得出现在 `export` 导出的文件里。
-   - API 令牌永远不能获得 `evidence:confirm` 和 `export` 权限；内置 agent 和外部 agent 都不能确认证据。
-3. **不伪造材料**
-   - 不实现任何"生成厂家页面、检测报告、证书"的功能。硬件证据只能来自真实网页或文件的截图。
-   - `ui mock` 原型由模型按功能要求生成单页 HTML，在 [docs/plan/sandbox.md](docs/plan/sandbox.md) 规定的沙盒中渲染截图。原型图片不加水印，图片、初稿和导出文档不加可见原型标签；系统内部必须保留 origin=prototype、生成模型和 HTML 哈希。原型可经逐卡人工确认作为证据。正式导出前，每项引用原型的证据必须由相应职责的人选择"保留（已是或将成为交付界面）"或"替换为真实截图"，可按模块批量决定并逐项留痕；未决定或未完成替换的阻止正式导出，不单独阻止审阅件。厂家网页、报告和证书仍禁止生成，硬件证据仍只来自真实网页或文件。
-4. **模型调用只经接入层**
-   - 只有 `server/app/providers/` 可以导入厂商 SDK；业务代码只依赖 Provider 接口。
-   - 每次调用都要记录服务商、模型名、耗时、费用，写入 `UsageRecord`。
-5. **CLI 契约**
-   - 所有命令支持 `--json`，输出统一结构：`ok`、`command`、`data`、`items`、`warnings`、`cost`、`duration_ms`。
-   - 退出码：0 成功；2 参数或输入错误；3 可重试失败；4 不可重试失败；5 部分成功。
-   - 不做交互式提问，缺参数直接报错。
-   - JSON 输出结构的不兼容变更必须升版本号；`bid schema` 输出与实现保持一致。
-   - 本地模式使用本机 PostgreSQL，并保留与远程模式一致的 RLS 和权限校验；文件保存在本地目录，仍以 `org/{org_id}/` 隔离。不得用纯文件数据库替代 PostgreSQL。
-6. **引用**：每条 `Requirement` 必须带来源文件和可核验的位置：PDF 为页码，Word 为章节路径与段落或表格单元格位置。引用原文必须逐字出现在所指位置；缺少有效引用的抽取结果要拒绝或标记，不能静默保存。
-7. **密钥与敏感数据**：服务商密钥和令牌加密存储；日志中不得出现密钥、报价、身份证号、银行账号。
-8. **记忆**：单位记忆永远不写入全局层；系统自动提议的记忆一律以 `candidate` 状态保存，经人确认后才生效。
+1. **Org isolation**
+   - Every business table must have a NOT NULL `org_id` and enable PostgreSQL row-level security (RLS). Any change that creates a table must also include its RLS policies and isolation tests.
+   - `User` is a global identity table and the sole exception to the org `org_id` and RLS requirements; it stores only login identity and authentication information. One global account may join multiple orgs. Org affiliations, roles and permissions belong in `Membership`; `Membership` and all other org business tables must still have a NOT NULL `org_id` and enable RLS.
+   - The platform operator console (平台运营后台) has additional approved exceptions: the global tables `platform_models` (platform model catalog), `platform_audit_logs` (append-only; no updates or deletes), and `platform_cards` (recharge cards (充值卡密), storing only hashes and the last 4 characters), plus the `NOLOGIN` role `bid_platform_fn`, without `BYPASSRLS`. This role has read-only cross-org policies only on `orgs`, `memberships`, `usage_records` and `org_balances`, and serves only as the owner of fixed functions. Functions must not return any org business content; balance credits may be posted only through `redeem_card` and `platform_adjust_balance`. Decisions and rationale are in [ADR 0001](docs/adr/0001-platform-console-access.md) and [ADR 0002](docs/adr/0002-prepaid-billing.md).
+   - [ADR 0006](docs/adr/0006-platform-credentials.md) approves a narrowly scoped new global table, `platform_credentials`, without `org_id` or tenant RLS. It stores only platform-held outbound service credentials and encryption and management metadata. It must not store org BYOK credentials, business content, login identities, platform administrator lists or keys used to unlock itself. Do not add a global credential-history table containing plaintext or ciphertext.
+   - Reuse the restricted function-owner pattern of `bid_platform_fn`, without extending access to the new ciphertext to that existing role. The new `bid_platform_credentials_fn` is `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`; it has only the table privileges required by the fixed credential functions and no privileges on any org business table. The org runtime role `bid_app` has no direct privileges on this table, no EXECUTE privilege on these functions and no membership in these roles. `bid_platform_app` (the dedicated platform management connection) may execute only metadata and write functions. `bid_credential_reader` (the dedicated API/worker credential-resolution connection) may execute only the function that resolves one ciphertext record for a verified consumer and the readiness metadata function. Neither receives table SELECT/UPDATE privileges, inherits the owner role or has any `BYPASSRLS` capability. Functions must fix `search_path`, fully qualify object names, revoke PUBLIC EXECUTE and prohibit dynamic SQL. TOTP is verified at the platform application boundary; the database must not treat forgeable `SET app.*` values as authentication. Separate connection roles form the isolation boundary for org SQL paths; they do not claim to isolate an entire compromised service process that holds the root key.
+   - Successful login does not authorize access to arbitrary orgs. Before switching to or accessing an org, validate an active `Membership`, then set that request's org context.
+   - Database sessions set the org context through `SET app.current_org = ...`. Application code must not use a database role that bypasses RLS.
+   - Every object-storage path must start with `org/{org_id}/`. Issue only signed, short-lived download links.
+   - Vector retrieval must filter by both `org_id` and memory scope.
+   - Background jobs must run with an org context. A job must not query another org's data incidentally.
+2. **Human confirmation gate (人工确认)**
+   - Evidence whose `Evidence.confirmed_by` is null must not enter response (响应) tables generated by `draft` or files produced by `export`.
+   - API tokens must never receive `evidence:confirm` or `export` permission. Neither built-in nor external agents may confirm evidence.
+3. **No fabricated materials**
+   - Do not implement any feature that generates vendor (厂家) pages, test reports or certificates (证书). Hardware evidence may come only from screenshots of real web pages or files.
+   - For `ui mock`, the model generates single-page HTML prototypes (原型) from functional requirements and captures screenshots in the sandbox defined by [docs/plan/sandbox.md](docs/plan/sandbox.md). Prototype images have no watermark, and images, drafts (初稿) and exported documents have no visible prototype labels. Internally, the system must retain origin=prototype, the generating model and the HTML hash. Prototypes may become evidence through human confirmation of each response card (响应卡). Before a final export, a human in the corresponding review domain (职责) must choose either "保留（已是或将成为交付界面）" (keep: already is or will become the delivered interface) or "替换为真实截图" (replace with a real screenshot) for each piece of evidence referencing a prototype. Decisions may be made in batches by module, with a record for each item. An undecided item or an incomplete replacement blocks final export but does not independently block a review copy (审阅件). Generating vendor pages, reports and certificates remains prohibited; hardware evidence must still come only from real web pages or files.
+4. **Model calls only through the provider layer**
+   - Only `server/app/providers/` may import vendor SDKs. Business code depends only on Provider interfaces.
+   - Record the provider, model name, duration and cost of every call in `UsageRecord`.
+5. **CLI contract**
+   - All commands support `--json` with a uniform output structure: `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`.
+   - Exit codes: 0 success; 2 argument or input error; 3 retryable failure; 4 non-retryable failure; 5 partial success.
+   - Do not ask interactive questions; report an error immediately when arguments are missing.
+   - Incompatible changes to JSON output structures must increase the version number. `bid schema` output must stay consistent with the implementation.
+   - Local mode uses local PostgreSQL and retains the same RLS and permission checks as remote mode. Files are stored in a local directory, still isolated by `org/{org_id}/`. Do not replace PostgreSQL with a file-only database.
+6. **Citations**: Every `Requirement` must include its source file and a verifiable location: a page number for PDF, or a section path and paragraph or table-cell location for Word. The quoted source text must occur verbatim at that location. Reject or flag extracted results without valid citations; never save them silently.
+7. **Keys and sensitive data**: Store provider keys and tokens encrypted. Logs must not contain keys, quoted prices, identity-card numbers or bank account numbers.
+8. **Memory (记忆)**: Org memory must never be written to the global layer. All automatically proposed memories are saved with `candidate` status and become effective only after human confirmation.
 
-## 技术栈
+## Technology stack
 
-| 部分 | 选型 |
+| Component | Choice |
 | --- | --- |
-| 服务端 | Python 3.12、FastAPI（async）、SQLAlchemy 2.0、Alembic |
-| 数据库 | PostgreSQL 16 + pgvector |
-| 文件存储 | S3 兼容对象存储（本地开发用 MinIO） |
-| 后台作业 | 暂定 Procrastinate（基于 PostgreSQL，少一个 Redis 组件）；如需更换，只改 `server/app/jobs/` |
-| 数据结构 | Pydantic v2（同时用于 API、CLI 输出和 LLM 结构化输出） |
-| CLI | Typer，命令名 `bid` |
-| 文档处理 | PyMuPDF（PDF）、python-docx（Word） |
-| 网页截图 | Playwright（BrowserProvider 的默认实现） |
-| 导出件预览转换 | Gotenberg（LibreOffice，独立容器） |
-| 证据标注 | Rust（clap、serde、image、sha2），编译为独立可执行文件 |
-| 前端 | Vue 3 + Vite + Element Plus |
-| 部署 | Docker Compose |
-| 质量 | ruff、pyright、pytest、cargo test、GitHub Actions |
+| Server | Python 3.12, FastAPI (async), SQLAlchemy 2.0, Alembic |
+| Database | PostgreSQL 16 + pgvector |
+| File storage | S3-compatible object storage (MinIO for local development) |
+| Background jobs | Procrastinate (PostgreSQL-based, avoiding an additional Redis component); if it must be replaced, change only `server/app/jobs/` |
+| Data structures | Pydantic v2 (shared by the API, CLI output and structured LLM output) |
+| CLI | Typer; command name `bid` |
+| Document processing | PyMuPDF (PDF), python-docx (Word) |
+| Web screenshots | Playwright (the default BrowserProvider implementation) |
+| Export preview conversion | Gotenberg (LibreOffice in a separate container) |
+| Evidence annotation | Rust (clap, serde, image, sha2), compiled as a standalone executable |
+| Frontend | Vue 3 + Vite + Element Plus |
+| Deployment | Docker Compose |
+| Quality | ruff, pyright, pytest, cargo test, GitHub Actions |
 
-引入上表以外的大型依赖前，先说明理由并征得同意。
+Explain the reason and obtain approval before introducing a major dependency outside this table.
 
-## 目录结构
+## Directory structure
 
-```
+```text
 .
 ├── agent.md
 ├── docs/
-│   ├── AI 标书工具设计文档.md  # 设计文档（以此为准）
-│   └── notes/             # 核心机制笔记，英文
+│   ├── design.md         # Authoritative design document
+│   └── notes/            # Notes on core mechanisms
 ├── server/
 │   ├── app/
-│   │   ├── api/           # 路由
-│   │   ├── core/          # 配置、认证、租户上下文、加密
-│   │   ├── models/        # SQLAlchemy 模型
-│   │   ├── schemas/       # Pydantic 模型，CLI 输出共用
-│   │   ├── services/      # 业务逻辑，每个命令一个模块
-│   │   ├── jobs/          # 后台作业定义
-│   │   ├── providers/     # LLM、Vision、OCR、Search、Embedding、Browser 接口与实现
-│   │   └── memory/        # 记忆读写与检索
-│   ├── migrations/        # Alembic
+│   │   ├── api/          # Routes
+│   │   ├── core/         # Configuration, authentication, tenant context, encryption
+│   │   ├── models/       # SQLAlchemy models
+│   │   ├── schemas/      # Pydantic models, shared with CLI output
+│   │   ├── services/     # Business logic, one module per command
+│   │   ├── jobs/         # Background job definitions
+│   │   ├── providers/    # LLM, Vision, OCR, Search, Embedding, Browser interfaces and implementations
+│   │   └── memory/       # Memory reads, writes and retrieval
+│   ├── migrations/       # Alembic
 │   └── tests/
-├── cli/                   # bid 命令行：远程模式调用 API，本地模式使用本机 PostgreSQL 和本地文件
-├── stamp/                 # Rust 证据标注
-├── web/                   # Vue 前端
-├── evals/                 # 评测数据集与脚本（不在 CI 默认运行）
-└── deploy/                # docker-compose 与环境变量模板
+├── cli/                  # bid CLI: API in remote mode; local PostgreSQL and files in local mode
+├── stamp/                # Rust evidence annotation
+├── web/                  # Vue frontend
+├── evals/                # Evaluation datasets and scripts (not run by default in CI)
+└── deploy/               # docker-compose and environment-variable templates
 ```
 
-## 工作方式
+## Workflow
 
-- **先接口后实现**：新功能先写 Pydantic 模型、Provider 接口和 CLI 的 JSON 结构，等确认后再写实现。
-- **纵向切片**：每次只推进一条完整链路，跑通并有测试后再开始下一条。不要一次铺开多个模块的半成品。
-- **小步提交**：每次改动聚焦一件事，提交信息用英文。
-- **不确定就问**：设计文档没有覆盖、或与本文件冲突的地方，先提问，不要自行假设。
-- **核心机制写笔记**：完成单位隔离、后台作业、证据链、记忆检索等核心机制后，在 `docs/notes/` 下写一页英文笔记，结构为 Problem / Usage / How it works / Pitfalls / Code，供人复习。
+- **Interfaces before implementation**: For new features, write Pydantic models, Provider interfaces and CLI JSON structures first. Wait for confirmation before implementing them.
+- **Vertical slices**: Advance one complete path at a time. Make it work and cover it with tests before starting the next. Do not build unfinished pieces across multiple modules at once.
+- **Small commits**: Keep each change focused on one concern; write commit messages in English.
+- **Ask when uncertain**: Ask first about anything the design document does not cover or that conflicts with this file; do not make assumptions.
+- **Document core mechanisms**: After completing core mechanisms such as org isolation, background jobs, the evidence chain or memory retrieval, write a one-page English note under `docs/notes/` with the structure Problem / Usage / How it works / Pitfalls / Code for later review.
 
-## 测试要求
+## Test requirements
 
-- **隔离测试必写**：测试夹具固定准备两个单位 A 和 B。每个接口、每张表都要有"用 A 的身份访问 B 的数据必须失败"的测试；资源不存在和无权访问统一返回 404。
-- **关口测试必写**：未确认证据不能导出；令牌申请确认权限必须被拒绝。
-- **CLI 契约测试**：对每个命令的 `--json` 输出做快照测试，结构变化必须是有意为之。
-- **不调用真实外部服务**：CI 中所有 Provider 使用假实现；需要真实调用的放进 `evals/`。
-- 不得为了让测试通过而放宽隔离规则、确认规则或删除测试。
+- **Isolation tests are mandatory**: Fixtures must always provide two orgs, A and B. Every endpoint and table must have a test proving that accessing B's data as A fails. Return 404 both for nonexistent resources and unauthorized access.
+- **Gate tests are mandatory**: Unconfirmed evidence cannot be exported; a token request for confirmation permission must be rejected.
+- **CLI contract tests**: Snapshot the `--json` output of every command. Structural changes must be intentional.
+- **No real external services**: All Providers use fake implementations in CI. Put tests requiring real calls under `evals/`.
+- Never weaken isolation or confirmation rules, or delete tests, to make tests pass.
 
-## 当前任务：切片 1
+## Scope and priorities
 
-目标：登录 → 创建任务 → 上传招标文件 → 解析 → 抽取要求 → CLI 输出结果，整条链路跑通。
+Remaining scope, implementation status, known defects and suggested order are maintained in
+[the roadmap](docs/plan/roadmap.md). Shipped changes are recorded in
+[the changelog](docs/changelog.md).
 
-- [ ] 仓库骨架、`deploy/docker-compose.yml`（PostgreSQL + pgvector、MinIO）、GitHub Actions
-- [ ] 数据模型与迁移：Org、User、Membership、ApiToken、Task、Document、Chunk、Requirement、UsageRecord；User 为全局身份表，其余单位业务模型全部带 org_id 和 RLS 策略
-- [ ] 认证：账号密码登录、API 令牌（带权限范围和过期时间）、请求级单位上下文中间件
-- [ ] Provider 接口：LLMProvider、OCRProvider 各一个真实实现 + 一个测试用假实现
-- [ ] 后台作业：`tender parse`、`req extract` 以作业方式执行，可查询状态
-- [ ] CLI：`bid login`、`bid org use`、`bid task create`、`bid tender parse`、`bid req extract`、`bid job status`、`bid schema`，支持远程和本地两种模式
-- [ ] 测试：隔离测试、CLI 契约快照测试、抽取结果的引用校验测试
+## Prohibited work
 
-完成标准：用一份公开的招标文件 PDF 端到端跑通；全部测试在 CI 通过；`docs/notes/` 下有单位隔离的笔记。
-
-## 不要做
-
-- 不要在 `providers/` 以外直接调用厂商 SDK。
-- 不要提交任何密钥；只维护 `deploy/.env.example`。
-- 不要实现设计文档"非目标"中列出的功能（编造材料、对接电子投标平台、报价策略）。
-- 不要在本切片里做看板、记忆系统和证据采集，它们属于后续切片。
+- Do not call vendor SDKs directly outside `providers/`.
+- Do not commit any keys; maintain only `deploy/.env.example`.
+- Do not implement the design document's [non-goals](docs/design.md#background-goals-and-non-goals): fabricating materials, integrating with electronic bidding platforms or pricing strategy.

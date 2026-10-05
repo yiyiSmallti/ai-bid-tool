@@ -109,7 +109,7 @@ discards the preview without retrying, and the job is tracked with
 
 [OrgDrafts.vue](../../web/src/views/OrgDrafts.vue) separates deterministic assembly
 preview from submission. It retains partial outcomes and historical snapshots,
-shows the three tables separately from comply-only decisions and gaps, and keeps
+shows the three tables separately from comply-only (须遵守) decisions and gaps, and keeps
 negative-deviation counts visible across filters. A stale draft retains its
 snapshot and links affected requirements back to review; it is not a deliverable.
 
@@ -133,7 +133,7 @@ SQL counts from fresh application transactions.
 - Browser role hints and checkboxes never replace API authorization or the human
   decision transaction. Local sign-out does not revoke the server session.
 - Full-set APIs have a scale limit. The performance gate in
-  [the console contract](../plan/org-console.md#大列表与无障碍) must pass with real
+  [the console contract](../plan/org-console.md#large-lists-and-accessibility) must pass with real
   API responses before claiming large-list acceptance; truncation is not a fix.
 - A signed URL alone is insufficient for material access. Do not place session
   credentials in a URL or embed signed downloads in an unauthenticated iframe.

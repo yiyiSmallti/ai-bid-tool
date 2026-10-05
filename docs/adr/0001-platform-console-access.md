@@ -2,39 +2,28 @@
 kind: adr
 ---
 
-# 0001 平台运营后台的跨单位访问
+# 0001 Cross-org access for the platform operator console (平台运营后台)
 
-日期：2026-10-01。状态：已采纳。
+Date: 2026-10-01. Status: accepted.
 
-## 背景
+## Context
 
-平台运营方需要开通、停用单位，维护平台付费模型，并查看各单位的用量与应收。
-[agent.md](../../agent.md#硬性规则任何情况下都不得违反) 规定所有业务表带 `org_id` 并强制 RLS，
-应用不得使用绕过 RLS 的数据库角色；[设计文档](../AI%20标书工具设计文档.md#多租户与权限)
-要求平台管理员看不到单位业务数据。
+Platform operators need to provision and disable orgs (organizations/tenants, 单位), maintain platform-billed models, and view usage and receivables by org.
+[agent.md](../../agent.md#hard-rules-must-never-be-violated) requires `org_id` and mandatory RLS on every business table and forbids database roles that bypass RLS.
+The [design document](../design.md#multi-tenancy-and-permissions) requires platform administrators to have no access to org business data.
 
-## 决定
+## Decision
 
-- 跨单位读取由 `NOLOGIN NOSUPERUSER NOBYPASSRLS` 角色 `bid_platform_fn` 承担。它只在
-  `orgs`、`memberships`、`usage_records` 上有 `FOR SELECT` 的全量策略，只作为四个
-  `SECURITY DEFINER` 函数的属主：单位摘要、用量汇总、开通单位、启停单位。函数只返回
-  固定的汇总列。运行角色 `bid_app` 只能执行这些函数，自身查询仍受单位策略约束。
-- 开通和启停单位的写入在函数内把 `app.current_org` 设为目标单位，沿用普通的单位策略，
-  结束时清空。
-- 新增两张全局表：`platform_models`（运行角色可读写，不可删除，停用代替删除，保证用量
-  记录始终能关联到模型）和 `platform_audit_logs`（只能新增和读取）。
-- 平台管理员名单和每人的 TOTP 密钥只来自部署配置，应用无法给自己提权。平台会话与
-  单位会话、API 令牌互不通用，有效期 30 分钟。
-- TOTP 防重放和登录限速借用平台审计表实现，不新增表。设置密码链接是签名令牌，绑定
-  当前密码哈希的指纹，用过即失效，同样不落库。
+- Cross-org reads use the `NOLOGIN NOSUPERUSER NOBYPASSRLS` role `bid_platform_fn`. It has unrestricted `FOR SELECT` policies only on `orgs`, `memberships`, and `usage_records`, and serves only as the owner of four `SECURITY DEFINER` functions: org summaries, usage summaries, org provisioning, and org enable/disable. Functions return only fixed summary columns. The runtime role `bid_app` can execute these functions; its own queries remain subject to org policies.
+- Provisioning and enable/disable writes set `app.current_org` to the target org inside the function, use ordinary org policies, and clear the context afterward.
+- Add two global tables: `platform_models` (runtime read/write, no deletion; disable instead of deleting so usage records can always reference a model) and `platform_audit_logs` (append and read only).
+- The platform administrator allowlist and each administrator's TOTP secret come only from deployment configuration. The application cannot elevate its own privileges. Platform sessions, org sessions, and API tokens are not interchangeable; platform sessions last 30 minutes.
+- TOTP replay prevention and login rate limiting use the platform audit table without another table. Password-setting links are signed tokens bound to a fingerprint of the current password hash. They become invalid after use and are not stored in the database.
 
-## 权衡
+## Tradeoffs
 
-- 没有采用超级用户属主的函数或 `BYPASSRLS` 角色：它们能读取一切，暴露面取决于函数实现
-  是否始终正确；专用角色加按表、按命令的策略，把可读范围限定在三张表的只读访问上。
-- 没有给 `bid_app` 直接加跨单位策略：那会让任何单位请求的代码缺陷都能读到其他单位。
-- 函数对 `bid_app` 可执行，应用层的平台身份检查仍是必要条件；所有平台操作写审计以便追查。
-- 管理员名单放在配置而非数据库，增减管理员需要重启；换来的是应用代码和数据库写入都
-  无法创建平台管理员。
-- 用审计表做限速意味着针对某个管理员邮箱的错误尝试可以让该账号暂时锁定 15 分钟，
-  这被接受为防暴力破解的代价。
+- Superuser-owned functions and `BYPASSRLS` roles were rejected: they can read everything, and exposure depends on consistently correct function implementations. A dedicated role with policies per table and command limits cross-org access to reads on three tables.
+- Direct cross-org policies on `bid_app` were rejected because a defect in any org request could expose other orgs.
+- Functions are executable by `bid_app`, so application-level platform identity checks remain necessary. Every platform operation is audited for investigation.
+- Keeping administrators in configuration rather than the database requires a restart to add or remove administrators, but neither application code nor database writes can create a platform administrator.
+- Audit-based rate limiting means failed attempts against an administrator's email can temporarily lock that account for 15 minutes. This is accepted as a cost of brute-force protection.

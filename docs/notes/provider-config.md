@@ -59,7 +59,8 @@ revision, source and object IDs, excluding key and endpoint input.
 [configured.py](../../server/app/providers/configured.py) resolves the latest org
 revision, then an enabled platform default, then `DisabledLLM`. There is no
 runtime fallback to environment-selected models. Explicit adapter injection is
-reserved for tests; standalone adapters and evals can still use `BID_LLM_*`.
+reserved for tests. Standalone adapters and evals use only non-secret `BID_LLM_*`
+settings; credential resolution follows [platform credential authority](platform-credentials.md#how-it-works).
 
 The org adapter replaces provider, model, endpoint, JSON mode, cost prices and
 reasoning options. It does not inherit deployment vendor request options or
@@ -85,7 +86,7 @@ catalog prices. `platform_usage_summary` groups these calls under `org`,
 `platform`, or legacy `unbilled` without granting the platform function role
 access to configuration rows or credentials.
 
-Org-key calls reserve zero platform charge and skip prepaid balance checks.
+Org-key calls reserve zero platform charge and skip prepaid balance (预付余额) checks.
 They still create `vendor_calls` and consume the job's cumulative call ceiling,
 including split batches, retries and failures with unknown usage. Settlement
 occurs before parsing or citation validation. The common admission and settlement

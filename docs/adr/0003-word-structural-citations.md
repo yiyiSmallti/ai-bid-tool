@@ -2,30 +2,27 @@
 kind: adr
 ---
 
-# 0003 Word 招标文件按文档位置引用
+# 0003 Cite Word tender documents by document location
 
-日期：2026-10-01。状态：已采纳。
+Date: 2026-10-01. Status: accepted.
 
-## 背景
+## Context
 
-硬性规则 6 原要求每条要求带页码。Word 文件没有固定分页，页码取决于排版软件、字体和纸张；
-样例招标文件由 WPS 保存，记录 181 页，文件中只有 27 处手动分页符。此前 Word 只能转成 PDF
-后再抽取。
+Hard rule 6 originally required a page number for every requirement. Word pagination depends on the layout application, fonts, and paper. The sample tender documents (招标文件) were saved by WPS and reported 181 pages, but contained only 27 manual page breaks. Previously, Word needed conversion to PDF before extraction.
 
-## 决定
+## Decision
 
-- 规则 6 改为：PDF 引用页码，Word 引用章节路径加段落或表格单元格；引用原文必须逐字出现在
-  所指位置。
-- Word 按正文顺序拆成段落块和单元格块，引用校验只在被引用的那一个块里进行。
-- 段落序号按所在最近章节计数显示，内部标识用全文序号。
-- 页眉页脚、文本框、脚注尾注、批注、图片不纳入，解析警告列出跳过的类别。
-- Result 契约由 1.0 升为 1.1：`source.page` 可为 null，新增 `source.location`。
+- Change rule 6: cite PDF page numbers; cite Word section paths plus paragraphs or table cells. Quoted text must occur verbatim at the referenced location.
+- Split Word content into paragraph and cell chunks in body order. Validate a citation only within its referenced chunk.
+- Display paragraph numbers relative to the nearest containing section; use document-wide numbers internally.
+- Exclude headers, footers, text boxes, footnotes, endnotes, comments, and images. Parsing warnings list skipped categories.
+- Upgrade the Result contract from 1.0 to 1.1: `source.page` may be null; add `source.location`.
 
-## 权衡
+## Tradeoffs
 
-- 块级校验比页级严格：跨两个单元格的引用会被拒绝。好处是位置可直接定位到格子。
-- 不再从 Word 推算页码，审阅者按章节和表格坐标查找，而不是翻页。
-- 文本框里的要求不会被抽取；样例文件没有文本框，出现时只能靠解析警告发现。
-- 读取旧契约的调用方遇到 Word 来源会看到 `page: null`，所以按不兼容变更升级契约版本。
+- Chunk-level validation is stricter than page-level validation: a quote spanning two cells is rejected, but the location points directly to a cell.
+- Stop inferring Word page numbers. Reviewers locate sections and table coordinates rather than pages.
+- Requirements in text boxes are not extracted. The sample has none; if they appear, parsing warnings are the only way to notice them.
+- Older-contract clients see `page: null` for Word sources, so the contract version increases for an incompatible change.
 
-机制见 [docx-citations.md](../notes/docx-citations.md)。
+See [docx-citations.md](../notes/docx-citations.md) for the mechanism.

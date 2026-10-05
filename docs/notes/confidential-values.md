@@ -80,7 +80,7 @@ the keys named by response rows and their evidence quotes. It adds a `confidenti
 label, status and current value row ID to the fixed manifest only when a key is
 named, so runs without placeholders keep their hash. A missing value blocks a
 `final_section` (`confidential_value_missing`); an unknown or archived key
-blocks both modes. A review copy renders a missing value as 【label】.
+blocks both modes. A review copy (审阅件) renders a missing value as 【label】.
 
 The render job decrypts exactly the fixed value rows into the private render
 directory. `_fill_confidential` in

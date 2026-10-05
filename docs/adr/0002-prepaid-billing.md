@@ -2,36 +2,29 @@
 kind: adr
 ---
 
-# 0002 预付余额与充值卡密
+# 0002 Prepaid balances (预付余额) and recharge cards
 
-日期：2026-10-01。状态：已采纳。
+Date: 2026-10-01. Status: accepted.
 
-## 背景
+## Context
 
-平台默认模型的调用按售价记入应收，需要一种收款方式。结算方式定为预付：单位用充值卡密
-充值，平台管理员可以生成卡密，也可以直接调整余额。币种由部署方自定义，不设透支额度。
+Calls to platform-default models accrue receivables at the selling price and need a payment mechanism. Settlement is prepaid: orgs (organizations/tenants, 单位) redeem recharge cards (充值卡密); platform administrators can generate cards or adjust balances directly. Deployment operators choose the currency. There is no overdraft allowance.
 
-## 决定
+## Decision
 
-- 每个单位一个余额（`org_balances`）和只能新增的流水（`balance_entries`），都在单位隔离下。
-  余额由流水推出，`org_balances` 是加锁维护的当前值。
-- 卡密存放在全局表 `platform_cards`，这是第三张经批准的全局表：卡密在兑换前不属于任何单位。
-  只存 SHA-256 哈希和末 4 位；原文只出现在生成响应和导出文件中。
-- 入账只经两个由 `bid_platform_fn` 拥有的函数：`redeem_card` 先锁余额再锁卡密，把同一张卡
-  的并发兑换串行化；`platform_adjust_balance` 把"设为"换算成差额并要求原因。运行角色只能
-  生成卡密和作废未使用的卡密；已兑换、已作废是终态，由触发器保证。
-- 扣费与用量记录在同一事务内完成。余额必须大于 0 才能提交平台计费作业，作业开始处理前再
-  检查一次；不做预估冻结。
-- 币种由 `BID_BILLING_CURRENCY` 配置，售价、应收、余额、卡密面值都用它；成本价仍是服务商的
-  美元报价。已有余额的币种与配置不一致时，服务拒绝启动。
-- 兑换是资金操作：只有单位管理员可以兑换，API 令牌永远不能获得 `billing:redeem`。
+- Each org has one balance (`org_balances`) and an append-only ledger (`balance_entries`), both under org isolation. The balance derives from the ledger; `org_balances` is the current value maintained under a lock.
+- Cards live in the global `platform_cards` table, the third approved global table: an unredeemed card belongs to no org. Store only its SHA-256 hash and last 4 characters; plaintext appears only in the generation response and export file.
+- Credits use only two functions owned by `bid_platform_fn`: `redeem_card` locks the balance before the card to serialize concurrent redemption of one card; `platform_adjust_balance` converts a “set to” operation into a delta and requires a reason. The runtime role can only generate cards and void unused cards. Redeemed and voided are terminal states enforced by triggers.
+- Charges and usage records commit in one transaction. The balance must be greater than 0 to submit a platform-billed job and is checked again before processing starts. There is no estimated-charge reservation.
+- `BID_BILLING_CURRENCY` defines the currency for selling prices, receivables, balances, and card face values. Cost prices remain the provider's USD prices. The service refuses to start if existing balances use a different currency from configuration.
+- Redemption is a financial operation: only org administrators may redeem; API tokens can never receive `billing:redeem`.
 
-## 权衡
+The no-reservation decision above records the original settlement contract. Current per-call reservation and admission behavior is maintained in [Prepaid billing](../notes/prepaid-billing.md#admission-and-the-spending-bound).
 
-- 没有透支额度，但一次调用的费用事先未知，所以正在运行的作业仍可能把余额扣成负数；
-  下一次作业会被拒绝，直到充值补平。要彻底杜绝负数需要按预估费用冻结余额，复杂度和
-  误拒都更高，暂不采用。
-- 卡密不可找回：丢失的卡密只能作废重发。换来的是数据库泄露也拿不到可用的卡密。
-- 兑换失败不区分原因，并按单位限速，防止枚举卡密；代价是用户只能看到笼统的失败提示。
-- 币种按部署统一而不是按单位设置，避免跨币种结算和汇率问题；更换币种前需要先把余额处理掉。
-- 函数恢复调用方原有的单位上下文，而不是清空它，这样单位请求可以在同一事务里继续写审计。
+## Tradeoffs
+
+- There is no overdraft allowance, but a call's cost is unknown in advance, so a running job can still make the balance negative. Subsequent jobs are rejected until recharge covers the deficit. Preventing all negative balances would require estimated-charge reservations, adding complexity and false rejections; this is not adopted here.
+- Cards cannot be recovered: a lost card must be voided and reissued. In return, a database leak does not reveal usable cards.
+- Redemption failures do not distinguish causes and are rate-limited by org to prevent enumeration. Users receive only a generic failure message.
+- Currency is deployment-wide rather than per org, avoiding cross-currency settlement and exchange rates. Balances must be resolved before changing currency.
+- Functions restore the caller's previous org context instead of clearing it so an org request can continue writing audit entries in the same transaction.

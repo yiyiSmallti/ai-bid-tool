@@ -2,600 +2,381 @@
 kind: changelog
 ---
 
-# 变更记录
+# Changelog
 
-按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
+Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
-## 2026-10-05：平台后台管理服务凭据
+## 2026-10-05: English developer documentation
 
-- 接受 ADR 0006 并纳入全局表与专用数据库角色例外；迁移 `0038` 增加平台凭据、固定管理/解析函数、目录引用校验和仅迁移属主可执行的密文重包裹通路。
-- 平台 TOTP 会话可经 API、CLI 与 Element Plus 控制台创建、替换、启停、移除和测试凭据；响应只含指纹及末四位，变更与审计同事务，移除保留 tombstone。导入支持纯预检、同值重放及整批冲突回滚。
-- 目录模型、Perplexity 和 standalone/eval 每次外发及重试重新解析已提交状态；缺失、停用、移除、解密或数据库失败无后备。API/worker/standalone 拒绝旧厂商密钥 env 与直接配置值。
-- `rotate-encryption --scope provider-secrets` 覆盖平台与 BYOK 历史，支持只读退役 keyring、绑定校验、CAS 重包裹及可重入计数。机制见 [Platform credential authority](notes/platform-credentials.md)。
+- Unified developer and agent documentation in English using the [glossary](glossary.md), renamed the [design document](design.md), and conservatively corrected stale statuses and superseded decisions against implementation and later decisions. The [roadmap](plan/roadmap.md) remains the home for remaining scope and open decisions.
 
-## 2026-10-05：单位记忆首片
+## 2026-10-05: Platform service credential management
 
-- 新增记忆 CRUD、history、确切修订人工 approve/reject、disable/delete、关键词检索、检索历史、逐调用使用记录、反馈恢复与单位内评测样本 API/CLI；运行契约迁入 schemas，删除文档草案模块。
-- 迁移 `0038` 增加单位隔离表、复合外键、不可变历史、人工与 worker 数据库 gate。所有新增均 candidate；只有单位 admin 人类会话可审批、管理与审阅样本，未启用作用域显式拒绝。
-- `keyword-v1` 以完整规则/偏好进入 card generation 的独立上下文；scope epoch、到期和策略版本参与缓存与准入/发布检查。每个实际调用保存固定记忆与要求清单，结算关联原有用量，不增加 embedding 调用。
-- 人工驳回或编辑模型派生卡片产生加密净化反馈、单位样本及可恢复候选作业；确认只产样本。`feedback-copy-v1` 不调用模型、不自动批准，唯一来源键阻止重复候选。机制见 [Organization memory](notes/memory.md)。
+- Accepted ADR 0006 and added global-table/dedicated-role exceptions. Migration `0038` adds platform credentials, fixed management/resolver functions, catalog-reference validation, and migration-owner-only ciphertext rewrapping.
+- Platform TOTP sessions can create, replace, enable/disable, remove, and test credentials through API, CLI, and Element Plus console. Responses contain fingerprints/last-four only; changes/audit share a transaction; removal retains tombstones. Import supports read-only prechecks, identical replay, and whole-batch conflict rollback.
+- Catalog models, Perplexity, and standalone/eval resolve committed state before every outbound call/retry. Missing, disabled, removed, decryption, or database failure has no fallback. API/worker/standalone rejects legacy vendor-key env/direct configuration.
+- `rotate-encryption --scope provider-secrets` covers platform and BYOK history, decrypt-only retired keyring, binding validation, CAS rewrapping, and resumable counts. See [Platform credential authority](notes/platform-credentials.md).
 
-## 2026-10-05：语义校验范围与完整评分表请求
+## 2026-10-05: First org memory slice
 
-- combined check 仅将有已确认投标正文的 response 行送入 CheckProvider；gap、comply_only 保留确定性规则覆盖，语义状态为 `not_requested`，不因缺少投标文本单独成为 partial。预检条目数、费用上界和作业调用规划使用同一选择集，没有响应正文时不调用模型。迁移 `0036` 调整分区对应的语义发布约束；机制见 [Confirmed-draft checks](notes/check.md)。
-- rubric 生成将指定抽取作业的全部 scoring Requirements 放入一个请求，移除按抽取字符预算分批、结构错误拆半和跨批 overall 合并。新增独立的完整请求容量配置；超限预检返回 `rubric_context_limit`，提交在任何调用之前拒绝。逐项验引、结构校验、确认、遮挡和逐调用计费关口保留；机制见 [Human-reviewed score rubrics](notes/score.md)。
-- 补充 API → worker 与 MockTransport 验收，覆盖混合分区、零语义调用、超过旧分批阈值的整表生成和容量拒绝，替换依赖旧分批行为的断言并保留失败与计费关口覆盖。
+- Added memory CRUD/history, human approve/reject of exact revisions, disable/delete, keyword retrieval/history, per-call usage records, feedback recovery, and org (organization/tenant, 单位) evaluation-sample API/CLI. Runtime contracts moved into schemas; documentation draft module removed.
+- Migration `0038` adds org-isolated tables, composite foreign keys, immutable history, and human/worker database gates. All additions are candidate; only human org admin sessions approve/manage/review samples. Disabled scopes explicitly reject.
+- `keyword-v1` supplies complete rules/preferences as separate card-generation context. Scope epoch, expiry, and policy version enter cache/admission/publication checks. Each real call saves fixed memories/requirements; settlement links existing usage, without embedding calls.
+- Human rejection/editing of model-derived response cards (响应卡) creates encrypted sanitized feedback, org samples, and recoverable candidate jobs; confirmation creates samples only. `feedback-copy-v1` makes no model calls/automatic approvals; unique source keys prevent duplicate candidates. See [Organization memory](notes/memory.md).
 
-## 2026-10-05：已确认响应草案的评分执行
+## 2026-10-05: Semantic check scope and complete scoring-table requests
 
-- 新增 `bid score run/list/show`、对应 preview/submit/list/show HTTP 路由和 `score` 持久作业。固定 current DraftRun、confirmed rubric、评估日期、模型/价格/reasoning 与遮挡修订；dry-run 零写入，正式提交绑定预览哈希。
-- `ScoreProvider.score` 只接收遮挡后的评分规则、招标引用和固定已确认响应文字。每项分数必须同时有通过本机核验的 tender/draft 引用；跨要求的确认响应可支持得分，缺依据、越界、歧义、薄承诺、外部比较和遮挡依赖保留为 unassessable。
-- sum、weighted_sum、capped_sum 使用 Decimal 和最终八位 ROUND_HALF_UP；不可评估子项和不支持的聚合使总分 unavailable，已评估小计单独显示。部分报告 show/wait 返回退出码 5。
-- 迁移 `0035` 增加 FORCE RLS 评分报告、逐项估分、支持响应和引用表；固定同单位/任务/文档/抽取/rubric/DraftRun 关系，发布重新核验确认与 worker attempt，报告及聚合历史不可改写。
-- 外发与逐次准入、预约、计费复用既有链路；迟到的拒答、截断和取消调用保留用量，后续批次失败可保留 partial，输入变化、租约或计费失败禁止发布。新增 MockTransport、API/worker/CLI 和 PostgreSQL 关口验收；机制见 [评分机制](notes/score.md)。
+- Combined check sends only response rows with confirmed bid (标书) text to CheckProvider. Gaps (缺口) and comply-only (须遵守) retain deterministic checks with semantic status `not_requested`; missing response text alone does not make the report partial. Precheck item counts, cost bounds, and job call plans use the same selection. No model calls without response text. Migration `0036` adjusts partition-specific semantic publication constraints; see [Confirmed-draft checks](notes/check.md).
+- Rubric generation sends all scoring Requirements from the selected extraction in one request, removing extraction-character-budget batching, structure-error splitting, and cross-batch overall merging. Added separate complete-request capacity configuration; excess preview returns `rubric_context_limit`, submission rejects before any calls. Per-item citation/structure/confirmation/redaction/call-billing gates remain; see [Human-reviewed score rubrics](notes/score.md).
+- Added API→worker and MockTransport acceptance for mixed partitions, zero semantic calls, full-table generation above old batching threshold, and capacity rejection. Replaced old batching assertions while preserving failure/billing gate coverage.
 
-## 2026-10-05：评分 rubric 规范化与人工确认
+## 2026-10-05: Score execution for confirmed response drafts
 
-- 新增 `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history`、对应 HTTP 接口和 `score_rubric` 作业。候选只读取指定成功抽取的全部 scoring Requirements；dry-run 固定输入哈希、遮挡与费用上界，提交沿用队列、租约、重试、取消、用量和预付计费边界。
-- rubric section、item、requirement coverage 与替换版本保存在受 FORCE RLS 保护的单位表。admin 只分类，商务和技术责任人按已存职责逐项确认，bidder 在覆盖、引用、上下限、权重、cap 与聚合全部通过确定性检查后确认整集；token、agent 和 worker 不能执行人工决定，所有分类、决定和修订历史只追加。
-- CLI 两种模式保持七键 Result 和 0/2/3/4/5 退出语义，复杂输入只接受 JSON 文件，`bid schema` 只公布阶段 A rubric 命令。四项 score scope 按批准契约注册；阶段 B 的 `score run/list/show`、评分报告和评分 Provider 作业保留为已批准契约，尚未注册。机制见 [Human-reviewed score rubrics](notes/score.md)。
-- 阶段 A 有一项明确的实现限制：遮挡会改变固定 `Source.quote` 或 `Source.location` 时，preview 返回 `sensitive_scoring_source`，提交在创建 Job 前拒绝。当前 schema 没有既保持逐字 Source 绑定又不持久化保密明文的安全表示；这不是新的契约默认，普通无效模型引用仍按契约保留为 unresolved。
+- Added `bid score run/list/show`, preview/submit/list/show HTTP routes, and persistent `score` jobs. Bind current DraftRun, confirmed rubric, evaluation date, model/price/reasoning, and redaction (遮挡) revision. Dry-run writes nothing; submission binds preview hash.
+- `ScoreProvider.score` receives only redacted scoring rules, tender citations, and fixed confirmed response (响应) text. Each score needs locally verified tender/draft citations; confirmed responses across requirements may support scores. Missing support, out-of-range values, ambiguity, weak commitments, external comparisons, and redaction dependence remain unassessable.
+- sum, weighted_sum, capped_sum use Decimal with final eight-place ROUND_HALF_UP. Unassessable children/unsupported aggregates make totals unavailable; assessed subtotal is shown separately. Partial show/wait exits 5.
+- Migration `0035` adds FORCE RLS reports, item estimates, supporting responses, and citations; bind same org/task/document/extraction/rubric/DraftRun. Publication rechecks confirmation/worker attempt; report/aggregate history is immutable.
+- Reuse outbound admission/reservation/billing. Late refusal/truncation/cancelled calls retain usage; later-batch failure may retain partial results. Input changes, lease/billing failures prevent publication. Added MockTransport/API/worker/CLI/PostgreSQL gate acceptance; see [Scoring](notes/score.md).
 
-## 2026-10-04：已确认初稿的 combined 语义校验
+## 2026-10-05: Normalized score rubrics and human confirmation (人工确认)
 
-- `bid check run --mode combined` 接入独立 CheckProvider 和结构化 HTTP 调用，固定单位配置或平台目录、推理档位、价格及输入哈希；rules 仍无模型调用。
-- 外发只使用局部 ref 和统一遮挡后的文本，关闭遮挡时预检与提交均阻止调用；按要求验收 no_risk_found/risk/unknown，双重核验连续唯一引用，拒收越界、拼接、遮挡引用及含敏感值的理由。
-- 每次调用沿用预约和计费账本；拒答、截断、取消后完成的调用仍记录真实用量。后续模型或预算中止可发布 partial；输入变更、租约丢失和计费失败不发布。
-- 新增迁移 `0033`，扩展既有受 RLS 保护的报告和引用表，保存无风险结论的支持引用及未评估原因；新增 MockTransport、API/worker/CLI 与数据库门禁合成测试。机制见 [Confirmed-draft checks](notes/check.md)。
+- Added `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history`, HTTP interfaces, and `score_rubric` jobs. Candidates read all scoring Requirements only from the selected successful extraction. Dry-run fixes input hash/redaction/cost bounds; submission reuses queue/lease/retry/cancel/usage/prepaid boundaries.
+- Rubric sections/items/requirement coverage/replacement versions use FORCE RLS org tables. Admin classifies only; commercial (商务)/technical reviewers confirm items in saved review domains (职责). Bidder confirms the entire set only after deterministic coverage/citation/bounds/weights/caps/aggregate checks. Tokens/agents/workers cannot make human decisions; classification/decision/revision history appends only.
+- Both CLI modes retain seven-key Result and 0/2/3/4/5 exits; complex inputs use JSON files only. `bid schema` publishes stage A rubric commands only. Four score scopes register under the approved contract; stage B `score run/list/show`, reports, and scoring Provider jobs remain approved but unregistered. See [Human-reviewed score rubrics](notes/score.md).
+- Stage A has an explicit limitation: if redaction changes fixed `Source.quote`/`Source.location`, preview returns `sensitive_scoring_source` and submission rejects before Job creation. Current schema cannot safely retain verbatim Source binding without confidential plaintext persistence. This is not a new contract default; ordinary invalid model citations remain unresolved under the contract.
 
-## 2026-10-04：已确认初稿的确定性校验
+## 2026-10-04: Combined semantic checks for confirmed drafts
 
-- 新增 `bid check run/list/show/decide/history` 与对应 HTTP 接口。`rules` 模式固定一个 current
-  初稿、抽取、要求、已确认响应与材料、证书和配置修订，预检返回输入哈希，worker 发布带 PDF/Word
-  可核验引用的不可变报告；相同输入复用作业，取消、显式重试、租约和输入变化沿既有作业栅栏处理。
-- 阶段一报告覆盖 ★/实质性缺项、已确认负偏离、未完成人工复核的缺口和证书声明日期；边界日包含，
-  缺日期为 unknown，未被已确认响应引用的证书不绑定无关要求。未确认候选正文不进入快照或报告，
-  规则执行不调用 Provider、不写 UsageRecord，也不产生费用。
-- 风险只作建议。商务和技术责任人可带理由追加 dismiss/reopen 决定；管理员、令牌和 worker 均不能决定，
-  历史报告输入失效后仍可读但不能继续决定。新增迁移 `0032` 与 `check:read`、`check:run`、`check:decide` 权限；
-  `combined` 语义模式保留到阶段二，当前明确返回 `check_mode_unavailable`。机制见
-  [Confirmed-draft checks](notes/check.md)。
+- `bid check run --mode combined` uses separate CheckProvider/structured HTTP calls, fixing org configuration or catalog, reasoning, price, and input hash. Rules still call no model.
+- Outbound uses local refs/unified redacted text only. Disabled redaction blocks preview/submission. Validate no_risk_found/risk/unknown per requirement; verify continuous unique citations twice; reject out-of-range, spliced, redacted citations and sensitive reasons.
+- Every call retains reservation/billing; refusals, truncation, and calls completing after cancellation record real usage. Later model/budget stops may publish partial; input changes/lease loss/billing failures do not publish.
+- Migration `0033` extends existing RLS reports/citations with support for no-risk conclusions and unassessed reasons; added synthetic MockTransport/API/worker/CLI/database-gate tests. See [Confirmed-draft checks](notes/check.md).
 
-## 2026-10-04：PDF 子进程资源隔离与背景图片 OCR 排除
+## 2026-10-04: Deterministic checks for confirmed drafts
 
-- PDF 上传验证、整份解析、在线预览及证据页渲染改用短生命周期子进程；设置墙钟、CPU、Linux 内存及输出上限，超时终止回收，资源超限或崩溃以不可重试的 `pdf_resource_limits` 结束。OCR 与用量记账保留在父进程，机制和 macOS 限制见 [PDF parsing](notes/pdf-parsing.md)。
-- 图片内原生文字块的联合面积覆盖至少 25% 时视为背景，不再因页边空白触发 OCR；扫描正文加页码仍执行 OCR，纯文字页仍不执行 OCR。
+- Added `bid check run/list/show/decide/history` and HTTP interfaces. `rules` fixes one current draft (初稿), extraction, requirements, confirmed responses/materials, certificates (证照), and configuration revisions. Preview returns input hash; worker publishes immutable PDF/Word-citable reports. Same inputs reuse jobs; cancellation/explicit retry/leases/input changes retain existing job fences.
+- Stage one covers starred (★) mandatory clause (★条款)/substantive clause (实质性条款) omissions, confirmed negative deviation (负偏离), gaps without human review, and certificate declaration dates. Boundary dates are inclusive; absent dates are unknown; uncited certificates do not bind unrelated requirements. Unconfirmed candidate text enters neither snapshots nor reports. Rules call no Provider/write no UsageRecord/incur no charge.
+- Risks are suggestions only. Commercial/technical reviewers append dismiss/reopen decisions with reasons; admins/tokens/workers cannot decide. Historical reports remain readable after input invalidation but cannot receive decisions. Migration `0032`, `check:read`, `check:run`, `check:decide`; `combined` is reserved for stage two and currently returns `check_mode_unavailable`. See [Confirmed-draft checks](notes/check.md).
 
-## 2026-10-04：PDF 栅格化上限与混合页 OCR
+## 2026-10-04: PDF subprocess isolation and background-image OCR exclusion
 
-- PDF 栅格化统一预检像素预算，OCR 对可处理的大页降低 DPI、对超大页明确拒绝；扫描正文带原生页码/页眉时执行 OCR 并合并可核验文本，未完整解析时返回警告，见 [PDF parsing](notes/pdf-parsing.md)。
+- PDF upload validation/full parsing/online preview/evidence-page rendering use short-lived subprocesses with wall-clock/CPU/Linux memory/output limits. Timeouts terminate/reap; excess/crashes end with nonretryable `pdf_resource_limits`. OCR/usage stay in parent; see [PDF parsing](notes/pdf-parsing.md) for mechanism/macOS limits.
+- Native text blocks covering at least 25% of an image's area classify it as background; blank margins no longer trigger OCR. Scanned bodies with page numbers still use OCR; text-only pages do not.
 
-## 2026-10-04：模拟功能改绑后仍阻止正式导出
+## 2026-10-04: PDF rasterization limits and mixed-page OCR
 
-- 导出声明检查功能与产品的全部根标记，模拟功能修订改绑普通产品后仍阻止正式件，审阅件仍需确认警告；机制见 [product-simulation.md](notes/product-simulation.md)。
+- Rasterization shares pixel-budget prechecks. OCR lowers DPI for manageable large pages and explicitly rejects oversized ones. Scanned bodies with native page numbers/headers use OCR and merge verifiable text; incomplete parsing warns. See [PDF parsing](notes/pdf-parsing.md).
 
-## 2026-10-04：缓存导出预览的实时门禁
+## 2026-10-04: Simulated features still block final export after rebinding
 
-- 缓存预览页复用 DOCX 下载门禁，输入或发起人权限失效后拒绝读取；预览状态沿用导出有效性并停止提供失效页面，机制见 [page-previews.md](notes/page-previews.md)。
+- Export declaration checks all feature/product origin markers. A simulated feature revision rebound to an ordinary product still blocks final sections (正式件); review copies (审阅件) still require warning confirmation. See [product-simulation.md](notes/product-simulation.md).
 
-## 2026-10-04：证照图片与多文件原件
+## 2026-10-04: Live gates for cached export previews
 
-- 证书原件可上传多个 PDF、PNG、JPEG，按顺序合成一份 PDF 原件，每张图一页，可逐个旋转；单个未旋转的 PDF 仍原样保存。
-  图片先按文件头检查尺寸（不超过 4000 万像素）再解码，按 EXIF 方向转正后重新编码，拍摄位置等元数据不进入原件和预览。
-  上传的文件原样加密保存为原件的组成部分（迁移 `0031`），原件提交后不能增减。
-- 控制台“单位资料”页新增“证照与附件”：添加营业执照等证照，拖入或多选文件，缩略图、排序、旋转，按页预览、下载，标出
-  已过期和 30 天内到期。证照沿用证书链路，可被任务选用、存档为证据页并进入导出附件；图片页没有文字，不发给模型。
-  CLI 的 `resource certificate file add` 可重复 `--file`。机制见
-  [versioned-certificate-files.md](notes/versioned-certificate-files.md#composed-originals)。
+- Cached preview pages reuse DOCX download gates, rejecting reads when inputs/initiator permissions are invalid. Preview state follows export validity and stops serving invalid pages. See [page-previews.md](notes/page-previews.md).
 
-## 2026-10-04：保密字段与导出时填入
+## 2026-10-04: Certificate images and multi-file originals
 
-- 新增保密字段：报价、证件号、银行账号、联系人、电话等登记为字段，值加密、只增不改（迁移 `0030`）。`org` 字段全单位
-  一个值，`task` 字段每个任务一个值。只有 admin、bidder 的登录会话能设值和查看完整值，查看记审计；令牌永不获得
-  `confidential:write`、`confidential:reveal`。
-- 起草时登记值换成 `{{secret.<key>}}` 再外发，请求附占位符清单，提示词 `card-draft-v3`、遮挡规则 `bid-redaction-v3`；
-  旧版本提交的起草作业以 `generation_rules_changed` 停止。卡片引用未知或已归档字段被拒绝，含 `[REDACTED_…]` 的卡片
-  不能确认。
-- 导出按固定的值行填入占位符：正式件缺值被 `confidential_value_missing` 阻止，审阅件缺值显示“【名称】”，提交后改值
-  需重新提交。资源声明也可引用字段，导出时证据摘录同样填值。
-- 控制台新增“保密字段”页、任务页“报价与保密信息”和“单位资料”编辑页；卡片编辑器与单位资料的正文把字段显示为标签块，
-  从字段条拖入或点击插入，不用手写占位符。CLI 新增 `bid confidential`。
-  机制见 [confidential-values.md](notes/confidential-values.md)。
+- Certificate originals accept multiple PDFs/PNGs/JPEGs, composed in order as one PDF, one image per page, individually rotatable. A single unrotated PDF is retained unchanged. Image headers limit dimensions to 40 million pixels before decoding; orient by EXIF and re-encode without location/other metadata in originals/previews. Uploaded files are encrypted unchanged as original components (migration `0031`); components cannot change after submission.
+- Console “单位资料” adds “证照与附件”: add business licenses/certificates, drag/multiselect, thumbnails/order/rotation/page preview/download, expired/within-30-days markers. Existing certificate path supports task selection/evidence-page archival/export appendices; image pages have no text and are not sent to models. CLI `resource certificate file add` accepts repeated `--file`. See [versioned-certificate-files.md](notes/versioned-certificate-files.md#composed-originals).
 
-## 2026-10-04：外发遮挡不再误伤招标原文
-
-- 外发遮挡规则升为 `bid-redaction-v2`：标签字样本身不再触发遮挡。身份证、账号、电话后须跟号码形态的值，联系人
-  须带冒号或等号，金额标签后须有分隔符或数字、币种、大写金额，英文标签须是独立单词。“刷身份证登录”“管理员账号”
-  “联系人管理”“预算管理”“Intel 8358”等原文照常发给模型。
-- 规则版本变更后，用旧版本提交、尚未执行的起草作业会以 `generation_rules_changed` 停止，需重新提交。
-
-## 2026-10-04：CI 只在 PR 上运行并行测试
-
-- 检查只在 PR 上运行（另可手动触发），合并后不再在 main 上重跑；只改 Markdown 或 `web/` 时跳过 Python 套件，
-  `web/` 未改时跳过控制台构建，两项必需检查照常报告通过。CI 测试库关闭持久化刷盘。
-- 测试可用 `pytest -n` 并行：每个 worker 在咨询锁下由一个 worker 迁移基础测试库，再各自以它为模板复制
-  `<库名>_gwN`；夹具用户改存同格式的低轮数密码哈希。CI 按运行器核数并行并列出最慢的测试。
-
-## 2026-10-04：Perplexity 厂商搜索
-
-- 配置 `BID_PERPLEXITY_API_KEY` 后，厂商来源搜索与模拟拟投改用 Perplexity Search API，不再依赖会被搜索引擎验证码
-  和限流封禁的 SearXNG；未配置时仍用 SearXNG。
-- 模拟拟投先按候选厂商官网域名过滤搜索；官网页面无法直接抓取时改读搜索服务的页面摘录，逐字核对改以摘录为准，
-  结果与控制台标注“搜索摘录”。厂商来源采集仍只认自行抓取的页面。
-
-## 2026-10-04：模拟拟投（演示）
-
-- 任务页新增“模拟拟投（演示）”：按招标表格的采购项归组技术要求，模型判断硬件、软件或服务，为硬件提出候选厂商；
-  worker 搜索并经可信抓取取回厂商官网页面（可从目录页再跟进一层同站链接），由模型从页面读出产品型号，只保留原文中
-  逐字出现的型号和参数，录入为【模拟】产品与功能声明并固定到任务。软件开发和服务不拟投产品。
-- 厂商搜索的 SearXNG 配置加入 Yahoo 引擎。
-- 模拟材料登记在只增不改的 `simulated_resources`（迁移 `0029`），后续人工修订仍算模拟；控制台在材料与证据上标注
-  “模拟”，导出时正式件被 `export_simulated_material` 阻止，审阅件需确认。机制见
-  [product-simulation.md](notes/product-simulation.md)。
-- 起草与模拟共用结构化模型调用（`providers/structured.py`）。
-
-## 2026-10-04：模型起草按批并发
-
-- 起草每批的字数改为该档位抽取批次的 `BID_DRAFTING_BATCH_SCALE` 倍（默认 4 倍），一次调用可覆盖约 40 条短要求。
-- 起草的批次不再逐个串行，最多 `BID_LLM_CONCURRENCY`（默认 4）批同时调用，与要求抽取一致；每次调用仍先按作业调用上限
-  和扣款上限准入。某批失败后未开始的批次不再发出，已发出的批次完成后照常发布，结果按原批次顺序发布。
-
-## 2026-10-04：控制台按 PC 宽度调整布局与可读性
-
-- 内容区最宽 1880px；正文、表格和提示字号上调，位置标签不再重复章节路径，程序聚焦的标题不显示焦点框。
-- 任务页分主栏与右侧栏：主栏为文件解析、要求抽取、抽取历史和导出文件，右栏为任务进度、任务信息与当前作业；
-  上传改为拖放框，主操作在前，重试类操作收入“更多”菜单，档位与抽取预检同一行。
-- 审阅页统计改为一行，筛选横跨全宽，列表每行只留状态、星标、负偏离标签，类别、职责和资格改为说明文字；
-  起草预检范围与批量处置分组显示；审阅详情的决定按钮固定在面板底部。初稿页组表与历史并排，面包屑显示任务名。
-
-## 2026-10-04：在线预览招标原件、证书原件和导出件
-
-- 单位后台可在线按页查看 PDF 招标原件和证书原件；审阅详情的“在线查看原文位置”直接打开引文所在页。Word 招标原件
-  按解析出的段落和表格展示并高亮引文所在段落或单元格。
-- 任务页新增“导出文件”，商务审核可在线预览已发布的导出件：首次打开时 worker 通过私有 Gotenberg（LibreOffice）把
-  DOCX 转成 PDF，之后按页显示，同一文件只转换一次。预览与下载适用同一关卡，打开记审计 `export.preview_opened`；
-  转换失败不保存任何结果，需显式重试。新增 `BID_CONVERTER_URL`、`BID_PREVIEW_MAX_PAGES` 和 Compose 服务 `converter`，
-  迁移 `0028` 登记新的审计事件。机制见 [page-previews.md](notes/page-previews.md)。
-
-## 2026-10-04：控制台改用 Element Plus 重新设计
-
-- 单位后台和平台后台改用 Element Plus（按需引入、中文语言包）：深色侧边导航、顶栏显示单位和中文角色名，
-  任务页带流程步骤条，审阅页为统计卡片、筛选区、要求列表和固定在右侧的审阅详情，初稿按分区标签页展示，
-  手机宽度下导航变为顶部横条、要求列表按卡片堆叠。浏览器标题按页面和后台区分，不再统一显示“平台后台”。
-- 状态、职责、资格、偏离、作业和文档状态等代码统一显示中文；成员会遇到的服务端错误码和抽取预检提示显示中文
-  说明，未收录的仍显示原文与代码。
-- 确认、驳回、需补材料等操作改用确认对话框；“确认响应”不可用时在按钮下写明缺少的条件；打开卡片或切回页面时
-  只有清除了已勾选的审阅项才提示重新勾选；材料面板不再提示网页成员使用命令行维护资源。
-- 列表中的状态标签用样式实现，1,200 条要求的筛选与翻页仍满足浏览器门槛；e2e 用例改为按选项文字操作下拉框并
-  点击确认对话框。
-
-## 2026-10-04：起草不再把缺材料标为负偏离
-
-- 起草提示词升为 `card-draft-v2`：负偏离只用于材料或承诺内容未达到要求；仅缺材料时保留证据类、偏离标无，
-  正文只写需补哪类材料，不断言满足、不写材料中没有的型号参数或名单。交付期、工期、质保期、服务响应等投标人
-  自行履行的义务按招标原值起草为承诺。此前缺材料的卡片会被记成负偏离，补齐材料后再起草会因
-  `negative_deviation_weakened` 被跳过，需人工改写。
-
-## 2026-10-03：导出件改为中标标书的表格版式
-
-- 三张响应表改为“序号｜招标文件要求｜投标文件响应内容｜响应情况”四列，序号按表从 1 起；要求逐字照录原文，
-  ★ 要求以 ★ 开头；响应末尾以可跳转的“（见附件 E003、声明 D001）”引用材料；响应情况写“响应”“响应且无负偏离”，
-  偏离写“正偏离：/负偏离：”加具体差异，负偏离加粗。须遵守与缺口清单、证据附件索引和附件说明不再印内部标签、
-  原文坐标、ID、确认人、时间戳或哈希；索引写材料名称、原件页与摘录和对应的表与序号。渲染 profile 升为
-  `docx-export-v3`，导出清单升为 `human-export-manifest-v2` 并记录材料名称。
-- 新增 `bid export provenance` / `GET /exports/{id}/provenance`：以与正文相同的编号返回确认人、时间、证据与资源
-  修订、附件哈希等留痕。新增 `bid export template-sample`：写出 A4、宋体小四、黑体三号标题、页脚页码并放好
-  六个锚点的起步模板，返回可直接使用的绑定。
-- 绑定列改为 `ordinal`/`requirement`/`response`/`compliance`，对外契约升为 `3.0`。旧的七列绑定仍可列出并标
-  `current: false`，预检以 `export_binding_outdated` 阻止，不再接受新建七列绑定。
-
-## 2026-10-03：沙箱双单位与生命周期验收
-
-- 新增 [sandbox_two_org_acceptance.py](../scripts/sandbox_two_org_acceptance.py)，在开发实例上以两个合成单位、
-  真实 worker 与 gVisor 节点运行：B 对 A 的运行、任务列表、产物链接、作业状态与取消、在 A 任务上提交和 A 的签名
-  链接得到与未知资源相同的 404；运行时数据库角色无单位上下文读不到任何沙箱行，B 上下文读不到也改不动 A 的行，
-  越权插入分别被行级安全与复合外键拒绝（各有成功的对照）。运行中取消和运行中 SIGKILL worker 均不发布产物，
-  容器在约 1.5 秒内回收，随后的渲染成功。租约过期接管与断连、存储失败注入仍待执行。
-
-## 2026-10-03：导出件的 Word 版面验收
-
-- 在 macOS Microsoft Word 中打开合成长响应正式件（150 条要求、130 页已确认证书附件）：三张响应表合计 150 行、
-  文档未加保护、130 张独立内嵌图与 130 个书签一一对应。发现每份附件的说明独占一页、图片被挤到下一页；渲染器
-  现在为说明预留两英寸并令其与图片同页，附件页数减半。渲染 profile 升为 `docx-export-v2`，旧缓存不复用。
-- 新增可选的规模场景 `server/tests/test_export_scale.py` 与 `scripts/word_inspect.applescript`，步骤见
-  [development.md](guides/development.md#check-an-export-in-word)。
-
-## 2026-10-03：拆分 API 入口与合并版本化资源服务
-
-- 产品、功能、证书、资质档案和模板共用 `services/versioned.py`：修订锁、修订冲突、任务选择替换与审计只有一份
-  实现，各类以 `VersionedKind` 声明表、权限范围和审计动作；功能的产品校验和模板文件存储以钩子接入。
-- `api/main.py` 只保留应用组装、中间件、错误结构和认证上下文；路由按领域拆到 `api/account.py`、
-  `api/tenders.py`、`api/resources.py` 和 `api/jobs.py`，上传、解析/抽取提交、要求查询、作业状态和令牌签发移入
-  `services/`。四处签名下载链接共用 `api/common.py`。接口、路由名和 OpenAPI 文档不变。
-
-## 2026-10-03：沙箱代理攻防验收驱动
-
-- 新增 [sandbox_proxy_acceptance.py](../scripts/sandbox_proxy_acceptance.py)：生产代码中的 `FetchBroker` 与
-  `SocketBrowserProvider` 对回环上的真实 TLS 合成源运行，各目标统计实际收到的请求。覆盖恶意 query/path、
-  userinfo、编码 IP、内网与元数据目标、混合 A/AAAA、DNS 重绑定、跨域与 HTTPS 降级跳转、无限跳转、
-  不受信证书、Cookie、POST、压缩炸弹和超大 chunk，以及伪造 supervisor 直接发送的 fetch 帧；违规目标收到
-  零请求，每次连接都使用校验过的地址。代理节点的内核级出网过滤与真实 DNS 不在其内。
-
-## 2026-10-03：CI 用时与 main 分支保护
-
-- CI 只在拉取请求和 main 上运行，分支推送不再重复跑一遍；同一拉取请求的新推送取消旧运行。只改 Markdown
-  时两项必需检查照常报告成功但跳过测试与构建。缓存 uv 与 Cargo 下载及渲染器构建。
-- main 设为受保护分支：只能经拉取请求合并，`python` 与 `web` 检查须通过，禁止强推与删除，管理员同样受限。
-
-## 2026-10-03：独立令牌密钥与数据密钥轮换
-
-- 会话、平台会话、密码设置链接和各类签名下载链接改用新的必填 `BID_TOKEN_KEY`，与 `BID_ENCRYPTION_KEY`、
-  `BID_SECRETS_KEY` 及已退役的数据密钥都必须不同，否则启动失败。升级时须先配置该变量；部署后现有会话和
-  链接全部失效一次。
-- 数据密钥可轮换：`BID_ENCRYPTION_KEY_PREVIOUS` 中的退役密钥只用于解密，`python -m app.admin
-  rotate-encryption` 逐单位把加密字段和存储对象改写到当前密钥，可重复执行。步骤见
-  [development.md](guides/development.md#keys-and-storage)。
-- 迁移 `0027` 删除 `api_tokens.encrypted_secret`：令牌只保存摘要，不再保存可解密的副本。回退迁移只恢复空列，
-  已删除的密文不可恢复。
-
-## 2026-10-03：切片 1 公开 PDF 验收与审查缺陷修复
-
-- 用公开的硬件招标 PDF（德邦基金信创交换机项目招标文件）经 CLI 远程模式走完登录、建任务上传、解析、
-  抽取和列出要求，平台默认模型完成抽取；入库要求的引用均逐字落在所引页，原文带 ★ 的行均有对应要求，
-  引用不符的条目逐条拒绝并报告。切片 1 的完成标准已满足。
-- 服务端未预期的异常返回 Result 结构的 `500 internal_error`（退出码 4），不含异常文本；本地模式得到同样
-  的结果，CLI 自身的未预期异常也以 `internal_error` 和退出码 4 输出，不再打印 traceback、退出码 1。
-- 登录时密码正确但不是该单位成员，与密码错误一样返回 `401 invalid_login`。
-- PDF 解析只打开一次文件，逐页渲染并立即 OCR，内存中至多保留一页扫描图。
-- 证书页来源存档在任务锁外读取原件和渲染，取锁后重新核对任务选择与重复存档；每个进程至多同时渲染两页，
-  超时仍在运行的渲染占用名额直到结束，名额用尽返回可重试的 `source_render_busy`。
-- 缺少 `BID_TEST_ADMIN_URL` 时数据库测试失败而不是跳过。
-
-## 2026-10-03：自托管厂家来源搜索
-
-- 新增 `bid evidence search`、`evidence candidates`、`evidence adopt`：预检显示只含厂家与型号的检索词及输入
-  哈希，提交后由 worker 调用自托管 SearXNG，候选经抓取 URL 规范化过滤（去掉 HTTP、带凭据与歧义地址）、
-  去重合并来源引擎，本单位产品库已记录的同厂家域名优先、PDF 其次，最多 20 条入库。搜索服务不可用时
-  作业可重试且不保存结果。选定候选后写入产品新修订的 `official_url`/`whitepaper_url` 并改选到任务，
-  过期的产品修订被拒绝。
-- `deploy/docker-compose.yml` 新增按摘要固定的 SearXNG 服务（只在内部网络），配置见
-  `deploy/searxng/settings.yml`；本地运行步骤见 [development.md](guides/development.md#run-vendor-search-locally)。
-  机制见 [screenshot-evidence.md](notes/screenshot-evidence.md#vendor-search)。
-
-## 2026-10-03：厂家网页缺失资源时仍可采集
-
-- 厂家网页的入口文档加载成功即截图：失败资源以逐请求 `fetch_failed` 应答跳过，代理不再因单个资源被拒而
-  关闭整次运行；等待 `load` 超出导航预算时也照常截图，报告前停止新请求并等待在途请求返回。产物标
-  `vendor_resources_incomplete`。入口文档失败、策略变更或撤销仍整次失败；主资源取不到时报告
-  `source_fetch_failed`。开放的开发策略不再受单位每分钟 60 次请求限制。
-- 厂家归档记录是否不完整及被拒请求数，迁移 `0026` 要求两者与沙箱回执一致，并要求不完整采集的卡片确认
-  复核 `vendor_capture_incomplete`。`VendorArchiveView` 增加对应字段，对外契约升为 `2.2`。
-- 在真实 gVisor 节点上连续两次完成新华三产品页（139 个请求，3 个失败）与白皮书 PDF 的采集和入库。
-
-## 2026-10-03：厂家网页采集并发转发与 gVisor 渲染修复
-
-- 厂家采集的资源请求带顺序编号，最多 4 个同时在途；runner、supervisor 与调用方按编号匹配应答，
-  supervisor 拒绝未知、重复或乱序编号。同一来源的两个连接租约占满时等待释放，不再立即拒绝。
-- 按已批准的决定，runsc 下的厂家采集以 `--disable-seccomp-filter-sandbox` 启动 Chromium（保留命名空间
-  沙箱），修复渲染进程在 gVisor 中因 `sched_getaffinity` 被拦截而崩溃；原型渲染不变。决定见
-  [sandbox.md](plan/sandbox.md#已定决定)。镜像已重建并重新固定摘要。
-
-## 2026-10-03：开发节点放开厂家取证网络与沙箱 runner 错误码
-
-- 抓取策略新增仅限开发节点的 `open_public_https` 修订：节点设置 `BID_SANDBOX_DEV_OPEN_EGRESS=1` 时允许任意
-  公网 HTTPS 地址，仍执行 URL 规范化、凭据参数拒绝、公网地址校验与字节预算；另接受本机 fake-IP 代理的
-  `198.18.0.0/15` 应答。未设置该开关时策略文件整体无效。步骤见
-  [sandbox-runtime.md](guides/sandbox-runtime.md#open-vendor-egress-on-a-development-node)。
-- 修复沙箱 runner 遇到浏览器库异常时直接退出、被报告为 `invalid_frame`：导航超时、导航失败与其他未预期
-  异常分别以 `source_timeout`、`source_navigation_failed`、`runner_unexpected_failure` 报告；厂家页面导航
-  期限改为按运行预算计算。镜像已重建并重新固定摘要。
-- 在真实 gVisor 节点上完成新华三官网白皮书 PDF 的采集、入库全链路。网页采集仍受逐个转发请求过慢和
-  gVisor 下 Chromium 自身沙箱崩溃限制，见 [sandbox-execution.md](notes/sandbox-execution.md#pitfalls)。
-
-## 2026-10-03：厂家网页与白皮书截图证据
-
-- `screenshot prepare --sandbox-artifact` 下载沙箱 `vendor_capture` 运行的网页或 PDF 页图并按本机计划处理；
-  `screenshot add` 以 `vendor_web`/`vendor_pdf` 来源入库，须复核归档哈希。服务端从运行与代理回执解析
-  URL 哈希、最终来源、入口页标题、抓取时间与内容哈希，重放计划并重验页图与归档字节；网页须
-  `archive=bundle`，同一运行多页共用一条归档记录。
-- 迁移 `0025` 将厂家归档绑定到沙箱运行、归档产物与入口回执，并要求厂家图片是该次采集的页面；
-  厂家图片卡片确认须复核 `vendor_model_scope`。`VendorSource` 改为只含页图产物 ID，删除未实施的
-  `VendorCaptureInput`，对外契约升为 `2.1`。机制见
-  [screenshot-evidence.md](notes/screenshot-evidence.md#vendor-captures)。
-
-## 2026-10-03：模型生成 HTML 原型（ui mock）
-
-- 新增 `bid ui mock` 与 `POST /tasks/{T}/prototype-generations`：固定一条要求与一个已选功能修订，
-  只外发遮挡后的要求原文与功能声明，预检报价单次调用，付费运行须带预检哈希。worker 持租约调用模型生成
-  单页 HTML，经离线沙箱渲染截图，HTML 与 PNG 加密保存并与沙箱回执一起写入原型记录；功能选择变化或沙箱
-  不可用均在调用前阻断。
-- 修复 gVisor 下大于 64 KiB 的沙箱产物偶发丢失 4 KiB（哈希校验报 `artifact_hash_mismatch`）：
-  runner 改为按 `PIPE_BUF` 原子写出帧；以模型生成的 238 KiB 页面连续 10 次渲染验证。
-- 新增 `GET /prototype-runs/{id}` 与源图读取，`screenshot prepare --prototype-run` 下载源图后按本机
-  计划处理，再经人工入库成为 origin=prototype 资产。机制见
-  [screenshot-evidence.md](notes/screenshot-evidence.md#prototype-generation)。
-
-## 2026-10-03：沙箱运行时定为专用 VM 内 rootful Docker + runsc
-
-- supervisor 预检改为：runsc 必须运行在 rootful 守护进程上且不得跳过 cgroup，rootless 仅用于 runc
-  合成模式；不满足时以 `sandbox_runsc_cgroups_unenforced` 或 `sandbox_rootless_required` 拒绝接单。
-- 开发 VM 切换到 runsc（带 `--oci-seccomp`）业务模式后，隔离验收子集全部通过：文件与秘密边界、
-  零网络外发（含正向对照）、CPU 死循环与内存炸弹被限额终止、调用方断连与 supervisor 重启后的容器回收。
-  驱动见 `scripts/sandbox_colima_acceptance.py`，决定理由见[沙箱契约](plan/sandbox.md#已定决定)。
-
-## 2026-10-03：沙箱开发节点与真实管道修复
-
-- 在 macOS Colima 专用 VM 上跑通真实沙箱管道：rootless Docker、固定摘要镜像、mTLS 控制通道、
-  渲染容器与独立验证容器，合成 HTML 渲染为 PNG。节点准备脚本、systemd 服务与环境模板见
-  `deploy/sandbox-node/`，步骤见[沙箱运行时指南](guides/sandbox-runtime.md)。
-- 修复 `deploy/sandbox-seccomp.json` 缺少 `chroot`，导致 Chromium 自身沙箱无法启动；
-  Chromium 启动失败现以固定代码 `browser_launch_failed` 报告，不再只显示帧错误。
-- 实测 gVisor 在 rootless Docker 下无法施加 cgroup 限额，运行时组合列为待定决定。
-
-## 2026-10-02：付费起草的预览绑定与扣款上限
-
-- `CardGenerateRequest` 新增可选 `expected_input_hash` 与 `max_charge`：提交时核对预览哈希（覆盖输入、
-  模型与价格修订），不一致以 `generation_input_changed` 拒绝且不建作业；作业累计平台扣费加下一次预留超过
-  上限即停止准入，以 `spend_cap_reached` 保存部分结果。同键进行中作业的上限更高或缺失时以
-  `generation_cap_conflict` 拒绝，重试按新上限约束累计扣费。预检回显上限并报告
-  `spend_cap_below_first_call`。CLI 增加 `--expect-input-hash`、`--max-charge`。
-- 单位后台启用付费起草：预检后填写扣款上限并勾选授权才能运行，提交携带预览哈希，作业状态在面板内跟踪。
-  契约见 [drafting-binding.md](plan/drafting-binding.md)。
-
-## 2026-10-02：导出图片证据与原型决定门禁
-
-- 人工导出消费已确认的 `image_region` 证据：固定派生 PNG 字节与哈希作为附件嵌入，所有图片统一标为
-  证据图片，文档不显示来源种类或原型性质。
-- 正式件要求每项原型图片有当前有效的保留决定，否则以 `prototype_decision_required`、
-  `prototype_replacement_pending` 或 `prototype_decision_stale` 拒绝；决定集合进入输入哈希，
-  之后改变决定会让已发布导出失效。审阅件不依赖决定。迁移 `0024` 在导出证据行记录保留决定，
-  并在完成关口核对。CI 构建 Rust 截图渲染器，使图片链路测试实际运行。机制见
-  [human-section-exports.md](notes/human-section-exports.md)。
-
-## 2026-10-02：单位模型、人工导出、单位后台、沙箱与截图证据
-
-- 单位模型配置：单位自带模型与平台目录模型选择，独立密钥加密、不可变修订和
-  `bid provider set/list/history/test`；抽取与卡片起草共用解析，自带密钥零平台扣费，仍逐次准入并
-  记录用量，支持厂商额度提示与余额查询。迁移 `0020`，机制见
-  [provider-config.md](notes/provider-config.md)。
-- 人工导出：人类 bidder 按单位固定模板修订预检、prepare、release 和下载 Word 响应章节；正式件拒绝缺口，
-  审阅件逐页标注不得提交；证书页附件保留原始字节，存储加密、签名下载、审计与限额。迁移 `0021`，
-  机制见 [human-section-exports.md](notes/human-section-exports.md)。
-- 单位后台：`web/` 新增招标任务、解析、官方推理档位抽取、千条响应卡审阅与按职责处置、起草费用预览
-  和三表初稿页面；初稿读取改为批量加载。付费起草按钮等待预览绑定契约。机制见
-  [org-console.md](notes/org-console.md)。
-- 沙箱：HTML 原型离线渲染、精确允许名单的厂家网页与 PDF 采集、一次性容器与独立验证、资源预算、
-  清理对账、加密产物与来源回执；原型不加可见标记，真实隔离运行时默认关闭。迁移 `0022`，机制见
-  [sandbox-execution.md](notes/sandbox-execution.md)、[sandbox-fetch.md](notes/sandbox-fetch.md)，
-  部署步骤见[沙箱运行时指南](guides/sandbox-runtime.md)。
-- 截图证据 Phase A：本机 Rust 像素脱敏、裁剪与区域标注，人工按精确哈希放行入库，`image_region`
-  响应证据进入卡片与初稿依赖，原型逐项保留或替换决定，经准入计费的多模态匹配、区域建议与读字。
-  CLI 契约升为 `2.0`，保留旧 Evidence 输入分支。迁移 `0023`，机制见
-  [screenshot-evidence.md](notes/screenshot-evidence.md)。
-
-## 2026-10-02：调用预留、引用边界与星号判定修复
-
-- 抽取、起草的两种 HTTP adapter 共用输出上限选项校验，运营模型目录禁止保存这些字段及别名；
-  预留与起草预估统一取实际请求中最大的输出上限，避免较小别名造成少预留。接入缓存版本更新。
-- 新增迁移 `0019`，让人工确认与组表使用和 Python 相同的原文区间、规范化及分段边界判定，
-  修复 `3.5mm/5mm`、`内存/扩展内存` 的内部匹配误判；保留逐字引用要求，不改写历史数据。
-- 结算连接池超时、不可恢复的数据库或记账错误先停止后续准入；写入未知状态再失败也保留停止状态
-  和原预留，已发送调用继续结算，明确可恢复的 DBAPI 错误仍有限重试。
-- 星号合并按引用在完整原文中的区间判断归属，不再用子串标星或遮蔽缺失星号段；后处理缓存版本更新。
-- 增加 MockTransport 驱动的 API 与作业回归场景，覆盖目录校验、调用计费、引用修复到人工确认及组表、
-  星号补入和 SQL/Python 一致性。机制见 [LLM 接入层](notes/llm-providers.md)、
-  [预付计费](notes/prepaid-billing.md)、[Word 引用](notes/docx-citations.md)及
-  [响应卡片](notes/response-cards.md)。
-
-- 由 Codex 按第二轮挑战式复审实现，在真实数据库上验证并修正一处测试字段名；当时的完整回归：819 项通过。
-## 2026-10-02：模型响应起草与外发遮挡
-
-- 新增 `bid card generate`、对应 API 和后台作业：按指定抽取作业及要求生成 model/worker 草稿，
-  提出处置建议、响应、偏离与候选引用；受保护卡片跳过，落盘复核版本，模型不能弱化已记录负偏离。
-- 提交固定并加密保存输入正文；清单限定为已选要求原文/位置、任务固定资源可引用字段及证书来源页
-  本地文本，公开预检只返回标识、哈希、遮挡状态、版本与命中数。默认遮挡金额、联系人/电话、
-  身份证号、银行账号，仅单位人类 admin 能关闭；每次厂商调用前重新检查权限和设置修订。
-- Anthropic 与 OpenAI 兼容 adapter 增加结构化起草，共用默认模型、官方 reasoning、逐次准入、
-  用量结算和预付扣费；起草分批、截断/格式错误拆分及瞬时重试均计费，首轮计划参与调用上限。
-  有效部分结果保留并返回退出码 5，未完成项和引用拒绝只报告标识及原因，不记录原始收发文本。
-- 模型局部引用同时核验实际发送文本和固定原文；无有效引用仍为需补材料的 evidence 草稿，
-  不自动转承诺。承诺多余引用丢弃并警示；候选证据和文字始终需要人工审阅确认。
-- 迁移 `0018` 扩大起草记录的 adapter 目录标识字段，并补充模型输入依赖在人工确认、旧稿失效和
-  组表时的数据库关口；不新增业务表，不改写历史。组表规则更新为 `response-draft-v3`。
-- 注册命令与 CLI JSON 快照，Result 七键及版本保持 `1.2`。原批准契约转换为
-  [ADR 0005](adr/0005-human-confirmed-responses.md)，机制见
-  [响应卡片](notes/response-cards.md)、[模型外发与遮挡](notes/model-drafting-redaction.md)和
-  [LLM 接入层](notes/llm-providers.md)，操作见 [CLI 指南](guides/cli.md#generate-model-response-proposals)。
-- 凭据未配置的平台模型不再先检查余额，抽取与起草直接以 `provider_unavailable` 说明原因。
-  由 Codex 实现，在真实数据库上验证并修正；当时的完整回归：768 项通过。
-
-## 2026-10-02：要求引用精确原文与受控修复
-
-- 抽取引用先按 NFKC、弯直引号和空白规范化定位，再保存唯一命中的原文连续片段；模型原始引文另存
-  `model_quote`。无匹配、重复匹配和未知位置按条拒绝，其余已核验结果继续保存。
-- 参数补漏不再把覆盖多个参数的整段引文当成逐项覆盖；★ 规则按分号和换行分段，只标记明确带星号的
-  分段并补入缺失项。`gap_fill.remaining` 报告最终保存及规则补入后仍未覆盖的参数数。
-- 抽取提示词保持 `req-v3`；新增后处理缓存版本 `exact-spans-v1`，HTTP adapter 更新为 v4，使所有服务商
-  在引用语义变化后重新抽取。Result 契约版本保持 `1.2`。
-- 新增仅单位人类 admin 可用的 `bid req repair-citations`：默认只读预览，执行需提交预览哈希和原因；
-  范围、来源或当前卡片变化时报 `repair_preview_changed`，不能唯一定位的历史要求保持不变。审计只记
-  要求、任务、作业、卡片标识及新旧引用、模型引文和操作原因的哈希，不记录这些原始文本。
-- 迁移 `0017` 增加可空的 `requirements.model_quote` 与卡片修订引用哈希，不改写既有修订历史。
-  修复后引用哈希变化的卡片派生 `needs_reconfirmation`，仅遵守项需重新人工处置；
-  `response-draft-v2` 组表将其列为缺口，读取旧初稿时重新计算有效性并保留原快照。机制见
-  [LLM 抽取](notes/llm-providers.md)、[Word 引用](notes/docx-citations.md)和
-  [响应卡片](notes/response-cards.md)，操作见[CLI 指南](guides/cli.md#repair-legacy-requirement-citations)。
-- 同一位置出现多处规范化匹配时，选择两侧以文本边界、空白或列表标点分隔的那一处，避免 `5mm插孔`
-  与 `3.5mm插孔`、`内存` 与 `扩展内存` 互相误判。由 Codex 实现，在真实数据库上验证并修正；
-  当时的完整回归：727 项通过。
-
-## 2026-10-02：模型调用预算、即时记账与作业租约
-
-- 新增共享作业执行上下文；提取的首轮、拆分、补漏和重试均在调用前检查 attempt 归属、
-  取消状态、累计调用上限和平台费用上限，按单位事务预占调用费用，避免并发重复使用余额。
-- 迁移 `0016` 增加强制单位隔离的调用记录和 usage 幂等关联。收到有效用量后立即将记录、
-  扣款、账目和累计费用同事务提交；记账重试不重复扣款，旧 attempt 的迟到费用仍保留。
-  超限的提取作业失败且不保存半份要求，已有用量不丢弃。
-- 作业按 `run_id` 续租，长请求期间继续心跳；取消、租约失效或接管阻止旧 attempt 继续调用。
-  普通取消等待已发出的调用记账，未知结果的预占留待对账。
-- 增加基于 API、processor 与 `httpx.MockTransport` 的预算、并发、取消、记账重试、心跳、
-  接管及租户隔离场景。费用上界与恢复限制见[预付费机制](notes/prepaid-billing.md)，
-  参数见[开发指南](guides/development.md#configure-job-guards)。
-- 每个作业的调用次数上限随首轮批次数增长（`BID_JOB_VENDOR_CALLS_PER_BATCH`，默认每批 4 次，不低于
-  `BID_JOB_MAX_VENDOR_CALLS`），大型招标文件不会在首轮中途被截停。由 Codex 实现，在真实数据库上验证；
-  当时的完整回归：717 项通过。
-## 2026-10-02：统一密码登录限速与 TOTP 原子消费
-
-- 单位列表查询、单位登录和平台登录共用归一化账号的失败计数；复用现有审计表及
-  PostgreSQL 事务锁，补充来源限制，未知、停用及未设置密码账号沿用统一失败响应。
-- 密码校验使用独立线程池、有限等待队列和跨 API 进程的计算槽位；饱和或等待超时
-  返回可重试错误，取消请求后仍保留执行中的容量并完成失败记账。
-- 平台 TOTP 在同一账号锁及事务内读取并消费计数，提交成功记录后才签发会话，
-  防止并发请求复用验证码。不新增迁移或依赖。
-- 规则和边界见 [平台认证机制](notes/platform-console.md#password-admission-and-totp-consumption)，
-  重试步骤见 [开发指南](guides/development.md#run-the-platform-console)。
-
-## 2026-10-02：人工响应卡片与偏离表初稿第一阶段
-
-- 新增卡片创建、编辑、分类、提交、确认、驳回、补材料、撤回和重开，以及同抽取作业的
-  原子批量处置。按技术/商务职责逐项人工决策，令牌、agent、worker 不能确认或处置。
-- 迁移 `0015` 增加响应修订、真实材料 Evidence 与链接、起草运行记录和三表快照；
-  新表强制单位隔离，数据库检查人工身份、状态迁移、不可变历史、关联完整性和全集覆盖。
-  任务遮挡设置默认开启，仅人类 admin 可修改；预留第二阶段模型起草与固定输入字段。
-- `bid draft` 后台确定性组表，复制确认内容，分别输出实质性、商务、技术表、须遵守清单和
-  缺口，保留负偏离；材料替换或卡片修订后读取旧稿标记失效。组表不调用模型、不产生模型费用。
-- API、本地/远程 CLI 和 `bid schema` 新增对应命令；保留 Result 七键及版本 `1.2`，
-  有缺口的组表及其作业查询/等待使用部分成功退出码。机制见
-  [response-cards.md](notes/response-cards.md)，操作见 [CLI 指南](guides/cli.md#review-responses-and-assemble-a-draft)。
-- 第一阶段预留模型起草与实际外发遮挡，未提供起草命令或导出；后续决策归档于
-  [ADR 0005](adr/0005-human-confirmed-responses.md)。
-- 样例招标文件开发环境冒烟：1,056 条要求全部列为无卡片缺口，其中 9 条为仅规范化匹配的 `invalid_citation`，
-  组表以部分成功退出。当时的完整回归：680 项通过。
-
-## 2026-10-02：参数清单逐项抽取
-
-- 抽取提示词要求硬件、软件参数逐项输出，各自引用原文，保留数值、单位和限定条件，不得用“等”省略；
-  跳过只有标题的条目，★ 规则也不再补入“★3.合同的终止：”一类空标题。提示词缓存版本更新。
-- 首轮抽取后扫描分号、换行分隔的参数片段，只把有效引用尚未覆盖的片段补发给模型，保留原块标识或页码；
-  补抽沿用分批、重试、引用校验和去重，仅执行一轮。
-- 抽取作业结果新增 `gap_fill`，报告待补片段、补抽调用和实际新增要求数量。每次已计费调用分别记录用量，
-  包括补抽失败、截断和格式错误的调用；原有 CLI/API 字段、Result 契约版本和数据库结构保持不变。
-- 机制、调用次数上界与额外成本见 [llm-providers.md](notes/llm-providers.md)。
-- 样例 Word 招标文件、`low` 档实测：保存 1,056 条（原 484 条），补抽 1 次调用新增 37 条，335 秒、22 万 token；
-  参数密集的技术参数块覆盖 144/161 个参数（原 `low` 73、原 `max` 123）。
-- 当时的完整回归：584 项通过。
-
-## 2026-10-02：按官方档位选择推理强度与抽取历史
-
-- 平台模型目录登记服务商公布的推理强度档位（如智谱 GLM-5.3 的 low、high、max），每档带请求参数、
-  批次大小和 Anthropic effort，并标出官方默认档；运营后台可编辑档位并逐档测试。
-- `bid req extract --reasoning LEVEL` 选择档位，不选时用官方默认档；未登记的档位以
-  `unsupported_reasoning` 失败，未分档的模型忽略并警告。`--dry-run` 列出可用档位。
-- 每次抽取的要求独立保存：`req list` 默认显示每个文档最近一次成功的抽取，`--job` 查看指定一次，
-  `req history` 列出全部抽取；要求带 `job_id` 与 `reasoning`。Result 契约升为 1.2。
-- 迁移 `0014`。决定见 [ADR 0004](adr/0004-extractions-per-reasoning-level.md)，机制见
-  [reasoning-levels.md](notes/reasoning-levels.md)。
-- 样例 Word 招标文件、GLM-5.3-Flash 实测：`low` 141 秒保存 484 条、15 万 token；`max`（4,000 字一批）
-  51 分钟保存 914 条、95 万 token；两档引用不通过各 1、2 条，★ 条款均 23/23 覆盖。
-- 模型返回空引用或空要求文字的条目按单条拒绝（`empty_quote`、`empty_text`）；抽取中的意外错误也会
-  保留已发生调用的用量，日志只记录异常类型与调用栈。
-- 网络中断、超时、限流等临时错误先在批次内重试两次（10 秒、30 秒后），不再让整个作业从头重排；
-  长时间请求中被断开的 TLS 连接（httpx 抛出的原始 `ssl.SSLError`）也按网络中断处理。
-- 当时的完整回归：572 项通过；Playwright 端到端检查通过。
-
-## 2026-10-02：服务商额度用完的提示
-
-- 服务商返回额度用完、欠费或套餐失效（HTTP 402、`insufficient_quota`、`billing_error`、
-  智谱 1113、1308–1321 中的额度与套餐类错误码）时，作业以 `provider_quota_exhausted` 失败，
-  不再重试三次；报错写明重置时间（服务商给出时）并提示联系系统管理员。智谱 1302、1305
-  限流仍按可重试处理。机制见 [llm-providers.md](notes/llm-providers.md)。
-
-## 2026-10-01：Word 招标文件按文档位置引用
-
-- Word 直接解析为段落块和表格单元格块，按标题样式或编号识别章节；合并单元格、嵌套表格、
-  内容控件都有稳定位置，页眉页脚、文本框等跳过的内容列在解析警告里。
-- Word 来源的要求引用章节路径加段落或单元格，`page` 为 `null`，新增 `location`；
-  Result 契约升为 1.1。引用原文必须落在所指的那一个块里。硬性规则 6 相应修改，
-  决定见 [ADR 0003](adr/0003-word-structural-citations.md)，机制见
-  [docx-citations.md](notes/docx-citations.md)。
-- 引用比对忽略全角半角与弯直引号差异；要求按原文顺序列出。
-- 模型输出被截断或不符合格式时自动把批次对半拆开重发：先按章节，再按块，长页面或长单元格再按行；
-  只有单行仍超限才失败。
-- 抽取批次并发发送（`BID_LLM_CONCURRENCY`），默认批次 8,000 字、输出上限 32,000 token，
-  每次调用有总时限；`BID_LLM_REQUEST_OPTIONS` 可向请求附加服务商参数。
-- [evals/extract_tender.py](../evals/extract_tender.py) 支持 Word，报告引用通过数与 ★ 召回。
-- 迁移 `0013`。
-- 样例招标文件（WPS，2,117 块）实测：GLM 关闭思考 135 秒抽出 449 条，446 条引用通过，
-  ★ 条款 23/23 覆盖（含规则补抽）。
-- 引用不通过改为逐条拒绝：其余条目照常保存，被拒条目的位置、原文与原因写入作业结果
-  `rejected` 并给出警告；全部不通过时仍以 `invalid_citation` 失败。
-- 当时的完整回归：556 项通过。
-
-## 2026-10-01：预付余额与充值卡密
-
-- 单位预付余额与只能新增的流水；平台计费调用按售价扣除，余额必须大于 0 才能提交平台计费作业，
-  不设透支额度。
-- 平台管理员批量生成、作废卡密，直接增减或设定单位余额；单位管理员在 `/app/org/billing`
-  或 `bid billing redeem` 兑换卡密。
-- 计费币种由 `BID_BILLING_CURRENCY` 配置；售价与应收字段去掉 `usd` 后缀。
-- 单位登录页按账号列出所属单位（`/auth/orgs`）。
-- 迁移 `0012`。决定见 [ADR 0002](adr/0002-prepaid-billing.md)，机制见
-  [prepaid-billing.md](notes/prepaid-billing.md)。
-- 当时的完整回归：540 项通过；Playwright 端到端检查通过。
-
-## 2026-10-01：平台运营后台
-
-- 平台管理员由部署配置指定，登录需密码与 TOTP，验证码只能用一次，15 分钟内失败 5 次锁定；
-  平台会话 30 分钟，与单位会话和 API 令牌互不通用。
-- 运营后台（`/app`）与 `bid platform` 命令：开通、停用、启用单位，一次性设置密码链接，
-  平台模型目录与测试，按月用量与应收（可导出 CSV），平台审计。
-- 停用单位后，其登录、会话和令牌立即失效。
-- 设为默认的目录模型用于所有单位的要求抽取，用量按成本价与售价分别记录。
-- 迁移 `0010`、`0011`。跨单位访问的决定见 [ADR 0001](adr/0001-platform-console-access.md)，
-  机制见 [platform-console.md](notes/platform-console.md)。
-- 当时的完整回归：514 项通过；Playwright 端到端检查通过。
-
-## 2026-10-01：真实 LLM 抽取
-
-- 新增 Anthropic 与 OpenAI 兼容两个 httpx adapter，按 `BID_LLM_*` 配置平台模型；
-  机制见 [llm-providers.md](notes/llm-providers.md)。
-- 失败调用之前已完成批次的用量照常记录；新增错误码 `provider_refused`、`invalid_provider_output`。
-- 空环境变量按未设置处理。
-- 新增 [evals/extract_tender.py](../evals/extract_tender.py) 用于真实服务验收。
-- 当时的完整回归：483 项通过；尚未调用真实服务。
-
-## 2026-10-01：代码审查修复
-
-- 所有路由的数据库事务改为在返回响应之前提交（`Depends(context, scope="function")`），
-  提交失败不再表现为成功响应。
-- 登录的 PBKDF2 校验移入线程，不再阻塞事件循环。
-- 作业遇到退出码 3 的暂时性错误（如对象存储不可用）时重新排队，不再直接失败。
-- 当时的完整回归：467 项通过。
-
-## 2026-10-01：八轮独立范围
-
-以下各轮均在实施前获得契约确认。真实 LLM 接入由用户决定暂缓，生产抽取明确报错。
-第八轮结束时的本机回归为 467 项通过，远程 CI 未运行。
-
-1. **基础链路**：全局 User 与 Membership、范围令牌、任务、加密文件存储、PDF 分页解析与本地 OCR、
-   抽取契约与引用校验、Procrastinate 后台作业、远程与本地两种 CLI 模式。
-   迁移 `0001`、`0002`。笔记：[tenant-isolation.md](notes/tenant-isolation.md)、
-   [background-jobs.md](notes/background-jobs.md)。
-2. **产品元数据**：不可变修订、乐观并发、任务固定选择与显式替换、审计。
-   迁移 `0003`。笔记：[versioned-resources.md](notes/versioned-resources.md)。
-3. **软件功能声明**：产品关联、声明状态、修订与任务固定。
-   迁移 `0004`。笔记：[versioned-features.md](notes/versioned-features.md)。
-4. **证书声明**：资格/人员类型、可未知日期、显式日期检查、独立权限范围。
-   迁移 `0005`。笔记：[versioned-certificates.md](notes/versioned-certificates.md)。
-5. **单位资料声明**：可未知文本字段、独立权限范围。
-   迁移 `0006`。笔记：[versioned-profiles.md](notes/versioned-profiles.md)。
-6. **单位私有 DOCX 模板**：原文件加密修订、任务固定、受权下载。
-   迁移 `0007`。笔记：[versioned-templates.md](notes/versioned-templates.md)。
-7. **证书 PDF 原件**：原件与声明形成新修订，旧修订不可回填、不继承。
-   迁移 `0008`。笔记：[versioned-certificate-files.md](notes/versioned-certificate-files.md)。
-8. **未确认 PDF 页来源**：固定原件指定页的 150 dpi PNG 归档，恒未确认、不能进入 draft/export。
-   迁移 `0009`。笔记：[unconfirmed-evidence-sources.md](notes/unconfirmed-evidence-sources.md)。
-
-## 2026-09-30：设计文档
-
-- 初始化仓库，提交 [AI 标书工具设计文档](AI%20标书工具设计文档.md) v0.2 草稿。
+## 2026-10-04: Confidential fields and export-time substitution
+
+- Added confidential fields (保密字段) for quotes/identity/bank/contact/phone values, encrypted append-only values (migration `0030`). `org` has one org-wide value; `task` one per task. Only logged-in admin/bidder sessions set/reveal full values; reveals audit. Tokens never receive `confidential:write`/`confidential:reveal`.
+- Drafting replaces registered values with `{{secret.<key>}}` before transmission, with placeholder manifests, `card-draft-v3`/`bid-redaction-v3`. Old submitted jobs stop with `generation_rules_changed`. Cards referencing unknown/archived fields reject; `[REDACTED_…]` prevents confirmation.
+- Export fills fixed value rows: final missing values block with `confidential_value_missing`; review missing values show “【名称】”; changes after submission require resubmission. Resources may reference fields; evidence excerpts also fill on export.
+- Added “保密字段”, task “报价与保密信息”, and “单位资料” editors. Card/profile text shows chips inserted by drag/click, without typed placeholders. Added `bid confidential`. See [confidential-values.md](notes/confidential-values.md).
+
+## 2026-10-04: Outbound redaction preserves tender wording
+
+- `bid-redaction-v2` stops redacting labels alone. Identity/account/phone labels require number-shaped values; contact labels require colon/equal; amount labels require separators/digits/currency/uppercase amounts; English labels must be separate words. Original text such as “刷身份证登录”“管理员账号”“联系人管理”“预算管理”“Intel 8358” is sent unchanged.
+- Submitted/unexecuted old-rule jobs stop with `generation_rules_changed` and require resubmission.
+
+## 2026-10-04: Parallel CI tests on PRs only
+
+- Checks run on PRs (or manually), no postmerge main rerun. Markdown-only/`web/`-only changes skip Python; unchanged `web/` skips console build; both required checks report success. CI database disables durable flushing.
+- `pytest -n` parallelism: under advisory lock, one worker migrates base DB, others clone `<database>_gwN`; fixture passwords use same-format low-round hashes. CI uses runner core count and reports slowest tests.
+
+## 2026-10-04: Perplexity vendor search
+
+- With `BID_PERPLEXITY_API_KEY`, vendor-source search and simulated proposals (模拟拟投) use Perplexity Search API instead of SearXNG, which search-engine CAPTCHAs/rate limits block. Without it, SearXNG remains.
+- Simulations search candidate vendor domains first. When official pages cannot be fetched, use search excerpts with verbatim checks against excerpts; results/console label “搜索摘录”. Vendor-source capture still accepts only directly fetched pages.
+
+## 2026-10-04: Simulated proposals (demo)
+
+- Task “模拟拟投（演示）” groups technical requirements by purchase items in tender tables. Model classifies hardware/software/services and proposes hardware vendors; worker searches and trusted-fetches vendor pages (one additional same-site link level from catalog pages). Model reads product models, retaining only verbatim models/parameters, saving 【模拟】 products/feature declarations fixed to task. Software development/services propose no products.
+- SearXNG vendor search adds Yahoo engine.
+- Append-only `simulated_resources` (migration `0029`) retains simulated origin after human revisions. Console labels material/evidence “模拟”; final export blocks with `export_simulated_material`; review requires confirmation. See [product-simulation.md](notes/product-simulation.md).
+- Drafting/simulation share structured calls (`providers/structured.py`).
+
+## 2026-10-04: Concurrent drafting batches
+
+- Drafting batch characters become `BID_DRAFTING_BATCH_SCALE` times the extraction level's batch size (default 4), covering about 40 short requirements per call.
+- Batches run concurrently up to `BID_LLM_CONCURRENCY` (default 4), like extraction. Each retains call/charge admission limits. Failure stops unstarted batches; sent batches complete/publish in original batch order.
+
+## 2026-10-04: Desktop console layout and readability
+
+- Content max width 1880px; larger body/table/notice type; location labels stop repeating section paths; programmatically focused headings hide focus outlines.
+- Task main column: parsing/extraction/history/exports; right: progress/info/current jobs. Drag/drop upload, primary actions first, retry actions in “更多”; reasoning/extraction precheck on one row.
+- Review statistics become one row; full-width filters; list rows keep state/star/negative-deviation tags, with category/domain/eligibility as explanation text. Drafting scope/batch dispositions group visually; decision buttons fixed at detail footer. Draft assembly/history side by side; breadcrumbs show task name.
+
+## 2026-10-04: Online tender, certificate, and export previews
+
+- Org console previews tender/certificate PDFs by page; “在线查看原文位置” opens citation page. Word previews parsed paragraphs/tables and highlights cited paragraph/cell.
+- Task adds “导出文件”. Commercial reviewers preview released exports; first open converts DOCX through private worker Gotenberg (LibreOffice), then page views reuse one conversion. Preview/download share gates; open audits `export.preview_opened`. Failure saves nothing, explicit retry required. Added `BID_CONVERTER_URL`, `BID_PREVIEW_MAX_PAGES`, Compose `converter`; migration `0028` adds audit events. See [page-previews.md](notes/page-previews.md).
+
+## 2026-10-04: Element Plus console redesign
+
+- Org/platform consoles use Element Plus with on-demand imports/Chinese locale: dark sidebar, org/Chinese roles in topbar, task stepper, review stats/filters/requirements/fixed-right details, draft section tabs. Mobile uses horizontal top nav/stacked requirement cards. Browser titles vary by page/console instead of universal “平台后台”.
+- State/domain/eligibility/deviation/job/document codes display Chinese. Member-visible server errors/extraction precheck notices have Chinese explanations; unknown codes retain original text/code.
+- Confirm/reject/supply-material operations use dialogs. Disabled “确认响应” explains missing conditions below. Opening/switching pages warns to recheck only when checked review items were cleared. Material panels stop directing web members to CLI resource maintenance.
+- Styled status tags preserve browser performance gates for filtering/paging 1,200 requirements. E2E chooses dropdowns by option text and clicks confirmation dialogs.
+
+## 2026-10-04: Missing material no longer becomes negative deviation in drafting
+
+- Prompt `card-draft-v2` uses negative deviation only when material/commitment fails requirements. Missing material alone retains evidence kind with no deviation (无偏离); text states the required material type without asserting satisfaction or inventing models/parameters/lists. Bidder-performed delivery/construction/warranty/service-response obligations draft as commitments using original tender values. Previously missing-material cards became negative deviations; redrafting after supplementation was skipped with `negative_deviation_weakened` and needed human rewriting.
+
+## 2026-10-03: Export tables follow a winning-bid layout
+
+- Three response tables become four columns “序号｜招标文件要求｜投标文件响应内容｜响应情况”, numbered from 1 per table. Copy requirements verbatim, prefix starred with ★. End responses with navigable “（见附件 E003、声明 D001）” references. Compliance text is “响应”/“响应且无负偏离”; deviations use “正偏离：/负偏离：” plus differences, negative deviations bold. Comply-only/gap lists, evidence index, and appendix descriptions omit internal labels, source coordinates, IDs, confirmers, timestamps, hashes. Index shows material name/original page/excerpt/table/ordinal. Render profile `docx-export-v3`; manifest `human-export-manifest-v2` records material names.
+- Added `bid export provenance` / `GET /exports/{id}/provenance`: same document numbering returns confirmer/time/evidence/resource revisions/appendix hashes. Added `bid export template-sample`: starter A4 template, 宋体小四 body, 黑体三号 headings, footer page numbers, six anchors, directly usable binding.
+- Binding columns become `ordinal`/`requirement`/`response`/`compliance`; public contract `3.0`. Old seven-column bindings remain listable with `current: false`, blocked by `export_binding_outdated`; new seven-column bindings are rejected.
+
+## 2026-10-03: Two-org sandbox and lifecycle acceptance
+
+- Added [sandbox_two_org_acceptance.py](../scripts/sandbox_two_org_acceptance.py) using two synthetic orgs/real worker/gVisor node in development. B receives unknown-resource-equivalent 404 for A runs/task lists/artifact links/job status/cancel/submission/signed links. Runtime DB role reads no sandbox rows without org context; B cannot read/update A. RLS/composite FKs reject unauthorized inserts with successful controls. In-flight cancellation/SIGKILL worker publish no artifacts; containers reap in about 1.5 seconds, subsequent rendering succeeds. Lease-expiry takeover/disconnection/storage fault injection remains unrun.
+
+## 2026-10-03: Word export layout acceptance
+
+- Opened synthetic long-response final section in macOS Microsoft Word (150 requirements, 130 confirmed certificate appendix pages): three tables total 150 rows, unprotected document, 130 independent embedded images/130 bookmarks one-to-one. Appendix descriptions occupied one page and pushed images to the next; renderer now reserves two inches and keeps descriptions/images together, halving appendix pages. Profile `docx-export-v2`, no old-cache reuse.
+- Added optional scale scenario `server/tests/test_export_scale.py` and `scripts/word_inspect.applescript`; see [development.md](guides/development.md#check-an-export-in-word).
+
+## 2026-10-03: Split API entry points and shared versioned-resource services
+
+- Products/features/certificates/qualification profiles/templates share `services/versioned.py`: one revision-lock/conflict/task-selection replacement/audit implementation. `VersionedKind` declares tables/scopes/actions; hooks handle feature-product validation/template storage.
+- `api/main.py` retains assembly/middleware/error structure/auth context only. Domain routes move to `api/account.py`, `api/tenders.py`, `api/resources.py`, `api/jobs.py`; uploads/parse-extract submission/requirements/job status/token issuance move to `services/`. Four signed-download paths share `api/common.py`. Interfaces/route names/OpenAPI unchanged.
+
+## 2026-10-03: Sandbox proxy adversarial acceptance driver
+
+- Added [sandbox_proxy_acceptance.py](../scripts/sandbox_proxy_acceptance.py): production `FetchBroker`/`SocketBrowserProvider` use real TLS synthetic loopback origins, recording actual requests per target. Covers malicious query/path/userinfo/encoded IP/private/metadata/mixed A/AAAA/DNS rebinding/cross-origin/HTTPS downgrade/infinite redirects/untrusted certificates/Cookie/POST/compression bombs/oversized chunks and forged supervisor fetch frames. Violating targets receive zero requests; every connection uses verified addresses. Excludes proxy-node kernel egress filters/real DNS.
+
+## 2026-10-03: CI time and main protection
+
+- CI runs on PR/main only, not duplicate branch pushes; new PR pushes cancel old runs. Markdown-only required checks succeed without tests/builds. Cache uv/Cargo downloads/renderer builds.
+- Protect main: PR-only merge, required `python`/`web`, no force-push/deletion, administrators included.
+
+## 2026-10-03: Independent token keys and data-key rotation
+
+- Sessions/platform sessions/password links/signed downloads use mandatory `BID_TOKEN_KEY`, distinct from `BID_ENCRYPTION_KEY`/`BID_SECRETS_KEY`/retired data keys, otherwise startup fails. Configure before upgrade; existing sessions/links invalidate once after deployment.
+- Retired `BID_ENCRYPTION_KEY_PREVIOUS` decrypts only; `python -m app.admin rotate-encryption` rewrites encrypted fields/storage to current key per org, repeatably. See [development.md](guides/development.md#keys-and-storage).
+- Migration `0027` removes `api_tokens.encrypted_secret`: tokens retain digests only. Downgrade restores an empty column; deleted ciphertext is unrecoverable.
+
+## 2026-10-03: Slice 1 public-PDF acceptance and review fixes
+
+- Remote CLI completed login/task upload/parse/extract/list with public hardware tender PDF “德邦基金信创交换机项目招标文件” and platform-default model. Saved citations occur verbatim on referenced pages; every starred source row has a requirement; mismatched citations reject/report individually. Slice 1 completion criteria met.
+- Unexpected server exceptions return Result `500 internal_error`, exit 4, no exception text. Local mode matches; CLI unexpected errors also return internal_error/4 instead of traceback/1.
+- Correct password without org membership returns `401 invalid_login`, same as wrong password.
+- Open PDF once; render/OCR pagewise; at most one scanned page in memory.
+- Certificate source archives read/render originals outside task lock, then recheck selection/duplicates under lock. At most two concurrent pages/process; timed-out ongoing render keeps its slot until completion. Exhaustion returns retryable `source_render_busy`.
+- Missing `BID_TEST_ADMIN_URL` fails database tests rather than skipping.
+
+## 2026-10-03: Self-hosted vendor-source search
+
+- Added `bid evidence search`, `evidence candidates`, `evidence adopt`: precheck shows vendor/model-only terms and input hash. Worker calls self-hosted SearXNG, normalizes fetched URLs (rejecting HTTP/credentials/ambiguous addresses), deduplicates/merges engines, ranks existing same-vendor org-library domains then PDFs, stores at most 20 candidates. Unavailable search retries without saving results. Adoption writes new product `official_url`/`whitepaper_url` revision and selects it for task; stale product revisions reject.
+- Compose adds digest-pinned internal-only SearXNG; config `deploy/searxng/settings.yml`. See [development.md](guides/development.md#run-vendor-search-locally) and [screenshot-evidence.md](notes/screenshot-evidence.md#vendor-search).
+
+## 2026-10-03: Vendor capture tolerates missing page resources
+
+- Successful entry-document load suffices for screenshots. Failed resources return per-request `fetch_failed`, without ending the run. Capture even if `load` exceeds navigation budget; stop new requests/wait in-flight before reporting. Mark `vendor_resources_incomplete`. Entry failure/policy changes/revocation still fail; missing primary resources return `source_fetch_failed`. Open development policy is no longer limited to 60 requests/org/minute.
+- Vendor archives record incompleteness/rejected request count. Migration `0026` requires sandbox-receipt agreement and `vendor_capture_incomplete` review before confirmation. VendorArchiveView adds fields; public contract `2.2`.
+- Real gVisor twice captured/stored H3C product page (139 requests, 3 failures) and white-paper PDF.
+
+## 2026-10-03: Concurrent vendor forwarding and gVisor rendering fixes
+
+- Vendor requests have sequential IDs, at most 4 in flight. Runner/supervisor/caller match responses; supervisor rejects unknown/duplicate/out-of-order IDs. When both source connection leases are occupied, wait rather than reject.
+- Approved runsc vendor capture launches Chromium with `--disable-seccomp-filter-sandbox`, retaining namespace sandbox, fixing gVisor `sched_getaffinity` renderer crashes. Prototype rendering unchanged. See [sandbox.md](plan/sandbox.md#decisions). Rebuilt/digest-pinned image.
+
+## 2026-10-03: Development vendor egress and sandbox runner errors
+
+- Development-only `open_public_https` revision permits public HTTPS when `BID_SANDBOX_DEV_OPEN_EGRESS=1`, still URL normalization/credential rejection/public-address/byte limits; accepts local fake-IP proxy `198.18.0.0/15`. Without flag the whole policy file is invalid. See [sandbox-runtime.md](guides/sandbox-runtime.md#open-vendor-egress-on-a-development-node).
+- Browser exceptions no longer exit as `invalid_frame`; navigation timeout/failure/unexpected errors report `source_timeout`/`source_navigation_failed`/`runner_unexpected_failure`. Vendor navigation deadlines use run budget. Image rebuilt/digest-pinned.
+- Real gVisor completed H3C official white-paper PDF capture/storage. Web capture still limited by slow sequential forwarding and Chromium sandbox crashes; see [sandbox-execution.md](notes/sandbox-execution.md#pitfalls).
+
+## 2026-10-03: Vendor-page and white-paper screenshot evidence
+
+- `screenshot prepare --sandbox-artifact` downloads vendor_capture web/PDF images for local plan processing. `screenshot add` stores `vendor_web`/`vendor_pdf` with archive-hash review. Server resolves URL hash/final source/title/capture time/content hash from run/proxy receipts, replays plan and rechecks image/archive bytes. Web requires `archive=bundle`; multiple pages share one archive.
+- Migration `0025` binds vendor archive to sandbox run/archive artifact/entry receipt and images to that capture. Confirmation requires `vendor_model_scope`. VendorSource retains only image artifact ID; removed unimplemented VendorCaptureInput; contract `2.1`. See [screenshot-evidence.md](notes/screenshot-evidence.md#vendor-captures).
+
+## 2026-10-03: Model-generated HTML prototypes (ui mock)
+
+- Added `bid ui mock`/`POST /tasks/{T}/prototype-generations`: fix one requirement/selected feature revision; send redacted requirement/feature declaration only. Precheck prices one call; paid run requires hash. Leased worker generates single-page HTML, offline sandbox captures; encrypted HTML/PNG and receipts persist prototype (原型). Changed selection/unavailable sandbox blocks before model call.
+- Fixed intermittent 4 KiB loss for artifacts above 64 KiB under gVisor (`artifact_hash_mismatch`): runner uses `PIPE_BUF` atomic frames, verified with 10 consecutive renders of a model-generated 238 KiB page.
+- Added `GET /prototype-runs/{id}`/source image reads. `screenshot prepare --prototype-run` downloads/processes locally, then human ingest creates origin=prototype assets. See [screenshot-evidence.md](notes/screenshot-evidence.md#prototype-generation).
+
+## 2026-10-03: Dedicated VM with rootful Docker and runsc
+
+- Supervisor requires rootful runsc with cgroups enabled; rootless allowed only for synthetic runc. Reject with `sandbox_runsc_cgroups_unenforced`/`sandbox_rootless_required`.
+- After development VM switches to runsc (`--oci-seccomp`), isolation subset passes: file/secret boundaries, zero egress with positive controls, CPU loops/memory bombs terminated by limits, container cleanup on disconnect/supervisor restart. Driver `scripts/sandbox_colima_acceptance.py`; rationale [sandbox contract](plan/sandbox.md#decisions).
+
+## 2026-10-03: Sandbox development node and real-pipeline fixes
+
+- Real pipeline on macOS dedicated Colima VM: rootless Docker, digest-pinned images, mTLS control, render/separate verification containers, synthetic HTML→PNG. Node scripts/systemd/env templates in `deploy/sandbox-node/`; see [sandbox runtime](guides/sandbox-runtime.md).
+- Added missing `chroot` to seccomp for Chromium sandbox startup. Browser launch failures now report `browser_launch_failed`, not frame errors only.
+- Measurements found gVisor/rootless Docker cannot enforce cgroups; runtime combination remains an open decision at this date.
+
+## 2026-10-02: Paid drafting preview binding and spending caps
+
+- Optional `expected_input_hash`/`max_charge` on CardGenerateRequest verify input/model/price preview at submission. Mismatch rejects `generation_input_changed` without job. Accumulated charges+next reservation above cap stop admission and save partial with `spend_cap_reached`. Higher/missing cap on unfinished same-key job conflicts with `generation_cap_conflict`; retry caps cumulative spend. Preview echoes cap/`spend_cap_below_first_call`; CLI adds `--expect-input-hash`/`--max-charge`.
+- Org console enables paid drafting after cap/authorization checkbox, submits preview hash, tracks job in panel. See [drafting-binding.md](plan/drafting-binding.md).
+
+## 2026-10-02: Image export and prototype decision gates
+
+- Human exports consume confirmed `image_region` evidence with fixed derived PNG bytes/hashes embedded. All images labeled evidence images; no source-kind/prototype labels in document.
+- Final sections need current valid keep decisions for every prototype; reject `prototype_decision_required`, `prototype_replacement_pending`, `prototype_decision_stale`. Decisions enter hash; changes invalidate published exports. Review copies do not depend on decisions. Migration `0024` stores decisions on export evidence rows/rechecks completion. CI builds Rust renderer so image-path tests execute. See [human-section-exports.md](notes/human-section-exports.md).
+
+## 2026-10-02: Org models, human exports, org console, sandbox, and screenshots
+
+- Org configuration: BYOK/platform selection, independent encryption, immutable revisions, `bid provider set/list/history/test`; extraction/drafting share resolution. BYOK zero platform charge but per-call admission/usage, quota guidance/balance queries. Migration `0020`; see [provider-config.md](notes/provider-config.md).
+- Human export: human bidder previews/prepares/releases/downloads Word response sections against fixed org template revisions. Final rejects gaps; review marks every page as not for submission. Certificate attachments retain original bytes, encrypted storage/signed downloads/audit/limits. Migration `0021`; see [human-section-exports.md](notes/human-section-exports.md).
+- Org console: `web/` adds tender tasks/parsing/official-level extraction, thousand-card review/domain disposition, drafting cost preview, three-table drafts. Draft reads use batch loading. Paid button awaits preview-binding contract. See [org-console.md](notes/org-console.md).
+- Sandbox: offline HTML prototype rendering, exact-allowlist vendor web/PDF capture, one-use containers/separate verification/resource budgets/cleanup reconciliation/encrypted artifacts/source receipts. Prototypes have no visible labels; real isolation runtime disabled by default. Migration `0022`; see [sandbox-execution.md](notes/sandbox-execution.md), [sandbox-fetch.md](notes/sandbox-fetch.md), [runtime guide](guides/sandbox-runtime.md).
+- Screenshot Phase A: local Rust pixel redaction/crop/region annotation; human exact-hash ingest approval. `image_region` response evidence enters card/draft dependencies; per-prototype keep/replace decisions; admitted/billed multimodal matching/region suggestions/text reading. CLI contract `2.0`, retain legacy Evidence input. Migration `0023`; see [screenshot-evidence.md](notes/screenshot-evidence.md).
+
+## 2026-10-02: Reservation, citation boundaries, and star-detection fixes
+
+- Extraction/drafting HTTP adapters share output-limit validation; model catalog forbids fields/aliases overriding output limits. Reservation/drafting estimates use greatest actual request output limit, preventing smaller aliases from under-reserving. Adapter cache versions updated.
+- Migration `0019` aligns human confirmation/table assembly (组表) with Python source spans/normalization/segment boundaries, fixing internal `3.5mm/5mm` and `内存/扩展内存` matches. Verbatim citations remain; no historical rewriting.
+- Settlement-pool timeout/unrecoverable database/accounting errors stop further admission first. Failure after an unknown write retains stop state/original reservation; sent calls continue settlement. Explicitly recoverable DBAPI errors retain bounded retries.
+- Star merging uses quote spans in complete source text, no substring starring/masking missing starred segments. Postprocessing cache version updated.
+- Added MockTransport API/job regression covering catalog/admission/citation repair/human confirmation/table assembly/star supplementation/SQL-Python agreement. See [LLM provider layer](notes/llm-providers.md), [prepaid billing](notes/prepaid-billing.md), [Word citations](notes/docx-citations.md), [response cards](notes/response-cards.md).
+- Implemented by Codex after the second adversarial review; verified against real database and corrected one test field name. Full regression at that time: 819 passed.
+
+## 2026-10-02: Model response drafting and outbound redaction
+
+- Added `bid card generate`, API/background job: model/worker drafts for selected extraction/requirements, suggesting disposition/response/deviation (偏离)/candidate citations. Protected cards skipped; versions rechecked at persistence; models cannot weaken recorded negative deviation.
+- Submission fixes/encrypts input text. Allowlist: selected requirement text/location, task-fixed citable resource fields, locally extracted certificate-source text. Public preview only IDs/hashes/redaction state/versions/hit counts. Default amount/contact/phone/identity/bank redaction; human org admin alone disables. Recheck permissions/settings revision before every vendor call.
+- Anthropic/OpenAI-compatible structured drafting shares default models/official reasoning/admission/settlement/prepaid charges. Batches, truncation/format splits, and transient retries all bill; first-round plan participates in call limits. Preserve valid partial results with exit 5; report incomplete/rejected items by ID/reason only, no raw input/output logs.
+- Local citations validate sent text and fixed original. No valid quote remains evidence draft needing material, not automatic commitment. Discard/warn extra commitment citations; candidates/text always require human review.
+- Migration `0018` expands adapter catalog identity on drafting records and database gates for model-input dependencies during confirmation/old-draft invalidation/table assembly. No new tables/history rewriting. Assembly `response-draft-v3`.
+- Register command/JSON snapshots; Result seven keys/version `1.2`. Approved contract becomes [ADR 0005](adr/0005-human-confirmed-responses.md). See [response cards](notes/response-cards.md), [model outbound/redaction](notes/model-drafting-redaction.md), [LLM provider layer](notes/llm-providers.md), [CLI guide](guides/cli.md#generate-model-response-proposals).
+- Platform models without credentials no longer check balance first; extraction/drafting explain `provider_unavailable`. Codex implemented/verified/corrected against real database. Full regression then: 768 passed.
+
+## 2026-10-02: Exact source citations and controlled repairs
+
+- Locate citations using NFKC, curly/straight quotes, whitespace normalization, then save uniquely matched continuous original spans; preserve model text in `model_quote`. Reject absent/duplicate/unknown matches individually while saving other verified results.
+- Parameter gap filling no longer treats a multiparameter quote as covering every parameter. Star rules split semicolon/newline segments, star only explicit segments, and add missing items. `gap_fill.remaining` counts parameters still uncovered after saved/rule-added requirements.
+- Prompt remains `req-v3`; postprocessing `exact-spans-v1`, HTTP adapter v4 invalidate all provider caches after citation changes. Result remains `1.2`.
+- Human org admin `bid req repair-citations`: read-only preview by default; execute requires preview hash/reason. Scope/source/current-card changes yield `repair_preview_changed`; nonunique historical matches remain unchanged. Audit IDs and hashes of old/new citations/model quotes/reasons, no raw text.
+- Migration `0017` adds nullable `requirements.model_quote`/card revision citation hashes without rewriting history. Changed hashes yield `needs_reconfirmation`; comply-only needs another human decision. `response-draft-v2` reports gaps; old reads recompute validity while retaining snapshots. See [LLM extraction](notes/llm-providers.md), [Word citations](notes/docx-citations.md), [response cards](notes/response-cards.md), [repair steps](guides/cli.md#repair-legacy-requirement-citations).
+- Multiple normalized matches choose one separated on both sides by text boundaries/whitespace/list punctuation, avoiding confusion between `5mm插孔`/`3.5mm插孔` or `内存`/`扩展内存`. Codex implemented/verified/corrected against real database. Full regression then: 727 passed.
+
+## 2026-10-02: Model budgets, immediate accounting, and job leases
+
+- Added shared job execution context: first extraction round/splits/gap fills/retries check attempt ownership/cancel/cumulative calls/platform charge cap before calls. Org transactions reserve call costs to prevent concurrent balance reuse.
+- Migration `0016` adds mandatory-org-isolated call records/idempotent usage links. Valid usage commits record/charge/ledger/cumulative cost atomically. Accounting retries never double-charge; late old-attempt charges remain. Over-limit extraction fails without half a requirement set; existing usage retained.
+- Renew by `run_id`, heartbeat during long requests. Cancel/expired lease/takeover blocks old attempts. Ordinary cancel waits for sent-call accounting; unknown reservations await reconciliation.
+- API/processor/`httpx.MockTransport` scenarios cover budgets/concurrency/cancel/accounting retries/heartbeat/takeover/isolation. Bounds/recovery in [prepaid billing](notes/prepaid-billing.md), parameters in [development](guides/development.md#configure-job-guards).
+- Call caps scale with initial batches (`BID_JOB_VENDOR_CALLS_PER_BATCH`, default 4/batch, never below `BID_JOB_MAX_VENDOR_CALLS`) so large tender documents (招标文件) are not stopped mid-first-round. Codex implemented/real-database verified. Full regression then: 717 passed.
+
+## 2026-10-02: Unified password limits and atomic TOTP consumption
+
+- Org discovery/login/platform login share normalized-account failure counts via existing audit/PostgreSQL locks; source limits added. Unknown/disabled/no-password accounts retain generic failures.
+- Password verification uses dedicated thread pool/bounded wait queue/cross-process compute slots. Saturation/timeouts retryable; cancelled requests retain running capacity and finish failure accounting.
+- Platform TOTP reads/consumes counter under same account lock/transaction; issue session only after successful audit commit, preventing concurrent code reuse. No migration/dependency.
+- See [platform authentication](notes/platform-console.md#password-admission-and-totp-consumption), [development retry steps](guides/development.md#run-the-platform-console).
+
+## 2026-10-02: Human response cards and deviation-table draft stage one
+
+- Added create/edit/classify/submit/confirm/reject/supply-material/withdraw/reopen and atomic same-extraction batch dispositions. Humans decide per technical/commercial domain; tokens/agents/workers cannot confirm/dispose.
+- Migration `0015`: response revisions/real Evidence/links/drafting runs/three-table snapshots. FORCE org isolation, DB human/state/immutable-history/relationship/full-coverage checks. Task redaction defaults on, human admin only; reserve stage-two model drafting/fixed inputs.
+- `bid draft` deterministically assembles confirmed text into substantive/commercial/technical tables, comply-only/gap lists, preserving negative deviation. Material replacement/card revision invalidates old reads. No model/cost in assembly.
+- API/local/remote CLI/`bid schema` add commands, retain seven-key `1.2`. Gapped drafts/job status/wait use partial exits. See [response-cards.md](notes/response-cards.md), [CLI guide](guides/cli.md#review-responses-and-assemble-a-draft).
+- Stage one reserves model drafting/actual redaction but has no generate/export commands. Later decisions archived in [ADR 0005](adr/0005-human-confirmed-responses.md).
+- Development sample smoke: all 1,056 requirements were no-card gaps; 9 normalized-only `invalid_citation`; assembly exited partial. Full regression then: 680 passed.
+
+## 2026-10-02: Item-by-item parameter extraction
+
+- Prompt emits each hardware/software parameter separately with its quote/values/units/qualifiers, no “等” omission; skip bare headings, including rule-added “★3.合同的终止：”. Prompt cache updated.
+- After initial extraction, scan semicolon/newline parameter segments, resend only those not covered by valid citations while retaining chunk/page IDs. One gap-fill round uses existing batching/retries/validation/deduplication.
+- Job `gap_fill` reports pending segments/calls/new requirements. Every billed call records usage, including failed/truncated/invalid-format gap fills. Existing CLI/API/Result/database unchanged.
+- See [llm-providers.md](notes/llm-providers.md) for mechanism/call bounds/extra cost.
+- Sample Word/`low`: 1,056 saved (previously 484), 1 gap-fill call added 37, 335 seconds/220,000 tokens. Dense technical chunk covered 144/161 parameters (previous low 73/max 123).
+- Full regression then: 584 passed.
+
+## 2026-10-02: Official reasoning levels and extraction history
+
+- Catalog registers official levels (Zhipu GLM-5.3 low/high/max), per-level request options/batch size/Anthropic effort/default. Console edits/tests each level.
+- `bid req extract --reasoning LEVEL`, official default if omitted. Unregistered fails `unsupported_reasoning`; unlevelled model ignores/warns. `--dry-run` lists levels.
+- Each extraction saves independently. `req list` defaults latest successful/document, `--job` selects one, `req history` lists all; requirements include `job_id`/`reasoning`. Result `1.2`.
+- Migration `0014`; [ADR 0004](adr/0004-extractions-per-reasoning-level.md), [reasoning-levels.md](notes/reasoning-levels.md).
+- Sample Word/GLM-5.3-Flash: low 141 seconds/484 requirements/150,000 tokens; max (4,000 characters/batch) 51 minutes/914/950,000 tokens. Invalid citations 1/2 respectively; both starred 23/23.
+- Empty quotes/text reject individually (`empty_quote`/`empty_text`); unexpected extraction errors retain usage, logs only exception type/stack.
+- Network/timeouts/rate limits retry twice in batch (after 10/30 seconds), no whole-job restart. Long-request dropped TLS (`httpx` raw `ssl.SSLError`) is network interruption.
+- Full regression then: 572 passed; Playwright E2E passed.
+
+## 2026-10-02: Provider quota exhaustion guidance
+
+- Quota/balance/plan exhaustion (HTTP 402, `insufficient_quota`, `billing_error`, Zhipu 1113 and quota/plan codes within 1308–1321) fails `provider_quota_exhausted` without three retries. Include reset time when supplied and contact-admin guidance. Zhipu 1302/1305 rate limits remain retryable. See [llm-providers.md](notes/llm-providers.md).
+
+## 2026-10-01: Word structural citations
+
+- Parse paragraphs/table cells directly; recognize sections by heading styles/numbering. Stable merged-cell/nested-table/content-control locations. Warn about skipped headers/footers/text boxes/etc.
+- Word citations use section path + paragraph/cell, `page:null`, new `location`; Result `1.1`. Quotes must occur within exactly that chunk. Hard rule 6 updated; [ADR 0003](adr/0003-word-structural-citations.md), [docx-citations.md](notes/docx-citations.md).
+- Citation matching ignores full/half-width and curly/straight-quote differences; requirements in source order.
+- Truncated/invalid output splits batches in half: sections, chunks, then lines for long pages/cells. Fail only if one line still exceeds limits.
+- Concurrent batches (`BID_LLM_CONCURRENCY`), default 8,000 characters/32,000 output tokens, per-call total deadline. `BID_LLM_REQUEST_OPTIONS` adds provider options.
+- [evals/extract_tender.py](../evals/extract_tender.py) supports Word/citation-pass/star recall reporting.
+- Migration `0013`.
+- WPS sample (2,117 chunks): GLM thinking off, 135 seconds/449 extracted/446 valid citations/23/23 starred (with rules).
+- Invalid citations reject individually; save other items, report rejected location/text/reason in `rejected` plus warnings. All invalid still fails `invalid_citation`.
+- Full regression then: 556 passed.
+
+## 2026-10-01: Prepaid balances (预付余额) and recharge cards
+
+- Org prepaid balances/append-only ledger; platform calls charge selling price, balance >0 required for submission, no overdraft allowance.
+- Platform admins batch-generate/void recharge cards (充值卡密), add/subtract/set org balances. Org admins redeem at `/app/org/billing` or `bid billing redeem`.
+- `BID_BILLING_CURRENCY`; remove `usd` suffix from selling-price/receivable fields.
+- Login lists account orgs (`/auth/orgs`).
+- Migration `0012`; [ADR 0002](adr/0002-prepaid-billing.md), [prepaid-billing.md](notes/prepaid-billing.md).
+- Full regression then: 540 passed; Playwright E2E passed.
+
+## 2026-10-01: Platform operator console (平台运营后台)
+
+- Deployment-defined administrators require password/TOTP, single-use codes, lock after 5 failures within 15 minutes. Platform sessions last 30 minutes, not interchangeable with org sessions/tokens.
+- `/app`/`bid platform`: provision/disable/enable orgs, one-time password links, model catalog/tests, monthly usage/receivables/CSV export, audit.
+- Disabled orgs immediately invalidate login/sessions/tokens.
+- Default catalog model serves all org extractions; usage records cost/selling prices separately.
+- Migrations `0010`/`0011`; cross-org [ADR 0001](adr/0001-platform-console-access.md), [platform-console.md](notes/platform-console.md).
+- Full regression then: 514 passed; Playwright E2E passed.
+
+## 2026-10-01: Real LLM extraction
+
+- Added Anthropic/OpenAI-compatible httpx adapters; `BID_LLM_*` platform model configuration. See [llm-providers.md](notes/llm-providers.md).
+- Retain completed-batch usage before failed calls; errors `provider_refused`, `invalid_provider_output`.
+- Empty environment variables count as unset.
+- Added [evals/extract_tender.py](../evals/extract_tender.py) for real-service acceptance.
+- Full regression then: 483 passed; real service not yet called.
+
+## 2026-10-01: Code review fixes
+
+- Route transactions commit before response (`Depends(context, scope="function")`); commit failures no longer appear successful.
+- PBKDF2 verification runs in thread, no event-loop blocking.
+- Exit-3 temporary job failures (such as unavailable storage) requeue rather than fail immediately.
+- Full regression then: 467 passed.
+
+## 2026-10-01: Eight independent scopes
+
+Each round obtained contract confirmation before implementation. Real LLM integration was deferred by user decision; production extraction explicitly errored. After round eight: 467 local regression passes, remote CI unrun.
+
+1. **Foundation**: global User/Membership, scoped tokens, tasks/encrypted files, pagewise PDF/local OCR, extraction/citation contracts, Procrastinate, remote/local CLI. Migrations `0001`/`0002`; [tenant-isolation.md](notes/tenant-isolation.md), [background-jobs.md](notes/background-jobs.md).
+2. **Product metadata**: immutable revisions/optimistic concurrency/fixed task selections/explicit replacement/audit. Migration `0003`; [versioned-resources.md](notes/versioned-resources.md).
+3. **Software feature declarations**: product association/declaration state/revisions/task binding. Migration `0004`; [versioned-features.md](notes/versioned-features.md).
+4. **Certificate declarations**: qualification (资格)/personnel kinds, optional unknown dates/explicit date checks/separate scopes. Migration `0005`; [versioned-certificates.md](notes/versioned-certificates.md).
+5. **Org profile (单位资料) declarations**: optional unknown text fields/separate scopes. Migration `0006`; [versioned-profiles.md](notes/versioned-profiles.md).
+6. **Org-private DOCX templates**: encrypted original revisions/task binding/authorized download. Migration `0007`; [versioned-templates.md](notes/versioned-templates.md).
+7. **Certificate PDF originals**: original+declaration form new revision; no backfill/inheritance into older revisions. Migration `0008`; [versioned-certificate-files.md](notes/versioned-certificate-files.md).
+8. **Unconfirmed PDF sources**: archive fixed original pages at 150 dpi PNG, permanently unconfirmed/ineligible for draft/export. Migration `0009`; [unconfirmed-evidence-sources.md](notes/unconfirmed-evidence-sources.md).
+
+## 2026-09-30: Design document
+
+- Initialized the repository and committed the [AI Bid Tool design](design.md) v0.2 draft by @yiyi.
