@@ -77,7 +77,6 @@ def create_router(
     @router.get("/documents/{document_id}", name="document_get", response_model=Result)
     async def document_get(document_id: UUID, ctx=Depends(context, scope="function")):
         session, identity = ctx
-        identity.require("task:read")
         document = await documents.require_document(session, document_id)
         return result(
             "document get",
@@ -91,7 +90,6 @@ def create_router(
     )
     async def download_link(document_id: UUID, ctx=Depends(context, scope="function")):
         session, identity = ctx
-        identity.require("task:read")
         await documents.require_document(session, document_id)
         return result(
             "document download link",
@@ -107,7 +105,6 @@ def create_router(
     @router.get("/documents/{document_id}/download", name="document_download")
     async def download(document_id: UUID, signature: str, ctx=Depends(context, scope="function")):
         session, identity = ctx
-        identity.require("task:read")
         document = await documents.require_document(session, document_id)
         check_signature(crypto, signature, "download", identity.org_id, document_id=document_id)
         return Response(
@@ -161,7 +158,6 @@ def create_router(
     @router.get("/documents/{document_id}/chunks", name="chunk_list", response_model=Result)
     async def chunk_list(document_id: UUID, ctx=Depends(context, scope="function")):
         session, identity = ctx
-        identity.require("task:read")
         await documents.require_document(session, document_id)
         chunks = (
             await session.scalars(

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import { useProvidedTaskAuthority, canEditTask } from "../task-authority.js";
 import { confirmAction, errorText, formatTime, label, orgAccess, orgRequest } from "../org.js";
 // Without a task this manages the org's fields and org-wide values; with one it fills the
 // task's own values. Values are only ever typed in or revealed on request, never listed.
@@ -23,9 +24,11 @@ async function load() {
     fields.value = listed.items; values.value = state.items;
   } catch (exc) { error.value = errorText(exc); }
 }
-function canSet(field) { return writable.value && (props.taskId ? true : field.scope === "org"); }
+const authority = useProvidedTaskAuthority();
+function canSet(field) { return (!props.taskId || canEditTask(authority.value)) && writable.value && (props.taskId ? true : field.scope === "org"); }
 function openSet(field) { editing.value = field; draft.value = ""; }
 async function save() {
+  if (!editing.value || !canSet(editing.value)) return;
   busy.value = true; error.value = "";
   try {
     const body = { value: draft.value, ...(editing.value.scope === "task" ? { task_id: props.taskId } : {}) };
@@ -116,7 +119,7 @@ onMounted(load);
   <el-dialog :model-value="!!editing" :title="`填写：${editing?.label ?? ''}`" width="440px" @close="editing = null">
     <p class="hint">值加密保存，不发给模型，只在导出文件中出现。每次填写都保留历史版本。</p>
     <el-input v-model="draft" type="password" show-password autocomplete="off" name="confidential-value" />
-    <template #footer><el-button @click="editing = null">取消</el-button><el-button type="primary" :loading="busy" :disabled="!draft.trim()" @click="save">保存</el-button></template>
+    <template #footer><el-button @click="editing = null">取消</el-button><el-button type="primary" :loading="busy" :disabled="!draft.trim() || !editing || !canSet(editing)" @click="save">保存</el-button></template>
   </el-dialog>
   <el-dialog :model-value="!!shown" title="查看保密值" width="440px" @close="shown = null">
     <p class="hint">此次查看已记入审计，30 秒后自动隐藏。</p>

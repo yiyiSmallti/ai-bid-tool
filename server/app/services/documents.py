@@ -19,6 +19,7 @@ from app.schemas.contracts import TaskCreate
 from app.services import budgets
 from app.services.auth import Identity
 from app.services.parsing import validate_document_async
+from app.services.task_authorization import task_authorized
 
 TASK_FIELDS = ("id", "name", "org_id", "model_redaction_enabled", "model_redaction_revision")
 
@@ -65,14 +66,33 @@ async def create_task(
             details={"revision": 1, "currency": currency},
         )
     )
+    from app.services.task_workflow import seed
+
+    await seed(session, identity, task)
     return task
 
 
 async def list_tasks(session: AsyncSession, identity: Identity):
     identity.require("task:read")
-    return (await session.scalars(select(Task).order_by(Task.created_at))).all()
+    from app.models.team_workflow import TaskMember
+
+    query = select(Task).order_by(Task.created_at)
+    if not (
+        identity.actor_kind == "session" and identity.token_id is None and identity.role == "admin"
+    ):
+        query = query.where(
+            Task.id.in_(
+                select(TaskMember.task_id).where(
+                    TaskMember.org_id == identity.org_id,
+                    TaskMember.user_id == identity.user_id,
+                    TaskMember.active.is_(True),
+                )
+            )
+        )
+    return (await session.scalars(query)).all()
 
 
+@task_authorized("task:read", parent=("document_id", "documents"))
 async def require_document(session: AsyncSession, document_id: UUID) -> Document:
     document = await session.get(Document, document_id)
     if document is None:
@@ -80,6 +100,7 @@ async def require_document(session: AsyncSession, document_id: UUID) -> Document
     return document
 
 
+@task_authorized("tender:upload", write=True)
 async def upload(
     session: AsyncSession,
     identity: Identity,

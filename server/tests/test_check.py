@@ -936,7 +936,11 @@ async def test_decisions_are_human_domain_cas_stale_safe_and_tenant_isolated(
         json=decision,
     )
     assert token_decision.status_code == 403
+    assert token_decision.json()["data"]["error"]["code"] == "human_session_required"
 
+    # The worker snapshot matches a real technical task grant; this assertion
+    # isolates the human-session gate from an unrelated missing domain grant.
+    set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
     worker = Identity(
         tenants["users"][0],
         tenants["orgs"][0],

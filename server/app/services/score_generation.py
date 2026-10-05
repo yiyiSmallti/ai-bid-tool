@@ -54,6 +54,7 @@ from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.extraction import locate_quote, locate_span
 from app.services.score_inputs import RubricSnapshot
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 PARTIAL_STOPS = {
@@ -566,6 +567,7 @@ async def _submit_rubric(
     ).model_dump(mode="json"), job
 
 
+@task_authorized("score:rubric:generate", write=True)
 async def submit_rubric(
     session: AsyncSession,
     actor: Identity,

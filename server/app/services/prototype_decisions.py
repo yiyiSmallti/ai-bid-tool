@@ -18,6 +18,7 @@ from app.models.screenshots import (
 from app.schemas.screenshot_contracts import PrototypeDecisionPreviewInput
 from app.services import response_cards as cards
 from app.services import screenshots as images
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 
@@ -42,6 +43,7 @@ def target(row, revision, image, prototype, asset, previous):
     }
 
 
+@task_authorized("evidence:confirm", review=True)
 async def preview(session, actor, task_id, body: PrototypeDecisionPreviewInput, storage=None):
     actor = await cards.access(session, actor, "evidence:confirm")
     actor.require("card:read")
@@ -135,6 +137,7 @@ async def preview(session, actor, task_id, body: PrototypeDecisionPreviewInput, 
     }
 
 
+@task_authorized("evidence:confirm", write=True, review=True)
 async def apply(session, actor, task_id, body, storage):
     actor = await cards.access(session, actor, "evidence:confirm")
     if actor.actor_kind != "session" or actor.token_id:

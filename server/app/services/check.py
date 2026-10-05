@@ -47,6 +47,7 @@ from app.services import check_inputs, check_rules, check_semantic, drafts
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.check_inputs import ADAPTER_VERSION, RULE_VERSION, SCHEMA_VERSION, CheckSnapshot
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 
@@ -70,6 +71,7 @@ def assessment_input(manifest: dict, input_hash: str) -> dict:
     ).model_dump(mode="json")
 
 
+@task_authorized("check:run", write=True)
 async def submit_check(
     session: AsyncSession,
     actor: Identity,
@@ -502,6 +504,7 @@ async def publish(
     }
 
 
+@task_authorized("check:read", parent=("report_id", "check_runs"))
 async def get_run(
     session: AsyncSession, actor: Identity, report_id: UUID, storage: Storage
 ) -> tuple[Identity, CheckRun]:
@@ -828,6 +831,7 @@ def page_limit(limit: int) -> None:
         cards.fail("invalid_input", "Limit must be between 1 and 200")
 
 
+@task_authorized("check:read")
 async def list_checks(
     session: AsyncSession,
     actor: Identity,
@@ -914,11 +918,23 @@ async def decide_finding(
     settings: Settings,
 ) -> dict:
     actor, run = await get_run(session, actor, report_id, storage)
-    await require_finding(session, run, finding_id)
+    finding = await require_finding(session, run, finding_id)
     if actor.actor_kind != "session" or actor.token_id is not None:
         cards.fail(
             "human_session_required", "A human session is required for check decisions", 403, 4
         )
+    from app.services.task_workflow import access as task_access
+
+    # Resolve the task/report/finding before action errors, then preserve the
+    # specific human-session rejection before checking task write/domain grants.
+    await task_access(
+        session,
+        actor,
+        run.task_id,
+        scope="check:decide",
+        write=True,
+        domain=finding.review_domain,
+    )
     actor = await check_inputs.access(session, actor, "check:decide")
     await check_inputs.lock_inputs(session, actor, run.task_id)
     await session.refresh(run)

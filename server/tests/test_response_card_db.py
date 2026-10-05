@@ -43,12 +43,9 @@ RESPONSE_TABLES = (
 
 def seed_response_rows(session, org, user, task, extraction, requirement):
     """Seed genuine relational materials under actor context, never bypass triggers."""
-    session.execute(
-        text(
-            "SELECT set_config('app.current_org',:org,true), set_config('app.actor_kind','session',true), set_config('app.actor_user_id',:user,true), set_config('app.actor_token_id','',true)"
-        ),
-        {"org": str(org), "user": str(user)},
-    )
+    from task_fixtures import actor_context
+
+    actor_context(session, org, user)
     card_id, revision_id = uuid4(), uuid4()
     card = ResponseCard(
         id=card_id,
@@ -230,11 +227,10 @@ from test_rls import seeded as seeded  # noqa: E402
 
 
 async def context(session, seeded, kind="session", token=None):
-    await session.execute(
-        text(
-            "SELECT set_config('app.actor_kind',:kind,true), set_config('app.actor_user_id',:user,true), set_config('app.actor_token_id',:token,true)"
-        ),
-        {"kind": kind, "user": str(seeded["users"][0]), "token": str(token) if token else ""},
+    from task_fixtures import actor_context_async
+
+    await actor_context_async(
+        session, seeded["orgs"][0], seeded["users"][0], kind=kind, token=token
     )
 
 
@@ -321,7 +317,9 @@ async def test_response_history_cannot_be_deleted(gate_db, seeded, table):
 
 
 @pytest.mark.parametrize("target", ["confirmed", "rejected", "needs_material"])
-async def test_draft_cannot_skip_pending_review(gate_db, seeded, target):
+async def test_draft_cannot_skip_pending_review(gate_db, technical_member, target):
+    # A real technical task grant lets this case exercise the later transition gate.
+    seeded = technical_member
     with pytest.raises(DBAPIError) as error:
         async with gate_db.transaction(seeded["orgs"][0]) as session:
             await context(session, seeded)
@@ -416,11 +414,9 @@ async def test_cross_org_response_reads_are_empty(gate_db, seeded, table):
 
 @pytest.fixture
 def technical_member(seeded, admin_engine):
-    with admin_engine.begin() as connection:
-        connection.execute(
-            text("UPDATE memberships SET role='technical' WHERE org_id=:org AND user_id=:user"),
-            {"org": seeded["orgs"][0], "user": seeded["users"][0]},
-        )
+    from task_fixtures import set_role
+
+    set_role(admin_engine, seeded["orgs"][0], seeded["users"][0], "technical")
     return seeded
 
 

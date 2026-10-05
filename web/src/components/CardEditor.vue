@@ -1,7 +1,8 @@
 <script setup>
 import { ArrowRight, Close, Download, Refresh, Tickets, View } from "@element-plus/icons-vue";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { actorKinds, confirmAction, simulatedSelections, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, mine, orgAccess, orgRequest, quoteChecks, responseKinds, states, statusTag } from "../org.js";
+import { useProvidedTaskAuthority, canEditTask, canReviewTask } from "../task-authority.js";
 import DocumentPreview from "./DocumentPreview.vue";
 import MaterialPanel from "./MaterialPanel.vue";
 import SecretTextEditor from "./SecretTextEditor.vue";
@@ -19,9 +20,10 @@ const masked = (value) => /\[REDACTED_[A-Z_]+\]/.test(value ?? "");
 let active = true;
 const dirty = computed(() => ready.value && JSON.stringify(content.value) !== baseline.value);
 const displayedSource = computed(() => card.value?.source ?? props.row.source);
-const writable = computed(() => orgAccess.role && orgAccess.role !== "viewer");
+const authority = useProvidedTaskAuthority();
+const writable = computed(() => canEditTask(authority.value) && orgAccess.role && orgAccess.role !== "viewer");
 const editable = computed(() => ready.value && writable.value && !conflict.value && (!card.value || (["draft", "rejected", "needs_material"].includes(card.value.state) && card.value.disposition !== "comply_only")));
-const canDecide = computed(() => card.value && mine(card.value.review_domain));
+const canDecide = computed(() => card.value && canReviewTask(authority.value, card.value.review_domain) && mine(card.value.review_domain));
 const invalid = computed(() => ["stale_material", "invalid_citation", "needs_reconfirmation"].includes(card.value?.eligibility));
 const completeResponse = computed(() => card.value && ["response_kind", "response_text", "deviation", "deviation_note"].every(key => typeof card.value.content[key] === "string" && card.value.content[key].trim()) && card.value.content.deviation_note.trim() !== "满足");
 // The first unmet confirmation condition, shown next to the disabled button.
@@ -41,6 +43,7 @@ const confirmBlocker = computed(() => {
 const confirmReady = computed(() => !confirmBlocker.value);
 function emptyContent() { return { response_kind: "commitment", response_text: "", deviation: "none", deviation_note: "", evidence: [] }; }
 function clearReview() { reviewed.value = []; warnings.value = []; }
+watch(() => authority.value?.workflow.access_epoch, clearReview);
 function install(value) {
   card.value = value; content.value = value ? JSON.parse(JSON.stringify(value.content)) : emptyContent();
   for (const key of ["response_text", "deviation_note"]) content.value[key] ??= "";
@@ -202,18 +205,18 @@ onMounted(async () => {
 
         <h4>警示与人工操作</h4>
         <div v-for="code in card?.warning_codes ?? []" :key="code" class="warning-item"><p class="notice warning">{{ code }}</p><label v-if="canDecide && card.state === 'pending_review'" class="check"><input v-model="warnings" type="checkbox" :value="code" :disabled="dirty || invalid || !!conflict" />已核对警示 {{ code }}</label></div>
-        <template v-if="writable && card">
+        <template v-if="(writable || canDecide) && card">
           <el-form label-position="top" @submit.prevent>
             <el-form-item label="操作原因 / 警示处理理由"><el-input v-model="reason" type="textarea" maxlength="10000" :autosize="{ minRows: 2, maxRows: 6 }" placeholder="驳回、需补材料、撤回、重开和分类都需要填写原因" /></el-form-item>
           </el-form>
-          <div v-if="orgAccess.role === 'admin' && card.state === 'draft' && !card.review_domain" class="actions classify">
+          <div v-if="writable && orgAccess.role === 'admin' && card.state === 'draft' && !card.review_domain" class="actions classify">
             <el-select v-model="domain" aria-label="指定审阅职责" class="domain-select"><el-option value="technical" label="技术" /><el-option value="commercial" label="商务 / 资格" /></el-select>
             <el-button :disabled="busy || dirty || !!conflict" @click="classify">分类并记录理由</el-button>
           </div>
           <div v-if="card.disposition !== 'comply_only'" class="decision-bar">
           <div class="actions decision">
-            <el-button v-if="card.state === 'draft'" type="primary" :disabled="busy || dirty || !!conflict" @click="action('submit')">提交审阅</el-button>
-            <el-button v-if="card.state === 'pending_review'" :disabled="busy || !!conflict" @click="action('withdraw')">撤回</el-button>
+            <el-button v-if="writable && card.state === 'draft'" type="primary" :disabled="busy || dirty || !!conflict" @click="action('submit')">提交审阅</el-button>
+            <el-button v-if="writable && card.state === 'pending_review'" :disabled="busy || !!conflict" @click="action('withdraw')">撤回</el-button>
             <template v-if="canDecide && card.state === 'pending_review'">
               <el-button type="success" :disabled="busy || !confirmReady" aria-describedby="confirm-blocker" @click="action('confirm')">确认响应</el-button>
               <el-button type="danger" plain :disabled="busy || !!conflict" @click="action('reject')">驳回</el-button>

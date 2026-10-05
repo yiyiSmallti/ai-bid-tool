@@ -6,6 +6,33 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Team workflow slice 1
+
+- Corrected offline event production to derive missing org context only for the
+  effective privileged database role, preserving strict runtime/direct-append
+  checks. Fixed disabled-owner recovery autoflush and released task locks during
+  local source rendering, with live authorization rechecked at publication.
+- Updated existing SQL/API fixtures to establish explicit task members through
+  the real workflow services, retained permission and tenant-isolation assertions,
+  and corrected Element Plus reason/checkbox selectors in the browser scenarios.
+
+- Added task owners, explicit task members and bounded review domains, intersected
+  with current org roles and token scopes. Human org administrators retain the
+  approved read/member-recovery exception; existing task, document, card, resource,
+  job, check, score, export and signed-download services apply the task boundary.
+- Added revision-checked handover, archive and explicit unarchive. Busy tasks
+  cannot archive; active-state checks fence submission, worker admission and
+  publication while preserving settlement of dispatched vendor calls.
+- Migration `0041` adds FORCE RLS workflow/member/event tables and reviewed
+  owner/member import, preflight and cutover administration. Unresolved legacy
+  tasks block cutover; no historical activity grants implicit task access.
+- Added bounded task-board/progress/activity reads, encrypted continuation and
+  event cursors, same-transaction metadata events, SSE reconnection and polling.
+  Added Chinese Element Plus board/member pages and slice 1 CLI/schema commands.
+- Approved all team-workflow defaults and the ADR 0005 co-sign amendment. Assignment,
+  discussion and co-sign execution remain later slices. Added API/PostgreSQL,
+  CLI and mocked-API browser acceptance; see [Team workflow](notes/team-workflow.md).
+
 ## 2026-10-05: English developer documentation
 
 - Unified developer and agent documentation in English using the [glossary](glossary.md), renamed the [design document](design.md), and conservatively corrected stale statuses and superseded decisions against implementation and later decisions. The [roadmap](plan/roadmap.md) remains the home for remaining scope and open decisions.

@@ -2,6 +2,8 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 
+import { useTaskAuthority } from "../task-authority.js";
+import TaskNavigation from "../components/TaskNavigation.vue";
 import JobPanel from "../components/JobPanel.vue";
 import { categories, deviations, display, errorText, formatTime, label, locationLabel, orgAccess, orgRequest, responseKinds, warningText } from "../org.js";
 
@@ -30,7 +32,9 @@ const jobId = computed(() => {
   const value = route.query.job;
   return Array.isArray(value) ? String(value[0] ?? "") : String(value ?? "");
 });
-const canWrite = computed(() => ["admin", "bidder", "technical"].includes(orgAccess.role));
+let accessLost = false;
+const authority = useTaskAuthority(taskId.value, (exc) => { accessLost = true; loadSequence++; detailSequence++; drafts.value = []; selectedDraft.value = null; extraction.value = null; taskName.value = ""; preview.value = null; query.value = ""; error.value = errorText(exc); });
+const canWrite = computed(() => authority.canWrite.value && ["admin", "bidder", "technical"].includes(orgAccess.role));
 const jobReady = computed(() => extraction.value?.status === "succeeded");
 const negativeRows = computed(() => {
   if (!selectedDraft.value) return [];
@@ -118,6 +122,7 @@ let loadSequence = 0;
 // The draft the user last asked for; a background reload must not override that choice.
 let wantedDraftId = null;
 async function loadPage() {
+  if (accessLost) return;
   const sequence = ++loadSequence;
   error.value = "";
   extraction.value = null;
@@ -263,6 +268,8 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <TaskNavigation :task-id="taskId" />
+  <el-alert v-if="authority.access.value?.workflow.state === 'archived'" title="任务已归档，只能查看已有初稿。" type="info" :closable="false" class="section" />
   <div class="draft-page">
     <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">{{ taskName || "任务" }}</RouterLink><span>/</span><span>响应表初稿</span></nav>
     <header class="page-header">
@@ -299,7 +306,7 @@ onBeforeUnmount(() => {
         </details>
         <p class="hint">本次预检实际模型成本为 {{ display(preview.estimated_cost?.usd) }} USD；这是确定性组表的零成本，不抵消此前模型起草费用。</p>
         <p class="hint">输入标识 <code>{{ preview.input_hash }}</code> · 预计时长 {{ preview.estimated_duration_ms == null ? "未知" : `${preview.estimated_duration_ms} ms` }}</p>
-        <div class="actions"><label class="check"><input v-model="retry" type="checkbox" />显式重试已失败或取消的组表作业</label><el-button type="primary" :loading="submitting" @click="submitDraft">确认生成初稿</el-button></div>
+        <div class="actions"><label class="check"><input v-model="retry" type="checkbox" />显式重试已失败或取消的组表作业</label><el-button type="primary" :loading="submitting" :disabled="!canWrite" @click="submitDraft">确认生成初稿</el-button></div>
       </div>
       <p v-else class="hint">先预检，核对响应行、须遵守、缺口和负偏离数量后再生成。</p>
     </el-card>

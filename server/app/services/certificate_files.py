@@ -36,6 +36,7 @@ from app.schemas.certificate_file_contracts import (
 )
 from app.services.auth import Identity
 from app.services.certificates import snapshot_data
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 MAX_FILE_BYTES = 40 * 1024 * 1024
@@ -449,6 +450,7 @@ async def list_files(
     )
 
 
+@task_authorized("certificate:file:read")
 async def list_task_files(
     session: AsyncSession, actor: Identity, task_id: UUID, *, history: bool = False
 ) -> tuple[dict, list[dict], list[str]]:

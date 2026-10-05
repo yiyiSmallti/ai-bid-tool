@@ -23,6 +23,7 @@ from app.services import billing, redaction
 from app.services import response_cards as cards
 from app.services import screenshots as images
 from app.services.card_generation import model_identity, worker
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 RULE_VERSION = "screenshot-analysis-v1"
@@ -116,6 +117,7 @@ async def render_manifest(session, actor, asset_id, parent_id, expected_hash, pl
     )
 
 
+@task_authorized("screenshot:write", parent=("asset_id", "screenshot_assets"), write=True)
 async def submit_render(session, actor, asset_id, body, storage, billing_currency):
     actor = await cards.access(session, actor, "screenshot:write")
     if body.dry_run and body.retry:
@@ -411,6 +413,7 @@ async def analysis_inputs(session, actor, task_id, body, storage, provider):
     return extraction, manifest, requirements, outgoing
 
 
+@task_authorized("screenshot:write", write=True)
 async def submit_analysis(session, actor, task_id, body, storage, provider, settings):
     from app.providers.screenshot_vision import preview
 
@@ -685,6 +688,7 @@ async def process_analysis(execution, storage, provider):
         }
 
 
+@task_authorized("screenshot:read", parent=("analysis_id", "screenshot_analysis_runs"))
 async def suggestions(session, actor, analysis_id, cursor):
     actor = await cards.access(session, actor, "screenshot:read")
     run = await session.get(ScreenshotAnalysisRun, analysis_id)

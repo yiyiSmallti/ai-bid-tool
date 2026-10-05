@@ -1,4 +1,6 @@
 <script setup>
+import { useTaskAuthority } from "../task-authority.js";
+import TaskNavigation from "../components/TaskNavigation.vue";
 import { Download, MoreFilled, Search, Upload, UploadFilled } from "@element-plus/icons-vue";
 import { computed, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
@@ -13,7 +15,9 @@ const task = ref(null), documents = ref([]), history = ref([]), parseJobs = ref(
 const file = ref(null), fileInput = ref(null), preview = ref(null), reasoning = ref(""), warnings = ref([]), error = ref(""), busy = ref(false), receipt = ref(null);
 const reasoningLevels = ref([]);
 const jobId = ref(recalled(`task.${taskId}`)?.jobId ?? null);
-const writable = computed(() => orgAccess.role && orgAccess.role !== "viewer");
+let accessLost = false, readGeneration = 0;
+const authority = useTaskAuthority(taskId, (exc) => { accessLost = true; readGeneration++; task.value = null; documents.value = []; history.value = []; parseJobs.value = []; exportList.value = null; preview.value = null; receipt.value = null; file.value = null; error.value = errorText(exc); });
+const writable = computed(() => authority.canWrite.value && orgAccess.role && orgAccess.role !== "viewer");
 const currentDocument = computed(() => documents.value.find((item) => item.id === selected.value));
 // The furthest step this task has reached, for orientation only; every action stays explicit.
 const step = computed(() => {
@@ -22,8 +26,10 @@ const step = computed(() => {
   return documents.value.length ? 1 : 0;
 });
 async function load() {
+  const run = ++readGeneration;
   try {
     const results = await Promise.all([orgRequest("GET", `/tasks/${taskId}`), orgRequest("GET", `/tasks/${taskId}/documents`), orgRequest("GET", `/tasks/${taskId}/extractions`), orgRequest("GET", `/tasks/${taskId}/jobs?kind=parse`)]);
+    if (accessLost || run !== readGeneration) return;
     task.value = results[0].data; documents.value = results[1].items; history.value = results[2].items; parseJobs.value = results[3].items;
     if (!selected.value) selected.value = documents.value.find(d => d.id === recalled(`task.${taskId}`)?.documentId)?.id ?? documents.value[0]?.id ?? "";
     if (!jobId.value) jobId.value = parseJobs.value.find(j => ["queued", "running"].includes(j.status))?.id ?? null;
@@ -76,6 +82,8 @@ const exportModes = { review_copy: "审阅件", final_section: "正式件" };
 onMounted(async () => { await load(); loadExports(); if (writable.value && selected.value) await run("extract", true); });
 </script>
 <template>
+  <TaskNavigation :task-id="taskId" />
+  <el-alert v-if="authority.access.value?.workflow.state === 'archived'" title="任务已归档，当前只能读取已有记录。" type="info" :closable="false" class="section" />
   <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><span>{{ task?.name ?? "任务" }}</span></nav>
   <div class="page-header">
     <div>
@@ -162,8 +170,8 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
         </tbody>
       </table></div>
     </el-card>
-    <SimulationPanel v-if="['admin', 'technical'].includes(orgAccess.role)" :task-id="taskId" :extractions="history" @changed="load" />
-    <ConfidentialPanel :task-id="taskId" />
+    <SimulationPanel v-if="writable && ['admin', 'technical'].includes(orgAccess.role)" :task-id="taskId" :extractions="history" @changed="load" />
+    <ConfidentialPanel v-if="!accessLost" :task-id="taskId" />
     <el-card v-if="exportList" class="section" shadow="never" body-class="flush">
       <template #header><div class="section-title"><h3>导出文件</h3><span class="hint">在线预览按 Word 版式转换成页面，转换只在第一次打开时进行</span></div></template>
       <div class="table-scroll flat"><table class="data-table"><caption class="sr-only">已发布的导出文件</caption>

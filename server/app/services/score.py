@@ -46,6 +46,7 @@ from app.schemas.score_contracts import (
 from app.services import drafts, score_generation, score_inputs, score_normalization
 from app.services import response_cards as cards
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 
@@ -53,6 +54,7 @@ async def access(session: AsyncSession, actor: Identity, scope: str = "score:rea
     return await cards.access(session, actor, scope)
 
 
+@task_authorized("score:read")
 async def get_set(
     session: AsyncSession, actor: Identity, task_id: UUID, rubric_id: UUID, *, lock: bool = False
 ) -> tuple[Identity, ScoreRubricSet]:
@@ -426,6 +428,7 @@ def page(
     ), [row[2] for row in selected[:limit]]
 
 
+@task_authorized("score:read")
 async def list_rubrics(
     session: AsyncSession,
     actor: Identity,
@@ -641,6 +644,7 @@ def review_denials(function):
     return wrapped
 
 
+@task_authorized("score:rubric:review", write=True, review=True)
 @review_denials
 async def classify_rubric(
     session: AsyncSession,
@@ -672,6 +676,7 @@ async def classify_rubric(
     return RubricClassificationView.model_validate(event).model_dump(mode="json")
 
 
+@task_authorized("score:rubric:review", write=True, review=True)
 async def decide_subject(
     session: AsyncSession,
     actor: Identity,
@@ -717,6 +722,7 @@ async def decide_subject(
     return RubricDecisionView.model_validate(event).model_dump(mode="json")
 
 
+@task_authorized("score:rubric:review", write=True, review=True)
 @review_denials
 async def decide_section(
     session: AsyncSession,
@@ -731,6 +737,7 @@ async def decide_section(
     return await decide_subject(session, actor, task_id, rubric_id, body, section_id=section_id)
 
 
+@task_authorized("score:rubric:review", write=True, review=True)
 @review_denials
 async def decide_item(
     session: AsyncSession,
@@ -745,6 +752,7 @@ async def decide_item(
     return await decide_subject(session, actor, task_id, rubric_id, body, item_id=item_id)
 
 
+@task_authorized("score:rubric:review", write=True, review=True)
 @review_denials
 async def decide_coverage(
     session: AsyncSession,
@@ -835,6 +843,7 @@ async def decide_coverage(
     ).model_dump(mode="json")
 
 
+@task_authorized("score:rubric:review", write=True, review=True)
 @review_denials
 async def decide_rubric(
     session: AsyncSession,
@@ -950,6 +959,7 @@ async def rubric_history(
     return page(settings, actor, task_id, rubric_id, rows, cursor, limit)
 
 
+@task_authorized("score:rubric:review", write=True, review=True)
 @review_denials
 async def revise_rubric(
     session: AsyncSession,

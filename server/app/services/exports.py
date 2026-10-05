@@ -67,6 +67,7 @@ from app.services import (
 )
 from app.services import response_cards as cards
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 MANIFEST_VERSION = "human-export-manifest-v2"
@@ -951,6 +952,7 @@ async def fresh_manifest(
     return fixed
 
 
+@task_authorized("export", write=True)
 async def submit_export(
     session: AsyncSession,
     actor: Identity,
@@ -1233,6 +1235,7 @@ async def run_view(
     ).model_dump(mode="json")
 
 
+@task_authorized("export", parent=("run_id", "export_runs"))
 async def get_run(
     session: AsyncSession, actor: Identity, run_id: UUID
 ) -> tuple[Identity, ExportRun]:
@@ -1282,6 +1285,7 @@ async def export_view(
     ).model_dump(mode="json")
 
 
+@task_authorized("export", parent=("export_id", "exports"))
 async def get_export(
     session: AsyncSession, actor: Identity, export_id: UUID
 ) -> tuple[Identity, Export]:
@@ -1292,6 +1296,7 @@ async def get_export(
     return actor, row
 
 
+@task_authorized("export", parent=("export_id", "exports"))
 async def provenance(session: AsyncSession, actor: Identity, export_id: UUID) -> dict:
     """The released export's provenance, numbered exactly as the printed section."""
     from app.services.export_renderer import declaration_labels, table_numbers
@@ -1377,6 +1382,7 @@ async def checked_content(
     return content
 
 
+@task_authorized("export", parent=("run_id", "export_runs"), write=True)
 async def release(
     session: AsyncSession, actor: Identity, run_id: UUID, body: ExportRelease, storage: Storage
 ):
@@ -1489,6 +1495,7 @@ async def release(
     return await export_view(session, actor, row, storage)
 
 
+@task_authorized("export", task="row.task_id")
 async def download_gate(session: AsyncSession, actor: Identity, row: Export, storage: Storage):
     run = await session.get(ExportRun, row.run_id)
     if run is None:

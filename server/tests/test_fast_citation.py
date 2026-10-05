@@ -269,12 +269,13 @@ def scale_source(index: int) -> tuple[str, str]:
 
 
 async def worker_context(session, user, *, kind="worker"):
-    await session.execute(
-        text(
-            "SELECT set_config('app.actor_kind',:kind,true), set_config('app.actor_user_id',:user,true), set_config('app.actor_token_id','',true)"
-        ),
-        {"kind": kind, "user": str(user)},
+    from task_fixtures import actor_context_async
+
+    org = await session.scalar(
+        text("SELECT nullif(current_setting('app.current_org', true), '')::uuid")
     )
+    assert org is not None
+    await actor_context_async(session, org, user, kind=kind)
 
 
 async def prepare_scale_input(db, actor, settings):
@@ -287,8 +288,9 @@ async def prepare_scale_input(db, actor, settings):
             created_by=actor.user_id,
             name="Synthetic citation publication scale",
         )
-        session.add(task)
-        await session.flush()
+        from task_fixtures import seed_task_async
+
+        await seed_task_async(session, task)
         document = Document(
             id=uuid4(),
             org_id=actor.org_id,

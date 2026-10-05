@@ -26,6 +26,7 @@ from app.providers.storage import Storage
 from app.schemas.contracts import Cost
 from app.services import certificate_files, documents, exports
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 if TYPE_CHECKING:
@@ -134,7 +135,6 @@ async def document_page(
     storage: Storage,
     settings: PDFSettings | None = None,
 ) -> bytes:
-    actor.require("task:read")
     document: Document = await documents.require_document(session, document_id)
     if document.media_type != "application/pdf" or document.citation_mode == "block":
         raise ServiceError("preview_not_pdf", "Only PDF originals have page previews", 400, 2)
@@ -184,6 +184,7 @@ async def current_job(session: AsyncSession, row: Export, *, lock: bool = False)
     return await session.scalar(query.with_for_update() if lock else query)
 
 
+@task_authorized("export", parent=("export_id", "exports"), write=True)
 async def submit_export_preview(
     session: AsyncSession,
     actor: Identity,
@@ -245,6 +246,9 @@ async def submit_export_preview(
 
 async def job_access(session: AsyncSession, actor: Identity, job: Job) -> None:
     """A preview job is visible only to people who may open the export itself."""
+    # The caller has resolved the job/task boundary; deny the export action before
+    # its more restrictive RLS can turn this known job's permission error into 404.
+    actor = await exports.human_access(session, actor)
     await exports.get_export(session, actor, UUID(job.result["submission"]["export_id"]))
 
 

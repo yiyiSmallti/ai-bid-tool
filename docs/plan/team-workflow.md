@@ -4,10 +4,15 @@ kind: plan
 
 # Team workflow: task membership, dashboard, live progress, and co-sign
 
-Status: **pending approval, not implemented**. Covers [roadmap](roadmap.md) F06,
-U01, U02, and B07. The review-only [Pydantic contracts](team-workflow/team_workflow_contracts.py)
-define proposed inputs, projections, and service interfaces; importing them registers
-no routes, commands, tables, or workers. Approval of this draft must precede implementation.
+Status: **approved; slice 1 implemented**. Covers [roadmap](roadmap.md) F06,
+U01, U02, and B07. The owner approved every default in [Decisions](#decisions),
+including the co-sign amendment to [ADR 0005](../adr/0005-human-confirmed-responses.md).
+Slice 1 supplies task membership, archival, the read board and durable progress.
+Slices 2 and 3 remain approved and unimplemented; no assignment, comment or
+co-sign write handlers are registered. The [contract module](team-workflow/team_workflow_contracts.py)
+records the approved interfaces; [runtime schemas](../../server/app/schemas/team_workflow.py)
+implement the slice 1 subset with the shared Result 4.0 budget types.
+See [Team workflow](../notes/team-workflow.md) for the mechanism and cutover procedure.
 
 ## Goal and boundary
 
@@ -33,24 +38,25 @@ input automatically. Budget enforcement belongs to [budget.md](budget.md).
 
 ## Code basis and differences from the design
 
-These are integration boundaries, not claims that the proposed feature exists.
+These are integration boundaries. Slice 1 is implemented; assignment, discussion
+and co-sign rows describe the approved later slices.
 
-| Basis | Observed behavior and proposed change |
+| Basis | Integration contract |
 | --- | --- |
 | [entities.py](../../server/app/models/entities.py), `Task`, `Membership`, `ApiToken`; [documents.py](../../server/app/services/documents.py), `create_task`, `list_tasks`, `upload` | Tasks have a creator, deadline, and `budget_usd`, but no members, owner, lifecycle, or task ACL. `list_tasks` is org-wide after `task:read`. Add membership/lifecycle checks to these existing entry points, not just new board routes. |
 | [auth.py](../../server/app/services/auth.py), `Identity`, `authenticate`, `membership`, `ROLE_SCOPES`, `SCOPES`; [api/main.py](../../server/app/api/main.py), `context` | Bearer credentials plus `X-Org-Id` establish an active org membership and transaction context. Task roles must intersect these grants. Org RLS alone does not authorize a particular task. |
 | [response_cards.py](../../server/app/services/response_cards.py), `access`, `human`, `extraction_scope`, `CardReadBatch`, `card_view_data`, `card_action`, `dispose_cards` | One primary domain and confirmer; state, disposition, and eligibility are separate. Reuse the validity calculation and explicit extraction scope. New co-sign checks are additional gates. |
-| [ADR 0005](../adr/0005-human-confirmed-responses.md) | Explicitly chooses one professional reviewer per card. Multi-domain co-sign requires an approved superseding decision for that clause before slice 3; this draft does not silently amend the accepted ADR. |
+| [ADR 0005](../adr/0005-human-confirmed-responses.md) | The approved co-sign amendment permits one professional reviewer per required domain. Slice 3 must extend the database and consumption gates before enabling that policy; slice 1 retains the existing single-domain runtime. |
 | [0015_response_cards.py](../../server/migrations/versions/0015_response_cards.py), `response_revision_gate`, `response_evidence_confirmation_complete`, `response_revision_complete`, `response_item_gate`; [0023_screenshots.py](../../server/migrations/versions/0023_screenshots.py), `response_evidence_gate` | Database human/confirmation/completion gates assume single-review confirmation. Later migrations must extend these gates together with Python services, retaining immutable history and direct-SQL rejection. |
 | [drafts.py](../../server/app/services/drafts.py), `assemble`, `current_draft_inputs`, `draft_view`; [exports.py](../../server/app/services/exports.py), `build_manifest`, `fresh_manifest`, `release`, `download_gate` | Existing draft (初稿) and export gates inspect fixed inputs and current validity. Bind policy/round/signature manifests here; no board badge authorizes consumption. |
 | [prototype_decisions.py](../../server/app/services/prototype_decisions.py), `apply`, `decision_view`, `export_decision_manifest` | Prototype (原型) decisions bind exact card/evidence inputs. Co-sign does not replace keep/replace decisions, nor change their corresponding-domain rule. |
 | [tender_jobs.py](../../server/app/services/tender_jobs.py), `submit`; [jobs.py](../../server/app/services/jobs.py), `status`, `cancel`; [processor.py](../../server/app/jobs/processor.py), `Processor.__call__`; [execution.py](../../server/app/jobs/execution.py), `JobExecution` | Jobs persist status, attempts, run ownership and accounting, but provide no task SSE stream. Cancellation does not undo already-dispatched charges. Progress must come from committed records, not simulated percentages. |
-| [contracts.py](../../server/app/schemas/contracts.py), `CONTRACT_VERSION`, `Result`, `Cost`; [CLI schema](../../cli/bid_cli/schema.py) | Runtime Result is 3.0; its cost is `llm_tokens/ocr_pages/usd`. Result 4.0 is proposed only in the budget draft and is not imported here. Rebase onto its shared runtime Cost if it merges before implementation. |
+| [contracts.py](../../server/app/schemas/contracts.py), `CONTRACT_VERSION`, `Result`, `Cost`; [CLI schema](../../cli/bid_cli/schema.py) | The branch uses runtime Result 4.0 and its shared accounting Cost. Workflow reads and writes import it without reproducing task-budget accounting. |
 | [org-console.md](org-console.md), [api.js](../../web/src/api.js), [router.js](../../web/src/router.js), [JobPanel.vue](../../web/src/components/JobPanel.vue) | Console currently polls jobs and derives review responsibility from org role. Add real task ownership and SSE; retain separate platform/org sessions and authenticated previews. |
 
 The [design](../design.md#multi-tenancy-and-permissions) promises that a read-only
 reviewer can comment, but the implemented console gives `viewer` no comment entry.
-Slice 2 proposes a human-only comment grant. The design also describes members,
+Slice 2 reserves a human-only comment grant. The design also describes members,
 archival, and SSE without their persistence/authorization contracts. Its sample
 Result lacks `ocr_pages`, which exists in runtime Cost. Only `commercial` (商务)
 and `technical` (技术) are runtime ReviewDomain values; qualification (资格) maps
@@ -66,7 +72,7 @@ Follow that live call chain, not the stale comment.
 | --- | --- |
 | 1 — membership, archive, board, progress | Create task with one owner; assign existing org members; enforce task ACL on every related read/write/download/job; show a bounded read board and deterministic next actions; SSE resumes without holes with polling fallback; archive an idle task read-only. Acceptance must include old-route bypass attempts, two orgs, two same-org tasks, and browser refresh/reconnect. No assignment/comment/co-sign writes yet. |
 | 2 — assignment and discussion | Assign requirement/card work to an active task contributor, discuss through card threads, and mention current task members. Assignment is metadata, preserving all existing card transitions. Acceptance includes duplicate request recovery, removal/reassignment races, and viewer comments. |
-| 3 — co-sign | Explicit or rule-required domain approvals, partial status, invalidation, and draft/export enforcement, including comply-only (须遵守). Requires the ADR decision and simultaneous service/database/manifest gates. No partially enabled co-sign UI before gates pass. |
+| 3 — co-sign | Explicit or rule-required domain approvals, partial status, invalidation, and draft/export enforcement, including comply-only (须遵守). The ADR decision is approved; implementation requires simultaneous service/database/manifest gates. No partially enabled co-sign UI before gates pass. |
 
 No new vendor Provider is needed. The contract's PostgreSQL read-provider and
 service Protocols separate projection, authorization, and event persistence. All
@@ -134,7 +140,7 @@ above (`task:members:write`, `task:archive`, `card:assign`, `card:comment`,
 constraints alongside every existing human-only exclusion, `evidence:confirm`,
 and `export`. Human role grants alone do not authorize a token. Update issuance,
 authentication/current-scope intersection, service checks, and direct-SQL gates.
-In `ROLE_SCOPES`, propose members/archive/assign/review-policy for admin and bidder,
+In `ROLE_SCOPES`, grant members/archive/assign/review-policy for admin and bidder,
 comment for all four human roles, and co-sign for bidder and technical. Each scope
 still requires its task-role and actor-kind checks from the table.
 
@@ -178,7 +184,7 @@ and audits reflect failed/cancelled/stale attempts without publishing their resu
 
 ## Data model and migration outline
 
-The following are proposed **org business tables**, each with UUID `id`,
+The following are approved **org business tables**, each with UUID `id`,
 `org_id NOT NULL`, `UNIQUE(org_id,id)`, ENABLE and **FORCE ROW LEVEL SECURITY**,
 USING/WITH CHECK against transaction `app.current_org`, and no access with missing
 context. All task references are `(org_id,task_id) → tasks(org_id,id)`. Every
@@ -243,7 +249,7 @@ Migration sequence after approval:
 
 `GET /tasks/{T}/board` requires `extraction_job_id=J`. Reuse the task/job/document
 binding checks in `extraction_scope` for the selected successful extraction.
-That existing helper rejects empty requirements; the proposed read-only board
+That existing helper rejects empty requirements; the read-only board
 validator permits a zero-row successful extraction with explicit extraction
 warnings, without changing submit/review/assembly validation. The task shell shows job progress
 and an explicit extraction selector before a successful extraction exists; a
@@ -493,7 +499,7 @@ retire the complete round. A reopen invalidates **all** signatures, never just t
 reopener's. Preserve immutable decisions and reasons for history.
 
 Signer loss includes removal/deactivation, losing the org role/domain or losing
-task review-domain permission. This proposed rule is stricter than current
+task review-domain permission. This slice 3 rule is stricter than current
 `card_view_data`, which does not independently revoke historical confirmation
 when a confirmer loses membership. Recompute effective approval on read and gates;
 invalidations record the cause but their scheduling is not an authorization gate.
@@ -579,9 +585,9 @@ with `--unassigned`. Streaming is for the browser/API; CLI `task events` is a bo
 single JSON result suitable for polling, avoiding an incompatible JSON-lines mode.
 Local mode uses the same services/PostgreSQL/RLS and bounded replay without
 bypassing authentication. Register every command/schema in `bid schema` at
-implementation, not by importing this draft.
+implementation, not by importing the plan contract.
 
-The Result envelope remains exactly:
+The Result envelope retains seven top-level fields. The following example is conceptual; the authoritative Cost schema is [budget_contracts.py](../../server/app/schemas/budget_contracts.py):
 
 ```json
 {
@@ -601,7 +607,17 @@ The Result envelope remains exactly:
   },
   "items": [],
   "warnings": [],
-  "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+  "cost": {
+    "llm_tokens": 0,
+    "ocr_pages": 0,
+    "usd": 0.0,
+    "basis": "zero",
+    "charge": "0",
+    "billing_currency": "USD",
+    "task_amount": "0",
+    "unpriced_calls": 0,
+    "unresolved_calls": 0
+  },
   "duration_ms": 4
 }
 ```
@@ -609,7 +625,7 @@ The Result envelope remains exactly:
 This illustrative no-cursor replay tells the caller to fetch a fresh snapshot.
 All new workflow operations make no paid calls: wrapper cost is actual zero, not
 accumulated job/task cost. Board job summaries never overwrite that meaning.
-Runtime schema version remains 3.0 for additive commands; preserve existing card
+Runtime schema version remains 4.0 for additive commands; preserve existing card
 Result shapes with separate sign-off data. If an implementation changes an existing
 output incompatibly, bump the major version and apply the project's compatibility
 policy. Do not copy draft BudgetCost into this contract.
@@ -630,7 +646,7 @@ failure 503. Existing job commands retain their own response and exit semantics.
 ## Console pages
 
 Follow [org-console.md](org-console.md#pages-and-roles), existing `style.css`,
-native forms, org navigation and server reauthorization. No platform session is
+Element Plus components, org navigation and server reauthorization. No platform session is
 an org session; GET /org/current remains the org-role source, with workflow/member
 views adding task authority. Browser buttons do not define permission.
 
@@ -689,7 +705,7 @@ fixture seed IDs, JUnit/CLI snapshots, redacted browser trace/screenshots and
 
 | Area | Required scenarios and evidence |
 | --- | --- |
-| Every proposed table | Two orgs A/B; runtime SELECT/INSERT/UPDATE/DELETE against B as A fail, missing org context fails; FORCE RLS and no bypass, org/task composite FK rejection, immutability, actor membership bindings; same-org task T1/T2 additionally tests service ACL. |
+| Every table in the implemented slice | Two orgs A/B; runtime SELECT/INSERT/UPDATE/DELETE against B as A fail, missing org context fails; FORCE RLS and no bypass, org/task composite FK rejection, immutability, actor membership bindings; same-org task T1/T2 additionally tests service ACL. |
 | Every new route and CLI command | Parameterized A/B/nonexistent/removed member, wrong task/extraction/card/thread, all roles, token scope intersection, archived/active; identical 404 shape. Include event handshake/poll and directory, activity, round/history reads. |
 | Every existing task access family listed above | Old task/list/document/download/preview/card/material/draft/export/job/check/score/sandbox paths cannot bypass ACL or archival; signed links reauthorize; org libraries do not reveal inaccessible task references. |
 | Membership and archive | New task atomic owner; migrated owner map; zero/two-owner failures; disabled owner recovery; concurrent remove/assign/handover; task_busy on queued/running and unknown calls; no new calls/publication after archive; late settlement idempotency. |
@@ -701,13 +717,15 @@ fixture seed IDs, JUnit/CLI snapshots, redacted browser trace/screenshots and
 | CLI contract | Snapshot success, empty lists, every new command, invalid input, 404, 409, 429/503, both modes, schema discovery, exactly seven Result keys/current Cost; bounded `task events` produces one JSON document; existing job exit 5 remains unchanged. |
 | Browser e2e | Owner creates/adds member, separate authorized member sees correct next action, second browser observes real job/card changes, refresh/reconnect/expired cursor works, role denial/org switch clears data, archive becomes read-only, assign/comment/mention, both-domain partial/final review, mobile/keyboard flow. Save verifiable redacted artifacts against a real API. |
 
-Draft-only verification runs ruff, ruff format --check, pyright and an import of
-the contracts module. Those checks establish parse/type/import coherence only;
-they are not evidence that the proposed authorization, migrations or SSE work.
+Run the slice 1 API/PostgreSQL acceptance suites and the mocked-API Playwright
+board/member scenarios. Ruff, format, pyright and CLI contract checks complement
+those suites; they do not establish PostgreSQL isolation or streaming behavior.
+The integrating session runs the database acceptance tests when the implementation
+workspace cannot reach PostgreSQL. Test artifacts remain outside `docs/`.
 
-## Open decisions
+## Decisions (已定决定)
 
-| Decision | Recommended default | Reason |
+| Decision | Approved default | Reason |
 | --- | --- | --- |
 | Task visibility and org admin access | Explicit members; human org admin read/member-recovery exception | Clear ownership and recoverability without expanding automation permissions. |
 | Existing task migration | Reviewed owner/member mapping; creator owner only when eligible; unresolved tasks block cutover | Avoid either silent broad access or stranding existing work. |
@@ -716,7 +734,7 @@ they are not evidence that the proposed authorization, migrations or SSE work.
 | Org viewer discussion | Human-only comments, all task readers; tokens cannot comment/mention | Matches product design without allowing automation impersonation/spam. |
 | Assignee permissions | Owner/admin assigns active owner/contributor; reviewer responsibility remains by domain | Separate preparation from professional sign-off with one clear work owner. |
 | Co-sign trigger and scope | Explicit requirement flag or starred-task rule; both existing domains, primary always required | Deterministic and reviewable; no generic workflow engine or model policy decisions. |
-| Co-sign ADR and legacy gate integration | Approve superseding single-review clause before slice 3; complete-round gate at DB/service/draft/export | Multi-review must not weaken present human/Evidence gates. |
+| Co-sign ADR and legacy gate integration | Approved amendment of ADR 0005; slice 3 must implement complete-round gates at DB/service/draft/export | Multi-review must not weaken present human/Evidence gates. |
 | Comply-only and lost signer authority | Co-sign applies to disposition too; loss of signer grant retires round | Prevent exemption/role-change paths from bypassing review. |
 | Signature acknowledgement | Every signer reviews all Evidence/warnings; distinct people | Existing org domain model makes a clear accountability boundary. |
 | Board query/stream limits | Bounds defined above; error on overflow; 7-day/50,000-event retention | Predictable resource use, honest counts and recoverable clients. |

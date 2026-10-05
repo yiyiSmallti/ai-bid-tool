@@ -26,6 +26,7 @@ from app.schemas.confidential_contracts import (
 )
 from app.services import redaction
 from app.services.auth import Identity
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 TAIL_KINDS = {"identity", "bank_account", "contact"}
@@ -180,6 +181,7 @@ async def update_field(
     return field_view(row)
 
 
+@task_authorized("confidential:write", task="body.task_id", write=True, optional=True)
 async def set_value(
     session: AsyncSession,
     actor: Identity,
@@ -238,6 +240,7 @@ async def set_value(
     return value_view(field, row, owner)
 
 
+@task_authorized("confidential:read", optional=True)
 async def list_values(session: AsyncSession, actor: Identity, task_id: UUID | None) -> list[dict]:
     """Every active field's state: org fields always, task fields only for a task."""
     actor.require("confidential:read")
@@ -259,6 +262,7 @@ async def list_values(session: AsyncSession, actor: Identity, task_id: UUID | No
     ]
 
 
+@task_authorized("confidential:read", optional=True)
 async def history(
     session: AsyncSession, actor: Identity, field_id: UUID, task_id: UUID | None
 ) -> list[dict]:
@@ -279,6 +283,7 @@ async def history(
     return [value_view(field, row, task_id) for row in rows]
 
 
+@task_authorized("confidential:reveal", parent=("value_id", "confidential_values"), optional=True)
 async def reveal(session: AsyncSession, actor: Identity, value_id: UUID, secrets: Secrets) -> dict:
     actor.require("confidential:reveal")
     human(actor)

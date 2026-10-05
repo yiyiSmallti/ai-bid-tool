@@ -27,6 +27,8 @@ from app.api.resources import create_router as create_resource_router
 from app.api.response_cards import create_router as create_response_router
 from app.api.sandbox import create_router as create_sandbox_router
 from app.api.score import create_router as create_score_router
+from app.api.task_board import create_router as create_task_board_router
+from app.api.task_workflow import create_router as create_task_workflow_router
 from app.api.tenders import create_router as create_tender_router
 from app.core.config import Settings
 from app.core.credential_db import close_connections, get_connections
@@ -103,6 +105,9 @@ def create_app(
             yield
         finally:
             await password_attempts.close()
+            stream_caps = getattr(_app.state, "workflow_stream_caps", None)
+            if stream_caps is not None:
+                await stream_caps.close()
             await db.engine.dispose()
             await close_connections(settings)
 
@@ -273,7 +278,12 @@ def create_app(
                 }
             },
         )
-        retry = {"auth_busy": "1", "too_many_attempts": "900"}.get(error.code)
+        retry = {
+            "auth_busy": "1",
+            "too_many_attempts": "900",
+            "stream_limit": "1",
+            "board_busy": "1",
+        }.get(error.code)
         return JSONResponse(
             status_code=error.status,
             content=body.model_dump(mode="json"),
@@ -373,6 +383,10 @@ def create_app(
 
     app.include_router(create_budget_router(context, settings))
     app.include_router(create_org_console_router(context))
+    app.include_router(create_task_workflow_router(context, settings))
+    task_board_router = create_task_board_router(context, db, storage, queue, settings)
+    app.state.workflow_stream_caps = task_board_router.stream_caps
+    app.include_router(task_board_router)
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
     app.include_router(
         create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)

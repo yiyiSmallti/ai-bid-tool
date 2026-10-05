@@ -50,7 +50,6 @@ import pymupdf
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from app.models.entities import Membership
 from app.schemas.contracts import (
     Category,
     ExtractedRequirement,
@@ -61,7 +60,7 @@ from app.schemas.contracts import (
 from conftest import PASSWORD, FakeQueue
 from fakes import FakeLLM, source_for
 from sqlalchemy import select, text
-from sqlalchemy.orm import Session
+from task_fixtures import set_role as set_task_actor_role
 
 TENDER_LINES = [
     "The offered appliance memory shall be at least 64 GB.",
@@ -250,12 +249,7 @@ async def select_real_materials(api, header, task, tmp_path: Path):
 
 
 def set_role(admin_engine, org_id, user_id, role):
-    with Session(admin_engine) as session, session.begin():
-        member = session.scalar(
-            select(Membership).where(Membership.org_id == org_id, Membership.user_id == user_id)
-        )
-        assert member is not None
-        member.role = role
+    set_task_actor_role(admin_engine, org_id, user_id, role)
 
 
 @asynccontextmanager

@@ -49,6 +49,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [unconfirmed-evidence-sources.md](notes/unconfirmed-evidence-sources.md): unconfirmed PDF-page sources.
 - [provider-config.md](notes/provider-config.md): org model revisions, separate key encryption, model resolution, call billing and provider balance.
 - [human-section-exports.md](notes/human-section-exports.md): human export of Word response sections, fixed manifests, candidate and release gates, evidence-page attachments and signed downloads.
+- [team-workflow.md](notes/team-workflow.md): task membership, archival, bounded board snapshots, durable progress and reviewed authorization cutover.
 - [org-console.md](notes/org-console.md): org task recovery, parsing and extraction, human response-card review, drafting cost previews and the draft-gap (缺口) console.
 - [product-simulation.md](notes/product-simulation.md): simulated proposals (模拟拟投), product selection by procurement item, official-page search and capture, verbatim parameter extraction and simulated-material markings.
 - [page-previews.md](notes/page-previews.md): online page previews of original tender documents (招标文件), original certificates and exports, and export conversion.

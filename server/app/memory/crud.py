@@ -2,7 +2,7 @@
 
 import hashlib
 from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from sqlalchemy import and_, or_, select
 
@@ -46,7 +46,7 @@ def target(memory):
     return MemoryTarget(scope=memory.scope, user_id=memory.user_id, task_id=memory.task_id)
 
 
-def revision_view(memory, revision):
+def revision_view(memory, revision, source=None):
     return MemoryRevisionView(
         id=revision.id,
         org_id=revision.org_id,
@@ -55,7 +55,7 @@ def revision_view(memory, revision):
         target=target(memory),
         content=MemoryContent.model_validate(revision.content),
         status=revision.status,
-        source=MemorySourceView.model_validate(revision.source),
+        source=source or MemorySourceView.model_validate(revision.source),
         content_sha256=revision.content_sha256,
         created_at=revision.created_at,
         created_by=revision.created_by,
@@ -68,7 +68,7 @@ def revision_view(memory, revision):
     )
 
 
-def memory_view(memory, revision):
+def memory_view(memory, revision, source=None):
     state = "deleted" if memory.deleted_at else revision.status
     if (
         state == "active"
@@ -79,17 +79,45 @@ def memory_view(memory, revision):
     return MemoryView(
         id=memory.id,
         org_id=memory.org_id,
-        current=revision_view(memory, revision),
+        current=revision_view(memory, revision, source),
         effective_status=state,
         deleted_at=memory.deleted_at,
     )
 
 
-def result(command, memory, revision):
+async def visible_sources(session, actor, revisions):
+    """Org memory remains shared while inaccessible task provenance stays private."""
+    from app.models.team_workflow import TaskMember, TaskWorkflow
+
+    task_ids = {UUID(row.source["task_id"]) for row in revisions if row.source.get("task_id")}
+    visible = set()
+    if task_ids and "task:read" in actor.scopes:
+        query = select(TaskWorkflow.task_id).where(
+            TaskWorkflow.org_id == actor.org_id, TaskWorkflow.task_id.in_(task_ids)
+        )
+        if not (actor.actor_kind == "session" and actor.token_id is None and actor.role == "admin"):
+            query = query.join(
+                TaskMember,
+                (TaskMember.org_id == TaskWorkflow.org_id)
+                & (TaskMember.task_id == TaskWorkflow.task_id),
+            ).where(TaskMember.user_id == actor.user_id, TaskMember.active.is_(True))
+        visible = set(await session.scalars(query))
+    return {
+        row.id: MemorySourceView(origin=row.source["origin"], provenance_redacted=True)
+        if row.source.get("task_id") and UUID(row.source["task_id"]) not in visible
+        else MemorySourceView.model_validate(row.source)
+        for row in revisions
+    }
+
+
+async def result(session, actor, command, memory, revision):
+    sources = await visible_sources(session, actor, [revision])
     return Result(
         ok=True,
         command=command,
-        data=MemoryData(memory=memory_view(memory, revision)).model_dump(mode="json"),
+        data=MemoryData(memory=memory_view(memory, revision, sources[revision.id])).model_dump(
+            mode="json"
+        ),
     )
 
 
@@ -136,7 +164,9 @@ async def load(session, actor, identifier, *, lock=False, deleted=False):
 async def check_source(session, actor, source):
     if source is None:
         return
-    actor.require("task:read")
+    from app.services.task_workflow import access as task_access
+
+    await task_access(session, actor, source.task_id)
     if (
         await session.scalar(
             select(Task.id).where(Task.id == source.task_id, Task.org_id == actor.org_id)
@@ -223,11 +253,11 @@ async def create_memory(session, actor, body, settings):
     session.add(revision)
     audit(session, actor, "create", memory, revision)
     await session.flush()
-    return result("memory add", memory, revision)
+    return await result(session, actor, "memory add", memory, revision)
 
 
 async def show_memory(session, actor, identifier):
-    return result("memory show", *(await load(session, actor, identifier)))
+    return await result(session, actor, "memory show", *(await load(session, actor, identifier)))
 
 
 async def append(
@@ -294,7 +324,7 @@ async def update_memory(session, actor, identifier, body, settings):
     revision = await append(
         session, actor, memory, previous, body.content, expires_at=body.expires_at
     )
-    return result("memory update", memory, revision)
+    return await result(session, actor, "memory update", memory, revision)
 
 
 async def decide_memory(session, actor, identifier, body, settings):
@@ -351,7 +381,7 @@ async def decide_memory(session, actor, identifier, body, settings):
         decision=body.action,
         reason=body.reason,
     )
-    return result(f"memory {body.action}", memory, revision)
+    return await result(session, actor, f"memory {body.action}", memory, revision)
 
 
 async def manage(session, actor, identifier, body, settings, deleting=False):
@@ -374,7 +404,7 @@ async def manage(session, actor, identifier, body, settings, deleting=False):
         decision=decision,
         reason=body.reason,
     )
-    return result(f"memory {decision}", memory, revision)
+    return await result(session, actor, f"memory {decision}", memory, revision)
 
 
 async def disable_memory(session, actor, identifier, body, settings):
@@ -411,7 +441,10 @@ async def list_memories(session, actor, body, settings):
     rows = (
         await session.execute(query.order_by(Memory.created_at, Memory.id).limit(body.limit + 1))
     ).all()
-    items = [memory_view(m, r).model_dump(mode="json") for m, r in rows[: body.limit]]
+    sources = await visible_sources(session, actor, [r for _, r in rows[: body.limit]])
+    items = [
+        memory_view(m, r, sources[r.id]).model_dump(mode="json") for m, r in rows[: body.limit]
+    ]
     next_cursor = (
         page_cursor(
             settings, actor, filters, rows[body.limit - 1][0].created_at, rows[body.limit - 1][0].id
@@ -448,7 +481,10 @@ async def history(session, actor, identifier, settings, *, cursor=None, limit=50
             )
         ).all()
     )
-    items = [revision_view(memory, row).model_dump(mode="json") for row in rows[:limit]]
+    sources = await visible_sources(session, actor, rows[:limit])
+    items = [
+        revision_view(memory, row, sources[row.id]).model_dump(mode="json") for row in rows[:limit]
+    ]
     next_cursor = (
         page_cursor(settings, actor, filters, rows[limit - 1].created_at, rows[limit - 1].id)
         if len(rows) > limit

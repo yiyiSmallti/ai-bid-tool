@@ -73,6 +73,11 @@ async def locked_job(session: AsyncSession, job_id: UUID) -> Job | None:
     task_id = await session.scalar(select(Job.task_id).where(Job.id == job_id))
     if task_id is not None:
         await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
+        from app.models.team_workflow import TaskWorkflow
+
+        await session.scalar(
+            select(TaskWorkflow).where(TaskWorkflow.task_id == task_id).with_for_update()
+        )
     job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
     if job is not None and job.task_id != task_id:
         raise ProviderFailure("Job task binding changed", code="job_attempt_stopped")
@@ -121,7 +126,13 @@ async def authorized_job(session: AsyncSession, job: Job) -> Identity:
     else:
         actor.require(JOB_SCOPES.get(job.kind, "task:read"))
     if job.task_id is not None:
-        actor.require("task:read")
+        from app.services.task_workflow import access as task_access
+
+        # The actual initiator is retained; workers receive no human admin recovery.
+        worker = Identity(
+            actor.user_id, actor.org_id, actor.scopes, actor.role, actor.token_id, "worker"
+        )
+        await task_access(session, worker, job.task_id, write=True)
     return actor
 
 
@@ -230,10 +241,15 @@ class JobExecution:
             raise self.stop(
                 "job_attempt_stopped", "Job attempt was cancelled, superseded or expired"
             )
+        await authorized_job(session, job)
         return job
 
     async def heartbeat(self) -> None:
         async with self.db.transaction(self.org_id) as session:
+            try:
+                await self.owned_job(session)
+            except ServiceError as error:
+                raise self.stop(error.code, "Submission authorization is no longer valid") from None
             renewed = await session.scalar(
                 update(Job)
                 .where(

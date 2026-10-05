@@ -195,6 +195,9 @@ async def record_feedback(session, actor, card, before, after, kind, reason=None
 
 async def read_access(session, actor, task_id, *, evaluation=False, review=False):
     scope = "memory:eval:review" if review else "memory:eval:read" if evaluation else "memory:read"
+    from app.services.task_workflow import access as task_access
+
+    await task_access(session, actor, task_id, scope=scope, write=review, lock=review)
     actor = await access(session, actor, scope)
     actor.require("card:read")
     if evaluation and (actor.role != "admin" or actor.actor_kind != "session" or actor.token_id):

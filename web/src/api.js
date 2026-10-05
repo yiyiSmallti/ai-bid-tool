@@ -26,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 const PUBLIC = new Set(["/platform/auth/login", "/auth/login", "/auth/orgs", "/auth/setup-password"]);
-const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:documents|jobs|extractions|requirements|products|features|certificates|profiles|certificate-files|evidence-sources|cards(?:\/(?:dispositions|generations))?|drafts|exports|product-simulations|simulated-resources|model-redaction))?)?|documents\/[^/?]+(?:\/(?:chunks|parse|extract|download-link|download|pages\/\d+\/preview))?|exports\/[^/?]+(?:\/(?:download-link|download|preview(?:\/pages\/\d+)?))?|jobs\/[^/?]+(?:\/cancel)?|cards\/[^/?]+(?:\/(?:actions|classification))?|drafts\/[^/?]+|resources\/(?:products|features|certificates|profiles)(?:\/revisions\/[^/?]+\/file\/(?:download-link|download|pages\/\d+\/preview))?|evidence-sources\/[^/?]+\/preview\/(?:download-link|download)|resources\/profiles\/[^/?]+\/revisions|resources\/certificates\/(?:files|[^/?]+\/(?:revisions|file-revisions))|billing(?:\/redeem)?|confidential-fields(?:\/[^/?]+\/(?:revisions|values))?|confidential-values(?:\/[^/?]+\/reveal)?)$/;
+const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:workflow|progress|members(?:\/[^/?]+(?:\/remove)?)?|member-candidates|handover|archive|unarchive|board|activity|events(?:\/poll)?|documents|jobs|extractions|requirements|products|features|certificates|profiles|certificate-files|evidence-sources|cards(?:\/(?:dispositions|generations))?|drafts|exports|product-simulations|simulated-resources|model-redaction))?)?|documents\/[^/?]+(?:\/(?:chunks|parse|extract|download-link|download|pages\/\d+\/preview))?|exports\/[^/?]+(?:\/(?:download-link|download|preview(?:\/pages\/\d+)?))?|jobs\/[^/?]+(?:\/cancel)?|cards\/[^/?]+(?:\/(?:actions|classification))?|drafts\/[^/?]+|resources\/(?:products|features|certificates|profiles)(?:\/revisions\/[^/?]+\/file\/(?:download-link|download|pages\/\d+\/preview))?|evidence-sources\/[^/?]+\/preview\/(?:download-link|download)|resources\/profiles\/[^/?]+\/revisions|resources\/certificates\/(?:files|[^/?]+\/(?:revisions|file-revisions))|billing(?:\/redeem)?|confidential-fields(?:\/[^/?]+\/(?:revisions|values))?|confidential-values(?:\/[^/?]+\/reveal)?)$/;
 function checkedPath(path, org) {
   if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   const url = new URL(path, window.location.origin);
@@ -84,3 +84,45 @@ export const money = (value, currency = "") => {
   return currency ? `${amount} ${currency}` : amount;
 };
 export const count = (value) => Number(value ?? 0).toLocaleString("zh-CN");
+
+// A fetch stream carries the same tenant credentials and cancellation epoch as Result reads.
+export async function orgEventStream(path, cursor, signal, onMessage) {
+  const pathname = checkedPath(path, true), current = orgSession.get(), epoch = orgEpoch;
+  if (!current) throw new ApiError(401, "session_required", "请重新登录单位");
+  const controller = new AbortController(), abort = () => controller.abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  if (signal?.aborted) abort();
+  orgRequests.add(controller);
+  let reader;
+  try {
+    const headers = { Authorization: `Bearer ${current.session}`, "X-Org-Id": current.orgId, Accept: "text/event-stream" };
+    if (cursor) headers["Last-Event-ID"] = cursor;
+    const response = await fetch(path, { headers, credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal });
+    if (!response.ok) await parseResult(response, pathname, true);
+    if (!response.headers.get("Content-Type")?.startsWith("text/event-stream") || !response.body) throw new ApiError(502, "invalid_event_stream", "进度流格式不符合契约");
+    reader = response.body.getReader();
+    const decoder = new TextDecoder(), encoder = new TextEncoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (controller.signal.aborted || orgEpoch !== epoch) throw new DOMException("单位会话已改变", "AbortError");
+      if (done) break;
+      buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, "\n");
+      if (encoder.encode(buffer).length > 262144) throw new ApiError(502, "event_buffer_limit", "进度流超过缓冲上限");
+      let end;
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        const frame = buffer.slice(0, end); buffer = buffer.slice(end + 2);
+        if (encoder.encode(frame).length > 8192) throw new ApiError(502, "invalid_event_stream", "进度帧超过上限");
+        const data = frame.split("\n").filter(line => line.startsWith("data:")).map(line => line.slice(5).trimStart()).join("\n");
+        if (!data) continue;
+        if (encoder.encode(data).length > 4096) throw new ApiError(502, "invalid_event_stream", "进度数据超过上限");
+        let payload; try { payload = JSON.parse(data); } catch { throw new ApiError(502, "invalid_event_stream", "进度数据无法识别"); }
+        if (controller.signal.aborted || orgEpoch !== epoch) throw new DOMException("单位会话已改变", "AbortError");
+        await onMessage(payload);
+      }
+    }
+  } finally {
+    await reader?.cancel().catch(() => {});
+    orgRequests.delete(controller); signal?.removeEventListener("abort", abort);
+  }
+}

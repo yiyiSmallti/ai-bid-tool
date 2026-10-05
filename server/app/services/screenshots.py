@@ -31,6 +31,7 @@ from app.schemas.screenshot_contracts import (
 from app.services import response_cards as cards
 from app.services import vendor_screenshots as vendor
 from app.services.evidence_sources import read_preview, require_source, source_data
+from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
 PRIVACY_VERSION = "screenshot-privacy-v1"
@@ -233,6 +234,7 @@ async def selection(session, actor, asset):
     fail("source_integrity", "Material source is incomplete", 409, 4)
 
 
+@task_authorized("screenshot:read", parent=("asset_id", "screenshot_assets"))
 async def asset_access(session, actor, asset_id, *, active=False):
     actor = await cards.access(session, actor, "screenshot:read")
     asset = await session.get(ScreenshotAsset, asset_id)
@@ -349,6 +351,7 @@ async def show(session, actor, asset_id):
     }
 
 
+@task_authorized("screenshot:ingest", write=True)
 async def ingest(
     session,
     actor,
@@ -587,6 +590,7 @@ async def ingest(
     }
 
 
+@task_authorized("screenshot:ingest", parent=("asset_id", "screenshot_assets"), write=True)
 async def withdraw(session, actor, asset_id, reason):
     actor = await cards.access(session, actor, "screenshot:ingest")
     ingest_human(actor)
