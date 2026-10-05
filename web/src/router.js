@@ -7,6 +7,7 @@ import Login from "./views/Login.vue";
 import Models from "./views/Models.vue";
 import OrgBilling from "./views/OrgBilling.vue";
 import OrgConfidential from "./views/OrgConfidential.vue";
+import OrgProfiles from "./views/OrgProfiles.vue";
 import OrgLogin from "./views/OrgLogin.vue";
 import OrgTasks from "./views/OrgTasks.vue";
 import OrgTask from "./views/OrgTask.vue";
@@ -32,6 +33,7 @@ export const router = createRouter({
     { path: "/org/tasks/:taskId", component: OrgTask, meta: { area: "org", title: "任务详情", nav: "tasks" } },
     { path: "/org/tasks/:taskId/review", component: OrgReview, meta: { area: "org", title: "要求与响应审阅", nav: "tasks" } },
     { path: "/org/tasks/:taskId/drafts", component: OrgDrafts, meta: { area: "org", title: "响应表初稿", nav: "tasks" } },
+    { path: "/org/profiles", component: OrgProfiles, meta: { area: "org", title: "单位资料", nav: "profiles" } },
     { path: "/org/confidential", component: OrgConfidential, meta: { area: "org", title: "保密字段", nav: "confidential" } },
     { path: "/org/billing", component: OrgBilling, meta: { area: "org", admin: true, title: "余额与充值", nav: "billing" } },
     { path: "/:rest(.*)", redirect: "/org/tasks" },

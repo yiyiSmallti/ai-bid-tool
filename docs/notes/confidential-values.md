@@ -12,8 +12,10 @@ the right value.
 
 Register fields and values in the console (保密字段, and 报价与保密信息 on a task
 page) or with the commands in [the CLI guide](../guides/cli.md#keep-confidential-values-out-of-the-model).
-Cards and drafts refer to a value as `{{secret.<key>}}`. The card editor inserts
-a placeholder at the cursor; an export dry run (`"dry_run": true` in the
+Cards, drafts and resource declarations refer to a value as `{{secret.<key>}}`.
+In the console nobody types one: the card editor and the 单位资料 page show each
+placeholder as a labelled block, and fields are dragged or clicked in from the
+strip above the text; an export dry run (`"dry_run": true` in the
 prepare input) lists which fields a run will fill and which are missing. The approved contract and
 its decisions are in [confidential-values.md](../plan/confidential-values.md).
 
@@ -56,7 +58,14 @@ label, kind) and the prompt asks the model to write placeholders instead of
 values. The manifest records the value row IDs used, so a changed value is a new
 input with a new hash.
 
-### Cards
+### Cards and declarations
+
+Resource declarations (products, features, certificates, org profiles,
+templates) may name fields too. `check_placeholders` in
+[versioned.py](../../server/app/services/versioned.py) refuses unknown or
+archived keys on every create and update. A declaration that names a field
+reaches the model as the placeholder and needs no substitution; an evidence
+quote of it is still verbatim.
 
 Saving a card refuses a placeholder whose key is unknown or archived
 (`unknown_confidential_field`). Confirming refuses that and any `[REDACTED_…]`
@@ -67,7 +76,7 @@ changing a value never invalidates a confirmed card.
 ### Export
 
 `confidential_gate` in [exports.py](../../server/app/services/exports.py) lists
-the keys named by response rows. It adds a `confidential` list of field ID,
+the keys named by response rows and their evidence quotes. It adds a `confidential` list of field ID,
 label, status and current value row ID to the fixed manifest only when a key is
 named, so runs without placeholders keep their hash. A missing value blocks a
 `final_section` (`confidential_value_missing`); an unknown or archived key
@@ -76,7 +85,8 @@ blocks both modes. A review copy renders a missing value as 【label】.
 The render job decrypts exactly the fixed value rows into the private render
 directory. `_fill_confidential` in
 [export_renderer.py](../../server/app/services/export_renderer.py) replaces the
-placeholders in response text and deviation notes before rendering. The values
+placeholders in response text, deviation notes and evidence excerpts before
+rendering. The values
 stay outside the manifest hash and the stored run. Release rebuilds the manifest,
 so a value changed after submission fails with `export_input_changed`.
 
@@ -84,6 +94,9 @@ so a value changed after submission fails with `export_input_changed`.
 
 - Text values match as substrings, so a registered name inside a longer name
   (张三 in 张三丰) is also replaced.
+- Substitution exists for text nobody can edit, such as certificate pages and
+  tender quotes. Declarations entered in the console should name fields rather
+  than carry values, so they never depend on it.
 - Substitution only finds exactly registered values. A differently written
   amount or an unregistered account number falls back to the pattern rules,
   and that masked text cannot be filled at export.
@@ -97,5 +110,5 @@ so a value changed after submission fails with `export_input_changed`.
 - [confidential.py](../../server/app/services/confidential.py), [confidential_contracts.py](../../server/app/schemas/confidential_contracts.py), [api/confidential.py](../../server/app/api/confidential.py) and [cli confidential.py](../../cli/bid_cli/confidential.py).
 - [redaction.py](../../server/app/services/redaction.py), [card_generation.py](../../server/app/services/card_generation.py) and [providers/drafting.py](../../server/app/providers/drafting.py).
 - [exports.py](../../server/app/services/exports.py), [export_render.py](../../server/app/jobs/export_render.py) and [export_renderer.py](../../server/app/services/export_renderer.py).
-- [ConfidentialPanel.vue](../../web/src/components/ConfidentialPanel.vue) and [CardEditor.vue](../../web/src/components/CardEditor.vue).
+- [SecretTextEditor.vue](../../web/src/components/SecretTextEditor.vue) (labelled blocks, drag and click insertion), [ConfidentialPanel.vue](../../web/src/components/ConfidentialPanel.vue), [CardEditor.vue](../../web/src/components/CardEditor.vue) and [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue).
 - [test_confidential_values.py](../../server/tests/test_confidential_values.py): drafting, export, permission and isolation scenarios with a repeatable DOCX artifact.

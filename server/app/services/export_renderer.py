@@ -928,14 +928,33 @@ def _fill_confidential(
     filled = {str(entry["key"]) for entry in fields if entry.get("value_id") is not None}
     if set(values) != filled:
         _fail("invalid_export_manifest", "Confidential values do not match the fixed fields")
+
+    def fill(value: object) -> object:
+        return redaction.fill_secrets(value, values, labels) if isinstance(value, str) else value
+
+    def evidence(entry: Mapping[str, Any]) -> Mapping[str, Any]:
+        quoted = entry.get("input")
+        if not isinstance(quoted, Mapping) or "quote" not in quoted:
+            return entry
+        return {**entry, "input": {**quoted, "quote": fill(quoted["quote"])}}
+
     return [
         {
             **item,
             **{
-                name: redaction.fill_secrets(item[name], values, labels)
+                name: fill(item[name])
                 for name in ("response_text", "deviation_note")
-                if isinstance(item.get(name), str)
+                if name in item
             },
+            **(
+                {
+                    "evidence": [
+                        evidence(_mapping(entry, "item.evidence[]")) for entry in item["evidence"]
+                    ]
+                }
+                if isinstance(item.get("evidence"), list)
+                else {}
+            ),
         }
         for item in items
     ]

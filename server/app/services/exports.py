@@ -819,8 +819,11 @@ async def confidential_gate(
     """The fields the responses name, fixed by value row ID; values stay encrypted."""
     used: dict[str, list[str]] = {}
     for item in items:
-        for name in ("response_text", "deviation_note"):
-            for key in redaction.secret_keys(item.get(name)):
+        texts = [item.get("response_text"), item.get("deviation_note")]
+        # Declaration excerpts may quote a profile that names a field instead of a value.
+        texts += [entry.get("input", {}).get("quote") for entry in item.get("evidence", [])]
+        for value in texts:
+            for key in redaction.secret_keys(value):
                 used.setdefault(key, [])
                 if item["requirement_id"] not in used[key]:
                     used[key].append(item["requirement_id"])

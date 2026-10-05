@@ -19,6 +19,8 @@ const errorMessages = {
   file_too_large: "文件超过上传大小限制", invalid_evidence_quote: "摘录没有逐字出现在所选材料位置", inactive_snapshot: "请先选择任务中的有效资源版本",
   empty_requirements: "该抽取没有保存任何要求", queue_unavailable: "作业已保存，但队列暂不可用，请重复提交以排队", conflict: "与已有记录冲突",
   idempotency_conflict: "同一请求的内容不一致", decision_set_mismatch: "处置条目必须与预检集合完全一致", invalid_input: "请求参数无效",
+  unknown_confidential_field: "引用了不存在或已归档的保密字段", redacted_placeholder_in_response: "正文含遮挡占位，请改用保密字段或写出原文",
+  confidential_key_exists: "已有同名键的保密字段", confidential_field_archived: "该保密字段已归档", human_required: "此操作需要成员本人登录操作",
 };
 const messageOverrides = {
   "Review role does not match the assigned domain": "当前角色不负责该职责的审阅",
@@ -33,6 +35,7 @@ export const errorText = (error) => {
   return `${text}${error.code ? `（${error.code}）` : ""}${error.retryAfter ? `；请在 ${Math.ceil(error.retryAfter / 1000)} 秒后重试` : ""}`;
 };
 const warningTexts = {
+  "Company metadata is a declaration; authenticity, performance and qualification have not been verified": "单位资料是自行声明，真实性、业绩和资质未经核验。",
   "Cost estimate is unavailable without an approved provider.": "当前模型没有可用的计价信息，暂时无法预估抽取费用。",
   "The current model has no reasoning levels configured; the level was ignored.": "当前模型未登记推理档位，所选档位已忽略。",
 };

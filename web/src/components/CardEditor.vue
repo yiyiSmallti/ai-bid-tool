@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { actorKinds, confirmAction, simulatedSelections, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, mine, orgAccess, orgRequest, quoteChecks, responseKinds, states, statusTag } from "../org.js";
 import DocumentPreview from "./DocumentPreview.vue";
 import MaterialPanel from "./MaterialPanel.vue";
+import SecretTextEditor from "./SecretTextEditor.vue";
 import SourcePreview from "./SourcePreview.vue";
 const props = defineProps({ row: Object, taskId: String, jobId: String, documentName: String });
 const emit = defineEmits(["updated", "dirty", "next", "close", "materials"]);
@@ -12,23 +13,9 @@ const reviewed = ref([]), warnings = ref([]), reason = ref(""), domain = ref("te
 const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kindKey = ref(0), marks = ref(new Set());
 simulatedSelections(props.taskId).then((value) => { marks.value = value; }).catch(() => {});
 // Confidential fields the response may name; the export fills their values.
-const secretFields = ref([]), responseInput = ref(null), secretPick = ref("");
+const secretFields = ref([]);
 orgRequest("GET", "/confidential-fields").then((result) => { secretFields.value = result.items; }).catch(() => {});
-const SECRET = /\{\{secret\.([a-z][a-z0-9_]{1,47})\}\}/g;
-const usedSecrets = computed(() => {
-  const keys = new Set([...`${content.value.response_text}\n${content.value.deviation_note}`.matchAll(SECRET)].map((match) => match[1]));
-  return [...keys].map((key) => ({ key, field: secretFields.value.find((item) => item.key === key) }));
-});
 const masked = (value) => /\[REDACTED_[A-Z_]+\]/.test(value ?? "");
-function insertSecret(key) {
-  const field = secretFields.value.find((item) => item.key === key);
-  secretPick.value = "";
-  if (!field || !editable.value) return;
-  const area = responseInput.value?.textarea, text = content.value.response_text ?? "";
-  const at = area ? area.selectionStart : text.length;
-  content.value.response_text = text.slice(0, at) + field.placeholder + text.slice(area ? area.selectionEnd : at);
-  edit();
-}
 let active = true;
 const dirty = computed(() => ready.value && JSON.stringify(content.value) !== baseline.value);
 const displayedSource = computed(() => card.value?.source ?? props.row.source);
@@ -199,13 +186,7 @@ onMounted(async () => {
             </el-radio-group>
           </el-form-item>
           <el-form-item label="响应正文">
-            <el-input ref="responseInput" v-model="content.response_text" type="textarea" :disabled="!editable" maxlength="20000" :autosize="{ minRows: 4, maxRows: 14 }" />
-            <div class="secret-row">
-              <el-select v-if="editable && secretFields.length" v-model="secretPick" size="small" placeholder="插入保密字段" style="width: 180px" aria-label="插入保密字段" @change="insertSecret">
-                <el-option v-for="field in secretFields" :key="field.key" :label="field.label" :value="field.key" />
-              </el-select>
-              <span v-if="usedSecrets.length" class="hint">导出时填入：<template v-for="(item, index) in usedSecrets" :key="item.key">{{ index ? "、" : "" }}<span :class="{ error: !item.field }">{{ item.field?.label ?? `未登记的 ${item.key}` }}</span></template></span>
-            </div>
+            <SecretTextEditor v-model="content.response_text" :fields="secretFields" :disabled="!editable" label="响应正文" :maxlength="20000" @change="edit" />
           </el-form-item>
           <el-form-item label="偏离">
             <el-radio-group v-model="content.deviation" :disabled="!editable" aria-label="偏离" @change="edit">
@@ -213,7 +194,7 @@ onMounted(async () => {
             </el-radio-group>
           </el-form-item>
           <p v-if="content.deviation === 'negative'" class="notice danger">负偏离：将如实保留在响应与初稿中。</p>
-          <el-form-item label="对应关系或具体偏离说明"><el-input v-model="content.deviation_note" type="textarea" :disabled="!editable" maxlength="10000" :autosize="{ minRows: 2, maxRows: 8 }" /></el-form-item>
+          <el-form-item label="对应关系或具体偏离说明"><SecretTextEditor v-model="content.deviation_note" :fields="secretFields" :disabled="!editable" label="对应关系或具体偏离说明" :maxlength="10000" :rows="2" @change="edit" /></el-form-item>
           <ol v-if="content.evidence.length" class="candidates"><li v-for="(input, index) in content.evidence" :key="index"><span class="hint">{{ input.kind }} · {{ input.field_path ?? input.evidence_source_id }}</span><blockquote class="quote">{{ input.quote }}</blockquote><el-button v-if="editable" size="small" type="danger" link @click="content.evidence.splice(index, 1); edit()">移除候选材料 {{ index + 1 }}</el-button></li></ol>
           <div class="actions"><el-button v-if="editable" type="primary" native-type="submit" :loading="busy">保存草稿</el-button><span v-if="dirty" class="hint">有未保存编辑；保存和提交审阅是两个动作。</span></div>
         </el-form>
@@ -287,5 +268,4 @@ onMounted(async () => {
 .blocker { color: var(--el-color-warning-dark-2, #b88230); }
 .history { margin-top: 12px; }
 .conflict-actions { justify-content: flex-end; }
-.secret-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 </style>

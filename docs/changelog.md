@@ -15,7 +15,9 @@ kind: changelog
   旧版本提交的起草作业以 `generation_rules_changed` 停止。卡片引用未知或已归档字段被拒绝，含 `[REDACTED_…]` 的卡片
   不能确认。
 - 导出按固定的值行填入占位符：正式件缺值被 `confidential_value_missing` 阻止，审阅件缺值显示“【名称】”，提交后改值
-  需重新提交。控制台新增“保密字段”页、任务页“报价与保密信息”和卡片编辑器的插入按钮；CLI 新增 `bid confidential`。
+  需重新提交。资源声明也可引用字段，导出时证据摘录同样填值。
+- 控制台新增“保密字段”页、任务页“报价与保密信息”和“单位资料”编辑页；卡片编辑器与单位资料的正文把字段显示为标签块，
+  从字段条拖入或点击插入，不用手写占位符。CLI 新增 `bid confidential`。
   机制见 [confidential-values.md](notes/confidential-values.md)。
 
 ## 2026-10-04：外发遮挡不再误伤招标原文

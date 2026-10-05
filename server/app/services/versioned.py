@@ -54,6 +54,23 @@ def audit(session: AsyncSession, actor: Identity, action: str, object_id: UUID, 
     )
 
 
+def strings(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for child in value.values() for text in strings(child)]
+    if isinstance(value, list):
+        return [text for child in value for text in strings(child)]
+    return []
+
+
+async def check_placeholders(session: AsyncSession, data: dict) -> None:
+    """Declarations may name confidential fields instead of carrying their values."""
+    from app.services.confidential import check_references
+
+    await check_references(session, strings(data))
+
+
 Check = Callable[[], Awaitable[None]]
 Attach = Callable[[Any, Any], Awaitable[None]]
 
@@ -71,6 +88,7 @@ async def create(
     """Create a root with revision 1. `check` runs before any write; `attach` may
     complete the revision (for example its stored file) before it is inserted."""
     actor.require(kind.write_scope)
+    await check_placeholders(session, data)
     if check is not None:
         await check()
     root = kind.root(org_id=actor.org_id, created_by=actor.user_id, current_revision=1)
@@ -147,6 +165,7 @@ async def update(
             409,
             kind.conflict_exit_code,
         )
+    await check_placeholders(session, data)
     if check is not None:
         await check()
     key = getattr(kind.revision, kind.key)

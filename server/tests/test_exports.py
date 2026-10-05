@@ -359,12 +359,44 @@ async def test_export_role_and_unknown_resource_boundaries(tenants, tmp_path, ad
             assert (await api.get(path, headers=headers[0])).status_code == 404
 
 
-async def complete_inputs(api, app, header, tenants, admin_engine, tmp_path, *, texts=None):
+async def complete_inputs(
+    api, app, header, tenants, admin_engine, tmp_path, *, texts=None, profile_wording=None
+):
     """Create three confirmed tables plus an independent comply-only decision.
-    `texts` replaces the response text of the cards for those requirement indexes."""
+    `texts` replaces the response text of the cards for those requirement indexes;
+    `profile_wording` makes requirement 2 cite a selected org profile declaration
+    instead of the certificate page."""
     task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
     selected, binding = await setup_template(api, header, task)
     _, _, _, _, page = await select_real_materials(api, header, task, tmp_path)
+    proof = [
+        {
+            "kind": "certificate_pdf_page",
+            "evidence_source_id": page["id"],
+            "quote": CERTIFICATE_PAGE,
+        }
+    ]
+    if profile_wording is not None:
+        profile = await api.post(
+            "/resources/profiles",
+            headers=header,
+            json={"data": {"name": "Synthetic profile", "standard_wording": profile_wording}},
+        )
+        assert profile.status_code == 200, profile.text
+        chosen = await api.post(
+            f"/tasks/{task}/profiles",
+            headers=header,
+            json={"profile_id": profile.json()["data"]["profile_id"]},
+        )
+        assert chosen.status_code == 200, chosen.text
+        proof = [
+            {
+                "kind": "org_profile",
+                "selection_id": chosen.json()["data"]["id"],
+                "field_path": "standard_wording",
+                "quote": profile_wording,
+            }
+        ]
     reviewed = {}
     for index in (0, 1, 2, 4):
         card = await create_card(
@@ -382,15 +414,7 @@ async def complete_inputs(api, app, header, tenants, admin_engine, tmp_path, *, 
                 "deviation_note": "Offered forty days exceeds required thirty days."
                 if index == 2
                 else "The specified synthetic response is retained verbatim.",
-                "evidence": [
-                    {
-                        "kind": "certificate_pdf_page",
-                        "evidence_source_id": page["id"],
-                        "quote": CERTIFICATE_PAGE,
-                    }
-                ]
-                if index == 1
-                else [],
+                "evidence": proof if index == 1 else [],
             },
         )
         if index == 0:

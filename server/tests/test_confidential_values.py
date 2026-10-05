@@ -167,6 +167,36 @@ async def test_export_fills_fixed_values_and_blocks_missing_or_changed(
         )
 
 
+async def test_declaration_naming_a_field_is_filled_in_the_export_excerpt(
+    tenants, tmp_path, admin_engine
+):
+    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+        header = headers[0]
+        bank = await add_field(api, header, "bank_account", "银行账号", "bank_account", "org")
+        await set_value(api, header, bank, "6222 0212 3456 7890 123")
+        refused = await api.post(
+            "/resources/profiles",
+            headers=header,
+            json={"data": {"name": "Synthetic", "standard_wording": "{{secret.unknown_key}}"}},
+        )
+        assert refused.json()["data"]["error"]["code"] == "unknown_confidential_field"
+        wording = "开户账号：{{secret.bank_account}}"
+        task, body, _, _ = await complete_inputs(
+            api, app, header, tenants, admin_engine, tmp_path, profile_wording=wording
+        )
+        preview = await api.post(
+            f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
+        )
+        assert [(f["key"], f["status"]) for f in preview.json()["data"]["confidential"]] == [
+            ("bank_account", "filled")
+        ]
+        run = await prepared(api, app, header, task, body)
+        released = await release(api, header, run)
+        assert released.status_code == 200, released.text
+        _, xml = await docx_text(api, header, released.json()["data"]["id"])
+        assert "开户账号：6222 0212 3456 7890 123" in xml and "{{secret." not in xml
+
+
 @pytest.mark.parametrize("enabled", [True, False])
 async def test_drafting_sends_placeholders_never_registered_values(
     tenants, tmp_path, admin_engine, enabled

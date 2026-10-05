@@ -1,5 +1,5 @@
 <script setup>
-import { Coin, DataAnalysis, Document, Files, Lock, Monitor, OfficeBuilding, Tickets, Wallet } from "@element-plus/icons-vue";
+import { Coin, DataAnalysis, Document, Files, Lock, Memo, Monitor, OfficeBuilding, Tickets, Wallet } from "@element-plus/icons-vue";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -18,6 +18,7 @@ const menus = computed(() => area.value === "platform"
     ]
   : [
       { key: "tasks", to: "/org/tasks", title: "招标任务", icon: Document },
+      { key: "profiles", to: "/org/profiles", title: "单位资料", icon: Memo },
       { key: "confidential", to: "/org/confidential", title: "保密字段", icon: Lock },
       ...(orgAccess.role === "admin" ? [{ key: "billing", to: "/org/billing", title: "余额与充值", icon: Wallet }] : []),
     ]);
