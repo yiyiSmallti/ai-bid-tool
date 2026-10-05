@@ -6,6 +6,10 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Export render exit race
+
+- The Linux render memory probe treats a renderer that exits while `/proc/<pid>/statm` is being read (ESRCH) as exited instead of failing the render job.
+
 ## 2026-10-05: English developer documentation
 
 - Unified developer and agent documentation in English using the [glossary](glossary.md), renamed the [design document](design.md), and conservatively corrected stale statuses and superseded decisions against implementation and later decisions. The [roadmap](plan/roadmap.md) remains the home for remaining scope and open decisions.
