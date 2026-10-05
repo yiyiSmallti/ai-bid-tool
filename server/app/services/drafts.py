@@ -137,6 +137,11 @@ async def assemble(
                 "kind": entry["kind"],
                 "eligibility": eligibility,
                 "evidence": [evidence_dependency(row) for row in view["evidence"]] if view else [],
+                **(
+                    {"memory_lineage": view["memory_lineage"]}
+                    if view and view.get("memory_lineage")
+                    else {}
+                ),
             }
         )
     fixed = {
@@ -393,6 +398,11 @@ def current_draft_inputs(requirements: list[Requirement], batch: cards.CardReadB
             "kind": kind,
             "eligibility": eligibility,
             "evidence": [evidence_dependency(row) for row in view["evidence"]] if view else [],
+            **(
+                {"memory_lineage": view["memory_lineage"]}
+                if view and view.get("memory_lineage")
+                else {}
+            ),
         }
     return current
 
@@ -496,6 +506,17 @@ def draft_view(
         else:
             entry["reasons"] = item.gap_reasons
             gaps.append(entry)
+    memory_warnings, memory_lineage = set(), []
+    for item in rows:
+        revision = batch.revisions.get(item.card_revision_id) if item.card_revision_id else None
+        if revision is not None and revision.model_job_id:
+            manifest = batch.generation_manifests.get(revision.model_job_id, {})
+            warning = cards.memory_warning_for(revision, manifest, batch.memory_epoch)
+            if warning:
+                memory_warnings.add(warning + ":" + str(item.requirement_id))
+            lineage = cards.memory_lineage_for(manifest, item.requirement_id)
+            if lineage:
+                memory_lineage.append({"requirement_id": str(item.requirement_id), **lineage})
     return DraftView.model_validate(
         {
             "id": run.id,
@@ -510,6 +531,8 @@ def draft_view(
             "comply_only": comply_only,
             "gaps": gaps,
             "invalidated_requirements": list(dict.fromkeys(invalidated)),
+            "memory_warnings": sorted(memory_warnings),
+            "memory_lineage": memory_lineage,
         }
     ).model_dump(mode="json")
 
@@ -565,6 +588,8 @@ async def list_drafts(
                     "validity",
                     "input_hash",
                     "invalidated_requirements",
+                    "memory_warnings",
+                    "memory_lineage",
                 )
             }
             | {"summary": run.summary}

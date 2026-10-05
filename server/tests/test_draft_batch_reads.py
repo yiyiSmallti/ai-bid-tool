@@ -133,6 +133,21 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
         else:
             entry["reasons"] = item.gap_reasons
             gaps.append(entry)
+    memory_warnings, memory_lineage = set(), []
+    for item in rows:
+        revision = (
+            await session.get(ResponseCardRevision, item.card_revision_id)
+            if item.card_revision_id
+            else None
+        )
+        if revision is not None:
+            warning, lineage = await cards.generation_memory_state(
+                session, actor, revision, item.requirement_id
+            )
+            if warning:
+                memory_warnings.add(warning + ":" + str(item.requirement_id))
+            if lineage:
+                memory_lineage.append({"requirement_id": str(item.requirement_id), **lineage})
     return DraftView.model_validate(
         {
             "id": run.id,
@@ -147,6 +162,8 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             "comply_only": comply_only,
             "gaps": gaps,
             "invalidated_requirements": list(dict.fromkeys(invalidated)),
+            "memory_warnings": sorted(memory_warnings),
+            "memory_lineage": memory_lineage,
         }
     ).model_dump(mode="json")
 
@@ -486,6 +503,8 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         "validity",
         "input_hash",
         "invalidated_requirements",
+        "memory_warnings",
+        "memory_lineage",
     )
     async with app.state.db.transaction(actor.org_id) as session:
         runs = (
@@ -665,6 +684,8 @@ async def test_large_draft_reads_match_reference_and_have_bounded_queries(
                         for scope in (
                             "draft:read",
                             "task:read",
+                            "memory:read",
+                            "memory:retrieve",
                             "resource:read",
                             "certificate:read",
                             "certificate:file:read",

@@ -9,7 +9,7 @@ import ssl
 import time
 from collections.abc import Sequence
 from decimal import ROUND_CEILING, Decimal
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import httpx
@@ -201,6 +201,10 @@ WIRE_SCHEMA: dict[str, Any] = {
 }
 
 
+if TYPE_CHECKING:
+    from app.schemas.memory_contracts import MemoryPromptContext
+
+
 class WireCondition(BaseModel):
     model_config = ConfigDict(extra="forbid")
     param: str
@@ -368,11 +372,16 @@ class HTTPExtractor:
         return copy
 
     async def draft(
-        self, requirements: list[dict], materials: list[dict], fields: Sequence[dict] = ()
+        self,
+        requirements: list[dict],
+        materials: list[dict],
+        fields: Sequence[dict] = (),
+        *,
+        memory: "MemoryPromptContext | None" = None,
     ):
         from app.providers.drafting import draft
 
-        return await draft(self, requirements, materials, fields)
+        return await draft(self, requirements, materials, fields, memory=memory)
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         limit = asyncio.Semaphore(max(1, self.settings.llm_concurrency))

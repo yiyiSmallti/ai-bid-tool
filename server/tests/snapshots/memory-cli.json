@@ -1,0 +1,1205 @@
+{
+  "error exit 2": {
+    "exit_code": 2,
+    "output": {
+      "command": "memory show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "error": {
+          "code": "memory_revision_conflict",
+          "exit_code": 2,
+          "message": "Refresh exact revision"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/memories/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "error exit 3": {
+    "exit_code": 3,
+    "output": {
+      "command": "memory show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "error": {
+          "code": "queue_unavailable",
+          "exit_code": 3,
+          "message": "Job saved for retry"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/memories/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "error exit 4": {
+    "exit_code": 4,
+    "output": {
+      "command": "memory show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "error": {
+          "code": "not_found",
+          "exit_code": 4,
+          "message": "Resource not found"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/memories/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "memory add": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory add",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "memory": {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": null,
+            "decision_reason_sha256": null,
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 1,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "candidate",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": null,
+          "effective_status": "candidate",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "content": {
+            "conflict_key": "delivery.source",
+            "kind": "rule",
+            "tags": [
+              "delivery"
+            ],
+            "text": "交货期以答疑为准"
+          },
+          "expires_at": null,
+          "source": null,
+          "target": {
+            "scope": "org",
+            "task_id": null,
+            "user_id": null
+          }
+        },
+        "method": "POST",
+        "path": "/memories"
+      }
+    ]
+  },
+  "memory approve": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory approve",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "memory": {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": "2026-10-05T00:00:00Z",
+            "confirmed_by": "00000000-0000-0000-0000-000000000001",
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": "approve",
+            "decision_reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 2,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "active",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": null,
+          "effective_status": "active",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "action": "approve",
+          "expected_revision": 1,
+          "reason": "Reviewed"
+        },
+        "method": "POST",
+        "path": "/memories/00000000-0000-0000-0000-000000000001/decisions"
+      }
+    ]
+  },
+  "memory candidates run": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory candidates run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "dry_run": false,
+        "event_count": 1,
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "reused": false,
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "action": {
+            "dry_run": false,
+            "reasoning": null,
+            "retry": false
+          },
+          "event_ids": [
+            "00000000-0000-0000-0000-000000000001"
+          ]
+        },
+        "method": "POST",
+        "path": "/tasks/00000000-0000-0000-0000-000000000001/memory-candidates"
+      }
+    ]
+  },
+  "memory delete": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory delete",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "memory": {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": "delete",
+            "decision_reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 2,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "disabled",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": "2026-10-05T00:00:00Z",
+          "effective_status": "deleted",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "expected_revision": 1,
+          "reason": "Reviewed"
+        },
+        "method": "DELETE",
+        "path": "/memories/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "memory disable": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory disable",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "memory": {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": "disable",
+            "decision_reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 2,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "disabled",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": null,
+          "effective_status": "disabled",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "expected_revision": 1,
+          "reason": "Reviewed"
+        },
+        "method": "POST",
+        "path": "/memories/00000000-0000-0000-0000-000000000001/disable"
+      }
+    ]
+  },
+  "memory feedback list": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory feedback list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "returned": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "actor_kind": "session",
+          "actor_user_id": "00000000-0000-0000-0000-000000000001",
+          "after_revision_id": "00000000-0000-0000-0000-000000000002",
+          "before_revision_id": "00000000-0000-0000-0000-000000000001",
+          "card_id": "00000000-0000-0000-0000-000000000001",
+          "created_at": "2026-10-05T00:00:00Z",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "kind": "card_rejected",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "review_domain": "commercial",
+          "sanitized_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sanitizer_version": "memory-sanitize-v1:redaction-v1",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "params": {
+          "limit": 50
+        },
+        "path": "/tasks/00000000-0000-0000-0000-000000000001/memory-feedback"
+      }
+    ]
+  },
+  "memory history": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory history",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "returned": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "actor_kind": "session",
+          "confirmed_at": null,
+          "confirmed_by": null,
+          "content": {
+            "conflict_key": "delivery.source",
+            "kind": "rule",
+            "tags": [
+              "delivery"
+            ],
+            "text": "交货期以答疑为准"
+          },
+          "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "created_at": "2026-10-05T00:00:00Z",
+          "created_by": "00000000-0000-0000-0000-000000000001",
+          "decision": null,
+          "decision_reason_sha256": null,
+          "expires_at": null,
+          "id": "00000000-0000-0000-0000-000000000002",
+          "memory_id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "revision": 1,
+          "source": {
+            "card_id": null,
+            "card_revision_id": null,
+            "feedback_event_id": null,
+            "origin": "human",
+            "platform_release_id": null,
+            "proposal_job_id": null,
+            "proposal_run_id": null,
+            "task_id": null
+          },
+          "status": "candidate",
+          "target": {
+            "scope": "org",
+            "task_id": null,
+            "user_id": null
+          }
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "params": {
+          "limit": 50
+        },
+        "path": "/memories/00000000-0000-0000-0000-000000000001/history"
+      }
+    ]
+  },
+  "memory list": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "returned": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": null,
+            "decision_reason_sha256": null,
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 1,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "candidate",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": null,
+          "effective_status": "candidate",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "params": {
+          "include_deleted": false,
+          "limit": 50,
+          "scope": "org"
+        },
+        "path": "/memories"
+      }
+    ]
+  },
+  "memory reject": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory reject",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "memory": {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": "reject",
+            "decision_reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 2,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "disabled",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": null,
+          "effective_status": "disabled",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "action": "reject",
+          "expected_revision": 1,
+          "reason": "Reviewed"
+        },
+        "method": "POST",
+        "path": "/memories/00000000-0000-0000-0000-000000000001/decisions"
+      }
+    ]
+  },
+  "memory retrieval show": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory retrieval show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "context_chars": 8,
+        "currently_valid": true,
+        "epochs": [
+          {
+            "epoch": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "owner_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "org"
+          }
+        ],
+        "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mode": "keyword",
+        "omitted": [],
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "preview": false,
+        "priority_version": "memory-priority-v1",
+        "query_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "retrieval_id": "00000000-0000-0000-0000-000000000001",
+        "retrieval_version": "keyword-v1",
+        "scopes": [
+          "org"
+        ],
+        "stale_reasons": [],
+        "valid_until": null
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "conflict_key": "delivery.source",
+          "kind": "rule",
+          "matched_by": [
+            "exact",
+            "keyword"
+          ],
+          "memory": {
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "expires_at": null,
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 2,
+            "revision_id": "00000000-0000-0000-0000-000000000002",
+            "scope": "org",
+            "sent_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "priority": 2,
+          "rank": 1,
+          "relevance": 110.0,
+          "text": "交货期以答疑为准"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/memory-retrievals/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "memory retrieve": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory retrieve",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "context_chars": 8,
+        "currently_valid": true,
+        "epochs": [
+          {
+            "epoch": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "owner_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "org"
+          }
+        ],
+        "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "mode": "keyword",
+        "omitted": [],
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "preview": true,
+        "priority_version": "memory-priority-v1",
+        "query_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "retrieval_id": null,
+        "retrieval_version": "keyword-v1",
+        "scopes": [
+          "org"
+        ],
+        "stale_reasons": [],
+        "valid_until": null
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "conflict_key": "delivery.source",
+          "kind": "rule",
+          "matched_by": [
+            "exact",
+            "keyword"
+          ],
+          "memory": {
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "expires_at": null,
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 2,
+            "revision_id": "00000000-0000-0000-0000-000000000002",
+            "scope": "org",
+            "sent_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "priority": 2,
+          "rank": 1,
+          "relevance": 110.0,
+          "text": "交货期以答疑为准"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "keywords": [],
+          "max_context_chars": 8000,
+          "mode": "keyword",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "query": "交货期以答疑为准",
+          "scopes": [
+            "org"
+          ],
+          "tags": [],
+          "task_id": null,
+          "top_k": 12,
+          "user_id": null
+        },
+        "method": "POST",
+        "params": {
+          "preview": true
+        },
+        "path": "/memories/retrieve"
+      }
+    ]
+  },
+  "memory samples list": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory samples list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "returned": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "actor_user_id": "00000000-0000-0000-0000-000000000001",
+          "after_revision_id": "00000000-0000-0000-0000-000000000002",
+          "before_revision_id": "00000000-0000-0000-0000-000000000001",
+          "card_id": "00000000-0000-0000-0000-000000000001",
+          "created_at": "2026-10-05T00:00:00Z",
+          "feedback_event_id": "00000000-0000-0000-0000-000000000001",
+          "generator_version": "feedback-copy-v1",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "label": "card_rejected",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "review_revision": 1,
+          "review_state": "unreviewed",
+          "reviewed_at": null,
+          "reviewed_by": null,
+          "sanitized_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "params": {
+          "limit": 50
+        },
+        "path": "/tasks/00000000-0000-0000-0000-000000000001/memory-evaluations"
+      }
+    ]
+  },
+  "memory samples review": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory samples review",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "sample": {
+          "actor_user_id": "00000000-0000-0000-0000-000000000001",
+          "after_revision_id": "00000000-0000-0000-0000-000000000002",
+          "before_revision_id": "00000000-0000-0000-0000-000000000001",
+          "card_id": "00000000-0000-0000-0000-000000000001",
+          "created_at": "2026-10-05T00:00:00Z",
+          "feedback_event_id": "00000000-0000-0000-0000-000000000001",
+          "generator_version": "feedback-copy-v1",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "label": "card_rejected",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "review_revision": 2,
+          "review_state": "accepted",
+          "reviewed_at": "2026-10-05T00:00:00Z",
+          "reviewed_by": "00000000-0000-0000-0000-000000000001",
+          "sanitized_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "action": "accept",
+          "expected_revision": 1,
+          "reason": "Reviewed"
+        },
+        "method": "POST",
+        "path": "/memory-evaluations/00000000-0000-0000-0000-000000000001/review"
+      }
+    ]
+  },
+  "memory samples show": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory samples show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "sample": {
+          "actor_user_id": "00000000-0000-0000-0000-000000000001",
+          "after_revision_id": "00000000-0000-0000-0000-000000000002",
+          "before_revision_id": "00000000-0000-0000-0000-000000000001",
+          "card_id": "00000000-0000-0000-0000-000000000001",
+          "created_at": "2026-10-05T00:00:00Z",
+          "feedback_event_id": "00000000-0000-0000-0000-000000000001",
+          "generator_version": "feedback-copy-v1",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "label": "card_rejected",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "review_revision": 1,
+          "review_state": "unreviewed",
+          "reviewed_at": null,
+          "reviewed_by": null,
+          "sanitized_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "sanitized_summary": "人工驳回：交货期应采用答疑。"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/memory-evaluations/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "memory show": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "memory": {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": null,
+            "decision_reason_sha256": null,
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 1,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "candidate",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": null,
+          "effective_status": "candidate",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/memories/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "memory update": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory update",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "memory": {
+          "current": {
+            "actor_kind": "session",
+            "confirmed_at": null,
+            "confirmed_by": null,
+            "content": {
+              "conflict_key": "delivery.source",
+              "kind": "rule",
+              "tags": [
+                "delivery"
+              ],
+              "text": "交货期以答疑为准"
+            },
+            "content_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "created_at": "2026-10-05T00:00:00Z",
+            "created_by": "00000000-0000-0000-0000-000000000001",
+            "decision": null,
+            "decision_reason_sha256": null,
+            "expires_at": null,
+            "id": "00000000-0000-0000-0000-000000000002",
+            "memory_id": "00000000-0000-0000-0000-000000000001",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "revision": 1,
+            "source": {
+              "card_id": null,
+              "card_revision_id": null,
+              "feedback_event_id": null,
+              "origin": "human",
+              "platform_release_id": null,
+              "proposal_job_id": null,
+              "proposal_run_id": null,
+              "task_id": null
+            },
+            "status": "candidate",
+            "target": {
+              "scope": "org",
+              "task_id": null,
+              "user_id": null
+            }
+          },
+          "deleted_at": null,
+          "effective_status": "candidate",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "json": {
+          "content": {
+            "conflict_key": "delivery.source",
+            "kind": "rule",
+            "tags": [
+              "delivery"
+            ],
+            "text": "交货期以答疑为准"
+          },
+          "expected_revision": 1,
+          "expires_at": null
+        },
+        "method": "PUT",
+        "path": "/memories/00000000-0000-0000-0000-000000000001"
+      }
+    ]
+  },
+  "memory used": {
+    "exit_code": 0,
+    "output": {
+      "command": "memory used",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "calls": [],
+        "job_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "requests": [
+      {
+        "method": "GET",
+        "path": "/jobs/00000000-0000-0000-0000-000000000001/memory"
+      }
+    ]
+  },
+  "partial exit 5": {
+    "exit_code": 5,
+    "output": {
+      "command": "memory candidates run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "completion": "partial",
+        "cost": {
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "usd": 0.0
+        },
+        "generator_version": "feedback-copy-v1",
+        "items": [
+          {
+            "error_code": "synthetic_event_failure",
+            "event_id": "00000000-0000-0000-0000-000000000001",
+            "memory_id": null,
+            "outcome": "failed",
+            "sample_id": null
+          }
+        ],
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "run_id": "00000000-0000-0000-0000-000000000002",
+        "stop_reason": "event_failure",
+        "usage_record_ids": []
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "memory_candidates_partial"
+      ]
+    },
+    "requests": [
+      {
+        "json": {
+          "action": {
+            "dry_run": false,
+            "reasoning": null,
+            "retry": false
+          },
+          "event_ids": [
+            "00000000-0000-0000-0000-000000000001"
+          ]
+        },
+        "method": "POST",
+        "path": "/tasks/00000000-0000-0000-0000-000000000001/memory-candidates"
+      }
+    ]
+  }
+}

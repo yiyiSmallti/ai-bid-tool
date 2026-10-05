@@ -265,6 +265,8 @@ async def token_header(api, header, *, scopes=None):
                 "card:read",
                 "card:write",
                 "card:generate",
+                "memory:read",
+                "memory:retrieve",
                 "resource:read",
                 "certificate:read",
                 "certificate:file:read",

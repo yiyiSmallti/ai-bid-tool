@@ -61,18 +61,18 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | --- | --- | --- | --- |
 | P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身；起草与模拟拟投共用的结构化 JSON 调用；独立 CheckProvider 和 RubricProvider 及对应结构化 HTTP adapter | ScoreProvider、agent 接入结构化调用 | 需相应能力契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
-| P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；Perplexity Search API 或自托管 SearXNG 搜索 | Embedding 草案见 [memory.md](memory.md#pgvector-与后续索引)；本机浏览器采集、仅用 SearXNG 时搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱租约接管与断连/存储失败注入验收 | 新契约 |
+| P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；Perplexity Search API 或自托管 SearXNG 搜索 | Embedding 后续边界见 [memory.md](memory.md#pgvector-与后续索引)；本机浏览器采集、仅用 SearXNG 时搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱租约接管与断连/存储失败注入验收 | 新契约 |
 | P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；机制见 [provider-config.md](../notes/provider-config.md) | [平台后台凭据管理草案](platform-credentials.md)（全局表例外见 [ADR 0006](../adr/0006-platform-credentials.md)）；视觉、搜索等其他能力的单位配置 | 平台凭据待批准；其他新契约 |
 | P05 通用控制 | 调用准入、即时记账、期限、有限重试、提取原子失败与起草/评分 rubric 部分成功；抽取、起草与模拟拟投按 `BID_LLM_CONCURRENCY` 并发；rubric 整表请求边界见[评分计划](score.md#provider作业和预付费) | 跨能力限流与统一进度 | 新契约 |
-| M01 记忆存储 | 未实施 | [记忆契约草案](memory.md#数据模型与迁移轮廓) | [待批准与待决定](memory.md#待决定) |
-| M02 记忆检索 | 未实施 | [记忆检索契约草案](memory.md#检索与优先级) | [分步范围](memory.md#目标与边界) |
-| M03 自动候选 | 未实施 | [自动候选与样本契约草案](memory.md#自动候选样本与作业) | 依赖 B07；待批准 |
+| M01 记忆存储 | org 候选/确切修订人工审批、不可变历史、FORCE RLS 与逻辑删除 | user/project/global 及其 ACL | [已定决定](memory.md#已定决定) |
+| M02 记忆检索 | org keyword/tag、规则/偏好优先级、独立起草上下文、逐调用使用记录 | Embedding/hybrid、其他消费者 | [分步范围](memory.md#目标与边界) |
+| M03 自动候选 | 人工模型卡 reject/edit 的净化确定性候选与单位评测样本、恢复作业 | LLM 泛化、风险卡误报、历史回填 | [反馈契约](memory.md#自动候选样本与作业) |
 | U01 看板 | 单位后台招标任务、解析抽取、响应卡审阅、起草预览、初稿、导出文件、模拟拟投、单位资料与保密字段页面，招标原件、证书原件和导出件在线按页预览；机制见 [org-console.md](../notes/org-console.md) | 产品、功能、证书、模板管理页；配置与记忆管理页 | 新契约 |
 | U02 卡片/SSE | API/CLI 卡片修订与状态迁移 | 看板交互、SSE | 界面契约 |
 | A01 内置 agent | 未实施 | 契约草案见 [agent.md](agent.md) | 待批准 |
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记见 [agent.md](agent.md#审计与-a02-来源标记)；可选 `mcp serve` | 新接口确认 |
 | C01 CLI 契约 | Result 七键、schema 注册、统一退出码、两种模式；`bid check run/list/show/decide/history` 与 `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history` | 后续命令、主版本兼容周期 | 新命令确认 |
-| C02 缓存 | 模型起草及确定性 check 固定输入/版本缓存，保留人工确认，组表重算依赖 | 记忆依赖见 [memory.md](memory.md#起草消费使用审计与-c02-缓存失效)；其他能力的跨依赖失效 | 新契约 |
+| C02 缓存 | 模型起草、check/score 固定输入缓存；记忆 scope epoch、到期与策略版本失效，保留人工确认并提醒 | 其他能力的跨依赖失效；记忆 PostgreSQL 并发验收 | [记忆缓存契约](memory.md#起草消费使用审计与-c02-缓存失效) |
 | C03 dry-run/预算 | 起草、评分 rubric 与评分执行的外发清单与首轮费用上界、预付余额/调用上限拦截；组表与 rules check 零费用预检；combined check 固定模型价格的零写入预检与逐次准入 | 更精确 token/耗时估算；[费用预检与任务预算草案](budget.md) | 价格与测量依赖服务 |
 
 ## 覆盖矩阵：评测与保密
@@ -102,7 +102,7 @@ Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg
 | 生产厂家采集的单位每分钟请求上限（现为 60，大页面会被截为不完整） | 生产启用厂家网页采集之前 |
 | 模板公共共享 | 扩大模板读取边界之前 |
 | 计费方式、数据驻留 | 对应范围契约时 |
-| 全局记忆 | [记忆契约待决定](memory.md#待决定) |
+| 全局记忆 | [记忆已定决定与后续启用条件](memory.md#已定决定) |
 | 看板卡片交互与进度展示 | U02 之前；服务状态机见 [response-cards.md](../notes/response-cards.md) |
 | 平台搜索服务的费用归属：Perplexity 按次计费，现由平台承担、不计入单位余额 | 生产启用 Perplexity 之前 |
 | 仓库可见性与 Actions 额度：私有仓库按分钟计费，公开仓库免费且运行器更快 | 额度不足时 |

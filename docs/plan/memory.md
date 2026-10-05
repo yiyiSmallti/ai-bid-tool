@@ -2,14 +2,13 @@
 kind: plan
 ---
 
-# 契约草案：分层记忆存储、检索与自动候选
+# 分层记忆存储、检索与自动候选
 
-状态：**待批准，未实施。** 对应[路线图](roadmap.md) M01、M02、M03，并涉及 P03 与 C02。
+状态：**已批准；单位层首片已实现，PostgreSQL 集成验收待主会话执行。** 对应[路线图](roadmap.md) M01、M02、M03，并涉及 P03 与 C02。
 
-[agent.md](../../agent.md#工作方式)要求：
-“新功能先写 Pydantic 模型、Provider 接口和 CLI 的 JSON 结构，等确认后再写实现。”
-[Pydantic 与 Provider 草案](memory/memory_contracts.py)仅供审查，未注册到运行 API、CLI、
-`bid schema` 或 worker，也不创建表、迁移或外部调用。
+[运行契约](../../server/app/schemas/memory_contracts.py)定义 Pydantic 模型、Provider 接口和
+CLI 的 JSON 结构；所有推荐默认值已批准，见[已定决定](#已定决定)。实现入口见
+[记忆机制](../notes/memory.md#code)，后续作用域仍按本文的启用条件推进。
 
 ## 目标与边界
 
@@ -18,7 +17,7 @@ kind: plan
 结果中的使用记录，以及从人工反馈产生候选和评测样本。记忆只影响工作方法，
 永远不能充当参数证据、替代真实材料、满足证据确认或导出关口。
 
-建议第一条完整链路为：**单位层**新增候选 → admin 人工审批 → PostgreSQL 精确、
+首片完整链路为：**单位层**新增候选 → admin 人工审批 → PostgreSQL 精确、
 关键词及标签检索 → 卡片模型起草 → 按实际调用记录使用清单 → 人工驳回或编辑产生新候选。
 这一链路不依赖 Embedding；CRUD、检索、反馈转候选本身不调用模型。已存在的卡片起草仍通过
 LLM Provider 调用并计费。人工确认卡片同时形成单位内评测样本，不生成自动生效的记忆。
@@ -28,7 +27,7 @@ LLM Provider 调用并计费。人工确认卡片同时形成单位内评测样�
 
 | 层 / wire 值 | 内容、所有者与读取边界 | 写入与确认 | 首片边界 |
 | --- | --- | --- | --- |
-| 全局 / `global` | 通用招投标知识；所有单位只读，绝无单位来源 | 仅平台维护；来源与审核人见[待决定](#待决定) | 禁用；不建全局表，不使用特殊单位或空 `org_id` 绕过规则 |
+| 全局 / `global` | 通用招投标知识；所有单位只读，绝无单位来源 | 仅平台维护；来源与审核人见[已定决定](#已定决定) | 禁用；不建全局表，不使用特殊单位或空 `org_id` 绕过规则 |
 | 单位 / `org` | 单位惯例、经验、规则及默认偏好；本单位成员和获授权 agent 可读 | 可写成员/令牌提出，单位人类 admin 审批 | 完整闭环 |
 | 用户 / `user` | 个人偏好；所有者为 `(org_id, user_id)`，仅本人及本人发起的 agent 读取 | 本人管理，激活仍须本人会话确认 | 模型先定义；后续启用私人结果和作业读取隔离，不能把私人偏好写进共享卡片快照 |
 | 项目 / `project` | 本任务决定、选型、答疑、分工；归属 `(org_id, task_id)` | 任务成员提出、人类任务成员确认；归档后只读保留 | 模型先定义；依赖 F06 的任务成员与归档机制，不把单位成员等同任务成员 |
@@ -40,13 +39,13 @@ LLM Provider 调用并计费。人工确认卡片同时形成单位内评测样�
 
 ## 接口
 
-下文入口均为拟新增。`org_id` 在 HTTP 中来自已验证的单位请求上下文；检索 body 还必须显式
+下文列出首片入口及后续向量入口。`org_id` 在 HTTP 中来自已验证的单位请求上下文；检索 body 还必须显式
 包含相同的 `org_id`，不一致返回 404。其他写入 body 不允许传组织、创建人、确认人、状态或
 来源种类以覆盖认证结果。列表的 target 编码为 `scope/user_id/task_id` 查询参数。
 
 | 入口 | 契约与返回 `data` / `items` |
 | --- | --- |
-| 数据 | [memory_contracts.py](memory/memory_contracts.py)：复用 `Contract`、`Result`、`Cost`、`ProviderUsage`、`JobAction`、`ReviewDomain`，不复制既有定义 |
+| 数据 | [memory_contracts.py](../../server/app/schemas/memory_contracts.py)：复用 `Contract`、`Result`、`Cost`、`ProviderUsage`、`JobAction`、`ReviewDomain`，不复制既有定义 |
 | `POST /memories` | `MemoryCreate` → `MemoryData` / `[]`；始终创建 candidate |
 | `GET /memories` | `MemoryListRequest` → `MemoryPageData` / `MemoryView[]`；带 scope，分页、筛选不改变授权 |
 | `GET /memories/{id}` | → `MemoryData` / `[]`；过期和停用可查，默认不显示逻辑删除对象 |
@@ -73,24 +72,25 @@ LLM Provider 调用并计费。人工确认卡片同时形成单位内评测样�
 
 ## 当前代码依据与差异
 
-| 当前依据 | 草案接入点或明确差异 |
+| 当前依据 | 接入点或明确差异 |
 | --- | --- |
-| [auth.py](../../server/app/services/auth.py) 的 `Identity`、`authenticate`、`membership`、`SCOPES`、`ROLE_SCOPES`，以及 [api/main.py](../../server/app/api/main.py) 的 `context` | 认证/角色与范围实际在 services，不在 `core/` 的某个 scope 模块；复用会话/令牌与 Membership 交集，不存在现成 memory scopes |
+| [auth.py](../../server/app/services/auth.py) 的 `Identity`、`authenticate`、`membership`、`SCOPES`、`ROLE_SCOPES`，以及 [api/main.py](../../server/app/api/main.py) 的 `context` | 认证/角色与范围实际在 services，不在 `core/` 的某个 scope 模块；复用会话/令牌与 Membership 交集，memory scopes 与角色边界见[权限表](#权限角色与-provider-计费) |
 | [core/db.py](../../server/app/core/db.py) 的 `Database.transaction`；[隔离笔记](../notes/tenant-isolation.md) | 使用事务级 `app.current_org`、`set_actor_context`；运行角色不能拥有表或 BYPASSRLS |
 | [entities.py](../../server/app/models/entities.py) 的 `Task`、`Job`、`UsageRecord`、`VendorCall` | Task 未提供任务成员/归档；Job 的 task/document 空值只对 `provider_test` 例外，不能虚构文件为无任务 Embedding 填充 |
 | [response_cards.py](../../server/app/services/response_cards.py) 的 `update_card`、`card_action`、`append_revision` | 人工编辑/驳回与不可变修订同事务；`CardUpdate` 没有 reason，不能假称编辑时已有学习指令 |
-| [ADR 0005](../adr/0005-human-confirmed-responses.md)、[response-cards.md](../notes/response-cards.md) | 已定义模型提议/人工确认与卡片缓存，明确未包含自动记忆；本草案只扩展依赖与候选，不改变专业职责确认 |
-| [card_generation.py](../../server/app/services/card_generation.py) 的 `snapshot`、`submit_generation`、`generate`、`publish`、`check_input_access`；[drafting.py](../../server/app/providers/drafting.py) 的 `request_body`、`groups`、`draft` | 当前 snapshot 和 wire 输入没有 memory；必须显式扩展、升 prompt/schema 版本，并保留双文本引用校验 |
+| [ADR 0005](../adr/0005-human-confirmed-responses.md)、[response-cards.md](../notes/response-cards.md) | 已定义模型提议/人工确认与卡片缓存，明确未包含自动记忆；本契约只扩展依赖与候选，不改变专业职责确认 |
+| [card_generation.py](../../server/app/services/card_generation.py) 的 `snapshot`、`submit_generation`、`generate`、`publish`、`check_input_access`；[drafting.py](../../server/app/providers/drafting.py) 的 `request_body`、`groups`、`draft` | snapshot 与 wire 输入使用独立 memory 规则/偏好及升级后的 prompt/schema 版本；保留双文本引用校验 |
 | [drafts.py](../../server/app/services/drafts.py) 的 `assemble`、`current_draft_inputs`、`show_draft` | `draft` 已是确定性逐字组表，不再调用 LLM；记忆在上游 card generation 消费，组表仅继承使用轨迹及失效提示 |
-| [providers/base.py](../../server/app/providers/base.py) 的 `LLMProvider`；[configured.py](../../server/app/providers/configured.py) 的 `resolve_configured`；[provider_contracts.py](../../server/app/schemas/provider_contracts.py) | 现有配置 capability 是 `llm_extract`，没有可直接调用的 Embedding resolver；保留 `server/app/memory/` 为业务包，该目录尚未建立 |
+| [providers/base.py](../../server/app/providers/base.py) 的 `LLMProvider`；[configured.py](../../server/app/providers/configured.py) 的 `resolve_configured`；[provider_contracts.py](../../server/app/schemas/provider_contracts.py) | 现有配置 capability 是 `llm_extract`，没有可直接调用的 Embedding resolver；保留 `server/app/memory/` 为业务包，该目录承载业务读写与选择 |
 | [ADR 0001](../adr/0001-platform-console-access.md)、[agent.md](../../agent.md#硬性规则任何情况下都不得违反) | 全局表例外只覆盖获准的平台表，没有 memory；设计所需全局层必须另行明确批准，不直接沿用跨单位策略 |
 
 ## 数据模型与迁移轮廓
 
-首片拟新增下列单位业务表，**每张均 `org_id NOT NULL`、`ENABLE ROW LEVEL SECURITY` 和
+首片使用下列单位业务表，**每张均 `org_id NOT NULL`、`ENABLE ROW LEVEL SECURITY` 和
 `FORCE ROW LEVEL SECURITY`**，USING 与 WITH CHECK 同时限定当前组织；缺组织上下文全拒绝。
 每张实体表有 `(org_id,id)` 唯一约束；epoch 用复合主键。外键禁止仅引用裸 UUID。
-下列名称是拟定表名，不表示 ORM 或迁移已经存在。
+表定义见 [memory.py](../../server/app/models/memory.py)，约束与授权见
+[记忆迁移](../../server/migrations/versions/0037_memory.py)。
 
 | 新表 / 公共 view | 字段与约束 |
 | --- | --- |
@@ -147,7 +147,7 @@ disabled 重新编辑只能成为 candidate，不能直接 enable；逻辑删除
 令牌 CHECK、作业 kind 分派及使用记录关联 → 最后给运行角色授权。首片只给 org scope，
 不回填历史卡片、不改变证据确认；用空 memory manifest 的显式新版本区分旧缓存。
 回滚保留历史表和已有审计，不提供破坏性 downgrade。实施时同次增加每张表双单位及缺上下文测试。
-本草案本身不包含迁移文件。
+迁移保留所有历史，不提供破坏性 downgrade。
 
 ### pgvector 与后续索引
 
@@ -205,7 +205,7 @@ identity；禁止仅凭 RLS 或应用返回后过滤代替显式双过滤。查�
 在 `card_generation.snapshot` 完成目标要求和材料权限检查后，根据本批要求及受限标签生成
 检索请求；首片固定 scopes=[org]。将 `MemoryPromptContext` 作为独立 `memory_rules` /
 `memory_preferences` 输入交给 `LLMProvider.draft`、`providers/drafting.request_body`；确切新增
-可选关键字参数由草案 `MemoryAwareLLMProvider.draft(..., memory=...)` 定义，返回类型复用
+可选关键字参数由 `MemoryAwareLLMProvider.draft(..., memory=...)` 定义，返回类型复用
 既有 `DraftingOutput`，空上下文不改变其他消费者，
 业务读写和选择放入预留的 `server/app/memory/`，厂商/Embedding adapter 只能在 `providers/`。
 memory 不能塞进 materials 的 ref 字典，也不能成为模型可引用的 EvidenceInput；
@@ -243,8 +243,7 @@ partial result 也准确对应。job/status/card/history/draft 只暴露通过 A
 新 memory epoch 不隐式重新起草已 confirmed/pending 的保护卡片。`drafts.assemble` 仍只复制确认内容，
 `show_draft/current_draft_inputs` 汇总记忆提醒及 lineage，但不让提醒把有效人工确认变成缺口。
 未审模型稿的 gate 必须同时扩展 Python 确认路径和数据库确认 predicate，不能只改缓存。
-当前 `generate` 检查 prompt/redaction 版本但没有完整 schema/记忆版本 gate；这属于接入必须
-补齐的差异，不宣称已有 C02 自动覆盖新依赖。
+`generate` 同时检查 prompt、redaction、schema 与记忆策略版本；旧快照不得由新 parser 静默消费。
 
 ## 自动候选、样本与作业
 
@@ -318,7 +317,7 @@ job:read + memory:read + card:read + task:read，取消再要求 job:cancel 和�
 必须放入 providers 适配层并输出 `ProviderUsage`，不能绕开作业准入。
 
 `EmbeddingProvider.embed(EmbeddingRequest) → EmbeddingOutput`、`reservation → Decimal`
-已在代码草案定义：输入显式单位/作用域/job/run、模型配置修订与有限文本批次；输出维度、
+已在运行契约定义：输入显式单位/作用域/job/run、模型配置修订与有限文本批次；输出维度、
 模型身份、向量、逐次 ProviderUsage。服务核对结果条数、维度、非零有限值及文本顺序，
 结果不能自带 scope 来改变检索边界。未配置的生产实现只能显式失败，不用随机/零向量。
 
@@ -414,7 +413,7 @@ job_id=null、计数、无写入/计费；普通提交返回 durable job ID，`-
 ## 审计事件
 
 沿用 [entities.py](../../server/app/models/entities.py) 的 `AuditLog` 和 actor context。
-拟定事件为 `memory.create/update/approve/reject/disable/delete`、`memory.retrieve`、
+审计事件为 `memory.create/update/approve/reject/disable/delete`、`memory.retrieve`、
 `memory.feedback.record`、`memory.candidate.publish`、`memory.eval.review`、
 `memory.call.attach`，以及后续 `memory.index.publish`。记录 org、actor/user/token、
 object/source/job/run/call、前后修订/状态、策略版本、hash、计数和理由 hash；正文和
@@ -424,7 +423,7 @@ object/source/job/run/call、前后修订/状态、策略版本、hash、计数�
 
 ## 批准后测试计划
 
-以下为后续实施验收，不是本草案已经执行的功能测试。按实际 API → PostgreSQL RLS →
+以下为实施验收要求；不把未执行的 PostgreSQL 测试当作通过。按实际 API → PostgreSQL RLS →
 worker → Provider fake → CLI 链路验证，不在实现后补复述代码的单元测试。
 
 1. 双单位 A/B：对数据模型表中的每张表及 `memory_embeddings` 验证 SELECT/INSERT/UPDATE/
@@ -459,31 +458,30 @@ worker → Provider fake → CLI 链路验证，不在实现后补复述代码�
    隔离/人工门禁违反数必须为 0，召回目标待基线实测。真实 Embedding/LLM 服务只在
    `evals/` 显式启用；公共合成样本可入版本库，单位反馈不自动外传，真实材料另需同意。
 
-## 待决定
+## 已定决定
 
-下表均是建议，未视为批准；人工确认草案时选择。未解决的后续能力保持关闭。
+下表采用已批准的推荐默认值。后续能力仍须满足各项启用条件。
 
-| 决定 | 选项 | 推荐默认与理由 |
-| --- | --- | --- |
-| 第一条完整链路 | 先 org；或先补 F06/私人结果后同时开 tenant 三层 | 先 org keyword + 确定性 candidate + 起草追溯；可复用现有权限与真实 task-bound 作业，不假设未实现的任务成员 |
-| 全局来源 | 平台独立采编公开权威资料；或外部经授权公共知识包；禁止从单位记忆脱敏汇总/提升 | 独立公开来源，逐条记录出处、授权/适用范围及版本，单位反馈无流入路径；首片关闭 global |
-| 全局审核人 | 平台维护者自审；或采编与审核两个平台人类身份 | 双人发布，领域审核人确认适用性，平台身份只负责发布边界；不得读取单位业务数据来审核 |
-| 全局存储例外 | 另立 ADR 增加 `global_memories/global_memory_revisions` 全局表及最小权限；或部署只读、签名公共包 | 建议另立 ADR 并明确修改 agent.md 例外清单后才建表。参照 ADR 0001 的独立平台会话/审计，不复用跨单位业务读权限；单位检索可用有 NOT NULL org_id 的只读发布投影，来源仅平台发布，向量始终按单位+scope 过滤 |
-| 人工新增是否直接 active | 管理人新增即 active；或所有新增先 candidate 再明确 approve | 后者，统一审阅与确切版本确认，避免把 token/自动提议伪装成人工创建 |
-| 自动候选策略 | 规则化复制净化反馈；或 LLM 泛化总结 | 首片确定性复制并标待泛化，零新增模型成本、来源清楚；后续 LLM 需单独预算/评测，不自动生效 |
-| 记忆变化对已确认响应 | 撤销全部人工确认；或保留确认并提醒、未审模型稿需刷新 | 后者，记忆不是证据；确切人类决定保留，实际材料/引用原有失效继续阻止组表与导出 |
-| 用户偏好进入共享卡片 | 明示分享后可用；或只用于私有输出 | 默认仅私人输出，先解决 job/card/manifest ACL；不能通过“本人发起 agent”将私人层间接公开 |
-| 默认到期和删除 | 无默认到期/逻辑删除；或强制 TTL/物理清除 | 首片允许显式 expires_at、默认无 TTL，逻辑删除留审计；敏感内容从入口拒绝，保留期限与依法删除另立范围 |
-| Embedding 模型、维度、费用与驻留 | 平台付费默认；单位自有 key；本地模型 | 首片不配置，先保留接口与空 pgvector 列；P03 评测中文召回后选型，价目与准入上界先确认再启用 |
-| 自动评测样本分享 | 仅单位内；或人工选取净化样本进公共集 | 默认单位内且 unreviewed，人工接受只允许本单位评测，不隐含对外分享同意 |
+| 决定 | 已批准选择与边界 |
+| --- | --- |
+| 第一条完整链路 | org keyword、确定性 candidate 与起草追溯；user/project 等待私人输出与任务成员机制 |
+| 全局来源 | 独立公开来源，逐条记录出处、授权/适用范围与版本；禁止单位反馈汇总、提升或流入 |
+| 全局审核人 | 采编与领域审核两个平台人类身份；平台身份不得读取单位业务内容 |
+| 全局存储例外 | 后续另立 ADR 并修改全局表例外后启用；首片关闭 global，不建立全局存储 |
+| 人工新增 | 所有新增先 candidate，再由 org admin 会话明确 approve 确切修订 |
+| 自动候选 | 确定性复制净化反馈并标明待泛化；不增加模型调用，不自动生效 |
+| 已确认响应 | 保留确切人工决定与 lineage 并提醒；未审模型稿需编辑或重新生成，证据原有 gate 继续生效 |
+| 用户偏好与共享卡片 | 后续默认只用于私人输出，先解决 job/card/manifest ACL |
+| 默认到期与删除 | 可显式 expires_at、默认无 TTL；逻辑删除保留历史与审计 |
+| Embedding | 首片不配置、不调用、不创建向量索引；接口保留，P03 完成模型/维度/价格/驻留选择后另行启用 |
+| 自动评测样本 | 仅单位内、默认 unreviewed；接受只允许单位内评测，不隐含对外分享 |
 
-本草案的静态检查命令沿用[开发指南](../guides/development.md#run-the-checks)：
+首片不建立可选的 `memory_embeddings` 空表，因此迁移不安装或假定 pgvector；
+未来创建 vector 列前必须按[索引预检要求](#pgvector-与后续索引)确认扩展已经安装。
 
-```sh
-uv run ruff check docs/plan/memory/
-uv run ruff format --check docs/plan/memory/
-uv run pyright docs/plan/memory/memory_contracts.py
-uv run python -c "import runpy; runpy.run_path('docs/plan/memory/memory_contracts.py')"
-```
-
-这些检查只验证契约可导入、类型及格式；不启动 PostgreSQL，不代表数据库/功能验收。
+实现检查沿用[开发指南](../guides/development.md#run-the-checks)。运行契约由
+[CLI 契约测试](../../server/tests/test_memory_cli.py)覆盖，数据库与调用边界分别见
+[存储测试](../../server/tests/test_memory_storage.py)、[API 测试](../../server/tests/test_memory_api.py)、
+[反馈链路测试](../../server/tests/test_memory_feedback.py)、[起草链路测试](../../server/tests/test_memory_drafting.py)
+和[检索评测](../../server/tests/test_memory_evaluation.py)。
+验证工件只写 `data/work/memory-validation/`，不写入文档目录。

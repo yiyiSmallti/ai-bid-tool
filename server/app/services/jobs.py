@@ -53,6 +53,10 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.score_generation import job_access as rubric_access
 
         await rubric_access(session, identity, job)
+    if job.kind == "memory_candidate":
+        from app.memory.candidates import job_access
+
+        await job_access(session, identity, job)
     await sandbox_guard_job(session, identity, job)
     payload = Result(
         ok=True,
@@ -95,6 +99,13 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         payload["cost"] = job.result.get("cost", payload["cost"])
         if job.status in {"failed", "cancelled"} or job.result.get("completion") == "partial":
             payload["ok"] = False
+    if job.kind == "memory_candidate":
+        payload["data"]["result"] = _public_result(job)
+        payload["ok"] = (
+            job.status not in {"failed", "cancelled"} and job.result.get("completion") != "partial"
+        )
+        payload["cost"] = job.result.get("cost", payload["cost"])
+        payload["warnings"] = job.result.get("warnings", [])
     if job.kind == "export_render":
         payload["data"]["result"] = _public_result(job)
         return payload
@@ -152,6 +163,10 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.score_generation import job_access as rubric_access
 
         await rubric_access(session, identity, job, cancel=True)
+    if job.kind == "memory_candidate":
+        from app.memory.candidates import job_access
+
+        await job_access(session, identity, job, cancel=True)
     await sandbox_guard_job(session, identity, job, cancel=True)
     if job.status not in {"cancelled", "queued", "running"}:
         raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)

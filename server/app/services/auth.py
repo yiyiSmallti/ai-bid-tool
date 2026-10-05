@@ -140,7 +140,16 @@ SCOPES.update({"confidential:read", "check:read", "check:run"})
 # Rubric review is a session-only capability, including admin classification.
 SCOPES.update({"score:read", "score:run", "score:rubric:generate"})
 
+SCOPES.update({"memory:read", "memory:write", "memory:retrieve", "memory:candidate:run"})
+
 for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.update({"memory:read", "memory:retrieve"})
+    if _role != "viewer":
+        _scopes.update({"memory:write", "memory:candidate:run"})
+    if _role == "admin":
+        _scopes.update(
+            {"memory:approve", "memory:manage", "memory:eval:read", "memory:eval:review"}
+        )
     _scopes.update({"provider:read", "screenshot:read"})
     if _role != "viewer":
         _scopes.update({"screenshot:write", "screenshot:ingest"})

@@ -6,6 +6,13 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05：单位记忆首片
+
+- 新增记忆 CRUD、history、确切修订人工 approve/reject、disable/delete、关键词检索、检索历史、逐调用使用记录、反馈恢复与单位内评测样本 API/CLI；运行契约迁入 schemas，删除文档草案模块。
+- 迁移 `0037` 增加单位隔离表、复合外键、不可变历史、人工与 worker 数据库 gate。所有新增均 candidate；只有单位 admin 人类会话可审批、管理与审阅样本，未启用作用域显式拒绝。
+- `keyword-v1` 以完整规则/偏好进入 card generation 的独立上下文；scope epoch、到期和策略版本参与缓存与准入/发布检查。每个实际调用保存固定记忆与要求清单，结算关联原有用量，不增加 embedding 调用。
+- 人工驳回或编辑模型派生卡片产生加密净化反馈、单位样本及可恢复候选作业；确认只产样本。`feedback-copy-v1` 不调用模型、不自动批准，唯一来源键阻止重复候选。机制见 [Organization memory](notes/memory.md)。
+
 ## 2026-10-05：语义校验范围与完整评分表请求
 
 - combined check 仅将有已确认投标正文的 response 行送入 CheckProvider；gap、comply_only 保留确定性规则覆盖，语义状态为 `not_requested`，不因缺少投标文本单独成为 partial。预检条目数、费用上界和作业调用规划使用同一选择集，没有响应正文时不调用模型。迁移 `0036` 调整分区对应的语义发布约束；机制见 [Confirmed-draft checks](notes/check.md)。

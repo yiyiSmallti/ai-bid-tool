@@ -507,6 +507,11 @@ async def card_view(
             image_warnings.update(warnings)
             invalid_image |= invalid
     generation_stale = await generation_materials_stale(session, actor, revision)
+    memory_warning, memory_lineage = await generation_memory_state(
+        session, actor, revision, requirement.id
+    )
+    if memory_warning:
+        image_warnings.add(memory_warning)
     return card_view_data(
         card,
         revision,
@@ -516,6 +521,7 @@ async def card_view(
         await citation_valid(session, requirement),
         invalid_image,
         image_warnings,
+        memory_lineage,
     )
 
 
@@ -548,6 +554,7 @@ def card_view_data(
     valid_citation: bool,
     invalid_image: bool = False,
     image_warnings: set[str] | None = None,
+    memory_lineage: dict | None = None,
 ) -> dict:
     """One projection/eligibility rule for both single-card and batched reads."""
     if not valid_citation:
@@ -595,8 +602,55 @@ def card_view_data(
             reason=revision.reason,
             reviewed_warning_codes=revision.reviewed_warning_codes,
             eligibility=eligibility,
+            memory_lineage=memory_lineage or {},
         )
     ).model_dump(mode="json")
+
+
+def memory_lineage_for(manifest: dict, requirement_id: UUID) -> dict:
+    memory = manifest.get("memory")
+    if not memory:
+        return {}
+    return {
+        "retrieval_id": manifest.get("memory_retrieval_id"),
+        "call_id": manifest.get("requirement_calls", {}).get(str(requirement_id)),
+        "manifest_sha256": memory["manifest_sha256"],
+        "memories": memory["memories"],
+    }
+
+
+def memory_warning_for(revision, manifest, current_epoch):
+    from app.memory.retrieval import manifest_epoch_changed
+
+    if "memory" not in manifest:
+        return None  # Existing pre-memory drafts retain their historical review semantics.
+    if manifest_epoch_changed(manifest["memory"], revision.org_id, current_epoch):
+        return (
+            "memory_changed_after_review" if revision.state == "confirmed" else "memory_input_stale"
+        )
+    return None
+
+
+async def generation_memory_state(session, actor, revision, requirement_id):
+    if revision.model_job_id is None:
+        return None, {}
+    from app.memory.retrieval import epoch
+
+    run = await session.scalar(
+        select(CardGenerationRun).where(
+            CardGenerationRun.org_id == actor.org_id,
+            CardGenerationRun.generation_job_id == revision.model_job_id,
+        )
+    )
+    if run is None:
+        fail("missing_generation_run", "Model response has no fixed input record", 500, 4)
+    if "memory" not in run.input_manifest:
+        return None, {}
+    actor.require("memory:read")
+    return (
+        memory_warning_for(revision, run.input_manifest, await epoch(session, actor.org_id)),
+        memory_lineage_for(run.input_manifest, requirement_id),
+    )
 
 
 async def generation_materials_stale(
@@ -655,6 +709,7 @@ class CardReadBatch:
     _evidence: dict[UUID, dict] = field(default_factory=dict)
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
     _views: dict[UUID, dict] = field(default_factory=dict)
+    memory_epoch: int = 0
 
     @classmethod
     async def load(
@@ -712,11 +767,8 @@ class CardReadBatch:
         ):
             links.setdefault(revision_id, []).append(row)
             evidence[row.id] = row
-        current_revision_ids = {row.current_revision_id for row in loaded_cards.values()}
         model_jobs = {
-            row.model_job_id
-            for row in revisions.values()
-            if row.id in current_revision_ids and row.model_job_id is not None
+            row.model_job_id for row in revisions.values() if row.model_job_id is not None
         }
         # Never load encrypted model text merely to check material dependencies.
         generation_manifests = dict(
@@ -770,7 +822,14 @@ class CardReadBatch:
                 images[row.id] = (view, *await image_state(session, actor, row, storage))
             except ServiceError as error:
                 images[row.id] = error
+        memory_epoch = 0
+        if any("memory" in value for value in generation_manifests.values()):
+            from app.memory.retrieval import epoch
+
+            actor.require("memory:read")
+            memory_epoch = await epoch(session, actor.org_id)
         return cls(
+            memory_epoch=memory_epoch,
             actor=actor,
             requirements=required,
             chunks=chunks,
@@ -870,6 +929,12 @@ class CardReadBatch:
             rows = self.links.get(revision.id, [])
             evidence = [self.evidence_view(row) for row in rows]
             images = [self.image(row) for row in rows if row.kind == "image_region"]
+            manifest = (
+                self.generation_manifests.get(revision.model_job_id, {})
+                if revision.model_job_id
+                else {}
+            )
+            warning = memory_warning_for(revision, manifest, self.memory_epoch)
             self._views[revision.id] = card_view_data(
                 card,
                 revision,
@@ -878,7 +943,9 @@ class CardReadBatch:
                 self.generation_materials_stale(revision),
                 self.citation_valid(requirement),
                 any(invalid for _, _, invalid in images),
-                {code for _, warnings, _ in images for code in warnings},
+                {code for _, warnings, _ in images for code in warnings}
+                | ({warning} if warning else set()),
+                memory_lineage_for(manifest, requirement.id),
             )
         return self._views[revision.id]
 
@@ -1069,6 +1136,9 @@ async def update_card(
             "model_job_id": None,
         },
     )
+    from app.memory.feedback import record_feedback
+
+    await record_feedback(session, actor, card, previous, revision, "card_edited")
     return await card_view(session, actor, card, revision, requirement)
 
 
@@ -1167,6 +1237,8 @@ async def card_action(
     values = {"state": after, "reason": body.reason}
     correlation_id = uuid4()
     if body.action == "confirm":
+        if "memory_input_stale" in view["warning_codes"]:
+            fail("memory_input_stale", "Memory changed; edit or regenerate before review", 409, 4)
         if view["eligibility"] in {"stale_material", "invalid_citation", "needs_reconfirmation"}:
             fail(view["eligibility"], "Card inputs are no longer valid", 409)
         if not all(getattr(previous, name) for name in CONTENT_FIELDS):
@@ -1238,6 +1310,18 @@ async def card_action(
         values=values,
         correlation_id=correlation_id,
     )
+    if body.action in {"reject", "confirm"}:
+        from app.memory.feedback import record_feedback
+
+        await record_feedback(
+            session,
+            actor,
+            card,
+            previous,
+            revision,
+            "card_rejected" if body.action == "reject" else "card_confirmed",
+            body.reason,
+        )
     if body.action == "confirm" and previous.disposition is None:
         audit(
             session,
