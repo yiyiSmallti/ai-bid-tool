@@ -14,9 +14,10 @@ Failure modes enumerated before implementation:
   quotes are checked against that extract, and the outcome names it as the source.
 - A model quote that is not verbatim in the fetched page is dropped before storage.
 - Kept products and statements are selected on the task and registered as simulated; a
-  later human revision keeps the mark.
+  later human revision keeps the mark, including after rebinding to an ordinary product.
 - A confirmed card citing a simulated statement blocks a final section and needs an
-  acknowledgment in a review copy.
+  acknowledgment in a review copy. Either the feature or its product suffices; unrelated
+  simulated resources must not block ordinary declarations.
 - The generic job reader does not expose the submission.
 """
 
@@ -230,8 +231,12 @@ async def public_dns(host):
 
 
 @pytest.mark.parametrize("provider", ["searxng", "perplexity"])
+@pytest.mark.parametrize(
+    "material",
+    ["feature", "rebound_feature", "linked_feature", "product", "normal_feature", "normal_product"],
+)
 async def test_simulation_records_only_verbatim_marked_parameters(
-    tenants, tmp_path, admin_engine, monkeypatch, provider
+    tenants, tmp_path, admin_engine, monkeypatch, provider, material
 ):
     FETCHED.clear()
     PERPLEXITY_REQUESTS.clear()
@@ -412,8 +417,76 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             marked = (await session.scalars(select(SimulatedResource))).all()
             assert {str(row.product_id) for row in marked if row.product_id} == {product_id}
+            assert {str(row.feature_id) for row in marked if row.feature_id} == set(
+                printer["feature_ids"]
+            )
 
-        # A confirmed card citing the simulated statement cannot go into a final section.
+        target_product = product_id
+        if material in {"rebound_feature", "normal_feature", "normal_product"}:
+            ordinary = await api.post(
+                "/resources/products",
+                headers=header,
+                json={"data": {"name": "普通打印终端", "vendor": "SynVendor", "model": "SP-100"}},
+            )
+            assert ordinary.status_code == 200, ordinary.text
+            target_product = ordinary.json()["data"]["product_id"]
+            assert target_product != product_id
+
+        selected_material = features[0]
+        evidence = {
+            "kind": "feature",
+            "selection_id": selected_material["id"],
+            "field_path": "description",
+            "quote": "内存：8GB DDR4",
+        }
+        if material in {"rebound_feature", "linked_feature", "normal_feature"}:
+            feature_data = {**features[0]["data"], "product_id": target_product}
+            if material == "rebound_feature":
+                feature_id = printer["feature_ids"][0]
+                changed = await api.post(
+                    f"/resources/features/{feature_id}/revisions",
+                    headers=header,
+                    json={"expected_revision": 1, "data": feature_data},
+                )
+            else:
+                changed = await api.post(
+                    "/resources/features", headers=header, json={"data": feature_data}
+                )
+            assert changed.status_code == 200, changed.text
+            revision = changed.json()["data"]
+            if material == "rebound_feature":
+                assert revision["feature_id"] == feature_id and revision["revision"] == 2
+                assert revision["data"]["product_id"] == target_product
+            chosen = await api.post(
+                f"/tasks/{task}/features",
+                headers=header,
+                json={"feature_id": revision["feature_id"], "revision": revision["revision"]},
+            )
+            assert chosen.status_code == 200, chosen.text
+            selected_material = chosen.json()["data"]
+            assert selected_material["feature_revision_id"] == revision["id"]
+            evidence["selection_id"] = selected_material["id"]
+            if material == "rebound_feature":
+                marks = (
+                    await api.get(f"/tasks/{task}/simulated-resources", headers=header)
+                ).json()["data"]
+                assert selected_material["id"] in marks["selection_ids"]
+        elif material in {"product", "normal_product"}:
+            chosen = await api.post(
+                f"/tasks/{task}/products",
+                headers=header,
+                json={"product_id": target_product},
+            )
+            assert chosen.status_code == 200, chosen.text
+            selected_material = chosen.json()["data"]
+            evidence = {
+                "kind": "product",
+                "selection_id": selected_material["id"],
+                "field_path": "model",
+                "quote": "SP-100",
+            }
+
+        # Confirmation cannot clear either root's simulation mark.
         requirements = (
             await api.get(f"/tasks/{task}/requirements", headers=header, params={"job": extraction})
         ).json()["items"]
@@ -426,17 +499,10 @@ async def test_simulation_records_only_verbatim_marked_parameters(
                 "requirement_id": memory["id"],
                 "content": {
                     "response_kind": "evidence",
-                    "response_text": "模拟拟投产品内存满足要求。",
+                    "response_text": "引用所选产品声明。",
                     "deviation": "none",
                     "deviation_note": "模拟参数与要求对应。",
-                    "evidence": [
-                        {
-                            "kind": "feature",
-                            "selection_id": features[0]["id"],
-                            "field_path": "description",
-                            "quote": "内存：8GB DDR4",
-                        }
-                    ],
+                    "evidence": [evidence],
                 },
             },
         )
@@ -455,27 +521,69 @@ async def test_simulation_records_only_verbatim_marked_parameters(
             assert response.status_code == 200, response.text
             card = response.json()["data"]
         assert card["state"] == "confirmed"
+        # Complete the unrelated requirements so only the simulation gate can block.
+        disposed = await api.post(
+            f"/tasks/{task}/cards/dispositions",
+            headers=header,
+            json={
+                "extraction_job_id": extraction,
+                "items": [
+                    {
+                        "requirement_id": row["id"],
+                        "expected_revision": None,
+                        "disposition": "comply_only",
+                        "reason": "合成场景中其余要求按须遵守条款处置。",
+                    }
+                    for row in requirements
+                    if row["id"] != memory["id"]
+                ],
+            },
+        )
+        assert disposed.status_code == 200, disposed.text
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
         selected, binding = await setup_template(api, header, task)
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         draft_id = await draft(api, app, header, task, extraction)
+        simulated = material not in {"normal_feature", "normal_product"}
         for mode, severity in (("final_section", "block"), ("review_copy", "acknowledge")):
+            body = {
+                "draft_id": draft_id,
+                "task_template_id": selected["id"],
+                "binding_id": binding["id"],
+                "mode": mode,
+            }
             preview = await api.post(
                 f"/tasks/{task}/export-runs",
                 headers=header,
+                json={**body, "dry_run": True},
+            )
+            blocked = simulated and mode == "final_section"
+            assert preview.status_code == (400 if blocked else 200), preview.text
+            data = preview.json()["data"]
+            assert data["gap_count"] == 0 and data["ready"] == (not blocked)
+            issues = [
+                item for item in data["issues"] if item["code"] == "export_simulated_material"
+            ]
+            assert [item["severity"] for item in issues] == ([severity] if simulated else []), (
+                preview.text
+            )
+            if simulated:
+                assert issues[0]["requirement_ids"] == [memory["id"]]
+                assert issues[0]["evidence_ids"] == [card["evidence"][0]["id"]]
+            submitted = await api.post(
+                f"/tasks/{task}/export-runs",
+                headers=header,
                 json={
-                    "draft_id": draft_id,
-                    "task_template_id": selected["id"],
-                    "binding_id": binding["id"],
-                    "mode": mode,
-                    "dry_run": True,
+                    **body,
+                    "expected_input_hash": data["input_hash"],
+                    "acknowledged_issue_ids": [
+                        item["issue_id"]
+                        for item in data["issues"]
+                        if item["severity"] == "acknowledge"
+                    ],
                 },
             )
-            issues = [
-                item
-                for item in preview.json()["data"]["issues"]
-                if item["code"] == "export_simulated_material"
-            ]
-            assert [item["severity"] for item in issues] == [severity], preview.text
-            assert issues[0]["requirement_ids"] == [memory["id"]]
+            assert submitted.status_code == (400 if blocked else 200), submitted.text
+            if blocked:
+                assert submitted.json()["data"]["error"]["code"] == "export_simulated_material"
         assert UUID(job)

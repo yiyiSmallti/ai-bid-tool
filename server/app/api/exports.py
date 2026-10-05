@@ -125,7 +125,8 @@ def create_router(context, db, storage, queue, settings, crypto):
     @router.get("/exports/{export_id}/preview", name="export_preview_show", response_model=Result)
     async def show_preview(export_id: UUID, ctx=Depends(context, scope="function")):
         return result(
-            "export preview", await page_previews.show_export_preview(ctx[0], ctx[1], export_id)
+            "export preview",
+            await page_previews.show_export_preview(ctx[0], ctx[1], export_id, storage),
         )
 
     @router.get("/exports/{export_id}/preview/pages/{page}", name="export_preview_page")
