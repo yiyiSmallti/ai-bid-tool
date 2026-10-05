@@ -68,9 +68,15 @@ async def test_g1_views_return_stable_recovery_shapes_and_worker_state(
     assert queued.status_code == 200, queued.text
     parse_job = queued.json()["data"]["job_id"]
     extraction_preview = await api.post(
-        f"/documents/{parsed_document}/extract", headers=headers[0], json={"dry_run": True}
+        f"/v4/documents/{parsed_document}/extract", headers=headers[0], json={"dry_run": True}
     )
     assert extraction_preview.status_code == 200
+    preview = extraction_preview.json()["data"]
+    assert preview["parsed"] is False and preview["input_blocker"] == "not_parsed"
+    assert preview["budget_preflight"]["planned_calls"] is None
+    assert preview["budget_preflight"]["next_call"] is None
+    assert preview["budget_preflight"]["admission_blocker"] is None
+    assert preview["budget_preflight"]["estimate"]["basis"] == "unknown"
 
     detail = (await api.get(f"/tasks/{task_id}", headers=headers[0])).json()["data"]
     assert set(detail) == {

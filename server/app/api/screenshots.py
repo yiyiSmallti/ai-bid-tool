@@ -383,7 +383,13 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         task_id: UUID, body: ProductSimulationInput, ctx=Depends(context, scope="function")
     ):
         data, job = await product_simulation.submit(
-            ctx[0], ctx[1], task_id, body, await search_provider(), settings
+            ctx[0],
+            ctx[1],
+            task_id,
+            body,
+            await search_provider(),
+            settings,
+            await resolve(ctx[0]) if resolve else llm,
         )
         await dispatch(ctx[0], ctx[1], job)
         if job is not None:

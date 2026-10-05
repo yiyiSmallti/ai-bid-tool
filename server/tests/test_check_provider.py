@@ -39,6 +39,7 @@ from app.providers.checking import (
     supports_check,
 )
 from app.providers.llm import OpenAICompatibleExtractor
+from app.providers.quotes import serialized_request, zero_quote
 from app.schemas.check_contracts import OutboundContext, OutboundText
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
@@ -57,7 +58,8 @@ class Accounting:
         self.events.append("plan")
         self.planned.append(first_pass_calls)
 
-    async def admit(self, reserved_charge: Decimal, platform_billed: bool):
+    async def admit(self, quote):
+        reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
         self.events.append("admit")
         self.reservations.append(reserved_charge)
         self.platform_billed.append(platform_billed)
@@ -124,7 +126,15 @@ class FakeCheckProvider:
             usage = self.synthetic_usage()
             return self.wire, usage
 
-        wire, usage = await accounted_call(self.reservation(value), False, operation)
+        quote = zero_quote(
+            "llm",
+            "local_free",
+            self.name,
+            self.model,
+            self.version,
+            serialized_request(self.request_body(value)),
+        )
+        wire, usage = await accounted_call(quote, operation)
         return CheckProviderResult(wire=wire, usages=[usage])
 
     def synthetic_usage(self):

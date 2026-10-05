@@ -29,7 +29,7 @@ from app.models.score import (
 from app.providers import llm as llm_providers
 from app.providers.base import ProviderFailure
 from app.providers.configured import model_identity
-from app.providers.llm import with_reasoning
+from app.providers.llm import HTTPExtractor, with_reasoning
 from app.providers.rubric import (
     ADAPTER_VERSION,
     PROMPT_VERSION,
@@ -57,6 +57,9 @@ from app.services.score_inputs import RubricSnapshot
 from app.services.versioned import audit
 
 PARTIAL_STOPS = {
+    "task_budget_exceeded",
+    "task_budget_unpriced",
+    "task_budget_currency_review_required",
     "insufficient_balance",
     "spend_cap_reached",
     "job_charge_limit_exceeded",
@@ -430,6 +433,34 @@ async def _submit_rubric(
                 **estimate,
             }
         ).model_dump(mode="json")
+        from app.services import budget_preflight
+
+        quotes = []
+        if (
+            isinstance(llm, HTTPExtractor)
+            and estimate.get("estimated_charge") is not None
+            and estimate.get("cost_basis_reason") != "test_provider"
+        ):
+            adapter = rubric_provider(llm)
+            if isinstance(adapter, HTTPRubricProvider):
+                quotes = [
+                    llm.quote(adapter.validate_request(provider_request(fixed.secret["outbound"])))
+                ]
+        data = await budget_preflight.attach(
+            session,
+            data,
+            command="score rubric generate",
+            task_id=task_id,
+            input_hash=fixed.input_hash,
+            currency=settings.billing_currency,
+            settings=settings,
+            quotes=quotes,
+            planned_calls=len(quotes)
+            if quotes
+            or estimate.get("cost_basis_reason") in {"no_assessable_items", "test_provider"}
+            else None,
+            max_charge=body.max_charge,
+        )
         return data, None
     if estimate.get("admission_blocker") == "redaction_required":
         cards.fail("redaction_required", "Rubric generation requires redaction", 409, 4)

@@ -115,8 +115,12 @@ async def draft(api, app, header, task, extraction):
     job = submitted.json()["data"]["job_id"]
     await app.state.processor(header["X-Org-Id"], job)
     result = await api.get(f"/jobs/{job}", headers=header)
-    assert result.json()["data"]["status"] == "succeeded", result.text
-    return result.json()["data"]["result"]["draft_id"]
+    terminal = result.json()
+    assert terminal["data"]["status"] == "succeeded", result.text
+    assert terminal["data"]["result"]["cost"] == terminal["cost"]
+    assert terminal["cost"]["llm_tokens"] == 0
+    assert terminal["cost"]["usd"] == 0.0
+    return terminal["data"]["result"]["draft_id"]
 
 
 async def prepared(api, app, header, task, body):

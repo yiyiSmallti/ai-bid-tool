@@ -16,12 +16,20 @@ import pytest
 from app.core.config import Settings
 from app.models.entities import Requirement, UsageRecord
 from app.providers.base import ProviderFailure
+from app.providers.calls import standalone_evaluation
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
 from conftest import FakeQueue, credential_app
 from pydantic import ValidationError
 from sqlalchemy import select
 from test_api import create_document, run_job
 from test_job_boundaries import session_for
+
+
+@pytest.fixture
+def explicit_offline_evaluation_calls():
+    with standalone_evaluation():
+        yield
+
 
 SYNTHETIC_KEY = "synthetic-test-key-not-real"
 GOOD_ITEMS = [
@@ -389,7 +397,9 @@ def test_incomplete_provider_settings_refuse_to_start(overrides, tmp_path):
         Settings(data_dir=tmp_path, **overrides)
 
 
-async def test_endless_keep_alive_hits_the_total_deadline(tmp_path):
+async def test_endless_keep_alive_hits_the_total_deadline(
+    tmp_path, explicit_offline_evaluation_calls
+):
     async def blank_lines():
         # What a busy vendor sends instead of an answer: keep-alive bytes forever.
         while True:
@@ -412,7 +422,9 @@ async def test_endless_keep_alive_hits_the_total_deadline(tmp_path):
     assert failure.value.retryable and time.monotonic() - started < 3
 
 
-async def test_batches_run_concurrently_in_order_and_stop_after_a_failure(tmp_path):
+async def test_batches_run_concurrently_in_order_and_stop_after_a_failure(
+    tmp_path, explicit_offline_evaluation_calls
+):
     in_flight, peak, seen = 0, 0, []
 
     async def handler(request):
@@ -466,7 +478,9 @@ async def test_batches_run_concurrently_in_order_and_stop_after_a_failure(tmp_pa
     assert len(failure.value.usage) == len(seen) - 1
 
 
-async def test_request_options_reach_the_vendor_without_overriding_core_fields(tmp_path):
+async def test_request_options_reach_the_vendor_without_overriding_core_fields(
+    tmp_path, explicit_offline_evaluation_calls
+):
     vendor = Vendor(anthropic_reply([]))
     settings = settings_for(
         tmp_path,

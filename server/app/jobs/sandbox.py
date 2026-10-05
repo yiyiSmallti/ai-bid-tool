@@ -105,6 +105,7 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
     executing = None
     guardian = None
     run_claimed = False
+    execution = None
     cleanup_state = "complete"  # No external instance has been requested yet.
     error_code, exit_code = "sandbox_failed", 4
     cancelled = False
@@ -434,6 +435,10 @@ async def process_if_sandbox(processor, org_id: UUID, job_id: UUID) -> bool:
                 reason_code=error_code,
                 denied_count=len(broker.denials),
             )
+    # The failure state is committed after activate() exits; attach its budget
+    # receipt now. finalize_result() fences cancelled or superseded attempts.
+    if execution is not None:
+        await execution.finalize_result()
     if cancelled:
         raise asyncio.CancelledError
     return True

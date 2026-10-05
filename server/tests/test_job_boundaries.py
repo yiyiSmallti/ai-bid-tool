@@ -15,8 +15,8 @@ from test_api import create_document, run_job
 
 
 class InvalidCitation(FakeLLM):
-    async def extract(self, chunks, schema):
-        result = await super().extract(chunks, schema)
+    async def _extract(self, chunks, schema):
+        result = await super()._extract(chunks, schema)
         for item in result.extraction.items:
             item.source.quote = "Fabricated citation"
         return result
@@ -63,10 +63,10 @@ async def test_cancellation_during_provider_call_cannot_commit_results(
     entered, release = asyncio.Event(), asyncio.Event()
 
     class SlowProvider(FakeLLM):
-        async def extract(self, chunks, schema):
+        async def _extract(self, chunks, schema):
             entered.set()
             await release.wait()
-            return await super().extract(chunks, schema)
+            return await super()._extract(chunks, schema)
 
     app = create_app(Settings(data_dir=tmp_path), llm=SlowProvider(), queue=FakeQueue())
     async with app.router.lifespan_context(app):
@@ -106,7 +106,7 @@ async def test_worker_context_cannot_process_another_tenant_job(
 
 async def test_retryable_failures_are_bounded(tenants, tmp_path, pdf_bytes):
     class FailingProvider(FakeLLM):
-        async def extract(self, chunks, schema):
+        async def _extract(self, chunks, schema):
             raise ProviderFailure("Synthetic timeout", retryable=True)
 
     app = create_app(Settings(data_dir=tmp_path), llm=FailingProvider(), queue=FakeQueue())
@@ -131,10 +131,10 @@ async def test_cancel_retry_invalidates_old_attempt_results(tenants, tmp_path, p
     entered, release = asyncio.Event(), asyncio.Event()
 
     class SlowOnce(FakeLLM):
-        async def extract(self, chunks, schema):
+        async def _extract(self, chunks, schema):
             entered.set()
             await release.wait()
-            return await super().extract(chunks, schema)
+            return await super()._extract(chunks, schema)
 
     app = create_app(Settings(data_dir=tmp_path), llm=SlowOnce(), queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):

@@ -10,6 +10,14 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 - Unified developer and agent documentation in English using the [glossary](glossary.md), renamed the [design document](design.md), and conservatively corrected stale statuses and superseded decisions against implementation and later decisions. The [roadmap](plan/roadmap.md) remains the home for remaining scope and open decisions.
 
+## 2026-10-05: Task budget enforcement and cost preflight
+
+- Add migration `0040`, task revision history, human admin/bidder budget changes, tenant constraints, safe audit and admin-controlled low-balance policies/notices.
+- Reserve task liability and prepaid funds in the existing admission transaction; enforce Task → Job → OrgBalance locks, live submitter permissions, durable unknown holds and idempotent late settlement.
+- Meter search, local OCR and Browser operations; expose task preflight, Result 4.0 and a legacy projection, and retain actual cost and human intervention through failed or partial job status/wait.
+- Preserve actorless local worker provenance without granting Provider admission, retain validated actual-model receipts beside fixed requested-model quotes, and serialize deterministic draft cost to JSON before persistence.
+- Approve the English [budget contract](plan/budget.md) and [ADR 0007](adr/0007-task-budget-reservations.md). Mechanism: [Task budgets](notes/task-budgets.md). Plans and monthly quotas remain outside this slice.
+
 ## 2026-10-05: Faster database citation verification
 
 - Added migration `0039` with a guarded fast path for unique exact quotes, retaining the original normalization, ambiguity and boundary behavior for other inputs.

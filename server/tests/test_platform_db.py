@@ -1,12 +1,15 @@
 """Aggregate-only cross-org access for the platform console, checked against real PostgreSQL."""
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 from app.core.config import Settings
 from app.core.db import Database
-from app.models.entities import Task, UsageRecord
+from app.models.entities import Document, Job, Task, UsageRecord, VendorCall
+from app.schemas.budget_contracts import BudgetCallQuote
+from app.services.auth import ROLE_SCOPES
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -83,11 +86,76 @@ def seed_usage(admin_engine, tenants):
             session.add(task)
             tasks.append(task)
         session.flush()
+        documents = []
+        for task in tasks:
+            document = Document(
+                id=uuid4(),
+                org_id=task.org_id,
+                task_id=task.id,
+                name="synthetic.pdf",
+                sha256="a" * 64,
+                storage_key=f"org/{task.org_id}/synthetic.pdf",
+                media_type="application/pdf",
+            )
+            session.add(document)
+            documents.append(document)
+        session.flush()
         for index, created, model_id, usd, charge, test_only in rows:
+            org, user, run_id = tenants["orgs"][index], tenants["users"][index], uuid4()
+            quote = BudgetCallQuote(
+                capability="llm",
+                payer="org_platform" if model_id else "org_direct",
+                provider="anthropic",
+                model="claude-opus-5-5",
+                version="test",
+                platform_model_id=model_id,
+                price_revision="synthetic-v1",
+                request_sha256="a" * 64,
+                currency="USD",
+                reserved_charge=Decimal(str(charge or 0)),
+                reserved_task_amount=Decimal(str(charge)) if model_id else None,
+                vendor_usd_upper_bound=Decimal(str(usd)) if usd is not None else None,
+                unknown_reason=None if model_id else "missing_price",
+            )
+            job = Job(
+                id=uuid4(),
+                org_id=org,
+                task_id=tasks[index].id,
+                document_id=documents[index].id,
+                kind="extract",
+                cache_key=uuid4().hex,
+                run_id=run_id,
+                actor_user_id=user,
+                actor_kind="session",
+                actor_scopes=sorted(ROLE_SCOPES["admin"]),
+            )
+            session.add(job)
+            session.flush()
+            call = VendorCall(
+                id=uuid4(),
+                org_id=org,
+                task_id=tasks[index].id,
+                job_id=job.id,
+                run_id=run_id,
+                budget_revision=1,
+                capability=quote.capability,
+                payer=quote.payer,
+                currency=quote.currency,
+                price_revision=quote.price_revision,
+                request_sha256=quote.request_sha256,
+                reserved_charge=quote.reserved_charge,
+                reserved_task_amount=quote.reserved_task_amount,
+                quote=quote.model_dump(mode="json"),
+            )
+            session.add(call)
+            session.flush()
             session.add(
                 UsageRecord(
-                    org_id=tenants["orgs"][index],
+                    org_id=org,
                     task_id=tasks[index].id,
+                    job_id=job.id,
+                    run_id=run_id,
+                    call_id=call.id,
                     provider="anthropic",
                     model="claude-opus-5-5",
                     version="test",
@@ -100,8 +168,15 @@ def seed_usage(admin_engine, tenants):
                     platform_model_id=model_id,
                     test_only=test_only,
                     created_at=created,
+                    capability=quote.capability,
+                    payer=quote.payer,
+                    billing_currency=quote.currency,
+                    price_revision=quote.price_revision,
+                    task_amount=quote.reserved_task_amount,
                 )
             )
+            session.flush()
+            call.state, call.charge = "completed", Decimal(str(charge or 0))
 
 
 async def test_usage_summary_aggregates_without_business_columns(runtime, admin_engine, tenants):

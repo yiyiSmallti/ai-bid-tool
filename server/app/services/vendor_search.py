@@ -96,13 +96,23 @@ async def submit(session, actor, task_id, body, provider):
     input_hash = images.digest(manifest)
     blocker = None if provider else "search_unavailable"
     if body.dry_run:
-        return {
-            "dry_run": True,
-            "input_hash": input_hash,
-            "queries": manifest["queries"],
-            "search_identity": provider.public_identity if provider else None,
-            "admission_blocker": blocker,
-        }, None
+        from app.services import budget_preflight
+
+        return await budget_preflight.attach(
+            session,
+            {
+                "dry_run": True,
+                "input_hash": input_hash,
+                "queries": manifest["queries"],
+                "search_identity": provider.public_identity if provider else None,
+                "admission_blocker": blocker,
+            },
+            command="evidence search",
+            task_id=task_id,
+            input_hash=input_hash,
+            quotes=[provider.quote(query) for query in manifest["queries"]] if provider else [],
+            planned_calls=len(manifest["queries"]) if provider else None,
+        ), None
     if body.expected_input_hash != input_hash:
         images.fail("search_input_changed", "Inputs changed since the preview", 409, 3)
     if blocker:
@@ -202,6 +212,7 @@ async def process(execution, provider):
         manifest = await rebuild(session, actor, job, provider)
         task_id = job.task_id
     hits, unresponsive = [], set()
+    execution.plan(len(manifest["queries"]))
     for query in manifest["queries"]:
         result = await provider.search(query)
         hits.extend(result.hits)

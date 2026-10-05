@@ -12,7 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import Database
 from app.core.errors import ServiceError
-from app.models.entities import AuditLog, BalanceEntry, OrgBalance, UsageRecord, User, VendorCall
+from app.models.entities import (
+    AuditLog,
+    BalanceEntry,
+    OrgBalance,
+    Task,
+    UsageRecord,
+    User,
+    VendorCall,
+)
 from app.services import platform
 from app.services.auth import Identity
 
@@ -194,7 +202,7 @@ async def redeem(db: Database, actor: Identity, raw_code: str, currency: str) ->
 
 
 async def verify_currency(db: Database, currency: str) -> None:
-    """Refuse to start when stored balances use another currency than the configured one."""
+    """Do not relabel existing balances, active budgets or unresolved call holds."""
     async with db.transaction() as session:
         mismatched = await session.scalar(
             text(
@@ -202,7 +210,34 @@ async def verify_currency(db: Database, currency: str) -> None:
             ),
             {"c": currency},
         )
+        org_ids = list(
+            (await session.scalars(text("SELECT id FROM platform_org_summaries()"))).all()
+        )
     if mismatched:
         raise RuntimeError(
             f"{mismatched} org balances use another currency than BID_BILLING_CURRENCY={currency}"
         )
+    # Use the ordinary RLS context for each known org. The platform function keeps
+    # its existing summary-only grants; it gains no access to budgets or calls.
+    for org_id in org_ids:
+        async with db.transaction(org_id) as session:
+            active_mismatch = await session.scalar(
+                select(Task.id)
+                .where(
+                    Task.budget_state == "active",
+                    Task.budget_currency != currency,
+                )
+                .limit(1)
+            )
+            held_mismatch = await session.scalar(
+                select(VendorCall.id)
+                .where(
+                    VendorCall.state.in_(["pending", "unknown"]),
+                    VendorCall.currency != currency,
+                )
+                .limit(1)
+            )
+            if active_mismatch is not None or held_mismatch is not None:
+                raise RuntimeError(
+                    "Task budget or unresolved call currency differs from BID_BILLING_CURRENCY"
+                )

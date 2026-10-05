@@ -175,6 +175,13 @@ def score_run(
             ) from exc
         try:
             terminal = asyncio.run(cli.wait_for_job(job_id, timeout))
+            if terminal["data"].get("status") in {"failed", "cancelled"}:
+                cli.emit(
+                    cli.merge_job_result(body, terminal),
+                    body["command"],
+                    json_output,
+                    cli.partial_completion_exit(terminal),
+                )
             try:
                 output = terminal["data"].get("result") or {}
             except (AttributeError, KeyError, TypeError) as exc:
@@ -185,7 +192,9 @@ def score_run(
                     4,
                 ) from exc
             try:
-                validated = ScoreJobResult.model_validate(output)
+                validated = ScoreJobResult.model_validate(
+                    {key: value for key, value in output.items() if key != "budget"}
+                )
             except (TypeError, ValueError) as exc:
                 raise ServiceError(
                     "invalid_server_response",
@@ -194,6 +203,8 @@ def score_run(
                     4,
                 ) from exc
             body["data"] = validated.model_dump(mode="json")
+            if "budget" in output:
+                body["data"]["budget"] = output["budget"]
             body["warnings"] = terminal.get("warnings", [])
             body["cost"] = terminal.get("cost", body["cost"])
         except ServiceError as exc:
@@ -259,6 +270,13 @@ def rubric_generate(
         job_id = _job_id(body)
         try:
             terminal = asyncio.run(cli.wait_for_job(job_id, timeout))
+            if terminal["data"].get("status") in {"failed", "cancelled"}:
+                cli.emit(
+                    cli.merge_job_result(body, terminal),
+                    body["command"],
+                    json_output,
+                    cli.partial_completion_exit(terminal),
+                )
             try:
                 output = terminal["data"].get("result") or {}
             except (AttributeError, KeyError, TypeError) as exc:
@@ -269,7 +287,9 @@ def rubric_generate(
                     4,
                 ) from exc
             try:
-                validated = RubricGenerateResult.model_validate(output)
+                validated = RubricGenerateResult.model_validate(
+                    {key: value for key, value in output.items() if key != "budget"}
+                )
             except (TypeError, ValueError) as exc:
                 raise ServiceError(
                     "invalid_server_response",
@@ -278,6 +298,8 @@ def rubric_generate(
                     4,
                 ) from exc
             body["data"] = validated.model_dump(mode="json")
+            if "budget" in output:
+                body["data"]["budget"] = output["budget"]
             body["warnings"] = terminal.get("warnings", [])
             body["cost"] = terminal.get("cost", body["cost"])
         except ServiceError as exc:

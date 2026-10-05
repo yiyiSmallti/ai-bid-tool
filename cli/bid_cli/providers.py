@@ -7,7 +7,8 @@ from typing import Annotated
 
 import typer
 from app.core.errors import ServiceError
-from app.schemas.provider_contracts import ProviderConfigInput, ProviderTest
+from app.schemas.budget_contracts import BudgetProviderTest
+from app.schemas.provider_contracts import ProviderConfigInput
 
 app = typer.Typer()
 JsonOption = Annotated[
@@ -79,11 +80,14 @@ def provider_set(
 def provider_test(
     capability: Annotated[str, typer.Option()] = "llm_extract",
     reasoning: Annotated[str | None, typer.Option()] = None,
+    dry_run: Annotated[bool, typer.Option()] = False,
     json_output: JsonOption = False,
 ):
     from bid_cli.main import call, emit
 
-    body = ProviderTest.model_validate({"capability": capability, "reasoning": reasoning})
+    body = BudgetProviderTest.model_validate(
+        {"capability": capability, "reasoning": reasoning, "dry_run": dry_run}
+    )
     result = call("POST", "/providers/test", json=body.model_dump(mode="json"))
     code = result.get("data", {}).get("error", {}).get("exit_code", 4) if not result["ok"] else 0
     emit(result, "provider test", json_output, code)

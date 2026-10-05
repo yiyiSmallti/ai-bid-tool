@@ -218,6 +218,8 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "score:run",
         "score:rubric:generate",
         "score:rubric:review",
+        "task:budget:write",
+        "billing:alert:write",
         "memory:read",
         "memory:write",
         "memory:retrieve",

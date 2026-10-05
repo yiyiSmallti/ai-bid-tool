@@ -8,7 +8,7 @@ import pytest
 from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.core.provider_secrets import ProviderSecrets
-from app.providers.calls import current_accounting
+from app.providers.calls import current_accounting, evaluation_calls
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.platform_credentials import (
     CatalogResolveTarget,
@@ -30,6 +30,13 @@ def config(**overrides):
     )
 
 
+@pytest.fixture
+def explicit_offline_evaluation_calls():
+    token = evaluation_calls.set(True)
+    yield
+    evaluation_calls.reset(token)
+
+
 class Resolver:
     def __init__(self):
         self.calls = 0
@@ -49,7 +56,9 @@ class Resolver:
         )
 
 
-async def test_each_outbound_resolves_new_secret_and_refuses_disabled():
+async def test_each_outbound_resolves_new_secret_and_refuses_disabled(
+    explicit_offline_evaluation_calls,
+):
     seen = []
     resolver = Resolver()
     adapter = OpenAICompatibleExtractor(
@@ -66,10 +75,14 @@ async def test_each_outbound_resolves_new_secret_and_refuses_disabled():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         for _ in range(2):
-            await adapter.post(client, "https://api.openai.com/v1/chat/completions", {}, {})
+            await adapter.post(
+                client, "https://api.openai.com/v1/chat/completions", {}, {"max_tokens": 4}
+            )
         resolver.state = "disabled"
         with pytest.raises(ServiceError, match="disabled"):
-            await adapter.post(client, "https://api.openai.com/v1/chat/completions", {}, {})
+            await adapter.post(
+                client, "https://api.openai.com/v1/chat/completions", {}, {"max_tokens": 4}
+            )
     assert seen == ["Bearer synthetic-key-version-1", "Bearer synthetic-key-version-2"]
     assert adapter.settings.llm_api_key is None
 
@@ -79,7 +92,7 @@ async def test_admission_wait_rechecks_and_releases_proven_unsent_call():
     events = []
 
     class Accounting:
-        async def admit(self, reserved, billed):
+        async def admit(self, quote):
             resolver.state = "disabled"
             events.append("admit")
             return uuid4()
@@ -108,7 +121,7 @@ async def test_admission_wait_rechecks_and_releases_proven_unsent_call():
                     client,
                     "https://api.openai.com/v1/chat/completions",
                     {},
-                    {},
+                    {"max_tokens": 4},
                     reserved_charge=Decimal(0),
                 )
     finally:
@@ -174,7 +187,9 @@ def test_startup_refuses_legacy_environment_names_without_values(monkeypatch, na
     assert "synthetic-secret" not in str(caught.value)
 
 
-async def test_search_explicit_selection_and_per_request_resolution():
+async def test_search_explicit_selection_and_per_request_resolution(
+    explicit_offline_evaluation_calls,
+):
     from app.providers.search import create_search_provider
     from app.schemas.platform_credentials import ServiceResolveTarget
 
@@ -273,7 +288,9 @@ async def test_search_rejects_credential_echo_before_returning_candidates(echo_f
 
 
 @pytest.mark.parametrize("exit_code", [3, 4])
-async def test_org_search_failure_projects_only_fixed_provider_error(exit_code):
+async def test_org_search_failure_projects_only_fixed_provider_error(
+    exit_code, explicit_offline_evaluation_calls
+):
     from app.providers.search import PerplexitySearch, create_search_provider
     from app.schemas.platform_credentials import ServiceResolveTarget
 

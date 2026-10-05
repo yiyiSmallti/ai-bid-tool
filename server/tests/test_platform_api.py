@@ -39,7 +39,11 @@ ROUTES = [
     ("POST", "/platform/orgs/00000000-0000-0000-0000-000000000001/active", {"active": False}),
     ("GET", "/platform/models", None),
     ("POST", "/platform/models", MODEL),
-    ("POST", "/platform/models/opus-standard/test", None),
+    (
+        "POST",
+        "/platform/models/opus-standard/test",
+        {"test_org_id": "00000000-0000-0000-0000-000000000001"},
+    ),
     ("GET", "/platform/usage", None),
     ("GET", "/platform/audit", None),
     (
@@ -315,17 +319,36 @@ async def test_missing_platform_credential_fails_extraction_explicitly(
     assert console.vendor.requests == []
 
 
-async def test_model_test_button_reports_success_and_failure(console):
+async def test_model_test_button_reports_success_and_failure(console, admin_engine):
     await console.post("/platform/models", headers=console.ops, json=MODEL)
     console.vendor.responses.extend(
         [anthropic_reply([]), httpx.Response(401, json={"error": {"type": "authentication_error"}})]
     )
+    organization = (
+        await console.post(
+            "/platform/orgs",
+            headers=console.ops,
+            json={"name": "Internal model probe", "admin_email": OPERATOR},
+        )
+    ).json()["data"]["org_id"]
+    funded = await console.post(
+        f"/platform/orgs/{organization}/balance",
+        headers=console.ops,
+        json={"mode": "add", "amount": 100, "reason": "Synthetic probe allowance"},
+    )
+    assert funded.status_code == 200
+    probe = {"test_org_id": organization}
+
     passed = (
-        await console.post("/platform/models/opus-standard/test", headers=console.ops)
+        await console.post(
+            "/v4/platform/models/opus-standard/test", headers=console.ops, json=probe
+        )
     ).json()["data"]
     assert passed["passed"] is True and passed["usage"]["charge"] == pytest.approx(0.0162)
     failed = (
-        await console.post("/platform/models/opus-standard/test", headers=console.ops)
+        await console.post(
+            "/v4/platform/models/opus-standard/test", headers=console.ops, json=probe
+        )
     ).json()["data"]
     assert failed["passed"] is False and failed["error"]["code"] == "provider_unavailable"
     outcomes = [
@@ -333,9 +356,65 @@ async def test_model_test_button_reports_success_and_failure(console):
         for e in (await console.get("/platform/audit", headers=console.ops)).json()["items"]
     ]
     assert outcomes[:2] == ["failed", "success"]
+    with Session(admin_engine) as database:
+        records = database.scalars(select(UsageRecord).where(UsageRecord.task_id.is_(None))).all()
+        assert len(records) == 1 and str(records[0].org_id) == organization
+        assert records[0].job_id is not None and records[0].call_id is not None
+
     assert (
-        await console.post("/platform/models/missing/test", headers=console.ops)
+        await console.post("/v4/platform/models/missing/test", headers=console.ops, json=probe)
     ).status_code == 404
+
+
+async def test_platform_model_dry_run_without_org_is_read_only(console, admin_engine):
+    await console.post("/platform/models", headers=console.ops, json=MODEL)
+    tables = (
+        "jobs",
+        "usage_records",
+        "vendor_calls",
+        "platform_audit_logs",
+        "balance_entries",
+        "org_balance_notices",
+    )
+
+    def snapshot():
+        with Session(admin_engine) as database:
+            return {
+                table: database.scalar(text(f"SELECT count(*) FROM {table}")) for table in tables
+            }
+
+    before = snapshot()
+    response = await console.post(
+        "/v4/platform/models/opus-standard/test",
+        headers=console.ops,
+        json={"dry_run": True},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert response.headers["X-Bid-Contract-Version"] == "4.0"
+    preflight = body["data"]["budget_preflight"]
+    assert preflight["task_id"] is None and preflight["task_budget"] is None
+    assert (
+        preflight["planned_calls"] == 1
+        and preflight["next_call"]["platform_model_id"] == MODEL["id"]
+    )
+    assert preflight["full_run_guaranteed"] is False and preflight["first_pass_fits"] is None
+    assert body["cost"] == preflight["estimate"]
+    assert snapshot() == before and console.vendor.requests == []
+
+
+async def test_platform_model_probe_requires_org_membership(console, tenants):
+    await console.post("/platform/models", headers=console.ops, json=MODEL)
+    missing = await console.post(
+        "/v4/platform/models/opus-standard/test", headers=console.ops, json={}
+    )
+    assert missing.status_code == 422 and missing.json()["data"]["error"]["exit_code"] == 2
+    denied = await console.post(
+        "/v4/platform/models/opus-standard/test",
+        headers=console.ops,
+        json={"test_org_id": str(tenants["orgs"][0])},
+    )
+    assert denied.status_code == 404 and console.vendor.requests == []
 
 
 @pytest.mark.parametrize(

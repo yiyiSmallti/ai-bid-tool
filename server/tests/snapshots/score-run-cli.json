@@ -3,8 +3,14 @@
     "score list": {
       "command": "score list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -68,8 +74,14 @@
     "score run": {
       "command": "score run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -81,8 +93,14 @@
         "estimate_kind": "first_pass_upper_bound",
         "estimated_charge": "0.04",
         "estimated_cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
           "llm_tokens": 900,
           "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
           "usd": 0.02
         },
         "estimated_duration_ms": null,
@@ -129,8 +147,14 @@
     "score show": {
       "command": "score show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -245,8 +269,14 @@
     "score list": {
       "command": "score list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -310,8 +340,14 @@
     "score run": {
       "command": "score run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -323,8 +359,14 @@
         "estimate_kind": "first_pass_upper_bound",
         "estimated_charge": "0.04",
         "estimated_cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
           "llm_tokens": 900,
           "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
           "usd": 0.02
         },
         "estimated_duration_ms": null,
@@ -371,8 +413,14 @@
     "score show": {
       "command": "score show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {

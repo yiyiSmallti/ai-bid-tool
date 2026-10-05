@@ -8,7 +8,7 @@ import math
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import ROUND_CEILING, Decimal
+from decimal import Decimal
 from typing import Any, Literal
 
 import httpx
@@ -18,6 +18,8 @@ from app.core.llm_options import validate_request_options
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import current_accounting, plan_calls
 from app.providers.llm import HTTPExtractor, OpenAICompatibleExtractor
+from app.providers.quotes import token_cost
+from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.contracts import ProviderUsage
 
 AnalysisPurpose = Literal["match_requirements", "propose_regions", "read_text"]
@@ -429,10 +431,7 @@ def _token_bounds(
 ) -> tuple[int, int]:
     # Text keeps the existing byte-level bound. Image tokens come only from the verified
     # catalog rule; encoded PNG length is deliberately removed before measuring text.
-    text_tokens = (
-        len(json.dumps(_without_image_bytes(body), ensure_ascii=False).encode("utf-8"))
-        + TEXT_FRAMING_TOKENS
-    )
+    text_tokens = len(provider.serialized_request(_without_image_bytes(body))) + TEXT_FRAMING_TOKENS
     input_tokens = text_tokens + capability.token_bound.tokens(images)
     output_tokens = provider.output_token_bound(body)
     return input_tokens, output_tokens
@@ -441,19 +440,12 @@ def _token_bounds(
 def _reservation(provider: HTTPExtractor, input_tokens: int, output_tokens: int) -> Decimal:
     if provider.platform_model_id is None:
         return Decimal(0)
-    if provider.sale is None or any(
-        not Decimal(str(price)).is_finite() or price < 0 for price in provider.sale
-    ):
+    amount = token_cost(input_tokens, output_tokens, provider.sale, reservation=True)
+    if amount is None:
         raise ProviderFailure(
             "Platform model prices are unavailable", code="billing_price_unavailable"
         )
-    return (
-        (
-            input_tokens * Decimal(str(provider.sale[0]))
-            + output_tokens * Decimal(str(provider.sale[1]))
-        )
-        / MILLION
-    ).quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
+    return amount
 
 
 def _prepare_call(
@@ -499,6 +491,29 @@ def preview(
         # Platform adapters embed model id and catalog revision in version.
         "catalog_identity": provider.version,
     }
+
+
+def _prepared_quote(
+    provider: HTTPExtractor, prepared: _PreparedVisionCall, image_count: int
+) -> BudgetCallQuote:
+    return provider.quote(
+        prepared.body,
+        capability="vision",
+        input_tokens=prepared.input_tokens,
+        output_tokens=prepared.output_tokens,
+        image_count=image_count,
+        image_price_revision=prepared.capability.price_revision,
+    )
+
+
+def quote(
+    provider: HTTPExtractor,
+    requirements: list[dict],
+    images: list[VisionImage],
+    purposes: list[AnalysisPurpose],
+) -> BudgetCallQuote:
+    prepared = _prepare_call(provider, requirements, images, purposes)
+    return _prepared_quote(provider, prepared, len(images))
 
 
 def _response_content(payload: dict, usage: ProviderUsage) -> str:
@@ -635,6 +650,7 @@ async def analyze(
                     prepared.body,
                     safe_metadata=True,
                     reserved_charge=prepared.reserved_charge,
+                    quote=_prepared_quote(provider, prepared, len(images)),
                     image_usage=(
                         len(images),
                         prepared.capability.price_revision,

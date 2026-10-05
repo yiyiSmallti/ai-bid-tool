@@ -1,3 +1,10 @@
+from app.schemas.budget_contracts import (
+    BudgetPlatformModelTest,
+    BudgetProviderTest,
+    BudgetTaskCreate,
+    LowBalancePolicySet,
+    TaskBudgetSet,
+)
 from app.schemas.certificate_contracts import (
     CertificateCreate,
     CertificateUpdate,
@@ -21,8 +28,8 @@ from app.schemas.confidential_contracts import (
     ConfidentialValueSet,
 )
 from app.schemas.contracts import (
-    CONTRACT_VERSION,
     JobAction,
+    LegacyResult,
     Login,
     Result,
     TaskCreate,
@@ -139,6 +146,7 @@ from app.schemas.screenshot_contracts import (
     VendorSearchAdopt,
     VendorSearchInput,
 )
+from app.schemas.simulation_contracts import ProductSimulationInput
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
@@ -394,7 +402,24 @@ CREDENTIAL_OUTPUTS.update(
 OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS | MEMORY_OUTPUTS | CREDENTIAL_OUTPUTS
 
 
-def command_schema(app=None) -> dict:
+LEGACY_COMMANDS = dict(COMMANDS)
+COMMANDS.update(
+    {
+        "task create": BudgetTaskCreate,
+        "provider test": BudgetProviderTest,
+        "platform model test": BudgetPlatformModelTest,
+        "product simulate": ProductSimulationInput,
+        "task budget show": None,
+        "task budget set": TaskBudgetSet,
+        "task budget history": None,
+        "billing alert show": None,
+        "billing alert set": LowBalancePolicySet,
+        "billing notices": None,
+    }
+)
+
+
+def command_schema(app=None, version: str = "4.0") -> dict:
     parameters = {}
     if app is not None:
         import click
@@ -440,14 +465,65 @@ def command_schema(app=None) -> dict:
             }
             for param in root.params
         ]
-    return {
-        "version": CONTRACT_VERSION,
-        "result": Result.model_json_schema(),
+    from app.schemas.budget_contracts import (
+        BudgetHistoryData,
+        BudgetPlatformModelTest,
+        BudgetProviderTest,
+        BudgetTaskCreate,
+        LowBalanceNoticesData,
+        LowBalancePolicyData,
+        LowBalancePolicySet,
+        TaskBudgetData,
+        TaskBudgetSet,
+    )
+    from app.schemas.compatibility import NEW_COMMANDS
+
+    commands = dict(LEGACY_COMMANDS if version == "3.0" else COMMANDS)
+    outputs = dict(OUTPUTS)
+    if version == "4.0":
+        commands.update(
+            {
+                "product simulate": ProductSimulationInput,
+                "task create": BudgetTaskCreate,
+                "provider test": BudgetProviderTest,
+                "platform model test": BudgetPlatformModelTest,
+                "task budget show": None,
+                "task budget set": TaskBudgetSet,
+                "task budget history": None,
+                "billing alert show": None,
+                "billing alert set": LowBalancePolicySet,
+                "billing notices": None,
+            }
+        )
+        outputs.update(
+            {
+                "task budget show": TypeAdapter(TaskBudgetData),
+                "task budget set": TypeAdapter(TaskBudgetData),
+                "task budget history": TypeAdapter(BudgetHistoryData),
+                "billing alert show": TypeAdapter(LowBalancePolicyData),
+                "billing alert set": TypeAdapter(LowBalancePolicyData),
+                "billing notices": TypeAdapter(LowBalanceNoticesData),
+            }
+        )
+    else:
+        commands = {name: model for name, model in commands.items() if name not in NEW_COMMANDS}
+        legacy_options = {"budget", "budget_currency", "test_org", "contract_version"}
+        for name, items in parameters.items():
+            parameters[name] = [
+                item
+                for item in items
+                if item["name"] not in legacy_options
+                and not (name == "provider test" and item["name"] == "dry_run")
+                and not (name == "platform model test" and item["name"] == "dry_run")
+            ]
+    schema = {
+        "version": version,
+        "result": (LegacyResult if version == "3.0" else Result).model_json_schema(),
         "commands": {
             name: {
                 "input": model.model_json_schema() if model else None,
                 "cli_parameters": parameters.get(name, []),
-                **({"output": OUTPUTS[name].json_schema()} if name in OUTPUTS else {}),
+                **({"output": outputs[name].json_schema()} if name in outputs else {}),
                 **(
                     {"items": TypeAdapter(CredentialView).json_schema()}
                     if name == "platform credential list"
@@ -459,7 +535,7 @@ def command_schema(app=None) -> dict:
                     else {}
                 ),
             }
-            for name, model in COMMANDS.items()
+            for name, model in commands.items()
         },
         "global_parameters": parameters.get("global", []),
         "exit_codes": {
@@ -470,3 +546,62 @@ def command_schema(app=None) -> dict:
             "5": "partial",
         },
     }
+    if version == "4.0":
+        from app.schemas.budget_contracts import (
+            BudgetPreflightData,
+            LowBalanceNoticeView,
+            TaskBudgetRevisionView,
+        )
+
+        costed = {
+            "tender parse",
+            "req extract",
+            "card generate",
+            "draft",
+            "check run",
+            "score run",
+            "score rubric generate",
+            "screenshot analyze",
+            "screenshot annotate",
+            "ui mock",
+            "evidence search",
+            "product simulate",
+            "provider test",
+            "platform model test",
+            "sandbox render",
+            "sandbox capture",
+            "export prepare",
+        }
+        preflight_schema = BudgetPreflightData.model_json_schema()
+        schema["$defs"] = preflight_schema.pop("$defs", {})
+        schema["$defs"]["BudgetPreflightData"] = preflight_schema
+        for name in costed:
+            if name in schema["commands"]:
+                schema["commands"][name]["budget_preflight"] = {
+                    "$ref": "#/$defs/BudgetPreflightData"
+                }
+        schema["commands"]["task budget history"]["items"] = (
+            TaskBudgetRevisionView.model_json_schema()
+        )
+        schema["commands"]["billing notices"]["items"] = LowBalanceNoticeView.model_json_schema()
+    if version == "3.0":
+        from app.schemas.contracts import LegacyCost
+
+        schema["result"]["title"] = "Result"
+        legacy_cost = LegacyCost.model_json_schema()
+        legacy_cost["title"] = "Cost"
+        schema["result"]["$defs"] = {"Cost": legacy_cost}
+        schema["result"]["properties"]["cost"]["$ref"] = "#/$defs/Cost"
+
+        def legacy_schema(value):
+            if isinstance(value, dict):
+                if "$defs" in value and "Cost" in value["$defs"]:
+                    value["$defs"]["Cost"] = legacy_cost
+                for child in value.values():
+                    legacy_schema(child)
+            elif isinstance(value, list):
+                for child in value:
+                    legacy_schema(child)
+
+        legacy_schema(schema)
+    return schema

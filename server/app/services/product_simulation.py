@@ -33,6 +33,7 @@ from app.models.entities import (
 from app.providers import simulation
 from app.providers.base import MalformedOutput, ProviderFailure
 from app.providers.calls import plan_calls
+from app.providers.llm import HTTPExtractor
 from app.providers.sandbox_fetch import (
     FetchBroker,
     FetchDenied,
@@ -176,12 +177,17 @@ async def access(session, actor):
     return actor
 
 
-async def submit(session, actor, task_id: UUID, body: ProductSimulationInput, provider, settings):
+async def submit(
+    session, actor, task_id: UUID, body: ProductSimulationInput, provider, settings, llm=None
+):
     actor = await access(session, actor)
     extraction, items = await items_for(session, task_id, body.extraction_job_id)
     manifest = manifest_for(
         task_id, extraction.id, items, provider.identity if provider is not None else None
     )
+    from app.providers.configured import model_identity
+
+    manifest["model"] = model_identity(llm) if llm is not None else None
     input_hash = images.digest(manifest)
     blocker = (
         "search_unavailable"
@@ -192,21 +198,55 @@ async def submit(session, actor, task_id: UUID, body: ProductSimulationInput, pr
         else None
     )
     if body.dry_run:
-        return {
-            "dry_run": True,
-            "input_hash": input_hash,
-            "items": [
-                {
-                    "key": item["key"],
-                    "name": item["name"],
-                    "requirements": len(item["requirement_ids"]),
-                }
-                for item in items
-            ],
-            "requirement_count": sum(len(item["requirement_ids"]) for item in items),
-            "search_identity": provider.public_identity if provider else None,
-            "admission_blocker": blocker,
-        }, None
+        from app.services import budget_preflight
+
+        ids = [UUID(value) for item in items for value in item["requirement_ids"]]
+        originals = {
+            str(row.id): row.quote
+            for row in (
+                await session.scalars(select(Requirement).where(Requirement.id.in_(ids)))
+            ).all()
+        }
+        batches = [
+            items[start : start + PROPOSAL_BATCH] for start in range(0, len(items), PROPOSAL_BATCH)
+        ]
+        estimates = (
+            [
+                lambda batch=batch, adapter=llm: adapter.quote(
+                    simulation.propose_body(adapter, [item_text(item, originals) for item in batch])
+                )
+                for batch in batches
+            ]
+            if isinstance(llm, HTTPExtractor)
+            else []
+        )
+
+        return await budget_preflight.attach(
+            session,
+            {
+                "dry_run": True,
+                "input_hash": input_hash,
+                "items": [
+                    {
+                        "key": item["key"],
+                        "name": item["name"],
+                        "requirements": len(item["requirement_ids"]),
+                    }
+                    for item in items
+                ],
+                "requirement_count": sum(len(item["requirement_ids"]) for item in items),
+                "search_identity": provider.public_identity if provider else None,
+                "admission_blocker": blocker,
+            },
+            command="product simulate",
+            task_id=task_id,
+            input_hash=input_hash,
+            quote_sources=estimates,
+            planned_calls=None if items else 0,
+            dynamic=bool(items),
+            settings=settings,
+            currency=settings.billing_currency,
+        ), None
     if body.expected_input_hash != input_hash:
         images.fail("simulation_input_changed", "Inputs changed since the preview", 409, 3)
     if blocker:
@@ -276,7 +316,11 @@ async def vendor_pages(search, domain: str, query: str) -> list[tuple[str, str]]
         hits = (await search.search(query, [domain] if narrowed else ())).hits
         if narrowed and not hits:
             hits = (await search.search(query)).hits
-    except ProviderFailure:
+    except ProviderFailure as error:
+        if error.code != "search_unavailable":
+            # Admission and accounting failures stop this atomic command; they
+            # cannot be reinterpreted as an empty vendor search result.
+            raise
         return []
     extracts: dict[str, str] = {}
     for hit in hits:
@@ -499,7 +543,7 @@ async def process(execution: JobExecution, processor, llm) -> None:
             for proposal in answered
         }
         hardware = sum(proposal.kind == "hardware" for proposal in proposals.values())
-        plan_calls(len(batches) + hardware * QUOTES_PER_ITEM)
+        plan_calls(len(batches) + hardware * (QUOTES_PER_ITEM + 2 * VENDORS_PER_ITEM))
         missing = simulation.ItemProposal(item_key="-", kind="service", candidates=[])
         outcomes = await asyncio.gather(
             *(
@@ -518,6 +562,8 @@ async def process(execution: JobExecution, processor, llm) -> None:
             )
         )
     async with execution.db.transaction(execution.org_id) as session:
+        # Resource selection also locks Task; acquire it before the job publication fence.
+        await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
         job = await execution.owned_job(session)
         actor = worker(job)
         for outcome in outcomes:

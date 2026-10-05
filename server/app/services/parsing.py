@@ -14,6 +14,7 @@ from app.core.pdf_process import (
     run_pdf_operation_async,
 )
 from app.providers.base import OCRProvider
+from app.providers.calls import plan_calls
 from app.schemas.contracts import PageText, ProviderUsage, SectionText
 from app.services.docx_blocks import parse_docx
 from app.services.extraction import at_boundary, locate_span, normalize
@@ -102,6 +103,7 @@ async def parse_document(
     output, usages, warnings = [], [], []
     with PDFOperation(content, "parse", {"max_pages": max_pages}, settings) as document:
         await document.wait_async()
+        plan_calls(sum(1 for record in document.records() if record.get("image") is not None))
         for number, record in enumerate(document.records(), 1):
             text, image, page_warnings = pdf_page_result(record, number)
             warnings.extend(page_warnings)

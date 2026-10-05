@@ -1,10 +1,23 @@
+import json
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from uuid import uuid4
 
 import pytest
 from app.core.config import Settings
 from app.core.db import Database
-from app.models.entities import ApiToken, Chunk, Document, Job, Requirement, Task, UsageRecord
+from app.models.entities import (
+    ApiToken,
+    Chunk,
+    Document,
+    Job,
+    Requirement,
+    Task,
+    UsageRecord,
+    VendorCall,
+)
+from app.schemas.budget_contracts import BudgetCallQuote
+from app.services.auth import ROLE_SCOPES
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
@@ -34,6 +47,22 @@ def seeded(tenants, admin_engine):
     identifiers = {}
     with Session(admin_engine) as session, session.begin():
         for index, org in enumerate(tenants["orgs"]):
+            # Response seeding below sets transaction-local actor context; replace
+            # that context before the next tenant's jobs are inserted.
+            session.execute(
+                text(
+                    "SELECT set_config('app.current_org',:org,true), "
+                    "set_config('app.actor_kind','session',true), "
+                    "set_config('app.actor_user_id',:user,true), "
+                    "set_config('app.actor_token_id','',true), "
+                    "set_config('app.actor_scopes',:scopes,true)"
+                ),
+                {
+                    "org": str(org),
+                    "user": str(tenants["users"][index]),
+                    "scopes": json.dumps(sorted(ROLE_SCOPES["admin"])),
+                },
+            )
             task = Task(
                 id=uuid4(), org_id=org, created_by=tenants["users"][index], name="Synthetic task"
             )
@@ -59,15 +88,51 @@ def seeded(tenants, admin_engine):
                 text="Synthetic source",
             )
             session.add(chunk)
+            run_id = uuid4()
             extraction = Job(
                 org_id=org,
                 task_id=task.id,
                 document_id=document.id,
                 kind="extract",
+                run_id=run_id,
+                actor_user_id=tenants["users"][index],
+                actor_kind="session",
+                actor_scopes=sorted(ROLE_SCOPES["admin"]),
                 cache_key="e" * 64,
                 status="succeeded",
             )
             session.add(extraction)
+            session.flush()
+            quote = BudgetCallQuote(
+                capability="llm",
+                payer="org_direct",
+                provider="test",
+                model="test",
+                version="1",
+                price_revision="synthetic-v1",
+                request_sha256="a" * 64,
+                currency="USD",
+                reserved_charge=Decimal(0),
+                reserved_task_amount=Decimal(0),
+                vendor_usd_upper_bound=Decimal(0),
+            )
+            call = VendorCall(
+                id=uuid4(),
+                org_id=org,
+                task_id=task.id,
+                job_id=extraction.id,
+                run_id=run_id,
+                budget_revision=1,
+                capability=quote.capability,
+                payer=quote.payer,
+                currency=quote.currency,
+                price_revision=quote.price_revision,
+                request_sha256=quote.request_sha256,
+                reserved_charge=quote.reserved_charge,
+                reserved_task_amount=quote.reserved_task_amount,
+                quote=quote.model_dump(mode="json"),
+            )
+            session.add(call)
             session.flush()
             session.add_all(
                 [
@@ -88,6 +153,14 @@ def seeded(tenants, admin_engine):
                     UsageRecord(
                         org_id=org,
                         task_id=task.id,
+                        job_id=extraction.id,
+                        run_id=run_id,
+                        call_id=call.id,
+                        capability=quote.capability,
+                        payer=quote.payer,
+                        billing_currency=quote.currency,
+                        price_revision=quote.price_revision,
+                        task_amount=Decimal(0),
                         provider="test",
                         model="test",
                         version="1",
@@ -113,6 +186,7 @@ def seeded(tenants, admin_engine):
                 ]
             )
             session.flush()
+            call.state, call.charge = "completed", Decimal(0)
             from test_response_card_db import seed_response_rows
 
             requirement = session.scalar(select(Requirement).where(Requirement.org_id == org))

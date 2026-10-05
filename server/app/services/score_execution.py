@@ -24,7 +24,7 @@ from app.models.score import (
 from app.providers import llm as llm_providers
 from app.providers.base import ProviderFailure
 from app.providers.configured import model_identity
-from app.providers.llm import with_reasoning
+from app.providers.llm import HTTPExtractor, with_reasoning
 from app.providers.scoring import (
     ADAPTER_VERSION,
     PROMPT_VERSION,
@@ -311,6 +311,35 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
                 **estimate,
             }
         ).model_dump(mode="json")
+        from app.services import budget_preflight
+
+        quotes = []
+        if (
+            isinstance(llm, HTTPExtractor)
+            and estimate.get("estimated_charge") is not None
+            and estimate.get("cost_basis_reason") not in {"no_assessable_items", "test_provider"}
+        ):
+            adapter = score_provider(llm)
+            request = score_semantic.provider_request(fixed.secret["outbound"])
+            if isinstance(adapter, HTTPScoreProvider) and request is not None:
+                quotes = [
+                    llm.quote(adapter.request_body(entry)) for entry in adapter._groups(request)
+                ]
+        data = await budget_preflight.attach(
+            session,
+            data,
+            command="score run",
+            task_id=task_id,
+            input_hash=fixed.input_hash,
+            currency=settings.billing_currency,
+            settings=settings,
+            quotes=quotes,
+            planned_calls=len(quotes)
+            if quotes
+            or estimate.get("cost_basis_reason") in {"no_assessable_items", "test_provider"}
+            else None,
+            max_charge=body.max_charge,
+        )
         return data, None
     if estimate["admission_blocker"] == "redaction_required":
         cards.fail("redaction_required", "Scoring requires redaction", 409, 4)
