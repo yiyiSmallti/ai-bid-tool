@@ -1298,10 +1298,14 @@ async def process_if_agent(processor, org_id, job_id):
             live_actor.session_id = row.id
             await agent_limits.task_authority(session, live_actor, row.task_id)
         except (ServiceError, ProviderFailure):
-            actor = await actor_for(session, row)
-            await set_actor_context(session, actor)
             job.status, job.finished_at, job.lease_until = "failed", timestamp, None
             await session.flush([job])
+            # locked_job installed a queued Job, not an admitted execution. Close
+            # it first, then stop set_actor_context from rebinding its stale ID
+            # so the pause uses the database's existing no-execution cleanup fence.
+            session.info.pop("execution_job", None)
+            actor = await actor_for(session, row)
+            await set_actor_context(session, actor)
             await agents.pause(
                 session,
                 row,

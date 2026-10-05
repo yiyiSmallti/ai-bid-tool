@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Queued agent authority-loss cleanup
+
+- Persist a rejected controller Job as failed before clearing its transaction
+  execution binding and saving the authority pause. A queued Job has no admitted
+  run; cleanup uses the existing no-execution fence without weakening the
+  [agent recovery guards](plan/agent.md#worker-recovery-and-cancellation).
+
 ## 2026-10-05: Agent and task authority integration
 
 - Apply the [agent task boundary](plan/agent.md#identity-permissions-and-human-gates)

@@ -27,7 +27,7 @@ from test_response_cards import (
     set_role,
 )
 
-SCOPES = [
+SCOPES = (
     "task:read",
     "job:read",
     "card:read",
@@ -39,7 +39,7 @@ SCOPES = [
     "certificate:file:read",
     "profile:read",
     "evidence:source:read",
-]
+)
 
 
 def workflow_client(tenants, tmp_path):
@@ -57,7 +57,7 @@ def start_body(extraction, **limits):
     return {
         "extraction_job_id": extraction,
         "message": "Prepare proposals, pause, then assemble.",
-        "requested_scopes": SCOPES,
+        "requested_scopes": list(SCOPES),
         "idempotency_key": str(uuid4()),
         "limits": {
             "max_vendor_usd": "2",

@@ -9,6 +9,8 @@ the admitted call ledger instead of retaining a failed/uncertain checkpoint;
 the database blocks the authority-loss pause/terminal receipt; delegation adds
 a human review scope or expands its owner's task review domain; child-generated
 task events identify the controller or human rather than the executing child.
+Queued rejection must close the Job before clearing its transaction execution
+context; a rejected job ID with no admitted run is not a live or recovery fence.
 """
 
 import json
@@ -124,8 +126,11 @@ async def test_archived_task_blocks_agent_start(authority_case):
 
 
 @pytest.mark.parametrize("checkpoint", ["queued", "paused"])
-async def test_removed_member_stops_worker_and_cannot_resume(authority_case, checkpoint):
+async def test_removed_member_stops_worker_and_cannot_resume(
+    authority_case, checkpoint, monkeypatch
+):
     from app.jobs.agent import wake
+    from app.services import agents
 
     case = authority_case
     await enroll(case)
@@ -151,6 +156,27 @@ async def test_removed_member_stops_worker_and_cannot_resume(authority_case, che
     )
     assert removed.status_code == 200, removed.text
     before = len(sent)
+    cleanup_context = {}
+    original_pause = agents.pause
+
+    async def verify_cleanup_fence(session, state, *args, **kwargs):
+        context = (
+            await session.execute(
+                text(
+                    "SELECT current_setting('app.execution_job_id') AS job_id, "
+                    "current_setting('app.execution_run_id') AS run_id, "
+                    "current_setting('app.agent_session_id') AS session_id"
+                )
+            )
+        ).one()
+        assert (context.job_id, context.run_id, context.session_id) == ("", "", str(sid))
+        rejected = await session.get(Job, state.current_job_id)
+        assert rejected is not None and rejected.status == "failed" and rejected.lease_until is None
+        cleanup_context.update(job_id=context.job_id, run_id=context.run_id)
+        return await original_pause(session, state, *args, **kwargs)
+
+    if checkpoint == "queued":
+        monkeypatch.setattr(agents, "pause", verify_cleanup_fence)
     async with case["app"].state.db.transaction(case["org"]) as session:
         queued = list(
             await session.scalars(
@@ -160,6 +186,8 @@ async def test_removed_member_stops_worker_and_cannot_resume(authority_case, che
     for job in queued:
         await case["app"].state.processor(str(case["org"]), str(job))
     await wake(case["app"].state.processor, case["org"], sid)
+    if checkpoint == "queued":
+        assert cleanup_context == {"job_id": "", "run_id": ""}
     async with case["app"].state.db.transaction(case["org"]) as session:
         state = await session.get(AgentSession, sid)
         assert state is not None and state.state == "paused"
@@ -205,6 +233,7 @@ async def test_removed_member_stops_worker_and_cannot_resume(authority_case, che
             "calls_before": before,
             "calls_after": len(sent),
             "direct_sql_denied": True,
+            "cleanup_context": cleanup_context,
             "cancel": cancelled.json(),
         },
     )
