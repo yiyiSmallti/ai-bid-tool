@@ -2,244 +2,123 @@
 kind: plan
 ---
 
-# 已确认响应草案的逐项评分预估契约
+# Itemized score-estimation contract for confirmed response drafts
 
-状态：**已批准，阶段 A 和阶段 B 已实施。** 本契约对应[路线图](roadmap.md) B10。
-阶段 A 负责 rubric 生成、规范化、人工分类、逐项与整集确认；阶段 B 负责对 current
-`DraftRun` 的评分、不可变报告和评分 Provider 作业。实现范围记录在
-[变更记录](../changelog.md#2026-10-05已确认响应草案的评分执行)。Pydantic 与 Provider 契约统一位于
-[运行时契约](../../server/app/schemas/score_contracts.py)。共用评估、引用、外发和 Result 约定见
-[B09 已批准契约](check.md)，类型来自[共享契约](../../server/app/schemas/check_contracts.py)。
+Status: **Approved; stages A and B implemented.** This contract corresponds to [roadmap](roadmap.md) B10. Stage A covers rubric generation, normalization, human classification, item-level confirmation, and set-level confirmation. Stage B covers current `DraftRun` scoring, immutable reports, and scoring Provider jobs. Implemented scope is recorded in the [changelog](../changelog.md#2026-10-05-score-execution-for-confirmed-response-drafts). Pydantic and Provider contracts live together in the [runtime contract](../../server/app/schemas/score_contracts.py). Shared assessment, citation, outbound, and Result conventions follow the [approved B09 contract](check.md), with types from the [shared contract](../../server/app/schemas/check_contracts.py).
 
-## 目标与结论边界
+## Goals and conclusion boundaries
 
-阶段 B 首版输出“已确认响应草案评分预估”：把一套经人确认的评分 rubric 逐项对照指定的
-current `DraftRun`，给出可估项目的分数、失分原因、补强动作和逐字引用。它是辅助判断，
-不是招标人的正式得分，也不是全文、版式、附件完整性或最终交付件审查。
+Stage B initially produces a “confirmed response draft score estimate”: compare a human-confirmed scoring rubric item by item against a specified current `DraftRun`, returning scores for assessable items, point deduction (扣分) reasons, strengthening actions, and verbatim citations. It supports judgment; it is not the purchaser's (招标人) official score or a review of the full bid (标书), layout, attachment completeness, or final delivery file.
 
-评分分两阶段完成：
+Scoring has two stages:
 
-1. 从一个显式指定且成功的抽取作业中，只读取 `Category.scoring` Requirements，生成
-   有版本的 rubric 候选。逐项人工确认后，再由人确认整套规则完整性。
-2. 只使用已确认整套 rubric，对一个显式指定且仍为 current 的 `DraftRun` 运行评分。
-   模型输出仍要经过本机边界、引用和聚合校验，结果恒为 advisory。
+1. Read only `Category.scoring` Requirements from one explicitly selected successful extraction job to generate versioned rubric candidates. After confirming items individually, a human confirms completeness of the entire rule set.
+2. Use only a fully confirmed rubric to score one explicitly selected, still-current `DraftRun`. Model output must pass local boundary, citation, and aggregation checks; results are always advisory.
 
-现有 `Requirement.condition` 是自由 `dict`，没有 rubric 契约。首版不读取它来决定分值、
-权重、上下限或公式，也不把它发送给评分 Provider。rubric 候选只能依据所选 scoring
-Requirement 的固定文字和已核验 `Source`；不能重新遍历 Chunk、扫描全文或偷偷启动新的
-抽取。为了重新核验引用，服务只按 `Source.chunk_id` 读取其所指 chunk/block，并定位该连续原文；
-不得借机扫描相邻 Chunk 或发现新评分项。这里的“完整”只表示覆盖该抽取作业保存的 scoring
-Requirements，不声称原招标文件没有漏抽。
+Existing `Requirement.condition` is a free `dict`, without a rubric contract. The first version neither uses it to determine points, weights, bounds, or formulas nor sends it to the scoring Provider. Rubric candidates rely only on pinned text and verified `Source` for the selected scoring Requirements. They cannot rewalk Chunk, scan complete tender documents (招标文件), or secretly start extraction. To reverify citations, the service reads only the chunk/block referenced by `Source.chunk_id` and locates its contiguous original text; it cannot scan adjacent Chunk objects or discover new scoring items. “Complete” means covering the scoring Requirements saved by that extraction job, never that extraction missed nothing in the original tender documents.
 
-## 固定输入
+## Pinned input
 
-### Rubric 候选输入
+### Rubric candidate input
 
-`RubricInput` 固定 `org_id`、`task_id`、`extraction_job_id`、`document_id` 和
-`input_hash`。服务必须验证抽取 Job 已成功，且 Job、Document、Requirement 同单位、同任务、
-同文档。选择集为该 Job 下全部 `Category.scoring` Requirements；调用方不能挑一部分后仍
-请求“完整 rubric”。Provider 收到的只有每条 Requirement 的本地 ref、固定文字和来源位置，
-不收到任意 `condition`、整份招标文件、其他类别要求或资源库内容。
+`RubricInput` pins `org_id`, `task_id`, `extraction_job_id`, `document_id`, and `input_hash`. The service verifies extraction Job success and that Job, Document, and Requirement belong to the same org (organization/tenant; 单位), task, and document. Selection includes every `Category.scoring` Requirement under that Job; callers cannot select a subset and still request a “complete rubric.” The Provider receives only each Requirement's local ref, pinned text, and source location, without arbitrary `condition`, complete tender documents, other requirement categories, or resource-library content.
 
-### 评分输入
+### Scoring input
 
-`ScoreRequest` 在共用 `AssessmentRequest` 上只增加 `rubric_id`。快照必须固定：
+`ScoreRequest` adds only `rubric_id` to shared `AssessmentRequest`. The snapshot must pin:
 
-- 指定 current `DraftRun` 的 `org_id`、`task_id`、`draft_id`、`extraction_job_id`、
-  `document_id`、`draft_input_hash`；DraftRun 必须与 confirmed rubric 固定到同一抽取作业和文档。
-- DraftRun 中每条 `ResponseItem` 的分区元数据：`response`、`comply_only` 或 `gap`，以及
-  requirement、source、gap reason、disposition 和固定 revision 绑定。评分项自身的行称为
-  `anchor_response_item`，其分区保存为 `anchor_partition`。
-- 同一 DraftRun 的全部 `response` 行作为候选支持材料，但只发送 DraftRun 固定的已确认
-  `response_text`、`deviation_note`；不得读取当前 Card 指针、未确认/待审/已拒绝 Card 的文字，
-  也不得用之后修改的 Card 偷换输入。这样评分项可以引用其他已确认技术/商务响应中的真实支持，
-  而不是错误地假定支撑一定与 scoring Requirement 同 ID。
-- `comply_only` 和 `gap` 行只发送必要元数据与招标侧原文，不生成或借用卡片文字。anchor 为 gap
-  不自动证明整份草案无材料；只有其他 confirmed response 的逐字内容确实支持时才可能 assessed。
-  `comply_only` 自身没有投标侧文字，不能单独得分；没有任何已确认投标侧引用时恒 unassessable。
-- 已确认 rubric 的 set、section、item 版本、覆盖决定、上下限、权重和聚合规则。
-- `assessment_date`、Provider/平台模型目录修订、reasoning、prompt/schema/评分规则版本、
-  遮挡设置修订及规则版本。
+- The specified current `DraftRun`'s `org_id`, `task_id`, `draft_id`, `extraction_job_id`, `document_id`, and `draft_input_hash`. DraftRun and confirmed rubric must pin the same extraction job/document.
+- Partition metadata for every `ResponseItem`: `response`, `comply_only`, or `gap`, plus requirement, source, gap (缺口) reason, disposition, and pinned revision bindings. The scoring item's own row is `anchor_response_item`; its partition is `anchor_partition`.
+- Every `response` row in the same DraftRun as candidate support, sending only its pinned, confirmed `response_text` and `deviation_note`. Never read current Card pointers, unconfirmed/pending/rejected Card text, or substitute later Card changes. This lets a scoring item cite real support from other confirmed technical/commercial responses (响应), rather than assuming support has the scoring Requirement's ID.
+- Only necessary metadata and tender-side text for `comply_only`/`gap`, without generating or borrowing card text. A gap anchor does not prove the entire draft lacks materials; assessment is possible only when verbatim text in other confirmed responses genuinely supports it. `comply_only` has no bid-side text and cannot independently earn points; without any confirmed bid-side citation, it is always unassessable.
+- Confirmed rubric set/section/item versions, coverage decisions, bounds, weights, and aggregation rules.
+- `assessment_date`, Provider/platform model catalog revisions, reasoning, prompt/schema/scoring rule versions, and redaction setting/rule revisions.
 
-首版不读取任何 released/review DOCX、导出运行、Gotenberg PDF、模板正文或页面图像。导出
-流程会在 human-only 下载件中填入真实保密值，agent 和模型无权下载；评分若读取 released
-文件，会同时破坏人工关口和保密边界。以后如确有需求，应另立“人工会话专用 released-export
-评审”契约，并单独决定授权、外发、文件引用、费用与审计，不能扩充本命令的隐含输入。
+The first version reads no released/review DOCX, export runs, Gotenberg PDF, template text, or page images. Export fills actual confidential values into human-only downloads; agents/models cannot download them. Scoring released files would breach both human and confidentiality gates. A future need requires a separate “human-session-only released-export review” contract with explicit authorization, outbound, file-citation, fee, and audit decisions, never implicit expansion of this command's input.
 
-## Rubric 的版本、覆盖和人工确认
+## Rubric versions, coverage, and human confirmation (人工确认)
 
-Provider 只创建 candidate。候选 section 和 item 固定到原 Requirement/Source，引用必须在
-实际发送文本和固定来源中唯一连续命中。未知、歧义、拼接或被遮挡的引用不修补；相应候选
-留为未解决，不能进入 confirmed set。
+Providers create candidates only. Candidate sections/items pin original Requirement/Source; citations must uniquely and contiguously match both actual sent text and pinned sources. Unknown, ambiguous, joined, or redacted citations are not repaired; affected candidates remain unresolved and cannot enter confirmed sets.
 
-每个 scoring Requirement 必须有一条 `RubricRequirementCoverageView`：
+Each scoring Requirement needs one `RubricRequirementCoverageView`:
 
-- `mapped`：明确关联一项或多项 rubric item；拆成多项时各项边界和分值均需确认。
-- `duplicate`：人指定 canonical Requirement 并写原因；不得由模型静默去重。
-- `excluded`：人说明为什么该 Requirement 不是可计分规则；仍保留来源和决定。
-- `pending`：尚未决定，阻止整集确认。
+- `mapped`: explicitly linked to one or more rubric items; split items each require confirmed boundaries and points.
+- `duplicate`: a human names the canonical Requirement and supplies a reason; models cannot silently deduplicate.
+- `excluded`: a human explains why the Requirement is not scoreable; source and decision remain.
+- `pending`: undecided; blocks set confirmation.
 
-rubric item 保存规范化规则文字、section、顺序、评估模式、分数上下限、可选权重、审阅职责、
-来源和内容 fingerprint。section 保存自己的上下限、权重、cap、是否进入总体、审阅职责以及
-`sum`、`weighted_sum`、`capped_sum`、`formula` 或 `non_additive` 聚合方式。确认整集前，服务必须
-确定性检查：
+Rubric items save normalized rule text, section, order, assessment mode, score bounds, optional weight, review domain (职责), source, and content fingerprint. Sections save their own bounds, weight, cap, overall inclusion, review domain, and aggregation method: `sum`, `weighted_sum`, `capped_sum`, `formula`, or `non_additive`. Before set confirmation the service checks deterministically:
 
-- 所有 scoring Requirements 均有非 pending 覆盖决定；item/section key、顺序和 fingerprint
-  没有未处置重复；引用仍绑定同一固定来源。
-- 每个 section/item 均已有 `review_domain` 并由对应职责的人确认；被拒项不能留在 set 中。
-  商务项由 bidder、技术项由 technical 处理。分类不复用只适用于 Card 的既有接口：本契约新增
-  section/item classify 请求，只有 admin 人类会话可执行，写非空理由和 expected revision/hash；
-  分类不因此赋予 admin 跨专业确认权。确认请求不接收 `review_domain`，授权只读取已存分类，
-  调用方不能用请求字段换职责。
-- 每个已声明上下限满足 `0 <= minimum <= maximum`，权重合法，item 到 section、section 到
-  overall 的纳入关系没有环、重复计入或悬空。
-- 每个 section 的合计/上限/权重规则和不同 section 如何形成 overall 已明确；能机械核对的
-  上下限与合计一致。招标原文确有歧义时，允许把 item 明确确认成 `ambiguous`，但不能把
-  未知规则编造成数字；该项在评分时恒为 unassessable。
+- All scoring Requirements have non-pending coverage decisions; item/section keys, order, and fingerprints have no unresolved duplicates; citations still bind the same pinned sources.
+- Each section/item has `review_domain` and confirmation from that domain's reviewer; rejected items cannot remain in the set. bidder handles commercial items; technical handles technical items. Classification does not reuse existing Card-only endpoints: this contract adds section/item classify requests, executable only by admin human sessions, with nonempty reason and expected revision/hash. Classification grants no cross-domain confirmation authority to admins. Confirmation requests accept no `review_domain`; authorization uses stored classification, never caller-supplied replacement domains.
+- Every declared bound satisfies `0 <= minimum <= maximum`; weights are valid; item→section and section→overall inclusion has no cycles, duplicates, or dangling references.
+- Section totals/caps/weights and section→overall aggregation are explicit, with mechanically verifiable bounds/totals consistent. Genuine tender ambiguity can be explicitly confirmed as `ambiguous`, without inventing numeric rules; such items are always unassessable during scoring.
 
-模型候选中的标题、规则、上下限、权重、cap、聚合方式或职责如有错误，人类先以
-`RubricReviseRequest` 提交完整替换快照；请求带 expected revision/input hash，只能引用该固定输入
-中的 Requirement 和上一版 section/item，不能改写 Source。服务创建新的 candidate 版本和新 IDs，
-保存 `prior_rubric_id` 与修订理由，旧版本及其决定不改。新版本重新经过分类、覆盖、逐项和整集
-确认。revision 输入不接收 `review_domain`，新版本 section/item 分类全部重置为 null，必须由 admin
-重新分类，避免修订人继承或自填职责绕过关口。决定、分类、coverage 和 revision history 均
-append-only，并可通过 history GET 分页读取。
+If candidate titles, rules, bounds, weights, caps, aggregation, or review domains are wrong, a human submits a complete replacement snapshot through `RubricReviseRequest`, with expected revision/input hash. It can reference only Requirements in the pinned input and prior-version sections/items, never rewrite Source. The service creates a new candidate version/new IDs, retaining `prior_rubric_id` and revision reason; old versions/decisions remain intact. New versions repeat classification, coverage, item, and set confirmation. Revision input accepts no `review_domain`; all new section/item domains reset to null and require admin reclassification, preventing inherited/self-assigned domains from bypassing gates. Decision, classification, coverage, and revision history are append-only and paginated through history GET.
 
-整集只有 `completeness.complete=true`、无 normalization error 且所有逐项关口完成后才能
-confirmed；score 只接受 confirmed set。`formula`/`non_additive` 可以作为“规则已完整记录且人工
-确认”的 rubric 进入 complete，但其 `aggregation_assessable=false`，不会被执行或阻止 rubric
-完整性；对应 section/overall 在评分报告中恒为 `unavailable`。
+A set becomes confirmed only when `completeness.complete=true`, no normalization errors exist, and all item gates are complete; score accepts only confirmed sets. `formula`/`non_additive` can enter a complete rubric as fully recorded, human-confirmed rules, but have `aggregation_assessable=false`; they are neither executed nor blockers to rubric completeness. Their section/overall scores always remain `unavailable`.
 
-### 首版聚合算法
+### First-version aggregation algorithms
 
-服务只执行以下三个确定性算法，全部使用 `Decimal`，中间过程不四舍五入，section/overall 最终
-结果按 `0.00000001`、`ROUND_HALF_UP` 取值：
+The service executes only these three deterministic algorithms, using `Decimal`, without intermediate rounding. Final section (正式件)/overall results use `0.00000001` with `ROUND_HALF_UP`:
 
-- `sum`：纳入项分数直接相加；可能范围分别相加每项下限和上限。
-- `weighted_sum`：权重是 `(0,1]` 的小数比例，不是百分数字符串；同一聚合节点下的纳入子项权重
-  必须精确合计 `1.00000000`，结果为 `sum(score * weight)`，可能范围同算。
-- `capped_sum`：先按 `sum` 计算，再取 `min(sum, cap)`；cap 必填且非负，可能范围同样应用 cap。
+- `sum`: add included scores; add their minimums and maximums separately for possible ranges.
+- `weighted_sum`: weights are decimal proportions in `(0,1]`, not percentage strings. Included children under one aggregation node must sum exactly to `1.00000000`; compute `sum(score * weight)` and corresponding ranges.
+- `capped_sum`: compute `sum`, then `min(sum, cap)`; cap is required and nonnegative, and also applies to ranges.
 
-section 作为 overall 子项时，其 `weight` 只供 overall 的 `weighted_sum` 使用；item 的 `weight`
-只供所属 section 的 `weighted_sum` 使用。其他算法出现不需要的 weight、缺 cap、重复纳入、权重
-和不为 1 或声明上下限与算法结果冲突，均形成 normalization error。`formula` 和
-`non_additive` 只保存逐字规则与限制原因，不解析或执行任意公式字符串。
+A section's `weight` is used only by overall `weighted_sum`; an item's `weight` only by its section's `weighted_sum`. Unneeded weights for other algorithms, missing caps, duplicate inclusion, weights not summing to 1, or declared bounds inconsistent with algorithm results produce normalization errors. `formula`/`non_additive` save only verbatim rules and limitation reasons; arbitrary formula strings are neither parsed nor executed.
 
-## 评分语义与聚合
+## Scoring semantics and aggregation
 
-第一版仅对 `assessment_mode=model_assessable` 且规则、上下限、输入证据均足够的项目给出
-`estimated_score`。以下项目必须明确为 `unassessable`，保留原因和可补强动作，不猜分：
+The first version provides `estimated_score` only for `assessment_mode=model_assessable` items with sufficient rules, bounds, and input evidence (证据). These items must be explicitly `unassessable`, retaining reasons and strengthening actions without guessed scores:
 
-- 评分文字或分段规则有歧义；公式在 rubric 中仍不完整或首版不支持。
-- 任何价格比较项，或依赖其他投标人、评委排序、基准价、现场演示、主观印象、外部名次和
-  当前输入没有的第三方数据的项目。
-- 没有任何 confirmed response 能提供投标侧逐字支持、需要附件/证明但只有无证据薄承诺，或
-  无法用实际发送内容和固定原文支持结论的项目。
+- Ambiguous scoring text/bands, incomplete rubric formulas, or formulas unsupported by this version.
+- Any price-comparison item or any dependence on other bidders (投标人), reviewer rankings, reference prices, live demonstrations, subjective impressions, external rankings, or third-party data absent from current input.
+- No confirmed response provides verbatim bid-side support; required attachments/proof are replaced by thin unsupported commitments; or actual sent text and pinned originals cannot support the conclusion.
 
-纯承诺只有在 confirmed rubric 明确规定“承诺文字本身足以得分”时才可评分。需要证书、报告、
-截图、参数、业绩或附件的规则，不得仅凭“满足、完全响应、可提供”之类薄承诺给满分。模型
-给出的分数必须落在 confirmed item bounds 内，并同时有至少一条通过本机核验的招标侧引用和
-一条当前 DraftRun 的已确认投标侧引用；只有招标原文引用不能得分。报告的
-`response_item_ids` 只列实际通过核验并支持该得分的响应行，unassessable 时为空。无效引用不
-自动改写为其他来源。最终分数低于 confirmed item maximum 时，`deduction_reasons` 至少一项；
-补强动作可以为空，但不得建议伪造证件、报告、截图、参数或设计非目标中的报价策略。
+A pure commitment is scoreable only when the confirmed rubric explicitly states commitment text alone earns points. Rules requiring certificates, reports, screenshots, parameters, performance records, or attachments cannot receive full marks solely from thin claims such as “满足、完全响应、可提供”. Model scores must lie within confirmed item bounds and have at least one locally verified tender citation and one confirmed bid-side citation from the current DraftRun; tender citations alone cannot earn points. Report `response_item_ids` lists only verified response rows actually supporting the score; it is empty for unassessable items. Invalid citations are never automatically reassigned to other sources. Scores below confirmed item maximum require at least one `deduction_reasons` entry. Strengthening actions may be empty but must not recommend fabricated certificates/reports/screenshots/parameters or pricing strategies excluded by the design.
 
-每个 section 和 report 始终输出 `assessed_subtotal`，字段名称明确它只是已评估项小计。
-只有全部纳入项均 assessed、所有聚合规则可确定执行、Provider 各批次完整且本机校验通过时，
-才输出 `estimated_score`/`estimated_total`。任何纳入子项不可评估或聚合不可执行时，total 状态为 `unavailable`，
-并把 `estimated_total` 置空；如 confirmed bounds 足够，可输出 `possible_range`。不得把部分小计
-改名成总分，也不得以未评估项为零来制造总分。
+Every section/report always outputs `assessed_subtotal`, explicitly named as the assessed-item subtotal. `estimated_score`/`estimated_total` appear only when all included items are assessed, all aggregation rules execute deterministically, all Provider batches are complete, and local validation passes. Any included unassessable child or non-executable aggregation makes total status `unavailable` and `estimated_total` null; confirmed bounds may allow `possible_range`. Never rename a partial subtotal as a total or set unassessed items to zero to manufacture one.
 
-报告读取时重算 `validity`。DraftRun 不再 current、rubric 被 supersede、固定 Card revision 的
-确认状态失效、遮挡/输入依赖变化时标为 stale，并列出 invalidation code；历史报告不可重写。
+Report reads recompute `validity`. Non-current DraftRun, superseded rubric, invalidated pinned Card revision confirmation, or redaction/input dependency changes mark reports stale with invalidation codes. Historical reports cannot be rewritten.
 
-## 引用、外发与保密
+## Citations, outbound calls, and confidentiality
 
-Provider 请求使用共用 `OutboundContext`：`texts` 的每个本地 ref 唯一，
-`confidential_fields` 只含占位符、名称和类别。外发前沿用
-[模型起草与遮挡机制](../notes/model-drafting-redaction.md)：登记值先换成
-`{{secret.<key>}}`，再执行版本化规则遮挡；原材料和 DraftRun 不改。固定 manifest 包含实际使用的
-confidential field/value-row IDs、每个实际 sent text 的 SHA-256 和总 input hash；即使
-redaction revision 未变化，保密值换版导致的遮挡结果变化也会形成新输入并拒绝旧 preview。
+Provider requests use shared `OutboundContext`: each local ref in `texts` is unique; `confidential_fields` contains only placeholders, names, and categories. Outbound processing follows [model drafting and redaction](../notes/model-drafting-redaction.md): registered values become `{{secret.<key>}}` before versioned redaction rules; original materials/DraftRun remain intact. Pinned manifests include actual confidential field (保密字段)/value-row IDs, SHA-256 of every actual sent text, and the full input hash. Even without redaction revision changes, a new confidential-value version changes redacted output, forming new input and rejecting old previews.
 
-模型只返回 `ModelEvidenceRef`。服务按该批实际发送 ref 白名单解析，并逐字核对 quote 同时存在于
-实际发送文本和固定原文。持久化使用共用 `VerifiedCitation`。首版 score profile 只接受
-`TenderCitation` 和绑定当前 DraftRun confirmed ResponseItem 的 `DraftCitation`；
-`EvidenceCitation` 虽属于共用类型，本命令首版拒绝，因为证据正文不在评分外发输入中。
-任意模型生成的 UUID、URL、路径、选择/修订号或未知 ref 都不能创建绑定；错误 ref 只记录脱敏
-摘要，不回显任意模型字符串。
+Models return only `ModelEvidenceRef`. The service resolves refs against the current batch's sent-ref allowlist and verifies quotes verbatim in both sent text and pinned originals. Persistence uses shared `VerifiedCitation`. The initial score profile accepts only `TenderCitation` and `DraftCitation` bound to confirmed ResponseItem in the current DraftRun. Though shared types include `EvidenceCitation`, this version rejects it because evidence text is absent from outbound scoring input. Model-generated UUIDs, URLs, paths, selection/revision numbers, or unknown refs cannot create bindings; invalid refs record only sanitized summaries without echoing arbitrary model strings.
 
-rubric Provider 只收到已遮挡的招标原文 ref。score Provider 的每个 item 必须显式收到
-`tender_ref`、confirmed `rule_ref` 与同一 DraftRun 全部已确认响应的候选 `draft_refs`；`rule_ref`
-是供推理的人工规范化规则，不能生成 `TenderCitation`，真实招标引文只能来自 `tender_ref`。服务
-发布 assessed 结果前分别校验 tender/rule/draft ref，并要求模型的 tender 与 draft 引用均非空。
-读取 rubric 或历史报告时仍要在当前 org/task scope 下重新解析所有 Source、DraftRun、ResponseItem
-和 Card revision 父对象；越权或不存在统一 404，依赖失效则报告 stale 并禁止据此发起新评分，
-不能因为报告保存了 Source JSON 就绕过当前读取权限。Source 原文核验只读取所指 chunk/block，
-不扫描全文或产生新 Requirement。
+The rubric Provider receives only redacted tender-text refs. Each score Provider item must explicitly receive `tender_ref`, confirmed `rule_ref`, and candidate `draft_refs` from all confirmed responses in that DraftRun. `rule_ref` is human-normalized reasoning text and cannot generate `TenderCitation`; real tender quotations come only from `tender_ref`. Before publishing assessed results, services separately validate tender/rule/draft refs and require nonempty model tender and draft citations. Rubric/historical-report reads re-resolve every Source, DraftRun, ResponseItem, and Card revision parent under current org/task scope. Unauthorized/missing objects uniformly return 404; invalid dependencies make reports stale and block new scoring. Saved Source JSON cannot bypass current read permissions. Original-source verification reads only the referenced chunk/block, never scanning the full document or producing new Requirements.
 
-真实保密值不进入 score 快照、提示词、Provider 错误、Job result、UsageRecord、审计或报告。
-虽然关闭遮挡仍是既有的人类 org admin、revision-checked、audited 任务设置，但 B10 比模型起草
-收紧：rubric/score dry-run 在关闭时返回 `admission_blocker=redaction_required`，正式提交拒绝，
-请求参数不能覆盖。设置修订变化会停止后续调用，并要求重新 preview/submit。后续是否允许单位
-自带或本地模型在关闭遮挡时运行须另行批准。
+Actual confidential values never enter score snapshots, prompts, Provider errors, Job results, UsageRecord, audit, or reports. Disabling redaction remains an existing human org-admin, revision-checked, audited task setting, but B10 is stricter than drafting: rubric/score dry-run returns `admission_blocker=redaction_required` when disabled; submission rejects it and request parameters cannot override it. Settings revision changes stop later calls and require fresh preview/submit. Allowing org-owned/local models with disabled redaction requires separate approval.
 
-## Provider、作业和预付费
+## Providers, jobs, and prepaid billing
 
-[运行时契约](../../server/app/schemas/score_contracts.py)定义两个结构化 Provider 方法：
+The [runtime contract](../../server/app/schemas/score_contracts.py) defines two structured Provider methods:
 
-- `RubricProvider.extract_rubric`：输入固定 scoring Requirements，输出 section/item 候选。
-- `ScoreProvider.score`：输入 confirmed rubric item、对应 DraftRun 分区和外发上下文，输出逐项
-  assessed/unassessable、分数、原因、补强动作与 refs。
+- `RubricProvider.extract_rubric`: pinned scoring Requirements → candidate sections/items.
+- `ScoreProvider.score`: confirmed rubric items, corresponding DraftRun partitions, and outbound context → item-level assessed/unassessable results, scores, reasons, strengthening actions, and refs.
 
-二者都只由 `server/app/providers/` 的实现调用厂商 SDK/HTTP，使用严格 JSON Schema；业务服务
-只依赖 Protocol。rubric 的全部 scoring Requirements 必须在一次完整请求中共同解析 section、
-item 与 overall；不得按字符预算分批，也不得在结构错误后拆半。容量门禁按完整 HTTP JSON 请求
-的 UTF-8 字节计算，包含 system/messages、schema 与厂商参数，使用 `BID_RUBRIC_MAX_REQUEST_BYTES`；
-配置定义与部署预算说明见 [环境变量模板](../../deploy/.env.example)。超限时 preview 返回
-`admission_blocker=rubric_context_limit`，submit 拒绝，均不创建作业或调用 Provider。响应必须有
-与整表完全一致的 requested IDs/ref 绑定；多个局部响应不能合并成 rubric。结构错误或截断明确
-失败并保留已发生 `ProviderUsage`；既有 HTTP 失败重试只重发完整请求，不新增结构重试策略。
-score 的适配层保留已完成 batches 和每次 `ProviderUsage`，第一次不可恢复失败后停止尚未开始
-的批次，已在途调用可完成并计费。score 结构错误可按既有边界拆半，但单项仍失败就明确报告。
-不能用默认分数、空引用或宽泛重试掩盖失败。
+Only implementations in `server/app/providers/` call vendor SDKs/HTTP, using strict JSON Schema; business services depend on Protocols only. All rubric scoring Requirements must share one complete request to jointly resolve sections, items, and overall. No character-budget batches or splitting after structural errors. Capacity gates count UTF-8 bytes of the entire HTTP JSON request, including system/messages, schema, and vendor parameters, using `BID_RUBRIC_MAX_REQUEST_BYTES`; configuration/deployment budgets are documented in the [environment template](../../deploy/.env.example). Overflow yields preview `admission_blocker=rubric_context_limit` and submission rejection, without jobs/Provider calls. Response requested IDs/refs must match the entire table exactly; partial responses cannot be merged into a rubric. Structural errors/truncation fail explicitly while retaining incurred `ProviderUsage`. Existing HTTP retries resend only complete requests; there is no new structural-retry strategy. Score adapters retain completed batches and per-call `ProviderUsage`; the first nonrecoverable failure stops unstarted batches, while in-flight calls may finish and be charged. Score structural errors may split batches under existing boundaries, but persistent single-item failure is explicit. Default scores, empty citations, or broad retries cannot conceal failures.
 
-rubric 和 score 的 Job kind 分别固定为 `score_rubric`、`score`。两者的 `task_id`、`document_id`
-必须非空；score Job 的 document 来自 DraftRun 固定 extraction Job 的真实 Document，不能造占位
-Document。执行复用既有
-`JobExecution.activate/owned_job/admit/_complete_once`：每次尝试持有 lease 和 `run_id`，发布前
-再次核验所有固定输入；接管、过期、取消或设置变化后旧 run 不得发布。
+Rubric/score Job kinds are respectively `score_rubric` and `score`. Both require non-null `task_id`/`document_id`; score's document comes from the real Document pinned by DraftRun's extraction Job, never a placeholder. Execution reuses `JobExecution.activate/owned_job/admit/_complete_once`: attempts hold lease/run_id and revalidate all pinned inputs before publication. Old runs cannot publish after takeover, expiry, cancellation, or settings changes.
 
-Provider 解析、固定 identity 和费用规则复用 [B09 作业与计费](check.md#作业provider-与计费)：
-`resolve_llm` 可以选择单位自带配置或平台默认，快照固定 `provider_config_id`、`provider_source`
-和 provider identity，不得只记录平台目录。每个真实调用仍走 VendorCall/call ceiling，并按现有
-唯一键 `(org_id, job_id, run_id, call_id)` 写 `UsageRecord`。只有平台收费调用按目录售价做正额
-reservation，并在同一事务调用 `billing.charge_usage` 扣预付余额；已发送但结果不明保留
-reservation。单位自带 key 的 reservation/平台 charge 为 0，跳过预付扣款，供应商 `usd` 不可知
-时仍为 null；`max_charge` 只限制平台售价扣款，不能声称限制单位直接承担的厂商账单。取消、引用
-拒绝、模型内容无效或报告 partial 都不抹去已发生用量。服务不得另写一套计费。
+Provider resolution, pinned identity, and fee rules reuse [B09 jobs and billing](check.md#jobs-provider-and-billing). `resolve_llm` may select org-owned configuration or platform defaults; snapshots pin `provider_config_id`, `provider_source`, and provider identity, never only the platform catalog. Every actual call uses VendorCall/call ceiling and writes `UsageRecord` under `(org_id, job_id, run_id, call_id)`. Only platform-paid calls reserve positive amounts at catalog prices and deduct prepaid balance (预付余额) through `billing.charge_usage` in the same transaction; sent requests with unknown outcomes retain reservations. Org-owned keys have reservation/platform charge=0, skip prepaid deductions, and retain null vendor `usd` when unknown. `max_charge` bounds only platform selling-price charges, not org-paid vendor bills. Cancellation, rejected citations, invalid model content, or partial reports never erase incurred usage. Services cannot implement separate billing.
 
-`--dry-run` 做同范围快照与授权检查，不写业务/审计/Job 数据、不调用 Provider，报告首轮费用
-上界、模型目录和遮挡摘要。正式提交必须带 preview 的 `expected_input_hash`；`max_charge` 只是
-本 Job 的平台售价扣款上限，不限制单位自带 key 的厂商账单，也不等于尚未实现的
-`Task.budget_usd` 全任务累计预算。已决定首版不执行全任务累计预算，不能在本切片里暗示已经生效。
+`--dry-run` performs snapshots/authorization for the same scope without business/audit/Job writes or Provider calls, returning first-pass cost bounds, model catalog, and redaction summaries. Submission requires the preview's `expected_input_hash`. `max_charge` is only this Job's platform-charge cap, not an org-owned-key vendor-bill limit or the unimplemented all-task cumulative `Task.budget_usd` budget. The first version explicitly does not enforce cumulative task budgets and must not imply otherwise.
 
-缓存键至少包含 org/task/document/extraction/draft/rubric ID 与固定版本、input hash、assessment
-date、Provider/模型目录修订、reasoning、prompt/schema/规则/遮挡版本。相同键可返回 cached Job；
-`retry=true` 仅重试同一固定输入，不选择“最新”DraftRun 或 rubric。
+Cache keys include at least org/task/document/extraction/draft/rubric IDs and pinned versions, input hash, assessment date, Provider/model catalog revisions, reasoning, and prompt/schema/rule/redaction versions. Identical keys can return cached Jobs; `retry=true` retries only pinned input, never selecting “latest” DraftRun/rubric.
 
-## HTTP、CLI 与 Result
+## HTTP, CLI, and Result
 
-接口按阶段注册；HTTP 和 CLI 使用同一 service 与 Pydantic 模型。复杂 revision/decision/classify
-输入使用 UTF-8 JSON 文件，结构分别为 `RubricReviseRequest`、`Rubric*DecisionRequest` 或
-`RubricClassifyRequest`，CLI 不做交互提问。
+Interfaces register by stage; HTTP/CLI use identical services and Pydantic models. Complex revision/decision/classify input uses UTF-8 JSON files with `RubricReviseRequest`, `Rubric*DecisionRequest`, or `RubricClassifyRequest`; CLI has no interactive prompts.
 
-阶段 A 注册以下 rubric 入口：
+Stage A registers these rubric entry points:
 
-| HTTP | CLI（均支持 `--json`） | data / items |
+| HTTP | CLI (all support `--json`) | data / items |
 | --- | --- | --- |
 | `POST /tasks/{task_id}/score-rubrics/preview` | `bid score rubric generate --task UUID --extraction-job UUID [--reasoning LEVEL] [--max-charge DECIMAL] --dry-run --json` | `RubricPreview` / `[]` |
-| `POST /tasks/{task_id}/score-rubrics` | `bid score rubric generate --task UUID --extraction-job UUID --expected-input-hash SHA256 [--reasoning LEVEL] [--max-charge DECIMAL] [--retry] [--wait] --json` | `RubricJobAccepted`；wait 后为 `RubricGenerateResult` / `[]` |
+| `POST /tasks/{task_id}/score-rubrics` | `bid score rubric generate --task UUID --extraction-job UUID --expected-input-hash SHA256 [--reasoning LEVEL] [--max-charge DECIMAL] [--retry] [--wait] --json` | `RubricJobAccepted`; after wait, `RubricGenerateResult` / `[]` |
 | `GET /tasks/{task_id}/score-rubrics?cursor=…&limit=…` | `bid score rubric list --task UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `RubricSetView[]` |
 | `GET /tasks/{task_id}/score-rubrics/{rubric_id}` | `bid score rubric show --task UUID --rubric UUID --json` | `RubricReportData` / `[]` |
 | `POST /tasks/{task_id}/score-rubrics/{rubric_id}/revisions` | `bid score rubric revise --task UUID --rubric UUID --input PLAN.json --json` | `RubricReportData` / `[]` |
@@ -251,167 +130,107 @@ date、Provider/模型目录修订、reasoning、prompt/schema/规则/遮挡版�
 | `POST /tasks/{task_id}/score-rubrics/{rubric_id}/decisions` | `bid score rubric decide --task UUID --rubric UUID --input DECISION.json --json` | `RubricSetView` / `[]` |
 | `GET /tasks/{task_id}/score-rubrics/{rubric_id}/history?cursor=…&limit=…` | `bid score rubric history --task UUID --rubric UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `RubricHistoryItem[]` |
 
-阶段 B 注册以下评分执行入口：
+Stage B registers these scoring entry points:
 
-| HTTP | CLI（均支持 `--json`） | data / items |
+| HTTP | CLI (all support `--json`) | data / items |
 | --- | --- | --- |
 | `POST /tasks/{task_id}/scores/preview` | `bid score run --task UUID --draft UUID --rubric UUID --as-of YYYY-MM-DD [--reasoning LEVEL] [--max-charge DECIMAL] --dry-run --json` | `ScorePreview` / `[]` |
-| `POST /tasks/{task_id}/scores` | `bid score run --task UUID --draft UUID --rubric UUID --as-of YYYY-MM-DD --expected-input-hash SHA256 [--reasoning LEVEL] [--max-charge DECIMAL] [--retry] [--wait] --json` | `ScoreJobAccepted`；wait 后为 `ScoreJobResult` / `[]` |
+| `POST /tasks/{task_id}/scores` | `bid score run --task UUID --draft UUID --rubric UUID --as-of YYYY-MM-DD --expected-input-hash SHA256 [--reasoning LEVEL] [--max-charge DECIMAL] [--retry] [--wait] --json` | `ScoreJobAccepted`; after wait, `ScoreJobResult` / `[]` |
 | `GET /tasks/{task_id}/scores?cursor=…&limit=…` | `bid score list --task UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `ScoreRunView[]` |
 | `GET /tasks/{task_id}/scores/{report_id}` | `bid score show --task UUID --report UUID --json` | `ScoreReportData` / `[]` |
 
-实际 path 前缀沿用现有 API router；这里固定相对资源结构。分页 limit 默认 50、范围 1–200，
-cursor 绑定 org、task、资源种类和排序。路径 `task_id` 必须等于 extraction/draft/rubric/report 的
-task，否则统一 404。耗时提交默认立即返回 Job；`--wait` 复用既有等待和状态查询。
+Actual path prefixes follow existing API routers; this fixes relative resource structure. Pagination limit defaults to 50, range 1–200; cursors bind org, task, resource kind, and ordering. Path `task_id` must match extraction/draft/rubric/report task or uniformly return 404. Long-running submissions return Jobs immediately by default; `--wait` reuses existing wait/status queries.
 
-所有成功、失败和 `--json` 输出都沿用 `contracts.CONTRACT_VERSION` 所定义的 Result 七键：
-`ok`、`command`、`data`、`items`、
-`warnings`、`cost`、`duration_ms`。`cost` 是该响应可证明的实际用量；preview 的估算在 data 的
-`estimated_cost/estimated_charge`，不能冒充已花费用。schema 仅新增上述命令，不改变既有命令；
-`bid schema` 公布已实施的 rubric 和评分执行命令。
+All success/failure/`--json` output uses the seven-key Result from `contracts.CONTRACT_VERSION`: `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`. `cost` is provable actual usage for that response; preview `estimated_cost/estimated_charge` in data cannot masquerade as incurred fees. Schema adds these commands without changing existing commands; `bid schema` publishes implemented rubric/scoring commands.
 
-| 退出码 | score 明确语义 |
+| Exit code | Explicit score semantics |
 | --- | --- |
-| 0 | preview、提交、列表、完整 rubric/report 读取成功；等待 rubric 生成时只有完整候选为 0，等待评分时只有全部项目可评估且可形成完整总分才为 0 |
-| 2 | 参数、日期、UUID、expected hash/revision、非 current DraftRun、未确认 rubric、跨抽取绑定或输入完整性错误 |
-| 3 | 尚未形成持久报告的可重试 Provider、队列、网络或临时存储失败 |
-| 4 | 身份/权限、资源不存在、内容拒绝、固定输入/计费/引用完整性或不可重试 Provider 失败 |
-| 5 | 已保留有效 rubric/report，但 rubric 生成有未解决要求，或评分有失败批次、unassessable item、不可聚合 section 或因此没有完整总分 |
+| 0 | Successful preview/submission/list/complete rubric or report read; rubric wait is 0 only for complete candidates, score wait only when all items are assessable and a complete total exists |
+| 2 | Parameter/date/UUID/expected hash or revision errors, non-current DraftRun, unconfirmed rubric, cross-extraction bindings, or input integrity errors |
+| 3 | Retryable Provider/queue/network/temporary storage failure before a persistent report exists |
+| 4 | Identity/permission, missing resource, content refusal, pinned-input/billing/citation integrity, or nonretryable Provider failure |
+| 5 | Valid rubric/report retained but rubric has unresolved requirements, or scoring has failed batches, unassessable items, nonaggregatable sections, or therefore no complete total |
 
-异步“已接受”本身返回 0；`job wait` 和 `score show` 读取 partial、含 unassessable item 或没有完整
-总分的报告时统一返回 5，不新增额外开关。
-跨单位和无权资源仍统一 404；错误不回显原文、外发文字、模型原始输出或厂商错误体。
+Asynchronous acceptance itself returns 0. `job wait`/`score show` consistently return 5 for partial reports, unassessable items, or missing complete totals, without another switch. Cross-org/unauthorized resources remain uniform 404; errors never echo original/outbound text, raw model output, or vendor error bodies.
 
-## 权限与人类关口
+## Permissions and human gates
 
-权限使用已批准的 `score:read`、`score:run`、`score:rubric:generate`、
-`score:rubric:review` 映射；评分执行只使用前两项：
+Permissions use approved `score:read`, `score:run`, `score:rubric:generate`, and `score:rubric:review` mappings; execution uses only the first two:
 
-- `score:read` 可按现有四种单位角色授予，也可进入 token allowlist；仍与 Membership 和任务读取
-  权限取交集。
-- `score:run` 与 `score:rubric:generate` 授予 admin/bidder/technical（与 `check:run` 相同；令牌只能由 admin
-  签发且不能超出签发人权限），并可显式进入 token allowlist，
-  使外部 agent 能预览和发起 advisory 作业；它们不能做人工决定。
-- `score:rubric:review` 只属于登录的人类 session，不进入 token `SCOPES`。数据库 CHECK/触发器
-  与 service 双重拒绝 token/agent/worker actor。technical 只能确认或修订 technical 内容，bidder
-  只能确认或修订 commercial 内容；提交完整替换快照时，
-  其他职责内容必须与上一版逐字相同。整集确认由 bidder 完成。admin 只执行 section/item
-  classify，不默认获得修订或跨专业确认权。history 随 `score:read` 可读。
-- 评分报告不能自动确认卡片、修改 DraftRun、写入导出、填保密值或发布最终得分。内置/外部
-  agent 与 token 不能把 advisory 结果变成人工决定。
+- `score:read` is grantable to the four existing org roles and may enter the token allowlist, still intersected with Membership/task-read permissions.
+- `score:run`/`score:rubric:generate` are granted to admin/bidder/technical, matching `check:run`. Only admins issue tokens, within their own permissions. These scopes may explicitly enter the token allowlist for external-agent previews/advisory submissions, never human decisions.
+- `score:rubric:review` belongs only to logged-in human sessions, not token `SCOPES`. DB CHECK/triggers and services both reject token/agent/worker actors. technical confirms/revises technical content only; bidder commercial content only. In complete replacement snapshots, other domains' content must remain verbatim identical to the prior version. bidder confirms the entire set. admin performs section/item classify only, with no default revision/cross-domain confirmation rights. history follows `score:read`.
+- Score reports cannot automatically confirm cards, modify DraftRun, write exports, fill confidential values, or publish final scores. Internal/external agents/tokens cannot turn advisory output into human decisions.
 
-路由必须先验证 session/token scope 和有效 Membership，再设置 `app.current_org`；后台 worker
-携带提交时 org，只在该 RLS 上下文中读取。不能使用 BYPASSRLS 角色。
+Routes validate session/token scopes and valid Membership before setting `app.current_org`. Workers carry submission org and read only within that RLS context; BYPASSRLS roles are forbidden.
 
-## 数据表与迁移轮廓
+## Tables and migration outline
 
-业务表也按阶段落地；名称可在实现迁移评审时微调，约束不能弱化：
+Business tables also land by stage. Names may be adjusted during implementation migration review; constraints cannot weaken:
 
-| 表 | 作用与关键固定字段 |
+| Table | Purpose and pinned fields |
 | --- | --- |
-| `score_rubric_sets` | task/extraction job/document、版本、输入哈希、规则/prompt/schema 版本、overall 规则、状态、确认人/时间 |
-| `score_rubric_sections` | rubric、source、key/order、聚合、上下限、权重、纳入 overall、状态与 revision |
-| `score_rubric_items` | rubric/section/requirement/source、fingerprint、规则、模式、上下限、权重、职责、状态与 revision |
-| `score_rubric_coverage` | 每个 scoring Requirement 的 mapped/duplicate/excluded/pending、canonical 绑定与 revision |
-| `score_rubric_coverage_items` | mapped coverage 与一个或多个 rubric item 的规范化复合外键关系；不把 item IDs 塞 JSON 假约束 |
-| `score_rubric_decisions` | section/item/set 的 append-only 人类决定、原因 hash、revision、session actor 与时间 |
-| `score_rubric_coverage_decisions` | coverage mapped/duplicate/excluded/reopen 的 append-only 人类决定 |
-| `score_rubric_classifications` | section/item 的 append-only admin 人类职责分类 |
-| `score_rubric_revision_events` | 新 candidate 版本与 prior rubric、理由、人类 actor 的 append-only 关联 |
+| `score_rubric_sets` | task/extraction job/document, version, input hash, rule/prompt/schema versions, overall rules, status, confirmer/time |
+| `score_rubric_sections` | rubric/source/key/order, aggregation, bounds, weight, overall inclusion, status/revision |
+| `score_rubric_items` | rubric/section/requirement/source, fingerprint, rules, mode, bounds, weight, domain, status/revision |
+| `score_rubric_coverage` | mapped/duplicate/excluded/pending per scoring Requirement, canonical binding/revision |
+| `score_rubric_coverage_items` | Normalized composite FK relations from mapped coverage to one or more rubric items, never pretending JSON item IDs enforce constraints |
+| `score_rubric_decisions` | Append-only human section/item/set decisions, reason hash, revision, session actor/time |
+| `score_rubric_coverage_decisions` | Append-only human coverage mapped/duplicate/excluded/reopen decisions |
+| `score_rubric_classifications` | Append-only admin human section/item review-domain classifications |
+| `score_rubric_revision_events` | Append-only link between new candidate/prior rubric, reason, and human actor |
 
-以上 rubric 表属于阶段 A。以下报告表属于阶段 B：
+These rubric tables belong to stage A. Report tables belong to stage B:
 
-| 表 | 作用与关键固定字段 |
+| Table | Purpose and pinned fields |
 | --- | --- |
-| `score_reports` | job/run、AssessmentInput、rubric 固定版本、规则版本、完成/有效性、聚合状态与用量 IDs |
-| `score_report_items` | report/rubric item/requirement/anchor ResponseItem、anchor 分区、结果、分数、原因与补强动作 |
-| `score_report_item_responses` | assessed item 与一个或多个实际支持得分的 confirmed ResponseItem 的规范化复合外键关系 |
-| `score_item_citations` | report item 与 verified tender/draft citation 的结构化绑定 |
+| `score_reports` | job/run, AssessmentInput, pinned rubric version, rule version, completion/validity, aggregation status/usage IDs |
+| `score_report_items` | report/rubric item/requirement/anchor ResponseItem, anchor partition, outcome, score, reasons, strengthening actions |
+| `score_report_item_responses` | Normalized composite FK relations from assessed items to one or more confirmed ResponseItems actually supporting scores |
+| `score_item_citations` | Structured report-item bindings to verified tender/draft citations |
 
-每张表 `org_id UUID NOT NULL`、`task_id UUID NOT NULL`，同一迁移中 `ENABLE ROW LEVEL SECURITY`
-和 `FORCE ROW LEVEL SECURITY`，策略只接受 `current_setting('app.current_org', true)` 的精确单位。
-每张表都有 `(org_id,id)` 与需要的 `(org_id,task_id,id)` 唯一键；coverage 公开 view 含
-id/org/task/rubric/revision，item IDs 由 `score_rubric_coverage_items` 授权聚合。所有 Task、Document、Job、
-Requirement、DraftRun、ResponseItem、rubric/report/decision/citation 关系使用含 `org_id` 的复合外键，
-任务内链再同时包含 `task_id`，数据库直接拒绝跨单位或跨任务拼接。必填业务字段均 NOT NULL；
-可空只用于尚无值的 score、上下限、确认 actor/time 和可选原因，并配成对 CHECK。
+Each table has `org_id UUID NOT NULL`, `task_id UUID NOT NULL`, and both `ENABLE ROW LEVEL SECURITY`/`FORCE ROW LEVEL SECURITY` in the same migration. Policies accept only the exact org in `current_setting('app.current_org', true)`. Each table has `(org_id,id)` and necessary `(org_id,task_id,id)` unique keys. Public coverage views contain id/org/task/rubric/revision; item IDs are authorized aggregates from `score_rubric_coverage_items`. Every Task, Document, Job, Requirement, DraftRun, ResponseItem, rubric/report/decision/citation relation uses composite FKs containing `org_id`; task-scoped chains also contain `task_id`, letting the DB reject cross-org/cross-task joins. Required business fields are NOT NULL; nullable fields are only unavailable scores/bounds/confirmation actor-time/optional reasons, with paired CHECK constraints.
 
-迁移还应包含：状态/数值/actor-kind CHECK；每 rubric 版本、section key、item key/fingerprint、coverage
-Requirement、report+rubric item 的唯一约束；确认 set 只能引用全部已确认 item/section 的数据库
-关口；decision/classification/revision/citation append-only 权限；组织删除策略沿用现有业务表。
-如实现 SQL view 或聚合 view，必须使用 security-invoker 与当前 org scope，不能以 view owner 绕过
-RLS；API 也可在授权查询后组装 Pydantic 聚合 view。Job 复用现表，只增加明确
-kind/cache/result schema 与处理器；`UsageRecord`、`VendorCall`、`AuditLog` 和余额表不复制。
+Migrations also require status/numeric/actor-kind CHECK; unique rubric versions, section keys, item keys/fingerprints, coverage Requirements, and report+rubric items; DB gates requiring all confirmed items/sections for confirmed sets; append-only decision/classification/revision/citation permissions; existing org-deletion policy. SQL/aggregate views must use security-invoker/current org scope, never owner-based RLS bypass. APIs may instead assemble Pydantic aggregate views after authorized queries. Jobs reuse existing tables with explicit kind/cache/result schema/processor additions; UsageRecord, VendorCall, AuditLog, and balance tables are not duplicated.
 
-迁移与同一实现改动必须包含两单位 A/B、无 org context、跨 task 复合外键、普通应用角色无法绕过
-FORCE RLS 的端到端验收；每张新表、每个公开/聚合 view 和上述每条 route 都验证 A 不能读写 B。
-先迁移/模型，再 service/provider/job，再 API/CLI/schema，最后控制台；任一阶段不能暂时用无 RLS
-表承载候选或报告。
+Migrations and their implementation changes must include end-to-end acceptance for orgs A/B, missing org context, cross-task composite FKs, and normal runtime roles unable to bypass FORCE RLS. Every new table, public/aggregate view, and route verifies A cannot read/write B. Implement migration/models first, then service/provider/job, API/CLI/schema, and finally console; no stage may temporarily store candidates/reports without RLS.
 
-## 审计
+## Audit
 
-固定成功事件码为 `score_rubric.submitted/completed/cancelled/revised/classified/decided` 和
-`score.submitted/completed/cancelled`；固定失败事件码为 `score_rubric.failed`、
-`score_rubric.decision_denied`、`score.failed`。持久审计默认只记录已认证、已解析 org 且进入业务
-边界的动作；pre-auth、跨单位统一 404 和无法安全绑定对象的拒绝只进既有安全日志。审计 metadata
-只含 org/task/object、actor kind/id、revision、输入/原因 hash、稳定 error code 和 usage IDs，不记
-外发文字、保密值、模型原始输出或厂商错误体。
+Fixed successful events are `score_rubric.submitted/completed/cancelled/revised/classified/decided` and `score.submitted/completed/cancelled`. Fixed failure events are `score_rubric.failed`, `score_rubric.decision_denied`, and `score.failed`. Persistent audit defaults to authenticated actions with resolved org that entered business boundaries. Pre-auth, uniform cross-org 404, and refusals lacking safe object bindings use existing security logs only. Metadata contains only org/task/object, actor kind/id, revision, input/reason hashes, stable error code, and usage IDs, never outbound text, confidential values, raw model output, or vendor error bodies.
 
-dry-run 严格零写入，因此不写 AuditLog；cached 命中返回既有 Job/report，不新增 submitted、
-completed 或用量审计。pre-auth 与跨单位统一 404 只进安全日志，不扩展为持久 AuditLog；以上事件
-与 metadata 边界不再悬空。
+Dry-run is strictly write-free and creates no AuditLog. Cached hits return existing Jobs/reports without new submitted/completed/usage audits. Pre-auth/cross-org 404 stay in security logs, not persistent AuditLog; these event/metadata boundaries are settled.
 
-## 评测依据
+## Evaluation basis
 
-Provider 匹配实验的来源限制、可得结论与不可声称事项统一见
-[B09 阶段二评测依据](check.md#阶段二评测依据)。B10 只继承其保守约束：所有模型引用都由本机逐字核验，
-missing/unknown 不默认满分，匹配实验不冒充真实招标得分或重复性证据。本页不复述样本数值。
+Provider-matching experiment source limits, supported conclusions, and prohibited claims live in [B09 stage two evaluation basis](check.md#stage-two-evaluation-basis). B10 inherits only conservative constraints: local verbatim verification for all model citations; missing/unknown never defaults to full marks; matching experiments are neither real tender scores nor reproducibility evidence. This page does not repeat sample statistics.
 
-## 分阶段验收
+## Staged acceptance
 
-按仓库规则只写端到端验收，不为模型类重复实现编写单元测试。测试 Provider 使用结构化 fake，
-真实服务评测放在 `evals/` 且不进默认 CI。至少覆盖：
+Repository rules require end-to-end acceptance only, without model-class unit tests that repeat implementation. Test Providers use structured fakes; real-service evaluations live in `evals/`, outside default CI. Cover at least:
 
-阶段 A 覆盖以下第 1、2、5、6 项中与 rubric 有关的迁移、HTTP、CLI、作业、费用和人工关口；
-阶段 B 覆盖评分报告、ScoreProvider 和聚合结果，并补齐其余条目。阶段 A 完成不能代替阶段 B
-评分验收。
+Stage A covers rubric-related migration, HTTP, CLI, jobs, fees, and human gates in items 1, 2, 5, and 6. Stage B covers reports, ScoreProvider, aggregation, and the remaining items. Stage A completion cannot substitute for stage B scoring acceptance.
 
-1. 两单位、无 org context、跨 task/document/draft/rubric 外键与 FORCE RLS；token scope、失效
-   Membership、职责错位和 agent 试图确认全部被拒，不能由 404 枚举他单位对象。
-2. rubric 只读取指定 extraction Job 的全部 scoring Requirements；不读 condition、不遍历 Chunk/
-   全文，只按 Source 读取所指 chunk/block 验引；覆盖、显式去重、修订新版本、admin 分类、逐项/
-   整集确认、history、权重/上下限/section 与 overall 合计关口可重复。
-3. score 只读取指定 current DraftRun 的全部 confirmed response 候选及 comply-only/gap metadata；
-   跨 Requirement 支撑行能被逐字验证并写入 `response_item_ids`，只有招标侧引用不能 assessed。未确认
-   Card、后来 Card、released DOCX、模板和真实保密值均不进入可见 fake Provider 请求；遮挡关闭
-   时 preview 阻止且正式提交不产生 Job/Provider 调用。
-4. sum/weighted_sum/capped_sum 的小数权重、cap、范围与 ROUND_HALF_UP；formula/non_additive 永不
-   执行但不阻止规则完整确认。覆盖歧义、价格比较、外部比较、薄承诺、负偏离、低于满分却无
-   deduction reason、非法越界分、未知/歧义/遮挡引用、重复/漏答 Provider item；只保留有效批次，
-   任何 partial 小计不成为 total，补强动作不能生成假证件或报价策略。
-5. preview 无写入/无调用；expected hash、redaction revision、rubric/Draft current fence；lease 过期、
-   run_id 接管、取消、并发批次、已发送结果不明 reservation、UsageRecord 唯一和预付余额只扣一次。
-6. HTTP 与远程/本地 CLI Result 七键、schema、0/2/3/4/5、所有 route 的 task 绑定、分页、缓存与
-   retry；历史 partial report 的 show 恒返回 5。端到端生成一个脱敏 JSON
-   rubric/report 工件，能核对 source、confirmed revisions、usage IDs、unassessable 和总分缺失原因；
-   工件放测试临时目录，不写入 `docs/`。
+1. Two orgs, missing org context, cross-task/document/draft/rubric FKs, FORCE RLS; reject invalid token scopes/Membership, mismatched domains, and agent confirmation attempts. 404 must not enumerate another org's objects.
+2. Rubric reads all scoring Requirements only from the selected extraction Job, never condition/Chunk traversal/full text. Source verification reads only the referenced chunk/block. Reproduce coverage, explicit deduplication, revision/new version, admin classification, item/set confirmation, history, weights/bounds, and section/overall total gates.
+3. Score reads all confirmed response candidates plus comply-only (须遵守)/gap metadata only from the specified current DraftRun. Cross-Requirement support verifies verbatim and enters `response_item_ids`; tender-only citations never establish assessed results. Unconfirmed/later Cards, released DOCX, templates, and actual confidential values never appear in fake Provider requests. Disabled redaction blocks preview/submission without Job/Provider calls.
+4. Test decimal weights, caps, ranges, and ROUND_HALF_UP for sum/weighted_sum/capped_sum. formula/non_additive never executes but permits complete rule confirmation. Cover ambiguity, price/external comparisons, thin commitments, negative deviation (负偏离), below-maximum scores without deduction reasons, out-of-bound scores, unknown/ambiguous/redacted citations, duplicate/missing Provider items. Retain valid batches only; partial subtotals never become totals; strengthening actions cannot fabricate certificates or pricing strategies.
+5. Write-free/call-free preview; expected hash, redaction revision, rubric/Draft current fences; lease expiry, run_id takeover, cancellation, concurrent batches, sent-request unknown-outcome reservations, unique UsageRecord, and exactly-once prepaid deductions.
+6. HTTP/remote/local CLI seven-key Result, schema, 0/2/3/4/5, all route task bindings, pagination, cache/retry; historical partial report show always returns 5. End-to-end output includes sanitized JSON rubric/report artifacts verifying sources, confirmed revisions, usage IDs, unassessable/missing-total reasons, in test temporary directories rather than `docs/`.
 
-实施时运行受影响的 ruff、pyright、迁移、PostgreSQL/RLS、API/CLI 和 worker 端到端关卡；按固定
-事件码验证成功、业务失败、dry-run 零写入和 cached 不重复审计。未接真实 Provider、未读 released 文件和未做版式审查必须
-留在报告 limitations，不能用“score 已完成”概括为最终投标评审。
+Implementation runs affected ruff, pyright, migration, PostgreSQL/RLS, API/CLI, and worker end-to-end gates. Verify successful/business-failure events, write-free dry-run, and no duplicate cached audits. No real Provider, no released-file reading, and no layout review must remain in report limitations; “score complete” cannot mean final bid evaluation.
 
-实现的保密表示限制见[评分机制的 Pitfalls](../notes/score.md#pitfalls)；固定来源和固定 section key
-不能安全表示为占位符时，不以改写已确认绑定绕过保密边界。
+Implementation confidentiality-representation limits are in [scoring Pitfalls](../notes/score.md#pitfalls). When pinned sources/section keys cannot safely be represented as placeholders, never rewrite confirmed bindings to bypass confidentiality.
 
-## 已定决定
+## Decisions
 
-以下采用原推荐默认。
+These adopt the originally recommended defaults.
 
-| 事项 | 决定 | 理由 |
+| Topic | Decision | Rationale |
 | --- | --- | --- |
-| 平台默认评分 Provider | 沿用 [B09 已定决定](check.md#已定决定)，B10 不单独选型 | check/score 应共享中文长文、结构化输出、引用、价格和数据政策评测，避免同一能力出现矛盾默认值 |
-| 失败持久审计扩展 | 只持久化本文固定的已认证业务失败事件，pre-auth 与跨单位 404 留安全日志 | 避免审计表本身形成对象枚举或高噪声 |
-| `Task.budget_usd` 执行 | 首版继续不执行，只使用平台预付准入与单 Job `max_charge` | 当前没有跨 Job 累计的一致事务；`max_charge` 也不能限制单位自带 key 的厂商账单 |
-| 价格及主观评分 | 首版全部 unassessable | 缺少可验证外部输入，自动猜测会制造虚假精度，且报价策略属于设计非目标 |
-| released-export 评分 | 不扩展现有命令；需要时另立 human-only 契约 | released 文件含真实保密值并受 export 下载权限保护，不能把 agent 的 `score:run` 变成下载通道 |
-| 人工改分、采纳与 UI | 后续另立追加式决定与界面契约，首版不改报告 | 保留模型输出、人工判断和最终评标结果的不同来源，避免覆盖历史 |
+| Platform default scoring Provider | Follow [B09 decisions](check.md#decisions); no independent B10 selection | check/score share Chinese long-document, structured output, citation, price, and data-policy evaluation, avoiding contradictory defaults for one capability |
+| Persistent failure-audit extension | Persist only the fixed authenticated business-failure events here; pre-auth/cross-org 404 remain security logs | Prevent enumeration and excessive audit noise |
+| `Task.budget_usd` enforcement | Not enforced initially; use platform prepaid admission and per-Job `max_charge` only | No consistent cross-Job cumulative transaction exists; max_charge also cannot bound org-owned-key vendor bills |
+| Price/subjective scoring | All unassessable initially | Missing verifiable external input makes guessing falsely precise; pricing strategy is a design non-goal |
+| Released-export scoring | Do not expand this command; use a separate human-only contract if needed | Released files contain real confidential values and require export download permission; agent `score:run` cannot become a download channel |
+| Human score changes/adoption/UI | Later separate append-only decision/UI contract; initial reports remain immutable | Preserve distinct provenance for model output, human judgment, and final evaluation, without overwriting history |

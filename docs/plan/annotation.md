@@ -2,150 +2,71 @@
 kind: plan
 ---
 
-# 契约草案：固定未确认来源的本机 Rust 标注副本
+# Draft contract: local Rust annotation copies of fixed unconfirmed sources
 
-状态：**待批准，未实施。** 本草案对应[路线](roadmap.md)中的 B05。
+Status: **pending approval, not implemented.** Covers B05 in the [roadmap](roadmap.md).
 
-仓库[agent.md](../../agent.md)要求：
-“新功能先写 Pydantic 模型、Provider 接口和 CLI 的 JSON 结构，等确认后再写实现。”
-本提案的[Pydantic与Provider草案](annotation/annotation_contracts.py)、
-[JSON Schema](annotation/annotation-schemas.json)只在文档中，未注册到运行API/CLI。
+[agent.md](../../agent.md) requires Pydantic models, Provider interfaces, and CLI JSON before implementation, with confirmation before implementation begins. The [Pydantic/Provider draft](annotation/annotation_contracts.py) and [JSON Schema](annotation/annotation-schemas.json) remain documentation-only, unregistered in runtime API/CLI.
 
-## 完整目标与这一最小链路
+## Full goal and this minimal path
 
-依据为当前[设计](../AI%20标书工具设计文档.md)的Rust标注边界，以及
-[覆盖矩阵](roadmap.md) B05/B07/F03。建议先完整交付一条独立链：
-以现有受权source ID读取真实PNG→校验→Rust确定性裁剪/框选/溯源水印→本机新PNG
-和可追溯JSON回执。保留原图，始终未确认，不冒充材料真实性或参数分析。
+The [design](../design.md) defines Rust annotation; [coverage](roadmap.md) B05/B07/F03 supplies the wider scope. First deliver one independent path: read a real PNG by existing authorized source ID → verify → deterministic Rust crop/boxes/provenance watermark → new local PNG and traceable JSON receipt. Preserve the original and unconfirmed state, without claiming authenticity or parameter analysis.
 
-这一步是拟请批准的明确实施顺序，不是缩减完整设计。设计中的服务器作业
-`bid evidence stamp`、归档Evidence/Card、人工确认、draft/export等仍待后续契约。
-现有[Job](../../server/app/models/entities.py)的document_id为NOT NULL并引用同单位
-招标Document；source引用证书原件，不能伪造Document来塞入现有作业。本范围明确
-只新增本机派生副本，不宣称已完成服务器stamp作业或完整B05。用户如批准，仅
-批准下面具体范围；[完整剩余目标](roadmap.md)不删减。
+This proposed implementation order does not reduce the full design. Server job `bid evidence stamp`, archived Evidence/Card, human confirmation (人工确认), and draft/export still need later contracts. Existing [Job](../../server/app/models/entities.py) requires task/document references for every kind except `provider_test`, with document_id referencing a same-org tender Document (招标文件); a source references a certificate (证照) original. Do not fabricate a Document to fit that job. This scope adds only local derived copies, not server stamp jobs or complete B05. Approval covers only the explicit scope below; retain the [full remaining goals](roadmap.md).
 
-## 新命令、权限与数据影响
+## New command, permissions, and data impact
 
 `bid evidence source annotate --id UUID --input PLAN.json --output NEW.png --json`
 
-本地模式通过既有本机PG/RLS服务读取来源；远程模式调用既有受权preview链接和
-下载接口。两种模式使用同一Pydantic/标注Provider与结果。所有身份须同时具有
-evidence:source:read、task:read、certificate:read、certificate:file:read，与有效
-Membership/现有角色取交集。四个既有读取角色可以制作本机副本；旧令牌不扩权。
-既有历史来源仍可受权读取，回执保留其active_selection=false并明确警示。
+Local mode reads through existing local PostgreSQL/RLS services; remote mode uses existing authorized preview links/download endpoints. Both use the same Pydantic/annotation Provider and results. Every identity requires evidence:source:read, task:read, certificate:read, certificate:file:read intersected with valid Membership/existing role. Four existing read roles may create local copies; old tokens gain no permissions. Authorized historical sources remain readable; receipts retain active_selection=false with an explicit warning.
 
-**无新服务器路由、业务表、迁移、授权范围或写入对象。** 仅新本机PNG输出和
-脱敏CLI回执；服务器已有原件/来源/审计不改。API令牌与agent仍不能确认/导出，
-本机副本不属于draft/export业务命令产物，不自动成为Evidence或已确认输入。
-不改变真实账号、持久授权或安全设置；不调用/外传AI、OCR、网页、搜索或云服务。
-下载只到调用者本机，测试材料均合成。新增一个命令，既有命令的输出不变。
+**No new server routes, business tables, migrations, scopes, or write objects.** Only a local PNG and redacted CLI receipt; existing server originals/sources/audit are unchanged. API tokens/agents still cannot confirm/export. Copies are not draft/export business outputs and do not automatically become Evidence or confirmed inputs. Do not change real accounts, persistent grants, or security settings; no AI/OCR/web/search/cloud calls or outbound transmission. Downloads go only to the caller's machine; all test material is synthetic. Add one command without changing existing outputs.
 
-## 精确输入与像素决定（批准时一并确认）
+## Exact input and pixel decisions (confirmed with approval)
 
-- SourceAnnotationPlan={crop:PixelRect|null, boxes:PixelRect[]}；默认null和[]，
-  意味仅加溯源水印。最多20框，extra=forbid；输入JSON<=128KiB，无任意标签文字、
-  覆盖/去水印、confirm/export字段。PixelRect为整数x/y>=0、width/height>=1，
-  每项<=8192且右/下端点<=8192；坐标须落在真实源图边界。
-- 所有坐标为现有150dpi RGB PNG的原始像素坐标，已尊重PDF原旋转。crop与每框
-  都使用原图坐标；有crop时每框必须完整包含于crop，拒绝越界，不自动裁剪框或缩放。
-  原图/原PDF不覆盖，框只画2像素红色内边界，不填充、不重绘文字、不做图像补全。
-- 输出内容区为原图或原图crop，保持像素/尺寸；画布宽=max(内容宽,1024)，内容
-  水平居中且顶边为0。底部加白色溯源区，左右16px、上下16px，固定16px宽/
-  20px高ASCII等宽字符格；使用随项目保留的固定小字形，不下载字体。按
-  floor((画布宽-32)/16)个字符逐行硬折行；区高=32+20*行数。不允许用户改水印。
-- 固定内容依序为：UNCONFIRMED USER-SUPPLIED PDF PAGE、SOURCE_ID、TASK_ID、
-  PAGE、DPI、SOURCE_PROFILE、SOURCE_RENDERED_UTC、ORIGINAL_PDF_SHA256、
-  SOURCE_PNG_SHA256、PLAN_SHA256。每项KEY=VALUE；时间来自已归档来源rendered_at
-  的UTC ISO表示，明确不是证书签发或厂家官网采集时间。ID/page/hash可回溯原档；
-  不将用户提供的PDF包装为厂家已认证材料。中文原页像素保持，水印标签使用ASCII。
-- 结果与拟结果均每边<=8192px、总像素<=20000000，编码PNG<=40MiB及适用更低
-  配置上限。水印扩展超过上限必须拒绝，不偷偷降采样。RGB/无alpha，PNG编码器
-  固定设置及profile=source-markup-v1，同源内容/同plan/profile字节确定性相同。
-- plan_sha256=校验后model_dump(mode="json")的UTF8 JSON SHA256，包含显式默认值，
-  sort_keys=true、separators=(",",":")、ensure_ascii=true、无尾换行。框顺序保留。
-  回执映射包含原图crop、content_offset_x、content_offset_y=0、footer_height_px；
-  输出图任一内容坐标可回算原图坐标，padding/水印不是原文件区域。
-- annotated_at为本机操作UTC时间，与可信服务器来源rendered_at分开；不伪称
-  服务端归档时间。status恒unconfirmed_source、confirmed_by=null、
-  eligible_for_draft_export=false，并由模型限制；水印也明确UNCONFIRMED。
+- SourceAnnotationPlan={crop:PixelRect|null, boxes:PixelRect[]}; defaults null/[] mean provenance watermark only. At most 20 boxes, extra=forbid, input JSON<=128KiB. No arbitrary label text, overlay/watermark-removal, or confirm/export fields. PixelRect uses integer x/y>=0 and width/height>=1; each <=8192, right/bottom endpoints <=8192, within actual source bounds.
+- Coordinates use original pixels of existing 150dpi RGB PNGs, respecting PDF rotation. crop and all boxes use original-image coordinates; with crop, every box must be fully inside. Reject out-of-bounds instead of clipping/scaling. Never overwrite original PNG/PDF. Draw only 2-pixel red inner borders, without fill, text redraw, or image completion.
+- Content is original/cropped pixels at unchanged dimensions. Canvas width=max(content width,1024); center content horizontally with top=0. Add white provenance footer with 16px horizontal/vertical margins and fixed 16px-wide/20px-high ASCII monospace cells, using fixed small glyphs retained in the project without font downloads. Hard-wrap at floor((canvas width-32)/16) characters; footer height=32+20*line count. Users cannot change the watermark.
+- Fixed content order: UNCONFIRMED USER-SUPPLIED PDF PAGE, SOURCE_ID, TASK_ID, PAGE, DPI, SOURCE_PROFILE, SOURCE_RENDERED_UTC, ORIGINAL_PDF_SHA256, SOURCE_PNG_SHA256, PLAN_SHA256. Each is KEY=VALUE. Use archived rendered_at in UTC ISO form, explicitly not certificate issue/vendor capture time. IDs/page/hashes trace originals; never present user-supplied PDF as vendor-authenticated material. Preserve Chinese source pixels; use ASCII watermark labels.
+- Actual/planned output: each side<=8192px, total pixels<=20000000, encoded PNG<=40MiB and any lower configured limit. Reject excess watermark expansion without downsampling. RGB/no alpha; fixed PNG settings/profile=source-markup-v1 make identical source/plan/profile bytes deterministic.
+- plan_sha256 is SHA256 of validated model_dump(mode="json") as UTF8 JSON with explicit defaults, sort_keys=true, separators=(",",":"), ensure_ascii=true, no trailing newline. Preserve box order. Receipt mapping includes original crop, content_offset_x, content_offset_y=0, footer_height_px. Map any output content coordinate back to the source; padding/watermark are not original-file regions.
+- annotated_at is local operation UTC time, separate from trusted server rendered_at, without claiming server archival time. Models enforce status=unconfirmed_source, confirmed_by=null, eligible_for_draft_export=false; watermark explicitly says UNCONFIRMED.
 
-## Provider、受权读取和本机输出
+## Provider, authorized reads, and local output
 
-审查协议AnnotationProvider.annotate(content:bytes, source:EvidenceSourceArchive,
-plan:SourceAnnotationPlan)->(bytes,SourceAnnotationRendering)，异步。Python只负责
-授权、源下载/校验、子进程边界与回执；裁剪/框/水印/编码在Rust独立可执行文件。
-所有来源元数据来自既有授权下载链接Result.items中的唯一完整Archive，不能
-从用户plan注入或换绑。原件ID/page/profile/源PNG描述符都保留在结果。
+Review protocol: asynchronous AnnotationProvider.annotate(content:bytes, source:EvidenceSourceArchive, plan:SourceAnnotationPlan)->(bytes,SourceAnnotationRendering). Python handles authorization, source download/verification, subprocess boundaries, and receipts; the standalone Rust executable crops/boxes/watermarks/encodes. All source metadata comes from the unique complete Archive in existing authorized download Result.items; user plans cannot inject/rebind it. Retain original ID/page/profile/source PNG descriptors in results.
 
-下载复用既有服务精确路径、短签名且身份仍必需、无redirect/外站；读到实际PNG后
-核对大小/SHA/格式/尺寸，不把链接请求成功当下载成功。先校验输入与新输出路径，
-失败不得启动Rust或产生最终文件。只执行配置明确的本机可信可执行路径，无shell；
-不把令牌/服务密钥放入参数、日志或子进程环境。子进程只接收源PNG/公开溯源元数据/
-plan，使用本次私有0700临时目录/0600文件，结束清理本次生成的临时文件。
+Reuse exact existing service download paths with short signatures and required identity; no redirects/external hosts. Check actual PNG length/SHA/format/dimensions after download, not merely link success. Validate input/new output path first; failure must not start Rust or produce a final file. Execute only explicitly configured trusted local binaries without shell. No tokens/service keys in argv/logs/subprocess environment. Subprocess receives only source PNG/public provenance metadata/plan, using task-private 0700 temporary directories and 0600 files; clean task-generated temporary files afterward.
 
-Rust内部CLI拟：`bid-stamp render --request PRIVATE.json --output PRIVATE.png`，
-request包括固定私有input_path、授权Archive和plan；stdout只有有界Rendering JSON，
-无PNG/密钥/原页文本。新输出路径由Provider生成，不允许plan指定任意Rust路径。
-20秒进程deadline，到期终止并等待自有子进程回收，返回失败无最终文件；PNG解码
-前限制声明尺寸/输入大小/解码内存，不依靠事后尺寸检查。只用PNG codec，不启用
-其他image格式/网络功能。固定ASCII字形如采用第三方数据，先核实许可并保留来源。
+Proposed internal CLI: `bid-stamp render --request PRIVATE.json --output PRIVATE.png`. Request includes fixed private input_path, authorized Archive, and plan. stdout contains only bounded Rendering JSON, never PNG/keys/source text. Provider chooses new output paths; plan cannot choose arbitrary Rust paths. Deadline: 20 seconds; terminate/reap the owned subprocess on expiry and fail without final files. Bound declared dimensions/input bytes/decoded memory before PNG decoding, not only afterward. Enable PNG codec only, with no other image formats/network. If fixed ASCII glyphs use third-party data, verify licensing and retain attribution first.
 
-Python再核对输出实际PNG/长度/hash/尺寸/profile/plan与源绑定，不盲信Rust回执。
-最终通过已验证的原子新文件写入得到0600 PNG，拒绝已有文件/symlink/路径替换竞态；
-失败仅清本次临时文件，原件、旧下载、真实目录内容保留。路径不在服务端持久保存。
+Python rechecks actual output PNG/length/hash/dimensions/profile/plan/source binding rather than trusting Rust receipts. Publish validated new files atomically as 0600 PNGs, rejecting existing files/symlinks/path-replacement races. Failure cleans only task temporary files, preserving originals, old downloads, and real directory contents. Do not persist local paths on the server.
 
-## JSON与失败契约
+## JSON and failure contract
 
-Result1.0保留ok、command、data、items、warnings、cost、duration_ms。
-成功command="evidence source annotate"，data=SourceAnnotationReceipt，items=[]；
-cost.llm_tokens=0、ocr_pages=0、usd=0，duration_ms实际测量。receipt字段：
-source（完整原Archive）、plan、plan_sha256、annotation_profile、annotated_at、
-output_path、file（PNG名称/SHA/bytes/宽高）、mapping、status、confirmed_by、
-eligible_for_draft_export。不把图像/base64塞入JSON；CLI schema批准后只新增1项。
+Result1.0 retains ok, command, data, items, warnings, cost, duration_ms. Success command="evidence source annotate", data=SourceAnnotationReceipt, items=[]; cost.llm_tokens=0, ocr_pages=0, usd=0, actual measured duration_ms. Receipt fields: source (complete original Archive), plan, plan_sha256, annotation_profile, annotated_at, output_path, file (PNG name/SHA/bytes/width/height), mapping, status, confirmed_by, eligible_for_draft_export. No images/base64 in JSON; add only one CLI schema entry after approval.
 
-| 退出码 | 明确情形 |
+| Exit | Exact cases |
 | --- | --- |
-| 0 | 真正输出新PNG并校验完毕 |
-| 2 | 缺参、非法UUID/JSON/坐标/超限、已有输出或非法输出路径 |
-| 3 | 缺可信可执行文件、临时网络/存储故障、子进程deadline |
-| 4 | 身份/权限/资源失败、源或输出完整性失败、Rust不可重试失败 |
+| 0 | New PNG actually written and fully verified |
+| 2 | Missing arguments; invalid UUID/JSON/coordinates/limits; existing/invalid output paths |
+| 3 | Missing trusted executable; temporary network/storage failure; subprocess deadline |
+| 4 | Identity/permission/resource failure; source/output integrity failure; non-retryable Rust failure |
 
-无部分成功场景，不宣称exit5。复用既有401/403/404语义；跨单位/无权资源404。
-错误脱敏，不回显源页/任意输入/令牌。失败不得显示成功或保留部分最终PNG。
+No partial-success case or exit5 claim. Reuse 401/403/404 semantics; cross-org/unauthorized resources return 404. Redact errors without source pages/arbitrary inputs/tokens. Failures cannot report success or retain partial final PNGs.
 
-## 编译器预检与普通依赖准备影响
+## Compiler precheck and ordinary dependency preparation
 
-本机只读预检：当前PATH没有cargo/rustc，且~/.cargo/bin与/opt/homebrew/bin的
-对应精确路径不存在；不是对全盘工具位置的穷尽搜索。尚未安装、下载或改配置。
-若批准，允许按官方来源准备本次隔离工具目录，使用任务专用CARGO_HOME/RUSTUP_HOME
-与单条命令PATH，不修改用户shell启动文件或持久PATH；工具目录与日志留本机。
-官方[rustup安装说明](https://rust-lang.github.io/rustup/installation/index.html)与
-[环境变量说明](https://rust-lang.github.io/rustup/environment-variables.html)支持
-独立工具目录；实际版本/校验/平台适配在实施时记录，不在此猜测新版本。
+The proposal's read-only local precheck found no cargo/rustc in PATH and no corresponding exact paths in ~/.cargo/bin or /opt/homebrew/bin. This was not an exhaustive filesystem search. No installation/download/configuration change occurred. If approved, prepare an isolated tool directory from official sources using task-specific CARGO_HOME/RUSTUP_HOME and per-command PATH, without shell startup or persistent PATH changes. Keep tools/logs local. Official [rustup installation](https://rust-lang.github.io/rustup/installation/index.html) and [environment-variable guidance](https://rust-lang.github.io/rustup/environment-variables.html) support isolation; record actual versions/checks/platform compatibility during implementation rather than guessing versions here.
 
-Rust依赖限设计选型clap、serde、image、sha2及小型JSON codec serde_json；批准后
-核对官方/crates.io源、许可、锁Cargo.lock与实际版本，PNG-only。无新大型依赖或
-付费服务、账号/密钥/持久授权。只下载普通工具/依赖代码，不向下载站上传项目资料。
-若网络或权限阻止工具准备，尽早记录确切阻塞，不长时间反复重试，不假报cargo通过。
+Rust dependencies are limited to clap, serde, image, sha2 and small JSON codec serde_json. After approval, verify official/crates.io sources/licenses, lock Cargo.lock/actual versions, PNG-only. No large new dependency, paid service, account/key, or persistent grant. Download ordinary tools/dependency code only, never upload project material. If network/permissions block preparation, record the exact blocker promptly without prolonged retries or false cargo passes.
 
-## 批准后验收标准与分步计划
+## Acceptance and phased plan after approval
 
-1. 工具与锁文件：隔离Rust可执行环境、依赖与许可来源；cargo fmt/check/clippy/test
-   和release构建。缺工具不绕成Python标注或把未运行测试标成通过。
-2. Rust真实像素验证：两份明显不同的合成页；无裁剪/裁剪/多框，源图未改变、框外
-   内容逐像素相同、坐标可逆、固定水印可见且回执一致；同输入确定性、多页绑定。
-   畸形PNG/尺寸/内存/编码上限、越界/超框/去水印字段、timeout/取消都无假成功。
-3. 授权与文件边界：两单位/无上下文、角色/范围交集、旧令牌无扩权、失效成员/
-   历史来源；源/输出篡改、重定向/断流、缺二进制/非执行文件、路径注入、symlink/
-   并发覆盖/原子输出/0600/临时文件清理。只有本次输出可写，原档/表/权限不变。
-4. 两种真正CLI与Result/schema：新增一个快照，既有输出和schema项保持；native
-   PG/API/既有真实worker与隔离Compose/MinIO回归，全量适用pytest/ruff/pyright/
-   Python包与Rust构建。测试Provider只fake，不声称真实AI结果；所有样例合成。
-5. Mac支持工具验证既有真实来源读取/下载/错误/重复/返回取消及本机派生PNG实际
-   落盘与可见水印/裁剪/框；这是本机标注链验收，没有新Vue表单，不能冒充产品UI。
-   保存本机像素/文件证据、英文机制笔记与报告；停自有服务，保留历史/数据/卷。
+1. Tools/lockfiles: isolated Rust environment, dependencies/license sources; cargo fmt/check/clippy/test and release build. Missing tools cannot justify Python annotation or labeling unrun tests passed.
+2. Real Rust pixels: two visibly different synthetic pages; no crop/crop/multiple boxes; original unchanged, outside-box pixels identical, reversible coordinates, visible fixed watermark consistent with receipt; deterministic inputs and multi-page binding. Malformed PNG/dimension/memory/encoding limits, out-of-bounds/excess boxes/watermark-removal fields, timeout/cancel produce no false success.
+3. Authorization/files: two orgs/no context, role/scope intersection, old tokens unchanged, invalid membership/historical sources; source/output tampering, redirect/broken stream, missing/nonexecutable binary, path injection, symlink/concurrent overwrite/atomic output/0600/temp cleanup. Only task output is writable; original archives/tables/permissions stay unchanged.
+4. Both real CLI modes and Result/schema: one new snapshot; existing outputs/schema unchanged. Native PG/API/existing real worker and isolated Compose/MinIO regression; all applicable pytest/ruff/pyright/Python packages/Rust builds. Test Providers are fake, not claimed real AI; all samples synthetic.
+5. Mac support tools verify existing source read/download/errors/repetition/back/cancel and actual local PNG with visible watermark/crop/boxes. This validates the local annotation path, without a new Vue form or claiming product UI. Retain local pixel/file evidence, English mechanism note/report; stop owned services and retain history/data/volumes.
 
-以上是待实施的验收目标，尚未执行。其余未实现项目列在[路线](roadmap.md)，包括完整服务器
-stamp作业/持久派生图/Evidence/Card/人工确认、其他来源、响应校验评分导出、Vue、
-记忆、服务配置、预算agent/生产等。
+These acceptance goals have not run. Other remaining scope lives in the [roadmap](roadmap.md): complete server stamp jobs/persisted derived images/Evidence/Card/human confirmation, other sources, response checks/scoring/export, Vue, memory, service configuration, budget agents/production, and more.

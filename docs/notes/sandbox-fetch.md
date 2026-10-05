@@ -2,7 +2,7 @@
 
 ## Problem
 
-A page inside the [capture sandbox](../plan/sandbox.md#按用途固定网络策略) may
+A page inside the [capture sandbox](../plan/sandbox.md#fixed-network-policy-by-purpose) may
 forge resource requests, redirects, response metadata, or DNS answers. The trusted
 proxy must independently authorize every request, keep transport and decoding
 bounded, and produce its own provenance. Browser interception is not an egress
@@ -138,4 +138,4 @@ remain subject to the persistent organization window.
 
 - [Broker, policy reader, and quota ledger](../../server/app/providers/sandbox_fetch.py)
 - [Synthetic fetch failure gates](../../server/tests/test_sandbox_fetch.py)
-- [Runtime and resource acceptance](../plan/sandbox.md#批准后的端到端验收)
+- [Runtime and resource acceptance](../plan/sandbox.md#end-to-end-acceptance-after-approval)

@@ -13,7 +13,7 @@ path = "AGENTS.md"
 kind = "reference"
 
 [[kinds]]
-path = "docs/AI 标书工具设计文档.md"
+path = "docs/design.md"
 kind = "plan"
 
 [[kinds]]
