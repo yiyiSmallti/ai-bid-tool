@@ -6,6 +6,12 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05: Faster database citation verification
+
+- Added migration `0039` with a guarded fast path for unique exact quotes, retaining the original normalization, ambiguity and boundary behavior for other inputs.
+- Deduplicated live citation verification at check and score publication, preserving source bindings and rejecting additions after early deferred validation; see [check publication gates](notes/check.md#how-it-works).
+- Added database parity coverage against the original SQL and Python reference, gate call-count and mutation regressions, and a timed 1,500-requirement publication scenario including commit.
+
 ## 2026-10-05：平台后台管理服务凭据
 
 - 接受 ADR 0006 并纳入全局表与专用数据库角色例外；迁移 `0038` 增加平台凭据、固定管理/解析函数、目录引用校验和仅迁移属主可执行的密文重包裹通路。

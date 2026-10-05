@@ -15,7 +15,9 @@ from app.services import response_cards as cards
 from app.services import score_execution, score_generation, score_run_inputs, score_semantic
 
 
-async def current_snapshot(session, actor, task_id, submitted, settings, job=None):
+async def current_snapshot(
+    session, actor, task_id, submitted, settings, job=None, *, defer_database_validation=False
+):
     manifest = submitted["input_manifest"]
     fixed = await score_run_inputs.snapshot(
         session,
@@ -24,6 +26,7 @@ async def current_snapshot(session, actor, task_id, submitted, settings, job=Non
         UUID(manifest["draft_id"]),
         UUID(manifest["rubric_id"]),
         date.fromisoformat(manifest["assessment_date"]),
+        defer_database_validation=defer_database_validation,
     )
     llm = (
         await score_execution.resolve(session, settings, job)
@@ -93,7 +96,13 @@ async def process(execution: JobExecution, storage) -> None:
         job = await execution.owned_job(session)
         actor = await score_run_inputs.access(session, score_execution.worker(job), "score:run")
         current, _ = await current_snapshot(
-            session, actor, task_id, submitted, execution.settings, job
+            session,
+            actor,
+            task_id,
+            submitted,
+            execution.settings,
+            job,
+            defer_database_validation=True,
         )
         if score_execution.safe_input(current) != saved:
             cards.fail("score_input_changed", "Scoring inputs changed during assessment", 409)
