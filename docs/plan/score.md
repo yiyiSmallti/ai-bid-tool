@@ -4,17 +4,12 @@ kind: plan
 
 # 已确认响应草案的逐项评分预估契约
 
-状态：**已批准，分两阶段实施。** 本契约对应[路线图](roadmap.md) B10。阶段 A 实施评分
-rubric 的生成、规范化、人工分类、逐项确认、整集确认和历史；阶段 B 才实施对 current
-`DraftRun` 的实际评分、报告与评分 Provider 作业。完整 Pydantic 与 Provider 契约位于
-[运行时契约](../../server/app/schemas/score_contracts.py)，原
-[审阅路径](score/score_contracts.py)只保留兼容导入。共用的
-评估、引用、外发和 Result 约定见 [B09 已批准契约](check.md)，类型来自
-[共享契约](../../server/app/schemas/check_contracts.py)，不在本文件复制。
-
-阶段 A 只注册本页 rubric 命令与 `score_rubric` 作业。阶段 B 的模型可以作为已批准契约供
-静态检查和后续实现复用，但不得提前注册 `score run/list/show`、`score` 作业或评分 Provider
-调用。阶段拆分不改变下文固定输入、引用、聚合、人工关口和退出码决定。
+状态：**已批准，阶段 A 和阶段 B 已实施。** 本契约对应[路线图](roadmap.md) B10。
+阶段 A 负责 rubric 生成、规范化、人工分类、逐项与整集确认；阶段 B 负责对 current
+`DraftRun` 的评分、不可变报告和评分 Provider 作业。实现范围记录在
+[变更记录](../changelog.md#2026-10-05已确认响应草案的评分执行)。Pydantic 与 Provider 契约统一位于
+[运行时契约](../../server/app/schemas/score_contracts.py)。共用评估、引用、外发和 Result 约定见
+[B09 已批准契约](check.md)，类型来自[共享契约](../../server/app/schemas/check_contracts.py)。
 
 ## 目标与结论边界
 
@@ -151,7 +146,7 @@ section 作为 overall 子项时，其 `weight` 只供 overall 的 `weighted_sum
 
 每个 section 和 report 始终输出 `assessed_subtotal`，字段名称明确它只是已评估项小计。
 只有全部纳入项均 assessed、所有聚合规则可确定执行、Provider 各批次完整且本机校验通过时，
-才输出 `estimated_score`/`estimated_total`。否则 total 状态只能是 `range_only` 或 `unavailable`，
+才输出 `estimated_score`/`estimated_total`。任何纳入子项不可评估或聚合不可执行时，total 状态为 `unavailable`，
 并把 `estimated_total` 置空；如 confirmed bounds 足够，可输出 `possible_range`。不得把部分小计
 改名成总分，也不得以未评估项为零来制造总分。
 
@@ -249,7 +244,7 @@ date、Provider/模型目录修订、reasoning、prompt/schema/规则/遮挡版�
 | `POST /tasks/{task_id}/score-rubrics/{rubric_id}/decisions` | `bid score rubric decide --task UUID --rubric UUID --input DECISION.json --json` | `RubricSetView` / `[]` |
 | `GET /tasks/{task_id}/score-rubrics/{rubric_id}/history?cursor=…&limit=…` | `bid score rubric history --task UUID --rubric UUID [--cursor CURSOR] [--limit N] --json` | `AssessmentListData` / `RubricHistoryItem[]` |
 
-阶段 B 才注册以下评分执行入口：
+阶段 B 注册以下评分执行入口：
 
 | HTTP | CLI（均支持 `--json`） | data / items |
 | --- | --- | --- |
@@ -266,7 +261,7 @@ task，否则统一 404。耗时提交默认立即返回 Job；`--wait` 复用�
 `ok`、`command`、`data`、`items`、
 `warnings`、`cost`、`duration_ms`。`cost` 是该响应可证明的实际用量；preview 的估算在 data 的
 `estimated_cost/estimated_charge`，不能冒充已花费用。schema 仅新增上述命令，不改变既有命令；
-阶段 A 的 `bid schema` 只公布已实施的 rubric 命令；阶段 B 命令到实现时再注册。
+`bid schema` 公布已实施的 rubric 和评分执行命令。
 
 | 退出码 | score 明确语义 |
 | --- | --- |
@@ -282,9 +277,8 @@ task，否则统一 404。耗时提交默认立即返回 Job；`--wait` 复用�
 
 ## 权限与人类关口
 
-阶段 A 注册已批准的 `score:read`、`score:run`、`score:rubric:generate`、
-`score:rubric:review` 权限映射。`score:run` 的 scope 可以签发和保留，但阶段 B 前没有对应
-CLI、HTTP 或 Job 处理器：
+权限使用已批准的 `score:read`、`score:run`、`score:rubric:generate`、
+`score:rubric:review` 映射；评分执行只使用前两项：
 
 - `score:read` 可按现有四种单位角色授予，也可进入 token allowlist；仍与 Membership 和任务读取
   权限取交集。
@@ -399,9 +393,12 @@ missing/unknown 不默认满分，匹配实验不冒充真实招标得分或重�
 事件码验证成功、业务失败、dry-run 零写入和 cached 不重复审计。未接真实 Provider、未读 released 文件和未做版式审查必须
 留在报告 limitations，不能用“score 已完成”概括为最终投标评审。
 
+实现的保密表示限制见[评分机制的 Pitfalls](../notes/score.md#pitfalls)；固定来源和固定 section key
+不能安全表示为占位符时，不以改写已确认绑定绕过保密边界。
+
 ## 已定决定
 
-以下采用原推荐默认。阶段 A 不因已经批准阶段 B 契约而提前注册评分执行。
+以下采用原推荐默认。
 
 | 事项 | 决定 | 理由 |
 | --- | --- | --- |

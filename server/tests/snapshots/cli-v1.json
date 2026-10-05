@@ -15008,6 +15008,84 @@
           ],
           "input": null
         },
+        "score list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "total": {
+                "minimum": 0,
+                "title": "Total",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "task_id",
+              "total"
+            ],
+            "title": "AssessmentListData",
+            "type": "object"
+          }
+        },
         "score rubric classify": {
           "cli_parameters": [
             {
@@ -19495,6 +19573,1620 @@
               "coverage"
             ],
             "title": "RubricReportData",
+            "type": "object"
+          }
+        },
+        "score run": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "draft",
+              "options": [
+                "--draft"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "rubric",
+              "options": [
+                "--rubric"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "as_of",
+              "options": [
+                "--as-of"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reasoning",
+              "options": [
+                "--reasoning"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_input_hash",
+              "options": [
+                "--expected-input-hash"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "max_charge",
+              "options": [
+                "--max-charge"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "assessment_date": {
+                "format": "date",
+                "title": "Assessment Date",
+                "type": "string"
+              },
+              "draft_id": {
+                "format": "uuid",
+                "title": "Draft Id",
+                "type": "string"
+              },
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "max_charge": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Max Charge"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              },
+              "rubric_id": {
+                "format": "uuid",
+                "title": "Rubric Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "draft_id",
+              "assessment_date",
+              "rubric_id"
+            ],
+            "title": "ScoreRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AssessmentInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "assessment_date": {
+                    "format": "date",
+                    "title": "Assessment Date",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "draft_id": {
+                    "format": "uuid",
+                    "title": "Draft Id",
+                    "type": "string"
+                  },
+                  "draft_input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "scope": {
+                    "const": "confirmed_draft",
+                    "default": "confirmed_draft",
+                    "title": "Scope",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "draft_id",
+                  "extraction_job_id",
+                  "document_id",
+                  "input_hash",
+                  "draft_input_hash",
+                  "assessment_date"
+                ],
+                "title": "AssessmentInput",
+                "type": "object"
+              },
+              "AssessmentJobAccepted": {
+                "additionalProperties": false,
+                "properties": {
+                  "cached": {
+                    "title": "Cached",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "status",
+                  "cached"
+                ],
+                "title": "AssessmentJobAccepted",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "Money": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ScoreJobResult": {
+                "additionalProperties": false,
+                "properties": {
+                  "assessed_items": {
+                    "minimum": 0,
+                    "title": "Assessed Items",
+                    "type": "integer"
+                  },
+                  "assessed_subtotal": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "billing_currency": {
+                    "maxLength": 3,
+                    "minLength": 3,
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "completion": {
+                    "enum": [
+                      "complete",
+                      "partial"
+                    ],
+                    "title": "Completion",
+                    "type": "string"
+                  },
+                  "estimated_total": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "report_id": {
+                    "format": "uuid",
+                    "title": "Report Id",
+                    "type": "string"
+                  },
+                  "stop_reason": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Stop Reason"
+                  },
+                  "total_status": {
+                    "enum": [
+                      "estimated",
+                      "range_only",
+                      "unavailable"
+                    ],
+                    "title": "Total Status",
+                    "type": "string"
+                  },
+                  "unassessable_items": {
+                    "minimum": 0,
+                    "title": "Unassessable Items",
+                    "type": "integer"
+                  },
+                  "usage_record_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Usage Record Ids",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "report_id",
+                  "job_id",
+                  "completion",
+                  "usage_record_ids",
+                  "charge",
+                  "billing_currency",
+                  "assessed_items",
+                  "unassessable_items",
+                  "assessed_subtotal",
+                  "total_status"
+                ],
+                "title": "ScoreJobResult",
+                "type": "object"
+              },
+              "ScorePreview": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blocker": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Admission Blocker"
+                  },
+                  "billing_currency": {
+                    "maxLength": 3,
+                    "minLength": 3,
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost_basis": {
+                    "enum": [
+                      "known",
+                      "unknown"
+                    ],
+                    "title": "Cost Basis",
+                    "type": "string"
+                  },
+                  "cost_basis_reason": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "estimate_kind": {
+                    "const": "first_pass_upper_bound",
+                    "default": "first_pass_upper_bound",
+                    "title": "Estimate Kind",
+                    "type": "string"
+                  },
+                  "estimated_charge": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "estimated_cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "estimated_duration_ms": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Duration Ms"
+                  },
+                  "input": {
+                    "$ref": "#/$defs/AssessmentInput"
+                  },
+                  "limitations": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Limitations",
+                    "type": "array"
+                  },
+                  "max_charge": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
+                  },
+                  "model_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model Revision"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "preflight_unassessable_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Preflight Unassessable Item Ids",
+                    "type": "array"
+                  },
+                  "prompt_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "provider_config_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Config Id"
+                  },
+                  "provider_source": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "org",
+                          "platform"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Source"
+                  },
+                  "reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reasoning"
+                  },
+                  "redacted_counts": {
+                    "additionalProperties": {
+                      "type": "integer"
+                    },
+                    "title": "Redacted Counts",
+                    "type": "object"
+                  },
+                  "redaction_revision": {
+                    "minimum": 1,
+                    "title": "Redaction Revision",
+                    "type": "integer"
+                  },
+                  "redaction_rule_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "rubric_input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "rubric_version": {
+                    "minimum": 1,
+                    "title": "Rubric Version",
+                    "type": "integer"
+                  },
+                  "schema_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "scoring_rule_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "selected_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Selected Item Ids",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "input",
+                  "selected_item_ids",
+                  "estimated_cost",
+                  "estimated_charge",
+                  "billing_currency",
+                  "cost_basis",
+                  "cost_basis_reason",
+                  "redaction_revision",
+                  "redaction_rule_version",
+                  "redacted_counts",
+                  "rubric_id",
+                  "rubric_version",
+                  "rubric_input_hash",
+                  "prompt_version",
+                  "schema_version",
+                  "scoring_rule_version",
+                  "preflight_unassessable_item_ids",
+                  "limitations"
+                ],
+                "title": "ScorePreview",
+                "type": "object"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/ScorePreview"
+              },
+              {
+                "$ref": "#/$defs/AssessmentJobAccepted"
+              },
+              {
+                "$ref": "#/$defs/ScoreJobResult"
+              }
+            ]
+          }
+        },
+        "score show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "report",
+              "options": [
+                "--report"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "AggregationRule": {
+                "enum": [
+                  "sum",
+                  "weighted_sum",
+                  "capped_sum",
+                  "formula",
+                  "non_additive"
+                ],
+                "type": "string"
+              },
+              "AssessmentInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "assessment_date": {
+                    "format": "date",
+                    "title": "Assessment Date",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "draft_id": {
+                    "format": "uuid",
+                    "title": "Draft Id",
+                    "type": "string"
+                  },
+                  "draft_input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "scope": {
+                    "const": "confirmed_draft",
+                    "default": "confirmed_draft",
+                    "title": "Scope",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "draft_id",
+                  "extraction_job_id",
+                  "document_id",
+                  "input_hash",
+                  "draft_input_hash",
+                  "assessment_date"
+                ],
+                "title": "AssessmentInput",
+                "type": "object"
+              },
+              "DraftCitation": {
+                "additionalProperties": false,
+                "properties": {
+                  "card_revision_id": {
+                    "format": "uuid",
+                    "title": "Card Revision Id",
+                    "type": "string"
+                  },
+                  "draft_id": {
+                    "format": "uuid",
+                    "title": "Draft Id",
+                    "type": "string"
+                  },
+                  "field": {
+                    "enum": [
+                      "response_text",
+                      "deviation_note"
+                    ],
+                    "title": "Field",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "draft",
+                    "default": "draft",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  },
+                  "response_item_id": {
+                    "format": "uuid",
+                    "title": "Response Item Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "draft_id",
+                  "response_item_id",
+                  "card_revision_id",
+                  "field",
+                  "quote"
+                ],
+                "title": "DraftCitation",
+                "type": "object"
+              },
+              "EvidenceCitation": {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence_id": {
+                    "format": "uuid",
+                    "title": "Evidence Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "evidence",
+                    "default": "evidence",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "evidence_id",
+                  "quote"
+                ],
+                "title": "EvidenceCitation",
+                "type": "object"
+              },
+              "Location": {
+                "additionalProperties": false,
+                "description": "Where a quote sits in a Word document: a paragraph or a table cell.",
+                "properties": {
+                  "block_id": {
+                    "maxLength": 200,
+                    "minLength": 2,
+                    "title": "Block Id",
+                    "type": "string"
+                  },
+                  "column": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Column"
+                  },
+                  "kind": {
+                    "enum": [
+                      "paragraph",
+                      "cell"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "label": {
+                    "minLength": 1,
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "paragraph": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Paragraph"
+                  },
+                  "row": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Row"
+                  },
+                  "section_path": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Section Path",
+                    "type": "array"
+                  },
+                  "table": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Table"
+                  }
+                },
+                "required": [
+                  "block_id",
+                  "kind",
+                  "label"
+                ],
+                "title": "Location",
+                "type": "object"
+              },
+              "Money": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "NonBlank": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ScoreItemView": {
+                "additionalProperties": false,
+                "properties": {
+                  "advisory_only": {
+                    "const": true,
+                    "default": true,
+                    "title": "Advisory Only",
+                    "type": "boolean"
+                  },
+                  "anchor_partition": {
+                    "$ref": "#/$defs/ScorePartition"
+                  },
+                  "anchor_response_item_id": {
+                    "format": "uuid",
+                    "title": "Anchor Response Item Id",
+                    "type": "string"
+                  },
+                  "citations": {
+                    "items": {
+                      "$ref": "#/$defs/VerifiedCitation"
+                    },
+                    "title": "Citations",
+                    "type": "array"
+                  },
+                  "deduction_reasons": {
+                    "items": {
+                      "$ref": "#/$defs/NonBlank"
+                    },
+                    "title": "Deduction Reasons",
+                    "type": "array"
+                  },
+                  "estimated_score": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "$ref": "#/$defs/ScoreOutcome"
+                  },
+                  "reason": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "reason_code": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "report_id": {
+                    "format": "uuid",
+                    "title": "Report Id",
+                    "type": "string"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "response_item_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Response Item Ids",
+                    "type": "array"
+                  },
+                  "rubric_item_id": {
+                    "format": "uuid",
+                    "title": "Rubric Item Id",
+                    "type": "string"
+                  },
+                  "score_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "section_key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "strengthening_actions": {
+                    "items": {
+                      "$ref": "#/$defs/NonBlank"
+                    },
+                    "title": "Strengthening Actions",
+                    "type": "array"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "report_id",
+                  "rubric_item_id",
+                  "requirement_id",
+                  "anchor_response_item_id",
+                  "response_item_ids",
+                  "section_key",
+                  "anchor_partition",
+                  "outcome",
+                  "reason_code",
+                  "reason",
+                  "deduction_reasons",
+                  "strengthening_actions",
+                  "citations"
+                ],
+                "title": "ScoreItemView",
+                "type": "object"
+              },
+              "ScoreOutcome": {
+                "enum": [
+                  "assessed",
+                  "unassessable"
+                ],
+                "type": "string"
+              },
+              "ScorePartition": {
+                "enum": [
+                  "response",
+                  "comply_only",
+                  "gap"
+                ],
+                "type": "string"
+              },
+              "ScoreRange": {
+                "additionalProperties": false,
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/Money"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "ScoreRange",
+                "type": "object"
+              },
+              "ScoreRunView": {
+                "additionalProperties": false,
+                "properties": {
+                  "advisory_only": {
+                    "const": true,
+                    "default": true,
+                    "title": "Advisory Only",
+                    "type": "boolean"
+                  },
+                  "assessed_items": {
+                    "minimum": 0,
+                    "title": "Assessed Items",
+                    "type": "integer"
+                  },
+                  "assessed_subtotal": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "assessment_date": {
+                    "format": "date",
+                    "title": "Assessment Date",
+                    "type": "string"
+                  },
+                  "completion": {
+                    "enum": [
+                      "complete",
+                      "partial"
+                    ],
+                    "title": "Completion",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "estimated_total": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input": {
+                    "$ref": "#/$defs/AssessmentInput"
+                  },
+                  "invalidation_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Invalidation Codes",
+                    "type": "array"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "limitations": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Limitations",
+                    "type": "array"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "overall_aggregation": {
+                    "$ref": "#/$defs/AggregationRule"
+                  },
+                  "overall_aggregation_assessable": {
+                    "title": "Overall Aggregation Assessable",
+                    "type": "boolean"
+                  },
+                  "overall_cap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "overall_rule_text": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "possible_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "prompt_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "rubric_id": {
+                    "format": "uuid",
+                    "title": "Rubric Id",
+                    "type": "string"
+                  },
+                  "rubric_input_hash": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "rubric_version": {
+                    "minimum": 1,
+                    "title": "Rubric Version",
+                    "type": "integer"
+                  },
+                  "run_id": {
+                    "format": "uuid",
+                    "title": "Run Id",
+                    "type": "string"
+                  },
+                  "schema_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "scoring_rule_version": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "total_status": {
+                    "enum": [
+                      "estimated",
+                      "range_only",
+                      "unavailable"
+                    ],
+                    "title": "Total Status",
+                    "type": "string"
+                  },
+                  "unassessable_items": {
+                    "minimum": 0,
+                    "title": "Unassessable Items",
+                    "type": "integer"
+                  },
+                  "usage_record_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Usage Record Ids",
+                    "type": "array"
+                  },
+                  "validity": {
+                    "enum": [
+                      "current",
+                      "stale"
+                    ],
+                    "title": "Validity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "job_id",
+                  "run_id",
+                  "input",
+                  "rubric_id",
+                  "rubric_version",
+                  "rubric_input_hash",
+                  "prompt_version",
+                  "schema_version",
+                  "scoring_rule_version",
+                  "assessment_date",
+                  "created_at",
+                  "completion",
+                  "validity",
+                  "invalidation_codes",
+                  "assessed_items",
+                  "unassessable_items",
+                  "assessed_subtotal",
+                  "overall_aggregation",
+                  "overall_aggregation_assessable",
+                  "total_status",
+                  "limitations",
+                  "usage_record_ids"
+                ],
+                "title": "ScoreRunView",
+                "type": "object"
+              },
+              "ScoreSectionSummary": {
+                "additionalProperties": false,
+                "properties": {
+                  "aggregation": {
+                    "$ref": "#/$defs/AggregationRule"
+                  },
+                  "aggregation_assessable": {
+                    "title": "Aggregation Assessable",
+                    "type": "boolean"
+                  },
+                  "aggregation_rule_text": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/NonBlank"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "assessed_items": {
+                    "minimum": 0,
+                    "title": "Assessed Items",
+                    "type": "integer"
+                  },
+                  "assessed_subtotal": {
+                    "$ref": "#/$defs/Money"
+                  },
+                  "cap": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "configured_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "estimated_score": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Money"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "possible_range": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ScoreRange"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "section_key": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "status": {
+                    "enum": [
+                      "estimated",
+                      "range_only",
+                      "unavailable"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "title": {
+                    "$ref": "#/$defs/NonBlank"
+                  },
+                  "unassessable_items": {
+                    "minimum": 0,
+                    "title": "Unassessable Items",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "section_key",
+                  "title",
+                  "aggregation",
+                  "aggregation_assessable",
+                  "assessed_items",
+                  "unassessable_items",
+                  "assessed_subtotal",
+                  "status"
+                ],
+                "title": "ScoreSectionSummary",
+                "type": "object"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "Source": {
+                "additionalProperties": false,
+                "properties": {
+                  "chunk_id": {
+                    "format": "uuid",
+                    "title": "Chunk Id",
+                    "type": "string"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "location": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Location"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "quote": {
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "chunk_id",
+                  "quote"
+                ],
+                "title": "Source",
+                "type": "object"
+              },
+              "TenderCitation": {
+                "additionalProperties": false,
+                "description": "已由服务端对固定原文核验；Pydantic 不替代文本与父对象查询。",
+                "properties": {
+                  "kind": {
+                    "const": "tender",
+                    "default": "tender",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "title": "TenderCitation",
+                "type": "object"
+              },
+              "VerifiedCitation": {
+                "discriminator": {
+                  "mapping": {
+                    "draft": "#/$defs/DraftCitation",
+                    "evidence": "#/$defs/EvidenceCitation",
+                    "tender": "#/$defs/TenderCitation"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/TenderCitation"
+                  },
+                  {
+                    "$ref": "#/$defs/DraftCitation"
+                  },
+                  {
+                    "$ref": "#/$defs/EvidenceCitation"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "items": {
+                "items": {
+                  "$ref": "#/$defs/ScoreItemView"
+                },
+                "title": "Items",
+                "type": "array"
+              },
+              "report": {
+                "$ref": "#/$defs/ScoreRunView"
+              },
+              "sections": {
+                "items": {
+                  "$ref": "#/$defs/ScoreSectionSummary"
+                },
+                "title": "Sections",
+                "type": "array"
+              }
+            },
+            "required": [
+              "report",
+              "sections",
+              "items"
+            ],
+            "title": "ScoreReportData",
             "type": "object"
           }
         },

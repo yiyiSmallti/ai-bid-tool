@@ -22,9 +22,9 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | F04 账号与角色 | 全局 User、Membership、四种角色；平台管理员（配置名单、TOTP、运营后台） | 单位成员管理入口、任务成员、评论权限、OIDC、全局记忆维护 | 新契约；SSO 需授权 |
 | F05 ApiToken | 签发、范围、期限；DB 禁止确认/导出范围 | 吊销入口、令牌列表、签发与吊销审计 | 新接口确认 |
 | F06 Org/Task | 任务名称、编号、截止、预算字段 | 套餐与月度预算、任务成员与归档、[预算执行草案](budget.md)、一次性组合创建 | 计费规则待定 |
-| F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/export_preview/sandbox/截图/原型生成/厂家搜索/模拟拟投/score_rubric 作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
-| F08 AuditLog | 资源、卡片人工决策、模型起草、评分 rubric 生成与人工决定、遮挡设置及组表审计 | 登录、令牌、导出、其他配置及 agent 调用审计与查询 | 新契约 |
-| F09 UsageRecord | OCR、抽取、模型起草和评分 rubric 生成的逐次用量记录；平台计费调用按售价从预付余额扣除，充值卡密 | 存储计量、[预算预检与低余额通知草案](budget.md)、在线支付 | 新契约 |
+| F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/export_preview/sandbox/截图/原型生成/厂家搜索/模拟拟投/score_rubric/score 作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
+| F08 AuditLog | 资源、卡片人工决策、模型起草、评分 rubric 生成与人工决定、评分执行、遮挡设置及组表审计 | 登录、令牌、导出、其他配置及 agent 调用审计与查询 | 新契约 |
+| F09 UsageRecord | OCR、抽取、模型起草和评分 rubric 生成与评分执行的逐次用量记录；平台计费调用按售价从预付余额扣除，充值卡密 | 存储计量、[预算预检与低余额通知草案](budget.md)、在线支付 | 新契约 |
 | F10 部署与质量 | 本机迁移、Compose（含 SearXNG、Gotenberg）、锁定依赖、GitHub Actions 在每个 PR 上按改动范围运行，测试按 worker 分库并行 | 生产对象存储、TLS、备份与密钥轮换、私有化包装 | 生产需授权 |
 
 ## 覆盖矩阵：资源与任务选择
@@ -52,7 +52,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B07 人工确认 | 卡片与 Evidence 按职责人工确认、不可变修订、原子处置、模型提议与消费关口；决定见 [ADR 0005](../adr/0005-human-confirmed-responses.md) | 会签、任务成员与看板交互 | 新契约 |
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
 | B09 check | 已实施 rules 与 combined：确定性规则、证书日期、语义矛盾/薄弱响应/材料覆盖、双重验引、逐调用计费、风险报告与人工 dismiss/reopen；机制见 [check.md](../notes/check.md) | 真实模型效果与重复调用波动评测，见[校验契约](check.md) | 受控 eval 输入与显式调用 |
-| B10 score | 阶段 A 已实施：rubric 生成、版本、分类、覆盖、逐项与整集人工确认及历史；机制见 [score.md](../notes/score.md) | 阶段 B：按 confirmed rubric 对 current DraftRun 评分并发布 advisory 报告；契约见[评分计划](score.md) | 已批准；阶段 B 依赖受控 Provider 评测 |
+| B10 score | rubric 生成、版本、分类、覆盖和人工确认；按 confirmed rubric 对 current DraftRun 逐项评分、确定性聚合及 advisory 报告；机制见 [score.md](../notes/score.md) | 真实 Provider 受控评测、人工改分与 UI；边界见[评分计划](score.md) | 新范围另立契约 |
 | B11 export | 人工 Word 响应章节导出、正式件/审阅件、证书页附件、审计；导出件经 Gotenberg 转 PDF 在线按页预览；机制见 [human-section-exports.md](../notes/human-section-exports.md)、[page-previews.md](../notes/page-previews.md) | WPS 视觉分页与隔离 S3 下载验收；契约见 [export.md](export.md) | 已批准 |
 
 ## 覆盖矩阵：Provider、记忆、看板、agent 与 CLI
@@ -73,7 +73,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记见 [agent.md](agent.md#审计与-a02-来源标记)；可选 `mcp serve` | 新接口确认 |
 | C01 CLI 契约 | Result 七键、schema 注册、统一退出码、两种模式；`bid check run/list/show/decide/history` 与 `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history` | 后续命令、主版本兼容周期 | 新命令确认 |
 | C02 缓存 | 模型起草及确定性 check 固定输入/版本缓存，保留人工确认，组表重算依赖 | 记忆依赖见 [memory.md](memory.md#起草消费使用审计与-c02-缓存失效)；其他能力的跨依赖失效 | 新契约 |
-| C03 dry-run/预算 | 起草和评分 rubric 的外发清单与首轮费用上界、预付余额/调用上限拦截；组表与 rules check 零费用预检；combined check 固定模型价格的零写入预检与逐次准入 | score 阶段 B 估价、更精确 token/耗时估算；[费用预检与任务预算草案](budget.md) | 价格与测量依赖服务 |
+| C03 dry-run/预算 | 起草、评分 rubric 与评分执行的外发清单与首轮费用上界、预付余额/调用上限拦截；组表与 rules check 零费用预检；combined check 固定模型价格的零写入预检与逐次准入 | 更精确 token/耗时估算；[费用预检与任务预算草案](budget.md) | 价格与测量依赖服务 |
 
 ## 覆盖矩阵：评测与保密
 
@@ -87,7 +87,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 ## 真实服务接入范围
 
 接入层支持：要求抽取、响应起草、原型生成与模拟拟投的平台 LLM（Anthropic、OpenAI 兼容）、截图多模态分析、
-Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg 文档转换。score rubric 生成复用结构化模型接入；尚未接入：score 阶段 B/agent 的模型调用、语义向量与云 OCR，
+Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg 文档转换。score rubric 生成和评分执行复用结构化模型接入；尚未接入：agent 的模型调用、语义向量与云 OCR，
 以及这些能力的评测。
 
 不依赖真实服务、可各自立契约推进的是：本地浏览器取证、Rust 标注、
@@ -121,4 +121,4 @@ Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg
 1. 沙箱租约过期接管与断连、存储失败注入验收；导出件的 WPS 视觉分页验收（B11），需要装有 WPS 的环境。
 2. 证书页等其他材料的标注（B05），check 真实模型评测（B09）。
 3. 看板、卡片状态与 SSE（U01、U02）。
-4. score 阶段 B、agent、记忆、用量与部署。
+4. score 受控评测、agent、记忆、用量与部署。

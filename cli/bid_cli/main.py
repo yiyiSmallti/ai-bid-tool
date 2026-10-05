@@ -62,7 +62,7 @@ from bid_cli.providers import app as provider_app
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
 from bid_cli.schema import command_schema
 from bid_cli.score import app as score_app
-from bid_cli.score import rubric_job_exit
+from bid_cli.score import rubric_job_exit, score_job_exit
 from bid_cli.screenshots import register as register_screenshot_commands
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
@@ -1164,6 +1164,7 @@ def job_status(job_id: UUID, json_output: JsonOption = False):
         sandbox_job_exit(body)
         or check_job_exit(body)
         or rubric_job_exit(body)
+        or score_job_exit(body)
         or partial_completion_exit(body),
     )
 

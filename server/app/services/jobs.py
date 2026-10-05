@@ -45,6 +45,10 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.check import job_access as check_access
 
         await check_access(session, identity, job, storage)
+    if job.kind == "score":
+        from app.services.score_execution import job_access as score_access
+
+        await score_access(session, identity, job, storage)
     if job.kind == "score_rubric":
         from app.services.score_generation import job_access as rubric_access
 
@@ -82,7 +86,7 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         identity.require("provider:read")
         payload["data"]["result"] = _public_result(job)
         payload["cost"] = job.result.get("cost", payload["cost"])
-    if job.kind in {"check", "score_rubric"}:
+    if job.kind in {"check", "score_rubric", "score"}:
         public = _public_result(job)
         for internal_envelope_field in ("cost", "warnings", "exit_code"):
             public.pop(internal_envelope_field, None)
@@ -140,6 +144,10 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.services.check import job_access as check_access
 
         await check_access(session, identity, job, storage, cancel=True)
+    if job.kind == "score":
+        from app.services.score_execution import job_access as score_access
+
+        await score_access(session, identity, job, storage, cancel=True)
     if job.kind == "score_rubric":
         from app.services.score_generation import job_access as rubric_access
 
@@ -147,13 +155,13 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
     await sandbox_guard_job(session, identity, job, cancel=True)
     if job.status not in {"cancelled", "queued", "running"}:
         raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)
-    if job.kind == "score_rubric" and job.status != "cancelled":
+    if job.kind in {"score_rubric", "score"} and job.status != "cancelled":
         from app.services.versioned import audit
 
         audit(
             session,
             identity,
-            "score_rubric.cancelled",
+            f"{job.kind}.cancelled",
             job.id,
             {
                 "task_id": str(job.task_id),

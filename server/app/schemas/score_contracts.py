@@ -1,4 +1,4 @@
-"""Approved score contracts; only rubric routes and jobs are implemented in phase A."""
+"""Approved rubric review, confirmed-draft scoring and report contracts."""
 
 from datetime import date
 from decimal import Decimal
@@ -857,8 +857,21 @@ class ScoreProviderItem(Contract):
 
 
 class ScoreProviderRequest(Contract):
+    assessment_date: date
     items: list[ScoreProviderItem] = Field(min_length=1)
+    context_only_refs: list[NonBlank] = Field(default_factory=list)
     context: OutboundContext
+
+    @model_validator(mode="after")
+    def context_only_refs_are_disjoint(self) -> Self:
+        item_refs = {
+            ref for item in self.items for ref in (item.tender_ref, item.rule_ref, *item.draft_refs)
+        }
+        if len(set(self.context_only_refs)) != len(self.context_only_refs):
+            raise ValueError("context-only refs must be unique")
+        if item_refs & set(self.context_only_refs):
+            raise ValueError("context-only refs cannot be item refs")
+        return self
 
 
 class ProposedScoreAssessment(Contract):

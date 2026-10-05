@@ -6,6 +6,14 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05：已确认响应草案的评分执行
+
+- 新增 `bid score run/list/show`、对应 preview/submit/list/show HTTP 路由和 `score` 持久作业。固定 current DraftRun、confirmed rubric、评估日期、模型/价格/reasoning 与遮挡修订；dry-run 零写入，正式提交绑定预览哈希。
+- `ScoreProvider.score` 只接收遮挡后的评分规则、招标引用和固定已确认响应文字。每项分数必须同时有通过本机核验的 tender/draft 引用；跨要求的确认响应可支持得分，缺依据、越界、歧义、薄承诺、外部比较和遮挡依赖保留为 unassessable。
+- sum、weighted_sum、capped_sum 使用 Decimal 和最终八位 ROUND_HALF_UP；不可评估子项和不支持的聚合使总分 unavailable，已评估小计单独显示。部分报告 show/wait 返回退出码 5。
+- 迁移 `0035` 增加 FORCE RLS 评分报告、逐项估分、支持响应和引用表；固定同单位/任务/文档/抽取/rubric/DraftRun 关系，发布重新核验确认与 worker attempt，报告及聚合历史不可改写。
+- 外发与逐次准入、预约、计费复用既有链路；迟到的拒答、截断和取消调用保留用量，后续批次失败可保留 partial，输入变化、租约或计费失败禁止发布。新增 MockTransport、API/worker/CLI 和 PostgreSQL 关口验收；机制见 [评分机制](notes/score.md)。
+
 ## 2026-10-05：评分 rubric 规范化与人工确认
 
 - 新增 `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history`、对应 HTTP 接口和 `score_rubric` 作业。候选只读取指定成功抽取的全部 scoring Requirements；dry-run 固定输入哈希、遮挡与费用上界，提交沿用队列、租约、重试、取消、用量和预付计费边界。

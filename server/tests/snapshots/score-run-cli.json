@@ -1,0 +1,486 @@
+{
+  "local": {
+    "score list": {
+      "command": "score list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "advisory_only": true,
+          "assessed_items": 0,
+          "assessed_subtotal": "0",
+          "assessment_date": "2026-10-05",
+          "completion": "partial",
+          "created_at": "2026-10-05T00:00:00Z",
+          "estimated_total": null,
+          "id": "00000000-0000-0000-0000-000000000010",
+          "input": {
+            "assessment_date": "2026-10-05",
+            "document_id": "00000000-0000-0000-0000-000000000005",
+            "draft_id": "00000000-0000-0000-0000-000000000003",
+            "draft_input_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000004",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          },
+          "invalidation_codes": [],
+          "job_id": "00000000-0000-0000-0000-000000000011",
+          "limitations": [
+            "missing_confirmed_support"
+          ],
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "score-prompt-v1",
+          "rubric_id": "00000000-0000-0000-0000-000000000006",
+          "rubric_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "rubric_version": 1,
+          "run_id": "00000000-0000-0000-0000-000000000012",
+          "schema_version": "score-wire-v1",
+          "scoring_rule_version": "score-aggregation-v1",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "total_status": "range_only",
+          "unassessable_items": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "score run": {
+      "command": "score run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "configured_price",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0.04",
+        "estimated_cost": {
+          "llm_tokens": 900,
+          "ocr_pages": 0,
+          "usd": 0.02
+        },
+        "estimated_duration_ms": null,
+        "input": {
+          "assessment_date": "2026-10-05",
+          "document_id": "00000000-0000-0000-0000-000000000005",
+          "draft_id": "00000000-0000-0000-0000-000000000003",
+          "draft_input_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000004",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "confirmed_draft",
+          "task_id": "00000000-0000-0000-0000-000000000002"
+        },
+        "limitations": [
+          "advisory_only"
+        ],
+        "max_charge": "1.25",
+        "model": "synthetic-model",
+        "model_revision": 1,
+        "platform_model_id": "synthetic-score",
+        "preflight_unassessable_item_ids": [],
+        "prompt_version": "score-prompt-v1",
+        "provider_config_id": null,
+        "provider_source": "platform",
+        "reasoning": "high",
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "rubric_id": "00000000-0000-0000-0000-000000000006",
+        "rubric_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "rubric_version": 1,
+        "schema_version": "score-wire-v1",
+        "scoring_rule_version": "score-aggregation-v1",
+        "selected_item_ids": [
+          "00000000-0000-0000-0000-000000000007"
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score show": {
+      "command": "score show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "items": [
+          {
+            "advisory_only": true,
+            "anchor_partition": "gap",
+            "anchor_response_item_id": "00000000-0000-0000-0000-000000000009",
+            "citations": [],
+            "deduction_reasons": [],
+            "estimated_score": null,
+            "id": "00000000-0000-0000-0000-000000000007",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "outcome": "unassessable",
+            "reason": "No confirmed response text supports this scoring item.",
+            "reason_code": "missing_confirmed_support",
+            "report_id": "00000000-0000-0000-0000-000000000010",
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "response_item_ids": [],
+            "rubric_item_id": "00000000-0000-0000-0000-000000000007",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_key": "technical",
+            "strengthening_actions": [
+              "Confirm response material for this scoring item."
+            ],
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          }
+        ],
+        "report": {
+          "advisory_only": true,
+          "assessed_items": 0,
+          "assessed_subtotal": "0",
+          "assessment_date": "2026-10-05",
+          "completion": "partial",
+          "created_at": "2026-10-05T00:00:00Z",
+          "estimated_total": null,
+          "id": "00000000-0000-0000-0000-000000000010",
+          "input": {
+            "assessment_date": "2026-10-05",
+            "document_id": "00000000-0000-0000-0000-000000000005",
+            "draft_id": "00000000-0000-0000-0000-000000000003",
+            "draft_input_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000004",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          },
+          "invalidation_codes": [],
+          "job_id": "00000000-0000-0000-0000-000000000011",
+          "limitations": [
+            "missing_confirmed_support"
+          ],
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "score-prompt-v1",
+          "rubric_id": "00000000-0000-0000-0000-000000000006",
+          "rubric_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "rubric_version": 1,
+          "run_id": "00000000-0000-0000-0000-000000000012",
+          "schema_version": "score-wire-v1",
+          "scoring_rule_version": "score-aggregation-v1",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "total_status": "range_only",
+          "unassessable_items": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        },
+        "sections": [
+          {
+            "aggregation": "sum",
+            "aggregation_assessable": true,
+            "aggregation_rule_text": null,
+            "assessed_items": 0,
+            "assessed_subtotal": "0",
+            "cap": null,
+            "configured_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "estimated_score": null,
+            "possible_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_key": "technical",
+            "status": "range_only",
+            "title": "Technical response",
+            "unassessable_items": 1
+          }
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "missing_confirmed_support"
+      ]
+    }
+  },
+  "remote": {
+    "score list": {
+      "command": "score list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000002",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "advisory_only": true,
+          "assessed_items": 0,
+          "assessed_subtotal": "0",
+          "assessment_date": "2026-10-05",
+          "completion": "partial",
+          "created_at": "2026-10-05T00:00:00Z",
+          "estimated_total": null,
+          "id": "00000000-0000-0000-0000-000000000010",
+          "input": {
+            "assessment_date": "2026-10-05",
+            "document_id": "00000000-0000-0000-0000-000000000005",
+            "draft_id": "00000000-0000-0000-0000-000000000003",
+            "draft_input_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000004",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          },
+          "invalidation_codes": [],
+          "job_id": "00000000-0000-0000-0000-000000000011",
+          "limitations": [
+            "missing_confirmed_support"
+          ],
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "score-prompt-v1",
+          "rubric_id": "00000000-0000-0000-0000-000000000006",
+          "rubric_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "rubric_version": 1,
+          "run_id": "00000000-0000-0000-0000-000000000012",
+          "schema_version": "score-wire-v1",
+          "scoring_rule_version": "score-aggregation-v1",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "total_status": "range_only",
+          "unassessable_items": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "score run": {
+      "command": "score run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "configured_price",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0.04",
+        "estimated_cost": {
+          "llm_tokens": 900,
+          "ocr_pages": 0,
+          "usd": 0.02
+        },
+        "estimated_duration_ms": null,
+        "input": {
+          "assessment_date": "2026-10-05",
+          "document_id": "00000000-0000-0000-0000-000000000005",
+          "draft_id": "00000000-0000-0000-0000-000000000003",
+          "draft_input_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000004",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "confirmed_draft",
+          "task_id": "00000000-0000-0000-0000-000000000002"
+        },
+        "limitations": [
+          "advisory_only"
+        ],
+        "max_charge": "1.25",
+        "model": "synthetic-model",
+        "model_revision": 1,
+        "platform_model_id": "synthetic-score",
+        "preflight_unassessable_item_ids": [],
+        "prompt_version": "score-prompt-v1",
+        "provider_config_id": null,
+        "provider_source": "platform",
+        "reasoning": "high",
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "rubric_id": "00000000-0000-0000-0000-000000000006",
+        "rubric_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "rubric_version": 1,
+        "schema_version": "score-wire-v1",
+        "scoring_rule_version": "score-aggregation-v1",
+        "selected_item_ids": [
+          "00000000-0000-0000-0000-000000000007"
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "score show": {
+      "command": "score show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "items": [
+          {
+            "advisory_only": true,
+            "anchor_partition": "gap",
+            "anchor_response_item_id": "00000000-0000-0000-0000-000000000009",
+            "citations": [],
+            "deduction_reasons": [],
+            "estimated_score": null,
+            "id": "00000000-0000-0000-0000-000000000007",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "outcome": "unassessable",
+            "reason": "No confirmed response text supports this scoring item.",
+            "reason_code": "missing_confirmed_support",
+            "report_id": "00000000-0000-0000-0000-000000000010",
+            "requirement_id": "00000000-0000-0000-0000-000000000008",
+            "response_item_ids": [],
+            "rubric_item_id": "00000000-0000-0000-0000-000000000007",
+            "score_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_key": "technical",
+            "strengthening_actions": [
+              "Confirm response material for this scoring item."
+            ],
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          }
+        ],
+        "report": {
+          "advisory_only": true,
+          "assessed_items": 0,
+          "assessed_subtotal": "0",
+          "assessment_date": "2026-10-05",
+          "completion": "partial",
+          "created_at": "2026-10-05T00:00:00Z",
+          "estimated_total": null,
+          "id": "00000000-0000-0000-0000-000000000010",
+          "input": {
+            "assessment_date": "2026-10-05",
+            "document_id": "00000000-0000-0000-0000-000000000005",
+            "draft_id": "00000000-0000-0000-0000-000000000003",
+            "draft_input_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000004",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000002"
+          },
+          "invalidation_codes": [],
+          "job_id": "00000000-0000-0000-0000-000000000011",
+          "limitations": [
+            "missing_confirmed_support"
+          ],
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "possible_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prompt_version": "score-prompt-v1",
+          "rubric_id": "00000000-0000-0000-0000-000000000006",
+          "rubric_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "rubric_version": 1,
+          "run_id": "00000000-0000-0000-0000-000000000012",
+          "schema_version": "score-wire-v1",
+          "scoring_rule_version": "score-aggregation-v1",
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "total_status": "range_only",
+          "unassessable_items": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        },
+        "sections": [
+          {
+            "aggregation": "sum",
+            "aggregation_assessable": true,
+            "aggregation_rule_text": null,
+            "assessed_items": 0,
+            "assessed_subtotal": "0",
+            "cap": null,
+            "configured_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "estimated_score": null,
+            "possible_range": {
+              "maximum": "10",
+              "minimum": "0"
+            },
+            "section_key": "technical",
+            "status": "range_only",
+            "title": "Technical response",
+            "unassessable_items": 1
+          }
+        ]
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "missing_confirmed_support"
+      ]
+    }
+  }
+}
