@@ -4,11 +4,12 @@ kind: plan
 
 # 标书初稿校验契约
 
-状态：**已批准。阶段一 rules 已实施；阶段二 combined 未实施。** 对应[路线图](roadmap.md) B09。
+状态：**已批准。阶段一 rules 与阶段二 combined 已实施。** 对应[路线图](roadmap.md) B09。
 
 [Pydantic 契约](../../server/app/schemas/check_contracts.py)是 API、CLI 和 schema 的活动定义。
-阶段一实现确定性规则、持久报告与人工误报决定；本文明确标为阶段二的 Provider、语义检查、
-计费和评测内容尚未实施。与 B10 共用的输入、引用、预检和作业回执类型仍由该模块定义，
+阶段一实现确定性规则、持久报告与人工误报决定；阶段二实现 Provider、语义检查、
+外发边界、逐调用计费与合成测试。真实模型效果评测仍须在 `evals/` 中显式运行。
+与 B10 共用的输入、引用、预检和作业回执类型仍由该模块定义，
 [score 契约草案](score.md)导入使用。
 
 ## 目标与边界
@@ -42,12 +43,12 @@ kind: plan
 
 ## 现有基础与设计差异
 
-| 依据 | 已复用基础及阶段二缺口 |
+| 依据 | 复用基础及能力边界 |
 | --- | --- |
 | [contracts.py](../../server/app/schemas/contracts.py) 的 `Category`、`Source`、`Result`、`ProviderUsage` | 已有 `scoring` 类别与 PDF/Word 引用；`condition` 仍为自由字典，不能当已批准的数值规则或评分量表 |
 | [response_card_contracts.py](../../server/app/schemas/response_card_contracts.py) 的 `DraftView`、`ResponseRow`、`ReviewDomain` | 已有确认响应/仅遵守/缺口分区；不是任意标书全文输入 |
 | [ADR 0005](../adr/0005-human-confirmed-responses.md) | 模型提议与人工决定分离；新报告不继承或产生证据确认权 |
-| [providers/base.py](../../server/app/providers/base.py) 的 `LLMProvider` | 阶段一不调用模型；阶段二才新增独立 check Protocol，不把 `extract`/`draft` 冒充 check |
+| [providers/base.py](../../server/app/providers/base.py) 的 `LLMProvider` | rules 不调用模型；combined 使用独立 `CheckProvider` Protocol，不把 `extract`/`draft` 冒充 check |
 | [providers/llm.py](../../server/app/providers/llm.py) 的 `resolve_llm`、`with_reasoning` | 阶段二沿用单位配置优先、平台默认其次的固定配置修订，不另建服务商选择入口 |
 | [providers/structured.py](../../server/app/providers/structured.py) 的 `strict_schema`、`json_request`、`json_call` | 阶段二复用结构化请求和已计费 HTTP 边界 |
 | [services/jobs.py](../../server/app/services/jobs.py) 的 `status`、`cancel` | 已加入 check 结果过滤及权限校验，继续隐藏 submission/encrypted_input |
@@ -85,7 +86,7 @@ rules 预检也保留同一结构：provider/config/model/reasoning 相关字段
 charge=0、cost_basis=known、reason 为 `no_model_calls`，币种仍取平台配置；redaction 字段
 仅描述当前设置。预检 exit 0 只表示只读分析成功，`admission_blocker != null` 明确表示不能
 按当前条件提交，实际提交必须重新检查并拒绝，不把它当成准入授权。默认模式为 `rules`；
-阶段一接收到 `combined` 明确返回 `check_mode_unavailable`/exit 2，不静默降级。
+`combined` 使用固定的 Provider 配置执行语义检查；不支持该能力的模型显式拒绝，不静默降级。
 
 | 退出码 | 结果语义 |
 | --- | --- |
@@ -118,7 +119,7 @@ ResponseItem.draft_id/requirement_id、DraftRun.task_id/extraction_job_id 全部
 | 负偏离 | 已确认响应的 `deviation=negative` 必须报告；★/实质性项列废标风险，其余列扣分风险候选，并引用原偏离说明 | 不改变负偏离、不给扣分数；具体后果须原条款和人判断 |
 | 未确认证据 | gap 的 unconfirmed/needs_reconfirmation 等状态提示未完成确认；若响应行实际携带未确认证据则输入完整性失败、停止模型调用 | 不读取或发送其候选正文；不能靠风险“忽略”让其进入 draft/export |
 | 证书日期 | 对固定任务证书调用 `certificates.inspect_dates`，沿用边界日包含规则；过期/尚未生效输出日期风险，缺日期为 unknown | 是声明日期检查，不认证证书真伪；无可靠要求绑定时仅列证书检查信息，不臆断资格废标 |
-| 内容矛盾、薄弱响应、材料覆盖不足（阶段二） | `combined` 才调用 LLM，逐要求给 no_risk_found/risk/unknown，清楚区分承诺、声明与证明 | 阶段一返回 `check_mode_unavailable`；任意 condition、单位换算、隐藏附件、视觉内容与漏抽均不能确定性声称通过 |
+| 内容矛盾、薄弱响应、材料覆盖不足（阶段二） | `combined` 才调用 LLM，逐要求给 no_risk_found/risk/unknown，清楚区分承诺、声明与证明 | 任意 condition、单位换算、隐藏附件、视觉内容与漏抽均不能确定性声称通过 |
 
 `mode=rules` 只完成上表的本地项目，semantic_status=not_requested，并始终声明语义未检查；
 无需模型配置、余额或 UsageRecord。`combined` 不许静默退回 rules；即使 LLM 失败，可保存
@@ -146,7 +147,7 @@ image_region 的视觉观察只是人工观察文字，首版不将它当作图�
 ## 阶段二外发边界
 
 阶段一 `rules` 不外发任何文本，不要求模型配置、余额或遮挡开关，也不创建 UsageRecord 或
-VendorCall。以下边界已批准，待 `combined` 实施时适用。
+VendorCall。以下边界由 `combined` 执行。
 
 遵循 [model-drafting-redaction.md](../notes/model-drafting-redaction.md) 和
 [confidential-values.md](../notes/confidential-values.md) 的替换顺序：登记值先变成占位符，
@@ -159,9 +160,10 @@ VendorCall。以下边界已批准，待 `combined` 实施时适用。
 现有起草允许管理员关闭的行为严格。rules 不外发，因此不受此限制。
 值行或设置修订变化，后续调用停止并要求重新预检。包含占位符的响应可用于理解主题，
 涉及被遮挡值的满足判断记 `redacted_input_unassessable`，不猜报价或证件值。
+实现对含遮挡值的要求采用保守关口：该要求的语义结论均不接收，确定性观察仍保留。
 模型理由、建议也做本地敏感信息检查，未知占位符/敏感字面值导致拒收；原始输出不落日志。
 
-## 阶段一数据模型与迁移
+## 数据模型与迁移
 
 迁移 [0032_check.py](../../server/migrations/versions/0032_check.py) 新增下列表。每表均有 UUID 主键、**NOT NULL org_id/task_id**，
 `UNIQUE(org_id,id)`、启用且 **FORCE RLS**，USING/WITH CHECK 绑定事务 `app.current_org`；
@@ -171,12 +173,19 @@ actor 用户引用 `(org_id,user_id)` Membership，不能只引用全局 User �
 
 | 表 / 公开视图 | 保存内容及关键约束 |
 | --- | --- |
-| `check_runs` / `CheckRunView` | 不可变报告、job/run_id、draft/extraction/document、input manifest/hash、加密输入和规则/schema 版本；(org_id,job_id) 唯一，一个 job 最多发布一个报告，run_id 记录成功发布的 attempt，父键连 jobs/draft_runs/tasks/documents；阶段一 usage 引用为空 |
-| `check_items` / `CheckItemView` | 每报告每 Requirement 恰一行，关联该 draft 的 ResponseItem（包括 comply_only/gap 行）、卡片修订及规则/语义覆盖；(org_id,report_id,requirement_id) 唯一，关联 requirement/extraction、response_item/draft 的组合，不允许同单位跨任务混绑 |
+| `check_runs` / `CheckRunView` | 不可变报告、job/run_id、draft/extraction/document、input manifest/hash、加密输入和规则/schema 版本；(org_id,job_id) 唯一，一个 job 最多发布一个报告，run_id 记录成功发布的 attempt，父键连 jobs/draft_runs/tasks/documents；rules 的 usage 引用为空；combined 按 org/job 查询实际用量 |
+| `check_items` / `CheckItemView` | 每报告每 Requirement 恰一行，关联该 draft 的 ResponseItem（包括 comply_only/gap 行）、卡片修订及规则/语义覆盖、`semantic_outcome`；(org_id,report_id,requirement_id) 唯一，关联 requirement/extraction、response_item/draft 的组合，不允许同单位跨任务混绑 |
 | `check_certificates` / `CheckCertificateView` | 固定任务证书选择、修订、检查日和日期状态；复合外键连 task_certificates/certificate_revisions；要求绑定只允许本报告输入，未绑定保留空列表及 limitation |
-| `check_findings` / `FindingView` | 不可变机器候选、方法、风险等级、职责、原因；连 check_item/requirement；阶段一方法固定 deterministic，公开 status/revision/latest_decision 由历史推导，不改写候选 |
-| `check_finding_citations` / `FindingCitationView` | 每条有效引用，typed nullable 外键列连 document/chunk 或 response_item/card_revision 或 evidence，CHECK 恰一种来源；quote 保留精确原文，Source 视图从固定父位置组装 |
+| `check_findings` / `FindingView` | 不可变机器候选、方法、风险等级、职责、原因；连 check_item/requirement；rules 方法固定 deterministic，combined 同时允许 semantic，公开 status/revision/latest_decision 由历史推导，不改写候选 |
+| `check_finding_citations` / `FindingCitationView` | 每条有效引用，finding/item 目标恰选一个；typed nullable 外键列连 document/chunk 或 response_item/card_revision 或 evidence，CHECK 恰一种来源；quote 保留精确原文，Source 视图从固定父位置组装 |
 | `check_decisions` / `FindingDecisionView` | append-only 的 dismiss/reopen、非空理由、reason hash、human actor/time、递增 revision；(org_id,finding_id,revision) 唯一，外键绑定原 finding/report |
+
+迁移 [0033_check_semantic.py](../../server/migrations/versions/0033_check_semantic.py)
+扩展既有模式与发布约束，增加 `check_items.semantic_outcome` 和现有引用表的 item 目标。
+`no_risk_found` 的已核验招标与投标引用直接绑定覆盖项，不伪造风险 finding；`unknown`
+保持 unassessed，拒收结论的 outcome 为 null，仅存固定原因码。相应公开字段为
+`CheckItemView.semantic_outcome` 和 `semantic_citations`，仅 combined 报告输出这两个新增字段；
+rules 的 JSON 与原 finding 引用结构保留。
 
 输入材料即使未成为引用也是依赖。manifest 中引用的每个对象仍须有受约束的父链，不能仅凭
 JSON 内 ID 保证隔离：ResponseItem→卡片修订→Evidence/资源选择沿现有关系核对；证书要求
@@ -251,14 +260,16 @@ reasoning 均为 null，`cost_basis_reason=no_model_calls`，`admission_blocker=
 
 ### 阶段二 combined
 
-以下 Provider、计费、部分发布和模型估价规则已批准但未实施。阶段一接收 `combined` 时只返回
-`check_mode_unavailable`。
+以下 Provider、计费、部分发布和模型估价规则由
+[check_semantic.py](../../server/app/services/check_semantic.py)、
+[checking.py](../../server/app/providers/checking.py) 与
+[jobs/check.py](../../server/app/jobs/check.py) 实施。
 
-`CheckProvider.check(CheckProviderRequest) -> CheckProviderResult` 是阶段二新增的 LLM 能力，
+`CheckProvider.check(CheckProviderRequest) -> CheckProviderResult` 是独立的 LLM 能力，
 业务仅依赖 Protocol。适配器在 `providers/` 中沿 `HTTPExtractor` 的结构化调用模式实施；
 `CheckWireOutput` 不允许额外字段，每批必须恰好覆盖 requested requirement IDs。批次不拆
 原文单字段、不隐式截短；超上下文限制显式失败。缺答/重复/未知 ID、无效引用记录拒绝码，
-不从另一要求借结果。`batches` 固定每次实际发送 refs；`usages` 复用 `ProviderUsage`，
+不从另一要求借结果。服务端批次固定每次实际发送 refs；每次调用返回 wire 候选与 `usages`，后者复用 `ProviderUsage`，
 包括模型/version/duration/input/output tokens/vendor cost/platform charge，绝不从文字长度
 补造真实 usage。接入层返回失败码及可用批次，不暴露供应商原始错误。
 wire 类型允许先解析出候选以保留可用批次；服务端再以请求 ID/ref 集合逐项拒绝漏答、
@@ -357,7 +368,9 @@ token 统计仅为聚合量，不能证明重复相同输入的 token 确定性�
    命令不变。真实模型效果/重复 token 波动/延迟仅在显式启用的 `evals/` 运行，CI 不调用。
 
 阶段一自动化位于 `server/tests/test_check.py`、`test_check_storage.py`、`test_check_api.py` 和
-`test_check_cli.py`；阶段二项目继续作为后续验收目标。本文不记录某次测试运行状态。
+`test_check_cli.py`；combined 的端到端场景位于 `server/tests/test_check_combined.py`，存储门禁位于
+`server/tests/test_check_semantic_storage.py`，无数据库的传输与验引边界位于
+`server/tests/test_check_provider.py`、`server/tests/test_check_semantic_boundary.py`。本文不记录某次测试运行状态。
 
 ## 已定决定
 

@@ -198,6 +198,63 @@
         "semantic_checks_not_requested"
       ]
     },
+    "check run combined": {
+      "command": "check run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "configured_price",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0.02",
+        "estimated_cost": {
+          "llm_tokens": 400,
+          "ocr_pages": 0,
+          "usd": 0.01
+        },
+        "estimated_duration_ms": null,
+        "gap_requirements": 0,
+        "input": {
+          "assessment_date": "2026-10-04",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "draft_id": "00000000-0000-0000-0000-000000000002",
+          "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "confirmed_draft",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "limitations": [],
+        "max_charge": "1.25",
+        "mode": "combined",
+        "model": "synthetic-model",
+        "model_revision": 1,
+        "platform_model_id": "synthetic-check",
+        "prompt_version": "semantic-check-v1",
+        "provider_config_id": null,
+        "provider_source": "platform",
+        "reasoning": "high",
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "rule_version": "check-rules-v1",
+        "rules_applicable": 1,
+        "schema_version": "check-wire-v1",
+        "selected_item_ids": [],
+        "semantic_items": 2
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
     "check show": {
       "command": "check show",
       "cost": {
@@ -449,6 +506,63 @@
       "warnings": [
         "semantic_checks_not_requested"
       ]
+    },
+    "check run combined": {
+      "command": "check run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "configured_price",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0.02",
+        "estimated_cost": {
+          "llm_tokens": 400,
+          "ocr_pages": 0,
+          "usd": 0.01
+        },
+        "estimated_duration_ms": null,
+        "gap_requirements": 0,
+        "input": {
+          "assessment_date": "2026-10-04",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "draft_id": "00000000-0000-0000-0000-000000000002",
+          "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "confirmed_draft",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "limitations": [],
+        "max_charge": "1.25",
+        "mode": "combined",
+        "model": "synthetic-model",
+        "model_revision": 1,
+        "platform_model_id": "synthetic-check",
+        "prompt_version": "semantic-check-v1",
+        "provider_config_id": null,
+        "provider_source": "platform",
+        "reasoning": "high",
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "rule_version": "check-rules-v1",
+        "rules_applicable": 1,
+        "schema_version": "check-wire-v1",
+        "selected_item_ids": [],
+        "semantic_items": 2
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
     },
     "check show": {
       "command": "check show",

@@ -229,6 +229,7 @@ class Processor:
                 if kind == "check":
                     from app.jobs.check import process as process_check
 
+                    incremental = True
                     await process_check(execution, self.storage)
                     return
                 if kind == "card_generate":

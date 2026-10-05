@@ -6,6 +6,13 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-04：已确认初稿的 combined 语义校验
+
+- `bid check run --mode combined` 接入独立 CheckProvider 和结构化 HTTP 调用，固定单位配置或平台目录、推理档位、价格及输入哈希；rules 仍无模型调用。
+- 外发只使用局部 ref 和统一遮挡后的文本，关闭遮挡时预检与提交均阻止调用；按要求验收 no_risk_found/risk/unknown，双重核验连续唯一引用，拒收越界、拼接、遮挡引用及含敏感值的理由。
+- 每次调用沿用预约和计费账本；拒答、截断、取消后完成的调用仍记录真实用量。后续模型或预算中止可发布 partial；输入变更、租约丢失和计费失败不发布。
+- 新增迁移 `0033`，扩展既有受 RLS 保护的报告和引用表，保存无风险结论的支持引用及未评估原因；新增 MockTransport、API/worker/CLI 与数据库门禁合成测试。机制见 [Confirmed-draft checks](notes/check.md)。
+
 ## 2026-10-04：已确认初稿的确定性校验
 
 - 新增 `bid check run/list/show/decide/history` 与对应 HTTP 接口。`rules` 模式固定一个 current

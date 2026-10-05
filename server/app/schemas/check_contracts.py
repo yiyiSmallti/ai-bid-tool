@@ -1,4 +1,4 @@
-"""Confirmed-draft rules assessment contracts and shared score input types."""
+"""Confirmed-draft assessment contracts and shared score input types."""
 
 from datetime import date
 from decimal import Decimal
@@ -184,7 +184,7 @@ class CheckRequest(AssessmentRequest):
 
 
 class CheckPreview(AssessmentPreview[AssessmentInput]):
-    mode: Literal["rules"]
+    mode: Literal["rules", "combined"]
     rule_version: NonBlank
     prompt_version: str | None
     schema_version: NonBlank
@@ -221,6 +221,8 @@ class CheckItemView(Contract):
     rules: list[RuleObservation]
     semantic_status: Literal["assessed", "unassessed", "not_requested"]
     semantic_reason_code: str | None = None
+    semantic_outcome: Literal["no_risk_found", "risk", "unknown"] | None = None
+    semantic_citations: list[VerifiedCitation] = Field(default_factory=list, max_length=20)
     finding_ids: list[UUID]
 
 
@@ -299,7 +301,7 @@ class CheckRunView(Contract):
     job_id: UUID
     run_id: UUID
     input: AssessmentInput
-    mode: Literal["rules"]
+    mode: Literal["rules", "combined"]
     rule_version: NonBlank
     prompt_version: str | None
     schema_version: NonBlank

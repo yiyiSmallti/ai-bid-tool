@@ -1,9 +1,11 @@
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Protocol
+from decimal import Decimal
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.schemas.contracts import LLMResult, OCRText, ProviderUsage
 
 if TYPE_CHECKING:
+    from app.providers.checking import CheckProviderRequest, CheckProviderResult
     from app.providers.drafting import DraftingOutput
 
 
@@ -59,6 +61,22 @@ class LLMProvider(Protocol):
     async def draft(
         self, requirements: list[dict], materials: list[dict], fields: Sequence[dict] = ()
     ) -> "DraftingOutput": ...
+
+
+@runtime_checkable
+class CheckProvider(Protocol):
+    """One semantic-check batch against server-assigned local identifiers."""
+
+    name: str
+    model: str
+    version: str
+    test_only: bool
+
+    def request_body(self, request: "CheckProviderRequest") -> dict: ...
+
+    def reservation(self, request: "CheckProviderRequest") -> Decimal: ...
+
+    async def check(self, request: "CheckProviderRequest") -> "CheckProviderResult": ...
 
 
 class OCRProvider(Protocol):

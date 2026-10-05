@@ -153,6 +153,8 @@ async def confirmed_material(
     row: Evidence,
     extraction_id: UUID,
     storage: Storage,
+    *,
+    semantic: bool = False,
 ) -> tuple[dict, dict]:
     if row.confirmed_by is None or row.confirmed_at is None:
         integrity()
@@ -164,7 +166,7 @@ async def confirmed_material(
 
         await validate_image_evidence(session, actor, row, storage=storage)
         # Human visual observations are not literal image text and cannot become
-        # a verified text citation in the rules-only report.
+        # a verified text citation in a check report.
         content = {"id": str(row.id), "kind": row.kind, "quote": None}
     else:
         body = TypeAdapter(EvidenceInput).validate_python(view["input"])
@@ -186,7 +188,12 @@ async def confirmed_material(
             cards.fail(
                 "invalid_input_citation", "Confirmed evidence quote cannot be verified", 409, 4
             )
-        content = {"id": str(row.id), "kind": row.kind, "quote": row.quote}
+        content = {
+            "id": str(row.id),
+            "kind": row.kind,
+            "quote": row.quote,
+            **({"original_text": original_text} if semantic else {}),
+        }
     content |= {
         "task_certificate_id": str(row.task_certificate_id) if row.task_certificate_id else None,
         "certificate_revision_id": (
@@ -203,6 +210,8 @@ async def snapshot(
     draft_id: UUID,
     assessment_date: date,
     storage: Storage,
+    *,
+    semantic: bool = False,
 ) -> CheckSnapshot:
     task = await session.get(Task, task_id)
     draft = await session.get(DraftRun, draft_id)
@@ -273,13 +282,24 @@ async def snapshot(
             "gap_reasons": row.gap_reasons or [],
             "evidence": [],
         }
+        if semantic:
+            item["tender_original"] = (
+                batch.chunks[requirement.chunk_id].text
+                if requirement.page is not None
+                else next(
+                    block["text"]
+                    for block in batch.chunks[requirement.chunk_id].blocks or []
+                    if {key: value for key, value in block.items() if key != "text"}
+                    == requirement.location
+                )
+            )
         dependencies = []
         for evidence in batch.links.get(row.card_revision_id, []) if row.card_revision_id else []:
             material_view = batch.evidence_view(evidence)
             dependencies.append(drafts.evidence_dependency(material_view))
             if row.kind == "row":
                 _, content = await confirmed_material(
-                    session, actor, evidence, extraction.id, storage
+                    session, actor, evidence, extraction.id, storage, semantic=semantic
                 )
                 item["evidence"].append(content)
                 if (

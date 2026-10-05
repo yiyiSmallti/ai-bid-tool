@@ -125,36 +125,41 @@ def check_interface(
 
     async def submit(session, actor, task_id, body, storage, settings):
         if body.dry_run:
+            combined = body.mode == "combined"
             return {
                 "dry_run": True,
                 "input": assessment_input,
                 "selected_item_ids": [],
-                "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
-                "estimated_charge": "0",
+                "estimated_cost": {
+                    "llm_tokens": 400 if combined else 0,
+                    "ocr_pages": 0,
+                    "usd": 0.01 if combined else 0,
+                },
+                "estimated_charge": "0.02" if combined else "0",
                 "billing_currency": "CNY",
                 "cost_basis": "known",
-                "cost_basis_reason": "no_model_calls",
+                "cost_basis_reason": "configured_price" if combined else "no_model_calls",
                 "estimate_kind": "first_pass_upper_bound",
                 "admission_blocker": None,
                 "estimated_duration_ms": None,
                 "provider_config_id": None,
-                "provider_source": None,
-                "platform_model_id": None,
-                "model_revision": None,
-                "model": None,
-                "reasoning": None,
+                "provider_source": "platform" if combined else None,
+                "platform_model_id": "synthetic-check" if combined else None,
+                "model_revision": 1 if combined else None,
+                "model": "synthetic-model" if combined else None,
+                "reasoning": body.reasoning if combined else None,
                 "redaction_revision": 1,
                 "redaction_rule_version": "redaction-v1",
                 "redacted_counts": {},
-                "max_charge": None,
-                "mode": "rules",
+                "max_charge": body.max_charge,
+                "mode": body.mode,
                 "rule_version": "check-rules-v1",
-                "prompt_version": None,
-                "schema_version": "check-schema-v1",
+                "prompt_version": "semantic-check-v1" if combined else None,
+                "schema_version": "check-wire-v1" if combined else "check-schema-v1",
                 "rules_applicable": 1,
-                "semantic_items": 0,
+                "semantic_items": 2 if combined else 0,
                 "gap_requirements": 0,
-                "limitations": ["semantic_checks_not_requested"],
+                "limitations": [] if combined else ["semantic_checks_not_requested"],
             }, None
         job = type(
             "QueuedJob",
@@ -318,6 +323,23 @@ def test_check_cli_remote_and_local_transport_snapshots_db_free(monkeypatch, tmp
             IDENTIFIER_2,
             "--as-of",
             "2026-10-04",
+            "--dry-run",
+        ],
+        "check run combined": [
+            "check",
+            "run",
+            "--task",
+            IDENTIFIER,
+            "--draft",
+            IDENTIFIER_2,
+            "--as-of",
+            "2026-10-04",
+            "--mode",
+            "combined",
+            "--reasoning",
+            "high",
+            "--max-charge",
+            "1.25",
             "--dry-run",
         ],
         "check list": ["check", "list", "--task", IDENTIFIER, "--limit", "25"],
@@ -653,42 +675,20 @@ def test_check_run_wait_rejects_invalid_job_result_as_server_error(monkeypatch, 
     }
 
 
-@pytest.mark.parametrize(
-    "arguments,code",
-    [
-        (
-            [
-                "check",
-                "run",
-                "--task",
-                IDENTIFIER,
-                "--draft",
-                IDENTIFIER_2,
-                "--as-of",
-                "2026-10-04",
-                "--mode",
-                "combined",
-                "--dry-run",
-            ],
-            "check_mode_unavailable",
-        ),
-        (
-            [
-                "check",
-                "run",
-                "--task",
-                IDENTIFIER,
-                "--draft",
-                IDENTIFIER_2,
-                "--as-of",
-                "2026-02-30",
-                "--dry-run",
-            ],
-            "invalid_date",
-        ),
-    ],
-)
-def test_check_run_rejects_unavailable_mode_and_invalid_date(arguments, code, capsys):
-    exit_code, body = invoke(arguments, capsys)
+def test_check_run_rejects_invalid_date(capsys):
+    exit_code, body = invoke(
+        [
+            "check",
+            "run",
+            "--task",
+            IDENTIFIER,
+            "--draft",
+            IDENTIFIER_2,
+            "--as-of",
+            "2026-02-30",
+            "--dry-run",
+        ],
+        capsys,
+    )
     assert exit_code == 2
-    assert body["data"]["error"]["code"] == code
+    assert body["data"]["error"]["code"] == "invalid_date"

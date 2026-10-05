@@ -51,7 +51,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | B06 ui mock | LLM 生成单页 HTML 原型并经沙箱离线截图、入库与逐项保留/替换决定；机制见 [screenshot-evidence.md](../notes/screenshot-evidence.md) | 软件响应表自动编排 | 新契约 |
 | B07 人工确认 | 卡片与 Evidence 按职责人工确认、不可变修订、原子处置、模型提议与消费关口；决定见 [ADR 0005](../adr/0005-human-confirmed-responses.md) | 会签、任务成员与看板交互 | 新契约 |
 | B08 draft | 三张人工确认响应表、须遵守与缺口全集分区、负偏离和旧稿失效；机制见 [response-cards.md](../notes/response-cards.md) | 多文档/多抽取作业合并 | 新契约 |
-| B09 check | 已实施已确认初稿的确定性规则校验、证书日期清单、风险报告与人工 dismiss/reopen；机制见 [check.md](../notes/check.md) | `combined` 语义矛盾、薄弱响应和材料覆盖检查，见[校验契约](check.md) | 阶段二 Provider 与评测 |
+| B09 check | 已实施 rules 与 combined：确定性规则、证书日期、语义矛盾/薄弱响应/材料覆盖、双重验引、逐调用计费、风险报告与人工 dismiss/reopen；机制见 [check.md](../notes/check.md) | 真实模型效果与重复调用波动评测，见[校验契约](check.md) | 受控 eval 输入与显式调用 |
 | B10 score | 未实施 | [评分契约草案](score.md) | 待批准 |
 | B11 export | 人工 Word 响应章节导出、正式件/审阅件、证书页附件、审计；导出件经 Gotenberg 转 PDF 在线按页预览；机制见 [human-section-exports.md](../notes/human-section-exports.md)、[page-previews.md](../notes/page-previews.md) | WPS 视觉分页与隔离 S3 下载验收；契约见 [export.md](export.md) | 已批准 |
 
@@ -59,7 +59,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 | ID | 现状 | 缺口 | 依赖 |
 | --- | --- | --- | --- |
-| P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身；起草与模拟拟投共用的结构化 JSON 调用；check 的 rules 阶段不调用模型 | check 的 combined 阶段、score、agent 接入结构化调用 | 已批准 check 契约；其余需新契约 |
+| P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身；起草与模拟拟投共用的结构化 JSON 调用；独立 CheckProvider 与 combined HTTP adapter | score、agent 接入结构化调用 | 需相应能力契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
 | P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；Perplexity Search API 或自托管 SearXNG 搜索 | Embedding 草案见 [memory.md](memory.md#pgvector-与后续索引)；本机浏览器采集、仅用 SearXNG 时搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱租约接管与断连/存储失败注入验收 | 新契约 |
 | P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；机制见 [provider-config.md](../notes/provider-config.md) | 视觉、搜索等其他能力的单位配置 | 新契约 |
@@ -73,7 +73,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记见 [agent.md](agent.md#审计与-a02-来源标记)；可选 `mcp serve` | 新接口确认 |
 | C01 CLI 契约 | Result 七键、schema 注册、统一退出码、两种模式；`bid check run/list/show/decide/history` | 后续命令、主版本兼容周期 | 新命令确认 |
 | C02 缓存 | 模型起草及确定性 check 固定输入/版本缓存，保留人工确认，组表重算依赖 | 记忆依赖见 [memory.md](memory.md#起草消费使用审计与-c02-缓存失效)；其他能力的跨依赖失效 | 新契约 |
-| C03 dry-run/预算 | 起草外发清单与首轮费用上界、预付余额/调用上限拦截；组表与 rules check 零费用预检 | combined check 与 score 估价；[费用预检与任务预算草案](budget.md) | 价格与测量依赖服务 |
+| C03 dry-run/预算 | 起草外发清单与首轮费用上界、预付余额/调用上限拦截；组表与 rules check 零费用预检；combined check 固定模型价格的零写入预检与逐次准入 | score 估价、更精确 token/耗时估算；[费用预检与任务预算草案](budget.md) | 价格与测量依赖服务 |
 
 ## 覆盖矩阵：评测与保密
 
@@ -87,7 +87,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 ## 真实服务接入范围
 
 接入层支持：要求抽取、响应起草、原型生成与模拟拟投的平台 LLM（Anthropic、OpenAI 兼容）、截图多模态分析、
-Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg 文档转换。尚未接入：语义 check/score/agent 的模型调用、语义向量与云 OCR，
+Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg 文档转换。尚未接入：score/agent 的模型调用、语义向量与云 OCR，
 以及这些能力的评测。
 
 不依赖真实服务、可各自立契约推进的是：本地浏览器取证、Rust 标注、
@@ -119,6 +119,6 @@ Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg
 ## 建议顺序
 
 1. 沙箱租约过期接管与断连、存储失败注入验收；导出件的 WPS 视觉分页验收（B11），需要装有 WPS 的环境。
-2. 证书页等其他材料的标注（B05），check 语义模式（B09 阶段二）。
+2. 证书页等其他材料的标注（B05），check 真实模型评测（B09）。
 3. 看板、卡片状态与 SSE（U01、U02）。
 4. score、agent、记忆、用量与部署。
