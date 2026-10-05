@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, ref } from "vue";
+import CertificateSection from "../components/CertificateSection.vue";
 import SecretTextEditor from "../components/SecretTextEditor.vue";
 import { errorText, orgAccess, orgRequest, warningText } from "../org.js";
 // Organization declarations. Long text fields take confidential fields as blocks, so a
@@ -43,7 +44,7 @@ onMounted(load);
   <div class="page-header">
     <div>
       <h2>单位资料</h2>
-      <p class="subtitle">单位名称、注册信息、业绩和标准表述。账号、联系人等从上方字段条拖入，起草时模型只看到字段名，导出时填入真实值。</p>
+      <p class="subtitle">单位名称、注册信息、业绩、标准表述，以及营业执照等证照。账号、联系人等从上方字段条拖入，起草时模型只看到字段名，导出时填入真实值。</p>
     </div>
     <el-button v-if="writable" @click="open(null)">新建资料</el-button>
   </div>
@@ -70,6 +71,7 @@ onMounted(load);
       </el-form>
     </el-card>
   </div>
+  <CertificateSection />
 </template>
 <style scoped>
 .layout { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(0, 3fr); gap: 16px; align-items: start; }

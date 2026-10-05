@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -802,6 +803,43 @@ class CertificateFile(Tenant, Base):
             "storage_key = 'org/' || org_id::text || '/certificate/' || certificate_id::text || '/' || certificate_revision_id::text || '/' || (file->>'sha256') || '.pdf'",
             name="certificate_file_binding",
         ),
+    )
+
+
+class CertificateFilePart(Tenant, Base):
+    """An uploaded file, kept unchanged, behind a composed certificate original."""
+
+    __tablename__ = "certificate_file_parts"
+    certificate_id: Mapped[UUID] = mapped_column()
+    certificate_revision_id: Mapped[UUID] = mapped_column()
+    certificate_file_id: Mapped[UUID] = mapped_column()
+    ordinal: Mapped[int] = mapped_column(Integer)
+    name: Mapped[str] = mapped_column(String(200))
+    media_type: Mapped[str] = mapped_column(String(40))
+    sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    page_start: Mapped[int] = mapped_column(Integer)
+    page_count: Mapped[int] = mapped_column(Integer)
+    rotation: Mapped[int] = mapped_column(Integer)
+    storage_key: Mapped[str] = mapped_column(String(400))
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "certificate_file_id", "ordinal"),
+        ForeignKeyConstraint(
+            ["org_id", "certificate_file_id", "certificate_id", "certificate_revision_id"],
+            [
+                "certificate_files.org_id",
+                "certificate_files.id",
+                "certificate_files.certificate_id",
+                "certificate_files.certificate_revision_id",
+            ],
+        ),
+        CheckConstraint("ordinal BETWEEN 1 AND 20", name="certificate_part_ordinal"),
+        CheckConstraint(
+            "media_type IN ('application/pdf', 'image/png', 'image/jpeg')",
+            name="certificate_part_type",
+        ),
+        CheckConstraint("rotation IN (0, 90, 180, 270)", name="certificate_part_rotation"),
     )
 
 

@@ -48,6 +48,7 @@ from app.schemas.response_card_contracts import (
     TaskRedactionSet,
 )
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
+from app.services.certificate_files import EXTENSIONS as CERTIFICATE_EXTENSIONS
 from app.services.certificate_files import read_file as read_certificate_file
 from app.services.template_files import read_template
 from pydantic import ValidationError
@@ -673,21 +674,31 @@ def task_profile_list(
     )
 
 
+def certificate_media_type(path: Path) -> str:
+    return CERTIFICATE_EXTENSIONS.get(path.suffix.lower(), "application/octet-stream")
+
+
 @certificate_file_app.command("add")
 def certificate_file_add(
     id: Annotated[UUID, typer.Option()],
     input: Annotated[Path, typer.Option()],
-    file: Annotated[Path, typer.Option()],
+    file: Annotated[
+        list[Path],
+        typer.Option(help="PDF, PNG or JPEG; repeat to compose one original in this order"),
+    ],
     json_output: JsonOption = False,
 ):
     body = input_contract(input, CertificateFileCreate)
-    content = read_certificate_file(file)
+    files = [
+        ("file", (path.name, read_certificate_file(path), certificate_media_type(path)))
+        for path in file
+    ]
     emit(
         call(
             "POST",
             f"/resources/certificates/{id}/file-revisions",
             data={"metadata": json.dumps(body)},
-            files={"file": (file.name, content, "application/pdf")},
+            files=files,
         ),
         "resource certificate file add",
         json_output,

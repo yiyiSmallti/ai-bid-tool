@@ -10765,7 +10765,7 @@
             },
             {
               "default": null,
-              "multiple": false,
+              "multiple": true,
               "name": "file",
               "options": [
                 "--file"
@@ -10843,6 +10843,25 @@
                 ],
                 "title": "CertificateData",
                 "type": "object"
+              },
+              "CertificatePartOptions": {
+                "additionalProperties": false,
+                "description": "Per uploaded file, in upload order. Rotation turns pages clockwise.",
+                "properties": {
+                  "rotation": {
+                    "default": 0,
+                    "enum": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ],
+                    "title": "Rotation",
+                    "type": "integer"
+                  }
+                },
+                "title": "CertificatePartOptions",
+                "type": "object"
               }
             },
             "additionalProperties": false,
@@ -10854,6 +10873,14 @@
                 "minimum": 1,
                 "title": "Expected Revision",
                 "type": "integer"
+              },
+              "parts": {
+                "items": {
+                  "$ref": "#/$defs/CertificatePartOptions"
+                },
+                "maxItems": 20,
+                "title": "Parts",
+                "type": "array"
               }
             },
             "required": [
