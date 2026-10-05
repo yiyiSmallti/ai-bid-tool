@@ -211,7 +211,8 @@ class AgentPause(Tenant, Base):
     question_enc: Mapped[str] = mapped_column(Text)
     action: Mapped[str | None] = mapped_column(String(30))
     resource_ids: Mapped[list[str]] = mapped_column(JSONB, default=list, server_default="[]")
-    budget_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # Nonbudget pauses require SQL NULL; JSON null violates agent_pause_budget.
+    budget_ref: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     input_refs: Mapped[list[dict[str, Any]]] = mapped_column(
         JSONB, default=list, server_default="[]"
     )

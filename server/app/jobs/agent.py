@@ -402,12 +402,10 @@ async def checkpoint(
     usages, calls = await agent_limits.ledger(session, row)
     # Flush steps and messages while the session still names the live controller.
     await session.flush()
-    row.vendor_calls_used = len(calls)
-    if state in agent_limits.TERMINAL or state == "paused":
-        row.active_seconds_used = agent_limits.active_used(row, timestamp)
-        row.active_since = None
-    row.state, row.updated_at = state, timestamp
-    row.revision += 1
+    # ORM cost queries may autoflush. Complete them before marking a session
+    # terminal: that transition must include its cleared execution binding.
+    cost = Cost.model_validate(await job_cost(session, job.id, processor.settings.billing_currency))
+    checkpoint_revision = row.revision + 1
     disposition = (
         "terminal"
         if state in agent_limits.TERMINAL
@@ -419,7 +417,7 @@ async def checkpoint(
     )
     result = AgentJobResult(
         session_id=row.id,
-        checkpoint_revision=row.revision,
+        checkpoint_revision=checkpoint_revision,
         disposition=disposition,
         session_state=state,
         step_id=step.id if step else None,
@@ -433,12 +431,17 @@ async def checkpoint(
         stop_reason=reason,
         output_refs=list(outputs),
         usage_ids=[usage.id for usage in usages if usage.job_id == job.id],
-        cost=Cost.model_validate(
-            await job_cost(session, job.id, processor.settings.billing_currency)
-        ),
+        cost=cost,
     )
-    row.current_job_id, row.current_run_id = None, None
-    await session.flush([row])
+    with session.no_autoflush:
+        row.vendor_calls_used = len(calls)
+        if state in agent_limits.TERMINAL or state == "paused":
+            row.active_seconds_used = agent_limits.active_used(row, timestamp)
+            row.active_since = None
+        row.state, row.updated_at = state, timestamp
+        row.revision = checkpoint_revision
+        row.current_job_id, row.current_run_id = None, None
+        await session.flush([row])
     job.result = result.model_dump(mode="json")
     job.status, job.finished_at, job.lease_until, job.error = "succeeded", timestamp, None, None
     audit(

@@ -6,6 +6,11 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Atomic agent checkpoints and pause references
+
+- Read controller costs before the terminal transition, then persist the complete session checkpoint and cleared execution binding in one UPDATE. Preserve the live step/message fence and [terminal-state immutability](plan/agent.md#worker-recovery-and-cancellation).
+- Bind absent pause budget references as SQL NULL instead of JSON `null`, retaining the existing budget-only reference CHECK. Strengthen checkpoint receipts and pause-persistence coverage without changing hard-limit termination or unknown-request recovery semantics.
+
 ## 2026-10-05: Agent integration regression fixes
 
 - Restore private candidate rendering for a verified human export submission while preserving worker identity, current attempt/lease checks and the separate [human release gate](plan/export.md#human-identity-and-release-gate). Automated actors still cannot invoke human-only export actions.

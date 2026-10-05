@@ -22,6 +22,34 @@ TABLES = (
 )
 
 
+# Budget persistence failures: None on nonbudget pauses must bind SQL NULL,
+# typed budget references must retain their JSON object, and the database must
+# reject a budget without a reference or a nonbudget pause with JSON content.
+@pytest.mark.parametrize("kind", ["human_action", "authority", "recovery"])
+def test_pause_budget_none_binds_sql_null(kind):
+    from app.models.agent import AgentPause
+    from sqlalchemy import insert
+    from sqlalchemy.dialects.postgresql import psycopg
+
+    dialect = psycopg.dialect()
+    statement = insert(AgentPause).values(kind=kind, budget_ref=None).compile(dialect=dialect)
+    column_type = AgentPause.__table__.c.budget_ref.type.dialect_impl(dialect)
+    bind = column_type.bind_processor(dialect)
+    assert bind(statement.params["budget_ref"]) is None
+
+
+def test_pause_budget_reference_binds_json_object():
+    from app.models.agent import AgentPause
+    from app.schemas.agent_contracts import BudgetDependencyRef
+    from sqlalchemy.dialects.postgresql import psycopg
+
+    reference = BudgetDependencyRef(question_ref="job:synthetic:budget", revision_ref="1")
+    dialect = psycopg.dialect()
+    column_type = AgentPause.__table__.c.budget_ref.type.dialect_impl(dialect)
+    bound = column_type.bind_processor(dialect)(reference.model_dump(mode="json"))
+    assert bound.obj == reference.model_dump(mode="json")
+
+
 @pytest.mark.parametrize("table", TABLES)
 async def test_agent_table_forces_rls(application, tenants, admin_engine, table):
     with admin_engine.connect() as connection:
@@ -231,6 +259,92 @@ async def agent_history(application, tenants):
         await db.flush()
         rows = {row.__tablename__: row.id for row in (principal, state, step, message, pause, link)}
     return {"owner": owner, "executor": executor, "rows": rows, "encrypted": encrypted}
+
+
+async def _insert_pause_budget_case(db, history, kind, budget_ref):
+    from app.models.agent import AgentPause
+    from app.services.auth import set_actor_context
+
+    worker = history["executor"]
+    await set_actor_context(db, worker)
+    # Release the fixture's pending slot through its permitted terminal transition.
+    await db.execute(
+        text("UPDATE agent_pauses SET status='cancelled' WHERE id=:id"),
+        {"id": history["rows"]["agent_pauses"]},
+    )
+    pause = AgentPause(
+        org_id=worker.org_id,
+        session_id=worker.session_id,
+        kind=kind,
+        question="Synthetic budget persistence check",
+        question_enc=history["encrypted"],
+        input_sha256="c" * 64,
+        budget_ref=budget_ref,
+    )
+    db.add(pause)
+    await db.flush()
+    return pause
+
+
+@pytest.mark.parametrize("kind", ["human_action", "authority", "recovery", "budget"])
+async def test_pause_budget_reference_persisted_by_kind(application, agent_history, kind):
+    from app.schemas.agent_contracts import BudgetDependencyRef
+
+    reference = (
+        BudgetDependencyRef(question_ref="job:synthetic:budget", revision_ref="1").model_dump(
+            mode="json"
+        )
+        if kind == "budget"
+        else None
+    )
+    async with application.state.db.transaction(agent_history["executor"].org_id) as db:
+        pause = await _insert_pause_budget_case(db, agent_history, kind, reference)
+        stored = (
+            await db.execute(
+                text(
+                    "SELECT budget_ref IS NULL AS sql_null,jsonb_typeof(budget_ref) AS json_type,"
+                    "budget_ref FROM agent_pauses WHERE id=:id"
+                ),
+                {"id": pause.id},
+            )
+        ).one()
+        if kind == "budget":
+            assert stored.sql_null is False and stored.json_type == "object"
+            assert (
+                BudgetDependencyRef.model_validate(stored.budget_ref).model_dump(mode="json")
+                == reference
+            )
+        else:
+            assert stored.sql_null is True and stored.budget_ref is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "value"),
+    [("budget", "absent")]
+    + [
+        (kind, value)
+        for kind in ("human_action", "authority", "recovery")
+        for value in ("object", "json_null")
+    ],
+)
+async def test_pause_budget_check_rejects_mismatched_reference(
+    application, agent_history, kind, value
+):
+    from app.schemas.agent_contracts import BudgetDependencyRef
+    from sqlalchemy import JSON
+
+    reference = {
+        "absent": None,
+        "object": BudgetDependencyRef(
+            question_ref="job:synthetic:budget", revision_ref="1"
+        ).model_dump(mode="json"),
+        "json_null": JSON.NULL,
+    }[value]
+    with pytest.raises(DBAPIError) as rejected:
+        async with application.state.db.transaction(agent_history["executor"].org_id) as db:
+            await _insert_pause_budget_case(db, agent_history, kind, reference)
+    assert rejected.value.orig.sqlstate == "23514"
+    assert rejected.value.orig.diag.constraint_name == "agent_pause_budget"
 
 
 @pytest.mark.parametrize("table", TABLES)

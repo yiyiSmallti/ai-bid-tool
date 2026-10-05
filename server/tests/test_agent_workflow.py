@@ -14,7 +14,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from app.models.agent import AgentJobLink, AgentMessage, AgentStep
+from app.models.agent import AgentJobLink, AgentMessage, AgentSession, AgentStep
 from app.models.entities import Job, VendorCall
 from sqlalchemy import select
 from test_card_generation import DraftVendor, drafting_client, slots
@@ -107,6 +107,47 @@ async def advance(api, app, header, session_id, *, maximum=30):
     raise AssertionError("Agent failed to reach a checkpoint")
 
 
+async def checkpoint_receipt(app, header, session_id, expected_state, *, reason=None):
+    """A committed pause/terminal checkpoint releases the binding and the worker lease."""
+    async with app.state.db.transaction(UUID(header["X-Org-Id"])) as session:
+        state = await session.get(AgentSession, UUID(session_id))
+        assert state is not None and state.state == expected_state
+        assert state.current_job_id is None and state.current_run_id is None
+        controllers = list(
+            (
+                await session.scalars(
+                    select(Job)
+                    .join(AgentJobLink, AgentJobLink.job_id == Job.id)
+                    .where(AgentJobLink.session_id == state.id, AgentJobLink.role == "controller")
+                    .order_by(Job.finished_at.desc(), Job.id.desc())
+                )
+            ).all()
+        )
+        assert controllers
+        assert all(
+            job.status == "succeeded" and job.lease_until is None and job.finished_at
+            for job in controllers
+        )
+        latest = controllers[0]
+        assert latest.result["checkpoint_revision"] == state.revision
+        assert latest.result["session_state"] == expected_state
+        assert latest.result["disposition"] == (
+            "paused" if expected_state == "paused" else "terminal"
+        )
+        if reason is not None:
+            assert latest.result["stop_reason"] == reason
+        return {
+            "job_id": str(latest.id),
+            "run_id": str(latest.run_id),
+            "checkpoint_revision": state.revision,
+            "state": state.state,
+            "controller_status": latest.status,
+            "binding_released": True,
+            "lease_released": True,
+            "stop_reason": latest.result["stop_reason"],
+        }
+
+
 async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, admin_engine):
     async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
         header = headers[0]
@@ -156,6 +197,7 @@ async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, adm
         assert (
             paused["session"]["state"] == "paused" and paused["pause"]["action"] == "review_cards"
         )
+        paused_checkpoint = await checkpoint_receipt(app, header, session_id, "paused")
         cards = await slots(api, header, task, extraction)
         assert len(cards) == len(requirements)
         assert all(row["card"]["confirmed_by"] is None for row in cards)
@@ -191,6 +233,7 @@ async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, adm
         assert resumed.status_code == 200, resumed.text
         final = await advance(api, app, header, session_id)
         assert final["session"]["state"] == "completed", final
+        final_checkpoint = await checkpoint_receipt(app, header, session_id, "completed")
         assert "synthetic-private-context-token" not in json.dumps(vendor.bodies)
         assert final["session"]["steps_used"] > paused["session"]["steps_used"]
         (tmp_path / "agent-review-draft.json").write_text(
@@ -200,6 +243,8 @@ async def test_proposals_human_review_and_confirmed_draft(tenants, tmp_path, adm
                         "start": started.json(),
                         "pause": paused,
                         "final": final,
+                        "pause_checkpoint": paused_checkpoint,
+                        "final_checkpoint": final_checkpoint,
                         "rerun": "pytest -q server/tests/test_agent_workflow.py -k confirmed_draft",
                     }
                 ),
@@ -227,6 +272,9 @@ async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
         session_id = started.json()["data"]["session"]["id"]
         paused = await advance(api, app, header, session_id)
         assert paused["pause"]["kind"] == "recovery" and len(sent) == 1
+        checkpoint = await checkpoint_receipt(
+            app, header, session_id, "paused", reason="agent_request_uncertain"
+        )
         again = await api.post(
             f"/v4/agent-sessions/{session_id}/resume",
             headers=header,
@@ -250,7 +298,7 @@ async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
             ).all()
             assert uncertain and holds
         (tmp_path / "agent-unknown.json").write_text(
-            json.dumps(sanitized_artifact(paused), indent=2)
+            json.dumps(sanitized_artifact({"session": paused, "checkpoint": checkpoint}), indent=2)
         )
 
 
@@ -324,11 +372,20 @@ async def test_session_limits_do_not_reset_across_control_jobs(
         session_id = started.json()["data"]["session"]["id"]
         terminal = await advance(api, app, header, session_id)
         assert terminal["session"]["state"] == "failed", terminal
+        checkpoint = await checkpoint_receipt(
+            app,
+            header,
+            session_id,
+            "failed",
+            reason="agent_step_limit" if max_steps == 1 else "agent_call_limit",
+        )
         assert terminal["session"]["steps_used"] <= max_steps
         assert terminal["session"]["vendor_calls_used"] <= max_calls
         assert len(vendor.bodies) <= 1
         (tmp_path / f"agent-hard-limits-{max_steps}-{max_calls}.json").write_text(
-            json.dumps(sanitized_artifact(terminal), indent=2)
+            json.dumps(
+                sanitized_artifact({"session": terminal, "checkpoint": checkpoint}), indent=2
+            )
         )
 
 
