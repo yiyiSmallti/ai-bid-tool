@@ -167,7 +167,7 @@ acceptance remains defined by the
   discriminated decisions, pauses and limits. Readonly business origin uses
   [AgentProvenance](../../server/app/schemas/agent_provenance.py).
 - [Agent models](../../server/app/models/agent.py) and
-  [migration](../../server/migrations/versions/0041_builtin_agent.py): persistent
+  [migration](../../server/migrations/versions/0042_builtin_agent.py): persistent
   tenant state, composite relationships, immutable history and database gates.
 - [Session services](../../server/app/services/agents.py) `human_access/owned/start/resume/cancel`:
   owner authorization, revisions, human review/budget rechecks and saved receipts.
