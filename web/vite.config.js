@@ -17,5 +17,6 @@ export default defineConfig({
   ],
   // One chunk keeps Element Plus tree-shaken (a vendor split pulls in the whole library).
   build: { chunkSizeWarningLimit: 650 },
-  server: { proxy: { "/platform": api, "/auth": api } },
+  // The console calls same-origin API paths, so everything outside /app goes to the API.
+  server: { proxy: { "^/(?!app(?:/|$))": api } },
 });
