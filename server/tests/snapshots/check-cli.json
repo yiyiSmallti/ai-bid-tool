@@ -1,0 +1,506 @@
+{
+  "local": {
+    "check decide": {
+      "command": "check decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "decision": {
+          "action": "dismiss",
+          "actor_kind": "session",
+          "decided_at": "2026-10-04T00:00:00Z",
+          "decided_by": "00000000-0000-0000-0000-000000000001",
+          "finding_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "Reviewed against the confirmed draft.",
+          "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "report_id": "00000000-0000-0000-0000-000000000001",
+          "revision": 2,
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "finding": {
+          "advisory_only": true,
+          "check_item_id": "00000000-0000-0000-0000-000000000001",
+          "citations": [],
+          "code": "negative_deviation",
+          "id": "00000000-0000-0000-0000-000000000002",
+          "latest_decision_id": "00000000-0000-0000-0000-000000000001",
+          "method": "deterministic",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "Confirmed negative deviation.",
+          "report_id": "00000000-0000-0000-0000-000000000001",
+          "requirement_id": "00000000-0000-0000-0000-000000000001",
+          "review_domain": "technical",
+          "revision": 2,
+          "severity": "deduction_risk",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement."
+          },
+          "status": "dismissed",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "check history": {
+      "command": "check history",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "action": "dismiss",
+          "actor_kind": "session",
+          "decided_at": "2026-10-04T00:00:00Z",
+          "decided_by": "00000000-0000-0000-0000-000000000001",
+          "finding_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "Reviewed against the confirmed draft.",
+          "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "report_id": "00000000-0000-0000-0000-000000000001",
+          "revision": 2,
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "check list": {
+      "command": "check list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "advisory_only": true,
+          "completion": "partial",
+          "created_at": "2026-10-04T00:00:00Z",
+          "finding_count": 0,
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input": {
+            "assessment_date": "2026-10-04",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000001"
+          },
+          "invalidation_codes": [],
+          "item_count": 1,
+          "job_id": "00000000-0000-0000-0000-000000000001",
+          "limitations": [
+            "semantic_checks_not_requested"
+          ],
+          "mode": "rules",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "prompt_version": null,
+          "rule_version": "check-rules-v1",
+          "run_id": "00000000-0000-0000-0000-000000000001",
+          "schema_version": "check-schema-v1",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "unassessed_count": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "check run": {
+      "command": "check run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "no_model_calls",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0",
+        "estimated_cost": {
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "usd": 0
+        },
+        "estimated_duration_ms": null,
+        "gap_requirements": 0,
+        "input": {
+          "assessment_date": "2026-10-04",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "draft_id": "00000000-0000-0000-0000-000000000002",
+          "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "confirmed_draft",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "limitations": [
+          "semantic_checks_not_requested"
+        ],
+        "max_charge": null,
+        "mode": "rules",
+        "model": null,
+        "model_revision": null,
+        "platform_model_id": null,
+        "prompt_version": null,
+        "provider_config_id": null,
+        "provider_source": null,
+        "reasoning": null,
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "rule_version": "check-rules-v1",
+        "rules_applicable": 1,
+        "schema_version": "check-schema-v1",
+        "selected_item_ids": [],
+        "semantic_items": 0
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": [
+        "semantic_checks_not_requested"
+      ]
+    },
+    "check show": {
+      "command": "check show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "certificates": [],
+        "coverage": [],
+        "report": {
+          "advisory_only": true,
+          "completion": "partial",
+          "created_at": "2026-10-04T00:00:00Z",
+          "finding_count": 0,
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input": {
+            "assessment_date": "2026-10-04",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000001"
+          },
+          "invalidation_codes": [],
+          "item_count": 1,
+          "job_id": "00000000-0000-0000-0000-000000000001",
+          "limitations": [
+            "semantic_checks_not_requested"
+          ],
+          "mode": "rules",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "prompt_version": null,
+          "rule_version": "check-rules-v1",
+          "run_id": "00000000-0000-0000-0000-000000000001",
+          "schema_version": "check-schema-v1",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "unassessed_count": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "semantic_checks_not_requested"
+      ]
+    }
+  },
+  "remote": {
+    "check decide": {
+      "command": "check decide",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "decision": {
+          "action": "dismiss",
+          "actor_kind": "session",
+          "decided_at": "2026-10-04T00:00:00Z",
+          "decided_by": "00000000-0000-0000-0000-000000000001",
+          "finding_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "Reviewed against the confirmed draft.",
+          "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "report_id": "00000000-0000-0000-0000-000000000001",
+          "revision": 2,
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "finding": {
+          "advisory_only": true,
+          "check_item_id": "00000000-0000-0000-0000-000000000001",
+          "citations": [],
+          "code": "negative_deviation",
+          "id": "00000000-0000-0000-0000-000000000002",
+          "latest_decision_id": "00000000-0000-0000-0000-000000000001",
+          "method": "deterministic",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "Confirmed negative deviation.",
+          "report_id": "00000000-0000-0000-0000-000000000001",
+          "requirement_id": "00000000-0000-0000-0000-000000000001",
+          "review_domain": "technical",
+          "revision": 2,
+          "severity": "deduction_risk",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement."
+          },
+          "status": "dismissed",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "check history": {
+      "command": "check history",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "action": "dismiss",
+          "actor_kind": "session",
+          "decided_at": "2026-10-04T00:00:00Z",
+          "decided_by": "00000000-0000-0000-0000-000000000001",
+          "finding_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reason": "Reviewed against the confirmed draft.",
+          "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "report_id": "00000000-0000-0000-0000-000000000001",
+          "revision": 2,
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "check list": {
+      "command": "check list",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "advisory_only": true,
+          "completion": "partial",
+          "created_at": "2026-10-04T00:00:00Z",
+          "finding_count": 0,
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input": {
+            "assessment_date": "2026-10-04",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000001"
+          },
+          "invalidation_codes": [],
+          "item_count": 1,
+          "job_id": "00000000-0000-0000-0000-000000000001",
+          "limitations": [
+            "semantic_checks_not_requested"
+          ],
+          "mode": "rules",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "prompt_version": null,
+          "rule_version": "check-rules-v1",
+          "run_id": "00000000-0000-0000-0000-000000000001",
+          "schema_version": "check-schema-v1",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "unassessed_count": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "check run": {
+      "command": "check run",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "admission_blocker": null,
+        "billing_currency": "CNY",
+        "cost_basis": "known",
+        "cost_basis_reason": "no_model_calls",
+        "dry_run": true,
+        "estimate_kind": "first_pass_upper_bound",
+        "estimated_charge": "0",
+        "estimated_cost": {
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "usd": 0
+        },
+        "estimated_duration_ms": null,
+        "gap_requirements": 0,
+        "input": {
+          "assessment_date": "2026-10-04",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "draft_id": "00000000-0000-0000-0000-000000000002",
+          "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "scope": "confirmed_draft",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "limitations": [
+          "semantic_checks_not_requested"
+        ],
+        "max_charge": null,
+        "mode": "rules",
+        "model": null,
+        "model_revision": null,
+        "platform_model_id": null,
+        "prompt_version": null,
+        "provider_config_id": null,
+        "provider_source": null,
+        "reasoning": null,
+        "redacted_counts": {},
+        "redaction_revision": 1,
+        "redaction_rule_version": "redaction-v1",
+        "rule_version": "check-rules-v1",
+        "rules_applicable": 1,
+        "schema_version": "check-schema-v1",
+        "selected_item_ids": [],
+        "semantic_items": 0
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": [
+        "semantic_checks_not_requested"
+      ]
+    },
+    "check show": {
+      "command": "check show",
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "certificates": [],
+        "coverage": [],
+        "report": {
+          "advisory_only": true,
+          "completion": "partial",
+          "created_at": "2026-10-04T00:00:00Z",
+          "finding_count": 0,
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input": {
+            "assessment_date": "2026-10-04",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "draft_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "scope": "confirmed_draft",
+            "task_id": "00000000-0000-0000-0000-000000000001"
+          },
+          "invalidation_codes": [],
+          "item_count": 1,
+          "job_id": "00000000-0000-0000-0000-000000000001",
+          "limitations": [
+            "semantic_checks_not_requested"
+          ],
+          "mode": "rules",
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "prompt_version": null,
+          "rule_version": "check-rules-v1",
+          "run_id": "00000000-0000-0000-0000-000000000001",
+          "schema_version": "check-schema-v1",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "unassessed_count": 1,
+          "usage_record_ids": [],
+          "validity": "current"
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "semantic_checks_not_requested"
+      ]
+    }
+  }
+}

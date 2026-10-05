@@ -2,21 +2,22 @@
 kind: plan
 ---
 
-# 契约草案：标书初稿校验
+# 标书初稿校验契约
 
-状态：**待批准，未实施。** 对应[路线图](roadmap.md) B09。
+状态：**已批准。阶段一 rules 已实施；阶段二 combined 未实施。** 对应[路线图](roadmap.md) B09。
 
-[Pydantic 与 Provider 草案](check/check_contracts.py)仅供接口审查，未注册到运行中的
-API、CLI、作业或迁移。[agent.md](../../agent.md#工作方式)要求先确认契约再实施；
-本页的建议均不表示已批准。与 B10 共用的输入、引用、预检和作业回执类型只在该模块定义，
-[score 草案](score.md)导入使用。
+[Pydantic 契约](../../server/app/schemas/check_contracts.py)是 API、CLI 和 schema 的活动定义。
+阶段一实现确定性规则、持久报告与人工误报决定；本文明确标为阶段二的 Provider、语义检查、
+计费和评测内容尚未实施。与 B10 共用的输入、引用、预检和作业回执类型仍由该模块定义，
+[score 契约草案](score.md)导入使用。
 
 ## 目标与边界
 
 [设计文档](../AI%20标书工具设计文档.md#处理流程与-cli-清单)要求对照招标要求发现废标、
-扣分风险，并让人处理误报。首条链路拟为：选择一个任务的明确 `DraftRun` → 固定输入与
-成本预检 → 确定性规则及可选语义检查 → 有引用的风险报告 → 责任人带理由忽略或重新打开。
+扣分风险，并让人处理误报。首条链路为：选择一个任务的明确 `DraftRun` → 固定输入与
+零费用预检 → 确定性规则 → 有引用的风险报告 → 责任人带理由忽略或重新打开。
 报告是建议，不能作出实际废标决定，也不自动修改卡片、Evidence、初稿或导出许可。
+阶段二在相同边界内增加可选语义检查，不改变这条人工关口。
 
 输入选择 **current 初稿快照**：已确认 `ResponseItem` 正文和偏离说明、已确认且仍有效的
 材料摘录，以及 `comply_only`/`gap` 的状态元数据。一个初稿固定一个成功抽取作业；不自动选
@@ -41,21 +42,21 @@ API、CLI、作业或迁移。[agent.md](../../agent.md#工作方式)要求先�
 
 ## 现有基础与设计差异
 
-| 依据 | 拟复用及明确缺口 |
+| 依据 | 已复用基础及阶段二缺口 |
 | --- | --- |
 | [contracts.py](../../server/app/schemas/contracts.py) 的 `Category`、`Source`、`Result`、`ProviderUsage` | 已有 `scoring` 类别与 PDF/Word 引用；`condition` 仍为自由字典，不能当已批准的数值规则或评分量表 |
 | [response_card_contracts.py](../../server/app/schemas/response_card_contracts.py) 的 `DraftView`、`ResponseRow`、`ReviewDomain` | 已有确认响应/仅遵守/缺口分区；不是任意标书全文输入 |
 | [ADR 0005](../adr/0005-human-confirmed-responses.md) | 模型提议与人工决定分离；新报告不继承或产生证据确认权 |
-| [providers/base.py](../../server/app/providers/base.py) 的 `LLMProvider` | 有 `extract`/`draft`，没有 check/score 方法；本草案新增能力 Protocol，批准后才扩展接入层 |
-| [providers/llm.py](../../server/app/providers/llm.py) 的 `resolve_llm`、`with_reasoning` | 起草已有单位配置优先、平台默认其次的解析，任务执行不回退环境变量模型；check/score 沿用固定配置修订，不另建服务商选择入口 |
-| [providers/structured.py](../../server/app/providers/structured.py) 的 `strict_schema`、`json_request`、`json_call` | 拟复用结构化请求和已计费 HTTP 边界；不能把 `extract` 的结果类型冒充 check |
-| [services/jobs.py](../../server/app/services/jobs.py) 的 `status`、`cancel` | 拟加入 check 结果过滤及权限校验，继续隐藏 submission/encrypted_input |
+| [providers/base.py](../../server/app/providers/base.py) 的 `LLMProvider` | 阶段一不调用模型；阶段二才新增独立 check Protocol，不把 `extract`/`draft` 冒充 check |
+| [providers/llm.py](../../server/app/providers/llm.py) 的 `resolve_llm`、`with_reasoning` | 阶段二沿用单位配置优先、平台默认其次的固定配置修订，不另建服务商选择入口 |
+| [providers/structured.py](../../server/app/providers/structured.py) 的 `strict_schema`、`json_request`、`json_call` | 阶段二复用结构化请求和已计费 HTTP 边界 |
+| [services/jobs.py](../../server/app/services/jobs.py) 的 `status`、`cancel` | 已加入 check 结果过滤及权限校验，继续隐藏 submission/encrypted_input |
 | [models/entities.py](../../server/app/models/entities.py) 的 `Job.job_document_binding` | 普通任务作业必须有真实 task/document，provider_test 才是空绑定例外；旧 annotation 草案的“总是 NOT NULL”表述不适用于这一例外 |
 | [prepaid-billing.md](../notes/prepaid-billing.md) | 已有逐调用预付准入；设计中的任务累计预算/月度配额尚不是通用执行门槛 |
 
 ## 接口
 
-所有路径均为拟新增。请求不得提供 `org_id`、确认人、actor、任意模型端点或 redaction 开关；
+下列路径均已用于阶段一。请求不得提供 `org_id`、确认人、actor、任意模型端点或 redaction 开关；
 单位及身份由现有 [api/main.py](../../server/app/api/main.py) `context` 解析。HTTP 与 CLI
 使用现有 `Result` 七键包装；下表列 `data` 类型，列表/报告中的风险放 `items`。
 
@@ -79,11 +80,12 @@ PostgreSQL/RLS、相同身份和服务，不能用直接文件读取绕过授权
 cost 为 `{llm_tokens:0,ocr_pages:0,usd:0}`；dry-run 的包装 cost 也为零，估算位于
 `data.estimated_cost`。执行耗时为真实值，预计耗时未知用 null。金额按既有 Decimal 的 JSON
 字符串表示，平台扣款与供应商 USD 成本分开。已存在的契约版本见 `contracts.CONTRACT_VERSION`；
-批准后只新增 `cli/bid_cli/schema.py` 条目，既有 JSON 不变，不沿用 annotation 中旧的版本数字。
+`cli/bid_cli/schema.py` 已增加对应条目，既有 JSON 不变，不沿用 annotation 中旧的版本数字。
 rules 预检也保留同一结构：provider/config/model/reasoning 相关字段均为 null，预计
 charge=0、cost_basis=known、reason 为 `no_model_calls`，币种仍取平台配置；redaction 字段
 仅描述当前设置。预检 exit 0 只表示只读分析成功，`admission_blocker != null` 明确表示不能
-按当前条件提交，实际提交必须重新检查并拒绝，不把它当成准入授权。
+按当前条件提交，实际提交必须重新检查并拒绝，不把它当成准入授权。默认模式为 `rules`；
+阶段一接收到 `combined` 明确返回 `check_mode_unavailable`/exit 2，不静默降级。
 
 | 退出码 | 结果语义 |
 | --- | --- |
@@ -101,8 +103,8 @@ charge=0、cost_basis=known、reason 为 `no_model_calls`，币种仍取平台�
 
 服务端固定 draft/extraction/document、所有 Requirement 的 quote/location hash、ResponseItem
 及卡片修订、Evidence/资源选择/修订、证书选择与日期、显式 `assessment_date`、角色职责、
-解析/抽取警示、redaction 设置修订/规则、保密字段和值行 ID、规则/提示词/schema/adapter
-版本以及模型目录修订/推理档位/价格。公开预检只有这些 ID/hash、计数与限额；原文快照按
+解析/抽取警示、redaction 设置修订/规则、保密字段和值行 ID，以及规则/提示词/schema/adapter
+版本。阶段二再固定模型目录修订、推理档位和价格。公开预检只有这些 ID/hash、计数与限额；原文快照按
 `card_generation.snapshot` 的加密方式保存，不在审计、UsageRecord 或 job status 展示。
 任务截止时间不暗中转换为证书检查日，调用方必须明确 `--as-of`。
 读取时须验证该 draft 有且仅有一个 ResponseItem 对应抽取作业中的每条要求，并验证
@@ -116,7 +118,7 @@ ResponseItem.draft_id/requirement_id、DraftRun.task_id/extraction_job_id 全部
 | 负偏离 | 已确认响应的 `deviation=negative` 必须报告；★/实质性项列废标风险，其余列扣分风险候选，并引用原偏离说明 | 不改变负偏离、不给扣分数；具体后果须原条款和人判断 |
 | 未确认证据 | gap 的 unconfirmed/needs_reconfirmation 等状态提示未完成确认；若响应行实际携带未确认证据则输入完整性失败、停止模型调用 | 不读取或发送其候选正文；不能靠风险“忽略”让其进入 draft/export |
 | 证书日期 | 对固定任务证书调用 `certificates.inspect_dates`，沿用边界日包含规则；过期/尚未生效输出日期风险，缺日期为 unknown | 是声明日期检查，不认证证书真伪；无可靠要求绑定时仅列证书检查信息，不臆断资格废标 |
-| 内容矛盾、薄弱响应、材料覆盖不足 | `combined` 才调用 LLM，逐要求给 no_risk_found/risk/unknown，清楚区分承诺、声明与证明 | 任意 condition、单位换算、隐藏附件、视觉内容与漏抽均不能确定性声称通过；unknown 不按“无风险”统计 |
+| 内容矛盾、薄弱响应、材料覆盖不足（阶段二） | `combined` 才调用 LLM，逐要求给 no_risk_found/risk/unknown，清楚区分承诺、声明与证明 | 阶段一返回 `check_mode_unavailable`；任意 condition、单位换算、隐藏附件、视觉内容与漏抽均不能确定性声称通过 |
 
 `mode=rules` 只完成上表的本地项目，semantic_status=not_requested，并始终声明语义未检查；
 无需模型配置、余额或 UsageRecord。`combined` 不许静默退回 rules；即使 LLM 失败，可保存
@@ -129,7 +131,7 @@ ResponseItem.draft_id/requirement_id、DraftRun.task_id/extraction_job_id 全部
 一个假的 `Source.document_id`。Evidence 引用须解析回原材料位置并复核确认与有效选择；
 image_region 的视觉观察只是人工观察文字，首版不将它当作图像上的逐字原文，也不发送图像。
 
-模型只收到服务端生成的局部 ref 和有界文本。服务端按本次已发送 ref 映射引用，使用
+以下模型引用规则属于**阶段二 combined**。模型只收到服务端生成的局部 ref 和有界文本。服务端按本次已发送 ref 映射引用，使用
 [extraction.py](../../server/app/services/extraction.py) 的 `locate_quote`/`locate_span`，
 在**实际发送文本和固定原文中**各定位唯一连续区间，保存原文的精确字面片段。
 不接受模型提供的真实源 ID/页码、跨块拼接、错误位置、歧义或遮挡值反向还原；
@@ -141,7 +143,10 @@ image_region 的视觉观察只是人工观察文字，首版不将它当作图�
 构造该类型跳过原文/父对象校验；三种 citation 都受上述门槛。FindingView.source 固定为
 关联 Requirement 的招标出处，其余论据在 citations 中，不允许模型替换 source。
 
-## 外发边界
+## 阶段二外发边界
+
+阶段一 `rules` 不外发任何文本，不要求模型配置、余额或遮挡开关，也不创建 UsageRecord 或
+VendorCall。以下边界已批准，待 `combined` 实施时适用。
 
 遵循 [model-drafting-redaction.md](../notes/model-drafting-redaction.md) 和
 [confidential-values.md](../notes/confidential-values.md) 的替换顺序：登记值先变成占位符，
@@ -149,16 +154,16 @@ image_region 的视觉观察只是人工观察文字，首版不将它当作图�
 字段名称/标签都走同一外发遍历；只发送 `OutboundContext` 的局部 ref、文字和字段提示，
 无值、尾号、路径、凭据、文件字节、未选资源或人工误报理由。标题/资料是数据，不执行其中指令。
 
-本草案建议对新增 check/score **要求遮挡开启**：现有设置若关闭，预检返回
+阶段二 check/score **要求遮挡开启**：现有设置若关闭，预检返回
 `redaction_required`，实际语义调用阻止；不由 job 修改开关，也不静默替管理员开启。这比
-现有起草允许管理员关闭的行为严格，须在待决定表确认。rules 不外发，因此不受此限制。
+现有起草允许管理员关闭的行为严格。rules 不外发，因此不受此限制。
 值行或设置修订变化，后续调用停止并要求重新预检。包含占位符的响应可用于理解主题，
 涉及被遮挡值的满足判断记 `redacted_input_unassessable`，不猜报价或证件值。
 模型理由、建议也做本地敏感信息检查，未知占位符/敏感字面值导致拒收；原始输出不落日志。
 
-## 数据模型与迁移轮廓
+## 阶段一数据模型与迁移
 
-拟新增下列表；本草案不创建任何表。每表均有 UUID 主键、**NOT NULL org_id/task_id**，
+迁移 [0032_check.py](../../server/migrations/versions/0032_check.py) 新增下列表。每表均有 UUID 主键、**NOT NULL org_id/task_id**，
 `UNIQUE(org_id,id)`、启用且 **FORCE RLS**，USING/WITH CHECK 绑定事务 `app.current_org`；
 缺单位上下文不能读写。所有父引用用 org 复合外键，任务/报告/抽取关系还要绑定同一任务。
 actor 用户引用 `(org_id,user_id)` Membership，不能只引用全局 User 绕过成员关系。
@@ -166,28 +171,28 @@ actor 用户引用 `(org_id,user_id)` Membership，不能只引用全局 User �
 
 | 表 / 公开视图 | 保存内容及关键约束 |
 | --- | --- |
-| `check_runs` / `CheckRunView` | 不可变报告、job/run_id、draft/extraction/document、input manifest/hash、加密输入、版本/模型/计费引用；(org_id,job_id) 唯一，一个 job 最多发布一个报告，run_id 记录成功发布的 attempt，父键连 jobs/draft_runs/tasks/documents |
+| `check_runs` / `CheckRunView` | 不可变报告、job/run_id、draft/extraction/document、input manifest/hash、加密输入和规则/schema 版本；(org_id,job_id) 唯一，一个 job 最多发布一个报告，run_id 记录成功发布的 attempt，父键连 jobs/draft_runs/tasks/documents；阶段一 usage 引用为空 |
 | `check_items` / `CheckItemView` | 每报告每 Requirement 恰一行，关联该 draft 的 ResponseItem（包括 comply_only/gap 行）、卡片修订及规则/语义覆盖；(org_id,report_id,requirement_id) 唯一，关联 requirement/extraction、response_item/draft 的组合，不允许同单位跨任务混绑 |
 | `check_certificates` / `CheckCertificateView` | 固定任务证书选择、修订、检查日和日期状态；复合外键连 task_certificates/certificate_revisions；要求绑定只允许本报告输入，未绑定保留空列表及 limitation |
-| `check_findings` / `FindingView` | 不可变机器候选、规则/模型来源、风险等级、职责、原因；连 check_item/requirement；公开 status/revision/latest_decision 由历史推导，不改写候选 |
+| `check_findings` / `FindingView` | 不可变机器候选、方法、风险等级、职责、原因；连 check_item/requirement；阶段一方法固定 deterministic，公开 status/revision/latest_decision 由历史推导，不改写候选 |
 | `check_finding_citations` / `FindingCitationView` | 每条有效引用，typed nullable 外键列连 document/chunk 或 response_item/card_revision 或 evidence，CHECK 恰一种来源；quote 保留精确原文，Source 视图从固定父位置组装 |
 | `check_decisions` / `FindingDecisionView` | append-only 的 dismiss/reopen、非空理由、reason hash、human actor/time、递增 revision；(org_id,finding_id,revision) 唯一，外键绑定原 finding/report |
 
 输入材料即使未成为引用也是依赖。manifest 中引用的每个对象仍须有受约束的父链，不能仅凭
 JSON 内 ID 保证隔离：ResponseItem→卡片修订→Evidence/资源选择沿现有关系核对；证书要求
-关联拟加 `(org_id,report_id,certificate_id,check_item_id)` 关系表 `check_certificate_items`，
+关联使用 `(org_id,report_id,certificate_id,check_item_id)` 关系表 `check_certificate_items`，
 公开视图合并为 `CheckCertificateView.requirement_ids`，该表同样 NOT NULL org/task、FORCE
 RLS，复合外键同时绑定 `check_certificates` 与 `check_items` 的报告。Usage 引用不接受客户端
 数组，以受单位/作业约束的 `UsageRecord` 查询组装公开列表。
 
-迁移拟先补足必要父表组合唯一键，再建表、外键/状态约束、RLS、最小运行角色 grants 与触发器。
+迁移先补足必要父表组合唯一键，再建表、外键/状态约束、RLS、最小运行角色 grants 与触发器。
 worker 只在拥有相应 running job/run_id/有效 lease 的完成事务中插入机器报告，原文输入加密
 列纳入现有 key rotation 登记；人类决策只经 actor=session、有效 Membership 和职责 gate。
 加密沿 `core/security.Secrets.for_data` 的当前数据密钥/历史密钥轮换，不自创 key_id；
 内部密文列纳入 `admin.ENCRYPTED_COLUMNS`，不把密钥或加密 envelope 放入公开 AssessmentInput。
 递延校验要求覆盖分区完整、引用确切归属、已确认 Evidence、run/draft 输入一致。运行角色
 不得更新/删除候选、引用或历史；决策用锁定 finding 的 expected_revision CAS，禁止假造 worker
-为 human。历史保留，回退应用时保留表，不做破坏性 downgrade。此处仅定义批准后的迁移目标。
+为 human。历史保留，回退应用时保留表，不做破坏性 downgrade。
 
 ## 权限与人工误报处理
 
@@ -195,7 +200,7 @@ worker 只在拥有相应 running job/run_id/有效 lease 的完成事务中插�
 `SCOPES` 和 [services/tokens.py](../../server/app/services/tokens.py) 的 `create_token`；
 [core/security.py](../../server/app/core/security.py)负责密钥/签名，不是 scope 的定义位置。
 
-| 新范围 | 登录角色建议 | API token / agent |
+| 新范围 | 登录角色 | API token / agent |
 | --- | --- | --- |
 | `check:read` | admin、bidder、technical、viewer | 可按显式签发授予，与有效 Membership 的角色权限取交集 |
 | `check:run` | admin、bidder、technical | 可显式授予；不隐式扩充旧 token |
@@ -221,19 +226,35 @@ reopen 仅对 dismissed；两者均要求非空理由、当前输入 hash 和 ex
 
 ## 作业、Provider 与计费
 
-新增 job kind=`check`，`document_id` 使用 draft 所属 extraction 的真实招标 document，
+### 阶段一 rules
+
+job kind=`check` 的 `document_id` 使用 draft 所属 extraction 的真实招标 document，
 而非虚构标书文档。沿 [background-jobs.md](../notes/background-jobs.md) 的持久化后派发、
-租约/heartbeat/attempt `run_id`、取消和显式 retry；批准后在
-[jobs/processor.py](../../server/app/jobs/processor.py)接入分支，在 `services/jobs.status/cancel`
-增加同等权限门槛。每次调用前和发布事务内复核输入、身份和所有依赖；变化返回
-`check_input_changed`，旧 worker、丢 lease、取消或计费失败不得发布。
+租约/heartbeat/attempt `run_id`、取消和显式 retry；
+[jobs/processor.py](../../server/app/jobs/processor.py)已接入分支，`services/jobs.status/cancel`
+有同等权限门槛。worker 在发布事务内复核输入、身份和所有依赖；变化返回
+`check_input_changed`，旧 worker、丢 lease或取消不得发布。
 
 缓存身份绑定 org/task/发起者、draft 全输入 hash、检查日、mode、规则/提示词/schema/adapter、
-模型目录/价格/推理及遮挡修订。相同输入返回同一作业和报告；新输入产生新报告，不覆盖人工
-决定。partial 作业终态可读，不假装 retry 能补完；重新评估须变更有问题的输入或显式的新
-规则/模型版本。failed/cancelled/过期 lease 的 `--retry` 延用原输入及累计预算，不能抢占活 lease。
+遮挡及保密值修订。相同输入返回同一作业和报告；新输入产生新报告，不覆盖人工决定。
+failed/cancelled/过期 lease 的 `--retry` 延用原输入，不能抢占活 lease。rules 不调用 Provider、
+不创建 UsageRecord/VendorCall、不预约或扣除余额；费用和 wrapper cost 都为零。
 
-`CheckProvider.check(CheckProviderRequest) -> CheckProviderResult` 是拟新增 LLM 能力，
+已映射证书的日期 unknown 或无法形成有效规则引用时，对应要求记为未完成评估，报告为
+`partial`，读取与等待返回 exit 5。未映射证书的 unknown 只进入证书清单与 limitation。
+partial 是已发布作业的终态，相同输入仍命中原报告；修改输入或规则版本后重新评估，
+新报告不继承既有人工决定。
+
+`--dry-run` 零外部调用、零数据写入（包括 Job/Audit/Finding/Usage/VendorCall/余额），先算一致的
+输入 hash；actual submission 必须带回 `expected_input_hash`。预检的 provider/config/model/
+reasoning 均为 null，`cost_basis_reason=no_model_calls`，`admission_blocker=null`。
+
+### 阶段二 combined
+
+以下 Provider、计费、部分发布和模型估价规则已批准但未实施。阶段一接收 `combined` 时只返回
+`check_mode_unavailable`。
+
+`CheckProvider.check(CheckProviderRequest) -> CheckProviderResult` 是阶段二新增的 LLM 能力，
 业务仅依赖 Protocol。适配器在 `providers/` 中沿 `HTTPExtractor` 的结构化调用模式实施；
 `CheckWireOutput` 不允许额外字段，每批必须恰好覆盖 requested requirement IDs。批次不拆
 原文单字段、不隐式截短；超上下文限制显式失败。缺答/重复/未知 ID、无效引用记录拒绝码，
@@ -262,8 +283,8 @@ VendorCall 和累计 call ceiling，但按现有机制平台 charge/reservation=
 未知供应商 USD 仍为 null，不能把零平台扣费称为免费。平台模型才执行售价、max_charge 与
 余额预约；单位直付模型的 max_charge 不承诺控制厂商账单，预检显式警示。
 
-预检参照 `card_generation.snapshot/estimate/submit_generation`，不是零模型组表的费用。
-`--dry-run` 零外部调用、零数据写入（包括 Job/Audit/Finding/Usage/VendorCall/余额）；
+combined 预检参照 `card_generation.snapshot/estimate/submit_generation`，不是零模型组表的费用。
+`--dry-run` 仍零外部调用、零数据写入（包括 Job/Audit/Finding/Usage/VendorCall/余额）；
 先算一致的输入 hash 和完整请求的 first_pass_upper_bound，actual submission 必须带回
 `expected_input_hash`。首次调用余额不足/单 job cap 不足作为 admission_blocker；估价未知为
 null 并说明，不报零元。无可用平台售价不得发送收费调用。每次重试/拆批仍受 live reservation、
@@ -276,7 +297,7 @@ call ceiling、`max_charge` 和余额约束；first-pass 估计不承诺重试�
 
 ## 审计与失败模式
 
-拟新增 `check.submit`、`check.publish`、`check.dismiss`、`check.reopen`，异常及取消沿已有
+审计事件为 `check.submit`、`check.publish`、`check.dismiss`、`check.reopen`，异常及取消沿已有
 job 记录；缓存读取、dry-run 不造假执行事件。AuditLog 写 org、actor/user/token、task、job、
 run、report/finding/decision IDs、版本、input/reason hash、计数/状态和固定错误码。人工决定
 与审计同事务，禁止原文、响应、报价、账号、证件号、raw ref、原始模型输出或理由全文入日志。
@@ -287,12 +308,12 @@ run、report/finding/decision IDs、版本、input/reason hash、计数/状态�
 | draft/卡片/材料/证书/保密值/职责变化 | 预检与调用/发布重新比较；输入变更停止，历史只读标 stale |
 | 完整性错误、未确认证据混入响应行 | 硬失败；不得以普通 warning 继续发模型 |
 | 日期或证据文本不足、原型图像未做视觉检查 | unknown/明确范围缺失，不能变成满足或默认满分 |
-| redaction 关闭、敏感值所需断言被遮挡 | 语义调用前阻止，或逐项 unassessed；无自动关闭遮挡重试 |
-| 引用拼接/错误/歧义、模型漏项/重复项 | 不存无效结论，覆盖项注明原因，partial 可审阅 |
-| 原始输出/异常包含秘密或指令 | 脱敏固定码，拒绝不可信文本，不执行原文中的指令 |
-| 队列派发失败、worker 接管、账务响应未知 | 复用持久作业、run_id 栅栏和保留资金预留，不重复结算 |
+| redaction 关闭、敏感值所需断言被遮挡（阶段二） | 语义调用前阻止，或逐项 unassessed；无自动关闭遮挡重试 |
+| 引用拼接/错误/歧义、模型漏项/重复项（阶段二） | 不存无效结论，覆盖项注明原因，partial 可审阅 |
+| 原始输出/异常包含秘密或指令（阶段二） | 脱敏固定码，拒绝不可信文本，不执行原文中的指令 |
+| 队列派发失败、worker 接管、账务响应未知 | 复用持久作业和 run_id 栅栏；阶段二保留资金预留且不重复结算 |
 
-## 评测依据
+## 阶段二评测依据
 
 只采用本机 `ai-bid-tool/data/work/clef-eval/` 的 `summary.txt`、`summary_clef.txt`、
 `summary_deepseek.txt`、`summary_glm.txt` 聚合统计，不复制真实标书、公司名称或逐条结果。
@@ -313,11 +334,12 @@ token 统计仅为聚合量，不能证明重复相同输入的 token 确定性�
 供应商账单或逐请求可结算凭据，不能作为预付扣费来源；目录 LLM 同样只按已接入的真实
 逐调用 usage 计费，不能拿此评测估价扣款。
 
-## 批准后的测试计划
+## 验收与阶段二测试
 
 以合成招标、两单位 A/B、真实 PostgreSQL runtime role、API→worker→CLI 链路验证；
-所有外部 Provider 为 fake/MockTransport。端到端结束在 `data/work/check-acceptance/` 输出
-合成 input manifest、报告 JSON、脱敏账务快照与可重跑命令，验证工件不放 `docs/`。
+所有外部 Provider 为 fake/MockTransport。设置 `BID_CHECK_ACCEPTANCE_DIR` 时，端到端输出
+合成 input manifest、报告 JSON 与可重跑命令；工件保留合成记录 ID 以重算 input hash，但不含
+会话、Authorization 或候选正文。未设置时只写 pytest `tmp_path`，验证工件不放 `docs/`。
 
 1. 对每张新增表（含 `check_certificate_items`）验证 A 不能读写 B、无上下文拒绝、FORCE
    RLS、跨单位/同单位跨任务复合 FK、历史不可改删、假 actor 和旧 run_id 拒绝；对接口表
@@ -327,25 +349,25 @@ token 统计仅为聚合量，不能证明重复相同输入的 token 确定性�
    dismiss 不改变 draft/export/score 门槛，理由空白、版本冲突、并发决定保持原子性。
 3. 已确认输入从预检到发出/发布间变更、重开卡片、替换资源、修引文、更改保密值/设置、
    撤销成员与 token、证书边界日/未知日、★ 缺项/负偏离完整覆盖均可重现。
-4. PDF/Word 精确来源、同词多处、跨块拼接、已遮挡/未发送 ref、无投标引文的缺项、敏感
-   文字及提示词注入；错误结论不持久化，unknown 与 no_risk_found 区分，薄内容不得默认通过。
-5. rules 零 provider/账务；dry-run 零写入；preview hash 不符不发送；实际每次调用先预约、
-   并发余额/上限、拒答/截断/取消仍计费、重复结算/未知 reservation、partial 与 lease 接管。
+4. 阶段一覆盖 PDF/Word 精确来源、候选正文不泄漏和遮挡引用拒绝；阶段二再覆盖同词多处、
+   跨块拼接、未发送 ref、提示词注入、unknown 与 no_risk_found 和薄内容不得默认通过。
+5. 阶段一覆盖 rules 零 provider/账务、dry-run 零写入、preview hash 不符、取消/重试与 lease
+   接管；阶段二覆盖调用预约、并发余额/上限、拒答/截断仍计费、重复结算和 unknown reservation。
 6. 每个新增 CLI 命令、remote/local 模式、七键与 0/2/3/4/5、schema 新增项均做快照；原有
    命令不变。真实模型效果/重复 token 波动/延迟仅在显式启用的 `evals/` 运行，CI 不调用。
 
-以上是实施验收目标；草案阶段只做 Python lint/格式/类型与 import 检查，不把未执行的
-数据库、隔离或端到端测试写成已通过。
+阶段一自动化位于 `server/tests/test_check.py`、`test_check_storage.py`、`test_check_api.py` 和
+`test_check_cli.py`；阶段二项目继续作为后续验收目标。本文不记录某次测试运行状态。
 
-## 待决定
+## 已定决定
 
-| 决定 | 选项 | 推荐默认与理由 |
+| 决定 | 已批准默认与理由 | 阶段 |
 | --- | --- | --- |
-| 首版输入 | current 初稿；已放行 DOCX；两者都支持 | current 初稿，复用确认/引用/agent 读取边界；DOCX 后续单独增加仅人类可启动的文件校验契约，须重新验 hash、结构位置、保密替换和下载权限 |
-| 语义外发与关闭遮挡 | 继承起草允许管理员关闭；新增能力强制开启 | check/score 强制开启，否则 `redaction_required`；满足新增检查的外发保密边界，明确这是对起草行为的收紧 |
-| 误报职责与继承 | 专业责任人；管理员任意关闭；自动沿用历史 | 沿 ADR 0005 专业职责逐项决定，理由必填、重跑不继承；避免新输入被旧误报决定隐藏 |
-| 风险与出口 gate | 仅建议；阻止导出；自动修卡 | 首版仅建议，已有 export gate 不变；风险核实后经既有卡片编辑/确认再重跑 |
-| 证书检查基准日 | 当前日期；任务截止日推导；显式日期 | 必填 `assessment_date`，保留每次检查基准及声明性质，不随运行日漂移 |
-| 预算范围 | 既有 per-job cap；追加累计任务/月度预算 | 先复用 prepaid/每次准入与 max_charge；累计预算需独立币种、并发与退款契约，不把 Task.budget_usd 当作已执行上限 |
-| Clef 作为并列 Provider | 既有可配置 LLM；Clef 做分流/相关性预筛；Clef 直接做终判/评分 | 首版沿用既有 LLM（单位配置或平台目录）；后续评测 Clef 的并列 triage/score Protocol，不把相关性映射成实际得分。必须同样遮挡、隔离、验引、预算；其 token 数不能作计费来源，可靠账单/按次定价和预约上界未定前不得从单位余额扣款 |
-| partial 的再次评估 | 相同请求自动重复付费；固定缓存并修正输入 | 固定缓存，改输入/规则/模型形成新 run；不自动重复收费，也不覆盖历史决定 |
+| 首版输入 | current 初稿，复用确认/引用/agent 读取边界；DOCX 交付件后续另立仅人类可启动的文件校验契约 | 阶段一 |
+| 语义外发与关闭遮挡 | check/score 强制开启，否则 `redaction_required`；rules 无外发，不受开关限制 | 阶段二 |
+| 误报职责与继承 | 沿 ADR 0005 由专业责任人逐项决定，理由必填、重跑不继承 | 阶段一 |
+| 风险与出口 gate | 仅建议，已有 export gate 不变；修改材料并重新确认后重跑 | 阶段一 |
+| 证书检查基准日 | 必填 `assessment_date`，不从当前日期或任务截止日推导 | 阶段一 |
+| 预算范围 | combined 先复用 prepaid、逐次准入、per-job cap 与 max_charge；不把 Task.budget_usd 当作已执行上限 | 阶段二 |
+| Clef 作为并列 Provider | 首版 semantic check 沿用既有可配置 LLM；Clef 只作为后续 triage/score 评测方向，在账单和预约上界明确前不扣单位余额 | 阶段二 |
+| partial 的再次评估 | 固定缓存；改输入、规则或模型形成新 run，不自动重复收费或覆盖历史决定 | 阶段一及阶段二 |
