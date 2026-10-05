@@ -1,14 +1,22 @@
 """Rubric generation and task-bound human review routes."""
 
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
 from procrastinate.exceptions import ConnectorException
 from psycopg import OperationalError
+from sqlalchemy import select
 
 from app.core.errors import ServiceError
 from app.models.entities import Job
+from app.models.score import ScoreRubricSet
+from app.schemas.console_assessments import (
+    AssessmentHistoryQuery,
+    RubricPageRequest,
+    ScorePageRequest,
+)
 from app.schemas.contracts import Result
 from app.schemas.score_contracts import (
     RubricClassifyRequest,
@@ -20,29 +28,57 @@ from app.schemas.score_contracts import (
     RubricSetDecisionRequest,
     ScoreRequest,
 )
-from app.services import score, score_execution, score_generation
+from app.services import (
+    assessment_rubrics,
+    assessment_scores,
+    score,
+    score_execution,
+    score_generation,
+)
+from app.services.assessment_bounds import bounded_result, query_model
 from app.services.versioned import audit
 
 
 def create_router(context, db, storage, queue, settings) -> APIRouter:
     router = APIRouter()
 
-    def result(command, data=None, items=None):
-        return Result(
-            ok=True,
+    def result(command, data=None, items=None, *, console=False, partial=False):
+        payload = Result(
+            ok=not partial,
             command=f"score rubric {command}",
             data=data if data is not None else {},
             items=items if items is not None else [],
         )
+        return bounded_result(payload) if console else payload
 
-    def score_result(command, data=None, items=None, warnings=None, *, partial=False):
-        return Result(
+    def score_result(
+        command, data=None, items=None, warnings=None, *, partial=False, console=False
+    ):
+        payload = Result(
             ok=not partial,
             command=f"score {command}",
             data=data if data is not None else {},
             items=items if items is not None else [],
             warnings=warnings if warnings is not None else [],
         )
+        return bounded_result(payload) if console else payload
+
+    async def rubric_console_result(command, session, data, items=None):
+        identifiers = [entry["id"] for entry in items or [] if "id" in entry]
+        identifier = data.get("parent_id") or data.get("id") or data.get("rubric_id")
+        if identifier is not None:
+            identifiers.append(identifier)
+        jobs = (
+            await session.scalars(
+                select(Job.result)
+                .join(ScoreRubricSet, ScoreRubricSet.job_id == Job.id)
+                .where(ScoreRubricSet.id.in_([UUID(str(value)) for value in identifiers]))
+            )
+            if identifiers
+            else []
+        )
+        partial = any(value.get("completion") == "partial" for value in jobs)
+        return result(command, data, items, console=True, partial=partial)
 
     async def invoke(operation, session, actor, *args, **kwargs):
         try:
@@ -167,8 +203,32 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         task_id: UUID,
         cursor: str | None = None,
         limit: int = Query(50, ge=1, le=200),
+        view: Literal["console"] | None = None,
+        extraction_job_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        if view == "console":
+            query = query_model(
+                AssessmentHistoryQuery,
+                cursor=cursor,
+                limit=limit,
+                extraction_job_id=extraction_job_id,
+            )
+            data, rows = await assessment_scores.history(ctx[0], ctx[1], task_id, query, settings)
+            return score_result(
+                "list",
+                data.model_dump(mode="json"),
+                [row.model_dump(mode="json") for row in rows],
+                partial=any(
+                    row.report.completion == "partial"
+                    or row.unassessable_items > 0
+                    or row.total_status != "estimated"
+                    for row in rows
+                ),
+                console=True,
+            )
+        if extraction_job_id is not None:
+            raise ServiceError("invalid_input", "Extraction filter requires view=console", 422, 2)
         data, items = await score_execution.list_scores(
             ctx[0], ctx[1], task_id, settings, storage, cursor=cursor, limit=limit
         )
@@ -187,8 +247,66 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
     async def score_show(
         task_id: UUID,
         report_id: UUID,
+        view: Literal["console"] | None = None,
+        part: Literal["summary", "sections", "items", "notices"] | None = None,
+        cursor: str | None = None,
+        limit: int = Query(50, ge=1, le=100),
+        section_key: str | None = None,
+        outcome: Literal["assessed", "unassessable"] | None = None,
+        requirement_id: UUID | None = None,
+        entry_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        if view == "console":
+            if part is None or part == "summary":
+                if any(
+                    value is not None
+                    for value in (cursor, section_key, outcome, requirement_id, entry_id)
+                ):
+                    raise ServiceError(
+                        "invalid_input", "Summary does not accept page filters", 422, 2
+                    )
+                summary = await assessment_scores.summary(
+                    ctx[0], ctx[1], task_id, report_id, settings
+                )
+                return score_result(
+                    "show",
+                    summary.model_dump(mode="json"),
+                    warnings=summary.report.invalidation_codes,
+                    partial=summary.report.completion == "partial"
+                    or summary.unassessable_items > 0
+                    or summary.total_status != "estimated",
+                    console=True,
+                )
+            query = query_model(
+                ScorePageRequest,
+                part=part,
+                cursor=cursor,
+                limit=limit,
+                section_key=section_key,
+                outcome=outcome,
+                requirement_id=requirement_id,
+                entry_id=entry_id,
+            )
+            page = await assessment_scores.page(ctx[0], ctx[1], task_id, report_id, query, settings)
+            run = await ctx[0].get(assessment_scores.ScoreReport, report_id)
+            partial = (
+                run.completion == "partial"
+                or run.summary.get("unassessable_items", 0) > 0
+                or run.summary.get("total_status") != "estimated"
+            )
+            return score_result(
+                "show",
+                page.data.model_dump(mode="json"),
+                [row.model_dump(mode="json") for row in page.items],
+                warnings=["score_input_changed"] if page.data.validity == "stale" else [],
+                partial=partial,
+                console=True,
+            )
+        if part is not None or any(
+            value is not None for value in (cursor, section_key, outcome, requirement_id, entry_id)
+        ):
+            raise ServiceError("invalid_input", "Projection options require view=console", 422, 2)
         data = await score_execution.show_score(
             ctx[0], ctx[1], task_id, report_id, settings, storage
         )
@@ -230,8 +348,26 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         task_id: UUID,
         cursor: str | None = None,
         limit: int = Query(50, ge=1, le=200),
+        view: Literal["console"] | None = None,
+        extraction_job_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        if view == "console":
+            query = query_model(
+                AssessmentHistoryQuery,
+                cursor=cursor,
+                limit=limit,
+                extraction_job_id=extraction_job_id,
+            )
+            data, rows = await assessment_rubrics.history(ctx[0], ctx[1], task_id, query, settings)
+            return await rubric_console_result(
+                "list",
+                ctx[0],
+                data.model_dump(mode="json"),
+                [row.model_dump(mode="json") for row in rows],
+            )
+        if extraction_job_id is not None:
+            raise ServiceError("invalid_input", "Extraction filter requires view=console", 422, 2)
         data, items = await score.list_rubrics(
             ctx[0], ctx[1], task_id, storage, settings, cursor=cursor, limit=limit
         )
@@ -242,7 +378,71 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         name="score_rubric_show",
         response_model=Result,
     )
-    async def show(task_id: UUID, rubric_id: UUID, ctx=Depends(context, scope="function")):
+    async def show(
+        task_id: UUID,
+        rubric_id: UUID,
+        view: Literal["console"] | None = None,
+        part: Literal["summary", "sections", "items", "coverage", "blockers", "replacement"]
+        | None = None,
+        cursor: str | None = None,
+        limit: int = Query(50, ge=1, le=100),
+        state: Literal["candidate", "confirmed", "rejected"] | None = None,
+        domain: Literal["commercial", "technical", "unclassified"] | None = None,
+        section_id: UUID | None = None,
+        requirement_id: UUID | None = None,
+        entry_id: UUID | None = None,
+        group_id: str | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        if view == "console":
+            if part is None or part in {"summary", "replacement"}:
+                if any(
+                    value is not None
+                    for value in (
+                        cursor,
+                        state,
+                        domain,
+                        section_id,
+                        requirement_id,
+                        entry_id,
+                        group_id,
+                    )
+                ):
+                    raise ServiceError(
+                        "invalid_input", "Summary/replacement do not accept page filters", 422, 2
+                    )
+                data = await (
+                    assessment_rubrics.replacement(ctx[0], ctx[1], task_id, rubric_id)
+                    if part == "replacement"
+                    else assessment_rubrics.summary(ctx[0], ctx[1], task_id, rubric_id)
+                )
+                return await rubric_console_result("show", ctx[0], data.model_dump(mode="json"))
+            query = query_model(
+                RubricPageRequest,
+                part=part,
+                cursor=cursor,
+                limit=limit,
+                state=state,
+                domain=domain,
+                section_id=section_id,
+                requirement_id=requirement_id,
+                entry_id=entry_id,
+                group_id=group_id,
+            )
+            page = await assessment_rubrics.page(
+                ctx[0], ctx[1], task_id, rubric_id, query, settings
+            )
+            return await rubric_console_result(
+                "show",
+                ctx[0],
+                page.data.model_dump(mode="json"),
+                [row.model_dump(mode="json") for row in page.items],
+            )
+        if part is not None or any(
+            value is not None
+            for value in (cursor, state, domain, section_id, requirement_id, entry_id, group_id)
+        ):
+            raise ServiceError("invalid_input", "Projection options require view=console", 422, 2)
         data, items = await score.show_rubric(ctx[0], ctx[1], task_id, rubric_id, storage, settings)
         return result("show", data, items)
 
@@ -255,12 +455,21 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         task_id: UUID,
         rubric_id: UUID,
         body: RubricReviseRequest,
+        view: Literal["console"] | None = None,
         ctx=Depends(context, scope="function"),
     ):
         data = await invoke(
-            score.revise_rubric, ctx[0], ctx[1], task_id, rubric_id, body, storage, settings
+            score.revise_rubric,
+            ctx[0],
+            ctx[1],
+            task_id,
+            rubric_id,
+            body,
+            storage,
+            settings,
+            console=view == "console",
         )
-        return result("revise", data)
+        return result("revise", data, console=view == "console")
 
     @router.post(
         "/tasks/{task_id}/score-rubrics/{rubric_id}/sections/{section_id}/classification",
@@ -388,12 +597,21 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         task_id: UUID,
         rubric_id: UUID,
         body: RubricSetDecisionRequest,
+        view: Literal["console"] | None = None,
         ctx=Depends(context, scope="function"),
     ):
         data = await invoke(
-            score.decide_rubric, ctx[0], ctx[1], task_id, rubric_id, body, storage, settings
+            score.decide_rubric,
+            ctx[0],
+            ctx[1],
+            task_id,
+            rubric_id,
+            body,
+            storage,
+            settings,
+            console=view == "console",
         )
-        return result("decide", data)
+        return result("decide", data, console=view == "console")
 
     @router.get(
         "/tasks/{task_id}/score-rubrics/{rubric_id}/history",

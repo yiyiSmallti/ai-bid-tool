@@ -53,6 +53,7 @@ async function load() {
     await loadRows();
     const saved = recalled(`review.${taskId}.${jobId}`);
     if (saved) { for (const key of Object.keys(filters)) if (key !== "query" && key in saved) filters[key] = saved[key]; pageSize.value = [25,50,100].includes(saved.pageSize) ? saved.pageSize : 50; await nextTick(); page.value = Math.min(pages.value, Math.max(1, saved.page || 1)); }
+    if (route.query.category === 'scoring') filters.category = 'scoring';
     const id = String(route.query.requirement ?? saved?.requirementId ?? "");
     if (id) { const row = rows.value.find(r => r.id === id); if (row) await open(row); else error.value = "指定要求不属于当前集合"; }
   } catch (exc) { rows.value = null; error.value = errorText(exc); }
@@ -138,7 +139,7 @@ onMounted(load);
   <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">{{ task?.name ?? "任务" }}</RouterLink><span>/</span><span>要求与响应审阅</span></nav>
   <div class="page-header">
     <div><h2 ref="title" tabindex="-1">要求与响应审阅</h2><p class="subtitle">任务 {{ task?.name }} · 固定抽取 <code>{{ jobId }}</code></p></div>
-    <div class="actions"><el-button :icon="Back" @click="router.push(`/org/tasks/${taskId}`)">返回任务</el-button><el-button type="primary" plain :icon="Document" @click="router.push(`/org/tasks/${taskId}/drafts?job=${jobId}`)">三表与缺口</el-button></div>
+    <div class="actions"><el-button :icon="Back" @click="router.push(`/org/tasks/${taskId}`)">返回任务</el-button><el-button type="primary" plain :icon="Document" @click="router.push(`/org/tasks/${taskId}/drafts?job=${jobId}`)">三表与缺口</el-button><RouterLink :to="`/org/tasks/${taskId}/checks?job=${jobId}`">检查风险</RouterLink><RouterLink :to="`/org/tasks/${taskId}/scores?job=${jobId}`">评分预估</RouterLink></div>
   </div>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
   <p v-if="notice" class="notice" role="status">{{ notice }}</p>

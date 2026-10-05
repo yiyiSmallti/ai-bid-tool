@@ -2,13 +2,16 @@ from collections.abc import Callable
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select
 
 from app.core.errors import not_found
 from app.models.entities import Document, Job, Task
+from app.schemas.console_assessments import AssessmentJobQuery, CitationRequest
 from app.schemas.contracts import Result
+from app.services import assessment_reads
+from app.services.assessment_bounds import bounded_result, query_model
 
 
 def _serial(row: Any, fields: tuple[str, ...]) -> dict[str, Any]:
@@ -21,7 +24,9 @@ def _result(command: str, data=None, items=None) -> dict[str, Any]:
     )
 
 
-def create_router(context: Callable[..., Any]) -> APIRouter:
+def create_router(
+    context: Callable[..., Any], storage: Any = None, settings: Any = None
+) -> APIRouter:
     router = APIRouter()
 
     @router.get("/tasks/{task_id}", name="task_get", response_model=Result)
@@ -89,11 +94,37 @@ def create_router(context: Callable[..., Any]) -> APIRouter:
     @router.get("/tasks/{task_id}/jobs", name="task_job_list", response_model=Result)
     async def task_job_list(
         task_id: UUID,
-        kind: Literal["parse"],
+        kind: Literal["parse", "check", "score_rubric", "score"],
+        extraction_job_id: UUID | None = None,
+        cursor: str | None = None,
+        limit: int = Query(50, ge=1, le=100),
         document: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
+        if kind != "parse":
+            if document is not None:
+                from app.core.errors import ServiceError
+
+                raise ServiceError("invalid_input", "Assessment jobs use extraction_job_id", 400, 2)
+            page = await assessment_reads.jobs(
+                session,
+                actor,
+                task_id,
+                AssessmentJobQuery(
+                    kind=kind, extraction_job_id=extraction_job_id, cursor=cursor, limit=limit
+                ),
+                storage,
+                settings,
+            )
+            return bounded_result(
+                Result(
+                    ok=True,
+                    command="assessment jobs",
+                    data=page.data.model_dump(mode="json"),
+                    items=[row.model_dump(mode="json") for row in page.items],
+                )
+            )
         actor.require("task:read")
         actor.require("job:read")
         if await session.get(Task, task_id) is None:
@@ -132,6 +163,48 @@ def create_router(context: Callable[..., Any]) -> APIRouter:
                 )
                 for job in jobs
             ],
+        )
+
+    @router.get(
+        "/tasks/{task_id}/assessment-inputs", name="assessment_inputs", response_model=Result
+    )
+    async def assessment_inputs(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
+        data = await assessment_reads.inputs(ctx[0], ctx[1], task_id, job, storage, settings)
+        return bounded_result(
+            Result(ok=True, command="assessment inputs", data=data.model_dump(mode="json"))
+        )
+
+    @router.get(
+        "/tasks/{task_id}/assessment-citation", name="assessment_citation", response_model=Result
+    )
+    async def assessment_citation(
+        task_id: UUID,
+        parent_kind: Literal["check", "rubric", "score"],
+        parent_id: UUID,
+        part: Literal["finding", "coverage", "rubric_section", "rubric_item", "score_item"],
+        entry_id: UUID,
+        origin: Literal["source", "citations"] = "source",
+        citation_index: int = Query(0, ge=0, le=1000),
+        text: Literal["quote", "context"] = "context",
+        offset: int = Query(0, ge=0),
+        limit: int = Query(4000, ge=1, le=8000),
+        ctx=Depends(context, scope="function"),
+    ):
+        query = query_model(
+            CitationRequest,
+            parent_kind=parent_kind,
+            parent_id=parent_id,
+            part=part,
+            entry_id=entry_id,
+            origin=origin,
+            citation_index=citation_index,
+            text=text,
+            offset=offset,
+            limit=limit,
+        )
+        data = await assessment_reads.citation(ctx[0], ctx[1], task_id, query, storage, settings)
+        return bounded_result(
+            Result(ok=True, command="assessment citation", data=data.model_dump(mode="json"))
         )
 
     return router

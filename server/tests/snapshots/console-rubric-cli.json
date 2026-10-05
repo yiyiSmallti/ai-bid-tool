@@ -1,0 +1,852 @@
+{
+  "local": {
+    "rubric blockers": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "blockers",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric coverage": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "coverage",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric decide": {
+      "command": "score rubric decide",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "completeness": {
+          "complete": false,
+          "covered_requirement_count": 0,
+          "duplicate_groups": 1,
+          "normalization_errors": 0,
+          "overall_aggregation_rule_confirmed": false,
+          "pending_requirements": 1200,
+          "scoring_requirement_count": 1200,
+          "section_aggregation_rules_confirmed": false,
+          "unconfirmed_items": 1200,
+          "unconfirmed_sections": 1
+        },
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "item_count": 1200,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "revision": 1,
+        "section_count": 1,
+        "state": "candidate",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric items": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "items",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric list": {
+      "command": "score rubric list",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "actions": [],
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "duplicate_groups": 1,
+            "normalization_errors": 0,
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirements": 1200,
+            "scoring_requirement_count": 1200,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_items": 1200,
+            "unconfirmed_sections": 1
+          },
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "item_count": 1200,
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prior_rubric_id": null,
+          "revision": 1,
+          "section_count": 1,
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "validity": "current",
+          "version": 1
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric replacement": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "prior_rubric_id": "00000000-0000-0000-0000-000000000002",
+        "replacement": {
+          "coverage": [
+            {
+              "disposition": "mapped",
+              "requirement_id": "00000000-0000-0000-0000-000000000008",
+              "rubric_item_keys": [
+                "technical-response"
+              ]
+            }
+          ],
+          "expected_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expected_revision": 1,
+          "items": [
+            {
+              "assessment_mode": "model_assessable",
+              "key": "technical-response",
+              "order": 1,
+              "requirement_id": "00000000-0000-0000-0000-000000000008",
+              "rule_text": "Award 0 to 10 points.",
+              "score_range": {
+                "maximum": "10",
+                "minimum": "0"
+              },
+              "section_key": "technical",
+              "source_item_id": "00000000-0000-0000-0000-000000000007",
+              "title": "Technical response quality"
+            }
+          ],
+          "overall_aggregation": "sum",
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "reason": "Corrected the item title and bounds.",
+          "sections": [
+            {
+              "aggregation": "sum",
+              "included_in_overall_total": true,
+              "key": "technical",
+              "order": 1,
+              "requirement_id": "00000000-0000-0000-0000-000000000008",
+              "score_range": {
+                "maximum": "10",
+                "minimum": "0"
+              },
+              "source_section_id": "00000000-0000-0000-0000-000000000006",
+              "title": "Technical response"
+            }
+          ]
+        },
+        "rubric_id": "00000000-0000-0000-0000-000000000001",
+        "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric revise": {
+      "command": "score rubric revise",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "completeness": {
+          "complete": false,
+          "covered_requirement_count": 0,
+          "duplicate_groups": 1,
+          "normalization_errors": 0,
+          "overall_aggregation_rule_confirmed": false,
+          "pending_requirements": 1200,
+          "scoring_requirement_count": 1200,
+          "section_aggregation_rules_confirmed": false,
+          "unconfirmed_items": 1200,
+          "unconfirmed_sections": 1
+        },
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "item_count": 1200,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "revision": 1,
+        "section_count": 1,
+        "state": "candidate",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric sections": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "sections",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric summary": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "completeness": {
+          "complete": false,
+          "covered_requirement_count": 0,
+          "duplicate_groups": 1,
+          "normalization_errors": 0,
+          "overall_aggregation_rule_confirmed": false,
+          "pending_requirements": 1200,
+          "scoring_requirement_count": 1200,
+          "section_aggregation_rules_confirmed": false,
+          "unconfirmed_items": 1200,
+          "unconfirmed_sections": 1
+        },
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "item_count": 1200,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "revision": 1,
+        "section_count": 1,
+        "state": "candidate",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    }
+  },
+  "remote": {
+    "rubric blockers": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "blockers",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric coverage": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "coverage",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric decide": {
+      "command": "score rubric decide",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "completeness": {
+          "complete": false,
+          "covered_requirement_count": 0,
+          "duplicate_groups": 1,
+          "normalization_errors": 0,
+          "overall_aggregation_rule_confirmed": false,
+          "pending_requirements": 1200,
+          "scoring_requirement_count": 1200,
+          "section_aggregation_rules_confirmed": false,
+          "unconfirmed_items": 1200,
+          "unconfirmed_sections": 1
+        },
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "item_count": 1200,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "revision": 1,
+        "section_count": 1,
+        "state": "candidate",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric items": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "items",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric list": {
+      "command": "score rubric list",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "actions": [],
+          "completeness": {
+            "complete": false,
+            "covered_requirement_count": 0,
+            "duplicate_groups": 1,
+            "normalization_errors": 0,
+            "overall_aggregation_rule_confirmed": false,
+            "pending_requirements": 1200,
+            "scoring_requirement_count": 1200,
+            "section_aggregation_rules_confirmed": false,
+            "unconfirmed_items": 1200,
+            "unconfirmed_sections": 1
+          },
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "item_count": 1200,
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "overall_aggregation": "sum",
+          "overall_aggregation_assessable": true,
+          "overall_cap": null,
+          "overall_rule_text": null,
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "prior_rubric_id": null,
+          "revision": 1,
+          "section_count": 1,
+          "state": "candidate",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "validity": "current",
+          "version": 1
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric replacement": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "prior_rubric_id": "00000000-0000-0000-0000-000000000002",
+        "replacement": {
+          "coverage": [
+            {
+              "disposition": "mapped",
+              "requirement_id": "00000000-0000-0000-0000-000000000008",
+              "rubric_item_keys": [
+                "technical-response"
+              ]
+            }
+          ],
+          "expected_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "expected_revision": 1,
+          "items": [
+            {
+              "assessment_mode": "model_assessable",
+              "key": "technical-response",
+              "order": 1,
+              "requirement_id": "00000000-0000-0000-0000-000000000008",
+              "rule_text": "Award 0 to 10 points.",
+              "score_range": {
+                "maximum": "10",
+                "minimum": "0"
+              },
+              "section_key": "technical",
+              "source_item_id": "00000000-0000-0000-0000-000000000007",
+              "title": "Technical response quality"
+            }
+          ],
+          "overall_aggregation": "sum",
+          "overall_score_range": {
+            "maximum": "10",
+            "minimum": "0"
+          },
+          "reason": "Corrected the item title and bounds.",
+          "sections": [
+            {
+              "aggregation": "sum",
+              "included_in_overall_total": true,
+              "key": "technical",
+              "order": 1,
+              "requirement_id": "00000000-0000-0000-0000-000000000008",
+              "score_range": {
+                "maximum": "10",
+                "minimum": "0"
+              },
+              "source_section_id": "00000000-0000-0000-0000-000000000006",
+              "title": "Technical response"
+            }
+          ]
+        },
+        "rubric_id": "00000000-0000-0000-0000-000000000001",
+        "snapshot_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric revise": {
+      "command": "score rubric revise",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "completeness": {
+          "complete": false,
+          "covered_requirement_count": 0,
+          "duplicate_groups": 1,
+          "normalization_errors": 0,
+          "overall_aggregation_rule_confirmed": false,
+          "pending_requirements": 1200,
+          "scoring_requirement_count": 1200,
+          "section_aggregation_rules_confirmed": false,
+          "unconfirmed_items": 1200,
+          "unconfirmed_sections": 1
+        },
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "item_count": 1200,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "revision": 1,
+        "section_count": 1,
+        "state": "candidate",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric sections": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": 1,
+        "part": "sections",
+        "returned": 0,
+        "snapshot": "rubric-revision-1",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "current"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "rubric summary": {
+      "command": "score rubric show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "completeness": {
+          "complete": false,
+          "covered_requirement_count": 0,
+          "duplicate_groups": 1,
+          "normalization_errors": 0,
+          "overall_aggregation_rule_confirmed": false,
+          "pending_requirements": 1200,
+          "scoring_requirement_count": 1200,
+          "section_aggregation_rules_confirmed": false,
+          "unconfirmed_items": 1200,
+          "unconfirmed_sections": 1
+        },
+        "created_at": "2026-10-04T00:00:00Z",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "item_count": 1200,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "overall_aggregation": "sum",
+        "overall_aggregation_assessable": true,
+        "overall_cap": null,
+        "overall_rule_text": null,
+        "overall_score_range": {
+          "maximum": "10",
+          "minimum": "0"
+        },
+        "prior_rubric_id": null,
+        "revision": 1,
+        "section_count": 1,
+        "state": "candidate",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "validity": "current",
+        "version": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    }
+  }
+}
