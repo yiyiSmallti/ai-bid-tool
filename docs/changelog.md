@@ -6,6 +6,10 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-04：模拟功能改绑后仍阻止正式导出
+
+- 导出声明检查功能与产品的全部根标记，模拟功能修订改绑普通产品后仍阻止正式件，审阅件仍需确认警告；机制见 [product-simulation.md](notes/product-simulation.md)。
+
 ## 2026-10-04：缓存导出预览的实时门禁
 
 - 缓存预览页复用 DOCX 下载门禁，输入或发起人权限失效后拒绝读取；预览状态沿用导出有效性并停止提供失效页面，机制见 [page-previews.md](notes/page-previews.md)。

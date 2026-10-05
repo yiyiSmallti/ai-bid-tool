@@ -60,7 +60,11 @@ selected on the task and registered in `simulated_resources` by product or featu
 root, so a later human revision stays marked. The table only accepts inserts.
 
 [exports.py](../../server/app/services/exports.py) reports
-`export_simulated_material` for every declaration whose product or feature is
-marked: it blocks a final section and needs acknowledgment in a review copy.
+`export_simulated_material` when any root of a declaration is marked: a product
+revision checks its product root, and a feature revision checks both its feature
+root and its linked product. Rebinding a simulated feature to an ordinary product
+cannot clear its permanent feature mark. A hit blocks a final section and needs
+acknowledgment in a review copy. Preparation, rendering, release and download
+rechecks use this same manifest check.
 Model calls use the job's accounting like drafting; search and fetch use the same
 providers and limits as vendor-source capture.

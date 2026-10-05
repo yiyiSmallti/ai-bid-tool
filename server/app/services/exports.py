@@ -708,17 +708,14 @@ async def build_manifest(
                             "export_evidence_integrity", "Declared material is missing", 500, 4
                         )
                     material["title"] = material_title(declared.data)
-                    root = getattr(declared, "product_id", None) or getattr(
-                        declared, "feature_id", None
-                    )
+                    simulated_roots = [
+                        getattr(SimulatedResource, key) == root
+                        for key in ("product_id", "feature_id")
+                        if (root := getattr(declared, key, None)) is not None
+                    ]
                     # A simulated product or statement is a demonstration, never deliverable.
-                    if root is not None and await session.scalar(
-                        select(SimulatedResource.id).where(
-                            or_(
-                                SimulatedResource.product_id == root,
-                                SimulatedResource.feature_id == root,
-                            )
-                        )
+                    if simulated_roots and await session.scalar(
+                        select(SimulatedResource.id).where(or_(*simulated_roots))
                     ):
                         issues.append(
                             issue(
