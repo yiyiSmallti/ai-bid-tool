@@ -57,6 +57,8 @@ can request only brokered fetches; the
 [fetch mechanism](sandbox-fetch.md) defines the independent network policy.
 Neither container has business storage credentials. Original PDF bytes must match
 the trusted entry response receipt, not just a sandbox-declared file header.
+PDF page rendering also applies the shared [raster budget](pdf-parsing.md#how-it-works)
+before allocating a bitmap; budget failures retain the runner's `image_limit` code.
 
 The supervisor persists instance identities before execution, enforces a shared
 deadline and resource budget, kills complete instances, and confirms removal

@@ -340,7 +340,7 @@ class Processor:
                                 if isinstance(page, SectionText)
                                 else {**page.model_dump(), "seq": page.page}
                             )
-                            await session.execute(
+                            inserted = await session.scalar(
                                 insert(Chunk)
                                 .values(
                                     org_id=org_id,
@@ -351,7 +351,24 @@ class Processor:
                                 .on_conflict_do_nothing(
                                     index_elements=["org_id", "document_id", "seq"]
                                 )
+                                .returning(Chunk.id)
                             )
+                            if inserted is None:
+                                stored = await session.scalar(
+                                    select(Chunk).where(
+                                        Chunk.document_id == document_id,
+                                        Chunk.seq == values["seq"],
+                                    )
+                                )
+                                if stored is not None and any(
+                                    getattr(stored, key) != value for key, value in values.items()
+                                ):
+                                    warnings.append(
+                                        f"{'Section' if word else 'Page'} {values['seq']} retains "
+                                        "previously stored parse text to preserve existing citations; "
+                                        "the new parse was not saved. Upload the document in a new "
+                                        "task to use the new parsing result."
+                                    )
                         document.status = "parsed"
                         document.citation_mode = "block" if word else "page"
                         document.page_count = None if word else len(pages)

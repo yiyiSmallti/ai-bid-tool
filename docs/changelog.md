@@ -6,6 +6,10 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-04：PDF 栅格化上限与混合页 OCR
+
+- PDF 栅格化统一预检像素预算，OCR 对可处理的大页降低 DPI、对超大页明确拒绝；扫描正文带原生页码/页眉时执行 OCR 并合并可核验文本，未完整解析时返回警告，见 [PDF parsing](notes/pdf-parsing.md)。
+
 ## 2026-10-04：模拟功能改绑后仍阻止正式导出
 
 - 导出声明检查功能与产品的全部根标记，模拟功能修订改绑普通产品后仍阻止正式件，审阅件仍需确认警告；机制见 [product-simulation.md](notes/product-simulation.md)。

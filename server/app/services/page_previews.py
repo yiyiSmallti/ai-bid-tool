@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import math
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
@@ -20,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
+from app.core.pdf_raster import raster_dimensions
 from app.models.entities import Document, Job
 from app.models.exports import Export, ExportRun
 from app.providers.base import ProviderFailure
@@ -34,8 +34,6 @@ if TYPE_CHECKING:
 
 # Pixel and byte bounds for one rendered page, as for archived certificate pages.
 ZOOM_DPI = {1: 110, 2: 200}
-MAX_EDGE_PX = 8192
-MAX_PIXELS = 20_000_000
 MAX_PNG_BYTES = 40 * 1024 * 1024
 JOB_KIND = "export_preview"
 
@@ -49,16 +47,12 @@ def render_pdf_page(content: bytes, page_number: int, zoom: int) -> bytes:
             if page_number < 1 or page_number > pdf.page_count:
                 raise ServiceError("invalid_page", "Page is outside the document", 400, 2)
             page = pdf[page_number - 1]
-            projected = (
-                math.ceil(page.rect.width * dpi / 72),
-                math.ceil(page.rect.height * dpi / 72),
+            raster_dimensions(
+                page.rect.width,
+                page.rect.height,
+                dpi / 72,
+                code="preview_limits",
             )
-            if (
-                min(projected) < 1
-                or max(projected) > MAX_EDGE_PX
-                or projected[0] * projected[1] > MAX_PIXELS
-            ):
-                raise ServiceError("preview_limits", "Page exceeds preview pixel limits", 400, 2)
             png = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csRGB, alpha=False).tobytes("png")
     except ServiceError:
         raise
