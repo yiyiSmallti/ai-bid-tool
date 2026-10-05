@@ -807,6 +807,9 @@ def test_score_rubric_cli_exit_codes_and_schema(monkeypatch, tmp_path, capsys):
         "score rubric coverage decide",
         "score rubric decide",
         "score rubric history",
+        "score run",
+        "score list",
+        "score show",
     }
     assert all(schema[name].get("output") for name in names)
 

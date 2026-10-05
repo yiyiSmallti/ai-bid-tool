@@ -1,12 +1,13 @@
 """Immutable rubric snapshots and human-only append-only review histories."""
 
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    Date,
     DateTime,
     ForeignKeyConstraint,
     Integer,
@@ -66,6 +67,7 @@ class ScoreRubricSet(Tenant, Base):
     __table_args__ = (
         *common(),
         UniqueConstraint("org_id", "extraction_job_id", "version"),
+        UniqueConstraint("org_id", "id", "task_id", "extraction_job_id", "document_id"),
         fk(["job_id", "task_id", "document_id"], "jobs", ["id", "task_id", "document_id"]),
         fk(
             ["extraction_job_id", "task_id", "document_id"],
@@ -127,6 +129,7 @@ class ScoreRubricItem(Tenant, Base):
         *common(),
         rubric_fk(),
         UniqueConstraint("org_id", "id", "task_id", "rubric_id"),
+        UniqueConstraint("org_id", "id", "task_id", "rubric_id", "section_id", "requirement_id"),
         UniqueConstraint("org_id", "rubric_id", "key"),
         UniqueConstraint("org_id", "rubric_id", "fingerprint"),
         fk(
@@ -274,4 +277,183 @@ class ScoreRubricRevisionEvent(Tenant, Base):
         UniqueConstraint("org_id", "rubric_id"),
         fk(["prior_rubric_id", "task_id"], "score_rubric_sets", ["id", "task_id"]),
         fk(["revised_by"], "memberships", ["user_id"]),
+    )
+
+
+class ScoreReport(Tenant, Base):
+    __tablename__ = "score_reports"
+    task_id: Mapped[UUID] = mapped_column()
+    job_id: Mapped[UUID] = mapped_column()
+    run_id: Mapped[UUID] = mapped_column()
+    draft_id: Mapped[UUID] = mapped_column()
+    extraction_job_id: Mapped[UUID] = mapped_column()
+    document_id: Mapped[UUID] = mapped_column()
+    rubric_id: Mapped[UUID] = mapped_column()
+    actor_user_id: Mapped[UUID] = mapped_column()
+    actor_token_id: Mapped[UUID | None] = mapped_column()
+    rubric_version: Mapped[int] = mapped_column(Integer)
+    rubric_revision: Mapped[int] = mapped_column(Integer)
+    rubric_input_hash: Mapped[str] = mapped_column(Text)
+    input_hash: Mapped[str] = mapped_column(Text)
+    draft_input_hash: Mapped[str] = mapped_column(Text)
+    prompt_version: Mapped[str] = mapped_column(Text)
+    schema_version: Mapped[str] = mapped_column(Text)
+    scoring_rule_version: Mapped[str] = mapped_column(Text)
+    encrypted_input: Mapped[str] = mapped_column(Text)
+    completion: Mapped[str] = mapped_column(Text)
+    actor_kind: Mapped[str] = mapped_column(Text)
+    assessment_date: Mapped[date] = mapped_column(Date)
+    input_manifest: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    limitations: Mapped[list[str]] = mapped_column(JSONB)
+    sections: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    __table_args__ = (
+        *common(),
+        UniqueConstraint("org_id", "job_id"),
+        UniqueConstraint("org_id", "id", "task_id", "draft_id", "extraction_job_id", "rubric_id"),
+        fk(["job_id", "task_id", "document_id"], "jobs", ["id", "task_id", "document_id"]),
+        fk(
+            ["extraction_job_id", "task_id", "document_id"],
+            "jobs",
+            ["id", "task_id", "document_id"],
+        ),
+        fk(
+            ["draft_id", "task_id", "extraction_job_id"],
+            "draft_runs",
+            ["id", "task_id", "extraction_job_id"],
+        ),
+        fk(["document_id", "task_id"], "documents", ["id", "task_id"]),
+        fk(
+            ["rubric_id", "task_id", "extraction_job_id", "document_id"],
+            "score_rubric_sets",
+            ["id", "task_id", "extraction_job_id", "document_id"],
+        ),
+        fk(["actor_user_id"], "memberships", ["user_id"]),
+        fk(["actor_token_id"], "api_tokens", ["id"]),
+    )
+
+
+class ScoreReportItem(Tenant, Base):
+    __tablename__ = "score_report_items"
+    task_id: Mapped[UUID] = mapped_column()
+    report_id: Mapped[UUID] = mapped_column()
+    draft_id: Mapped[UUID] = mapped_column()
+    extraction_job_id: Mapped[UUID] = mapped_column()
+    rubric_id: Mapped[UUID] = mapped_column()
+    rubric_item_id: Mapped[UUID] = mapped_column()
+    section_id: Mapped[UUID] = mapped_column()
+    requirement_id: Mapped[UUID] = mapped_column()
+    anchor_response_item_id: Mapped[UUID] = mapped_column()
+    anchor_partition: Mapped[str] = mapped_column(Text)
+    outcome: Mapped[str] = mapped_column(Text)
+    reason_code: Mapped[str] = mapped_column(Text)
+    reason: Mapped[str] = mapped_column(Text)
+    score_range: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    estimated_score: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
+    deduction_reasons: Mapped[list[str]] = mapped_column(JSONB)
+    strengthening_actions: Mapped[list[str]] = mapped_column(JSONB)
+    __table_args__ = (
+        *common(),
+        UniqueConstraint("org_id", "report_id", "rubric_item_id"),
+        UniqueConstraint("org_id", "id", "task_id", "report_id", "draft_id"),
+        UniqueConstraint("org_id", "id", "task_id", "report_id"),
+        fk(
+            ["report_id", "task_id", "draft_id", "extraction_job_id", "rubric_id"],
+            "score_reports",
+            ["id", "task_id", "draft_id", "extraction_job_id", "rubric_id"],
+        ),
+        fk(
+            ["rubric_item_id", "task_id", "rubric_id", "section_id", "requirement_id"],
+            "score_rubric_items",
+            ["id", "task_id", "rubric_id", "section_id", "requirement_id"],
+        ),
+        fk(
+            ["requirement_id", "task_id", "extraction_job_id"],
+            "requirements",
+            ["id", "task_id", "job_id"],
+        ),
+        fk(
+            ["anchor_response_item_id", "draft_id", "requirement_id"],
+            "response_items",
+            ["id", "draft_id", "requirement_id"],
+        ),
+    )
+
+
+class ScoreReportItemResponse(Tenant, Base):
+    __tablename__ = "score_report_item_responses"
+    task_id: Mapped[UUID] = mapped_column()
+    report_id: Mapped[UUID] = mapped_column()
+    score_item_id: Mapped[UUID] = mapped_column()
+    draft_id: Mapped[UUID] = mapped_column()
+    response_item_id: Mapped[UUID] = mapped_column()
+    requirement_id: Mapped[UUID] = mapped_column()
+    card_revision_id: Mapped[UUID] = mapped_column()
+    __table_args__ = (
+        *common(),
+        UniqueConstraint("org_id", "score_item_id", "response_item_id"),
+        UniqueConstraint(
+            "org_id",
+            "task_id",
+            "report_id",
+            "score_item_id",
+            "draft_id",
+            "response_item_id",
+            "card_revision_id",
+        ),
+        fk(
+            ["score_item_id", "task_id", "report_id", "draft_id"],
+            "score_report_items",
+            ["id", "task_id", "report_id", "draft_id"],
+        ),
+        fk(
+            ["response_item_id", "draft_id", "requirement_id", "card_revision_id"],
+            "response_items",
+            ["id", "draft_id", "requirement_id", "card_revision_id"],
+        ),
+    )
+
+
+class ScoreItemCitation(Tenant, Base):
+    __tablename__ = "score_item_citations"
+    task_id: Mapped[UUID] = mapped_column()
+    report_id: Mapped[UUID] = mapped_column()
+    score_item_id: Mapped[UUID] = mapped_column()
+    kind: Mapped[str] = mapped_column(Text)
+    quote: Mapped[str] = mapped_column(Text)
+    document_id: Mapped[UUID | None] = mapped_column()
+    chunk_id: Mapped[UUID | None] = mapped_column()
+    draft_id: Mapped[UUID | None] = mapped_column()
+    response_item_id: Mapped[UUID | None] = mapped_column()
+    card_revision_id: Mapped[UUID | None] = mapped_column()
+    field: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    __table_args__ = (
+        *common(),
+        fk(
+            ["score_item_id", "task_id", "report_id"],
+            "score_report_items",
+            ["id", "task_id", "report_id"],
+        ),
+        fk(["document_id", "task_id"], "documents", ["id", "task_id"]),
+        fk(["chunk_id", "task_id", "document_id"], "chunks", ["id", "task_id", "document_id"]),
+        fk(
+            [
+                "task_id",
+                "report_id",
+                "score_item_id",
+                "draft_id",
+                "response_item_id",
+                "card_revision_id",
+            ],
+            "score_report_item_responses",
+            [
+                "task_id",
+                "report_id",
+                "score_item_id",
+                "draft_id",
+                "response_item_id",
+                "card_revision_id",
+            ],
+        ),
     )

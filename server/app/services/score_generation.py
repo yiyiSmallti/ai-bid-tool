@@ -784,7 +784,9 @@ def accept_batches(
     }
 
 
-async def usage_integrity(session: AsyncSession, job: Job, run_id: UUID, reported_usages) -> None:
+async def usage_integrity(
+    session: AsyncSession, job: Job, run_id: UUID, reported_usages, *, kind: str = "score_rubric"
+) -> None:
     calls = list(
         (
             await session.scalars(
@@ -804,8 +806,8 @@ async def usage_integrity(session: AsyncSession, job: Job, run_id: UUID, reporte
     completed = {call.id: call for call in calls if call.state == "completed"}
     if len(completed) != len(usages) or {usage.call_id for usage in usages} != set(completed):
         cards.fail(
-            "score_rubric_usage_integrity",
-            "Rubric usage does not match settled calls",
+            f"{kind}_usage_integrity",
+            "Score capability usage does not match settled calls",
             500,
             4,
         )
@@ -835,8 +837,8 @@ async def usage_integrity(session: AsyncSession, job: Job, run_id: UUID, reporte
             != completed[call_id].charge
         ):
             cards.fail(
-                "score_rubric_usage_integrity",
-                "Rubric usage settlement identity is invalid",
+                f"{kind}_usage_integrity",
+                "Score capability usage settlement identity is invalid",
                 500,
                 4,
             )
@@ -845,7 +847,7 @@ async def usage_integrity(session: AsyncSession, job: Job, run_id: UUID, reporte
         key = signature(usage)
         if available[key] < 1:
             cards.fail(
-                "score_rubric_usage_integrity",
+                f"{kind}_usage_integrity",
                 "Provider usage does not match the accounting ledger",
                 500,
                 4,
@@ -853,7 +855,7 @@ async def usage_integrity(session: AsyncSession, job: Job, run_id: UUID, reporte
         available[key] -= 1
     if any(available.values()):
         cards.fail(
-            "score_rubric_usage_integrity",
+            f"{kind}_usage_integrity",
             "Settled usage is missing from provider accounting metadata",
             500,
             4,

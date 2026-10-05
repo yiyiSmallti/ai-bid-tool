@@ -117,6 +117,7 @@ class Processor:
                     "draft",
                     "check",
                     "score_rubric",
+                    "score",
                     "card_generate",
                     "provider_test",
                     "export_render",
@@ -227,6 +228,12 @@ class Processor:
                     await generate_prototype(execution, self.storage, llm, browser_for(self))
                     return
                 assert task_id is not None and document_id is not None
+                if kind == "score":
+                    from app.jobs.score import process as process_score
+
+                    incremental = True
+                    await process_score(execution, self.storage)
+                    return
                 if kind == "score_rubric":
                     from app.jobs.score_rubric import process as process_score_rubric
 
@@ -454,6 +461,9 @@ class Processor:
                         "draft_input_changed",
                         "check_input_changed",
                         "score_rubric_input_changed",
+                        "score_input_changed",
+                        "score_stale_draft",
+                        "score_rubric_unconfirmed",
                         "export_input_changed",
                         "generation_input_changed",
                         "generation_model_changed",
@@ -489,14 +499,14 @@ class Processor:
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
-                    if kind == "score_rubric":
+                    if kind in {"score_rubric", "score"}:
                         from app.services.score_generation import worker
                         from app.services.versioned import audit
 
                         audit(
                             session,
                             worker(current),
-                            "score_rubric.failed",
+                            f"{kind}.failed",
                             job_id,
                             {
                                 "task_id": str(task_id),

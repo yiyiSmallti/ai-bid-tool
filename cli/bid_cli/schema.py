@@ -87,6 +87,10 @@ from app.schemas.score_contracts import (
     RubricSectionDecisionRequest,
     RubricSetDecisionRequest,
     RubricSetView,
+    ScoreJobResult,
+    ScorePreview,
+    ScoreReportData,
+    ScoreRequest,
 )
 from app.schemas.screenshot_contracts import (
     PrototypeDecisionBatch,
@@ -146,6 +150,9 @@ COMMANDS = {
     "score rubric coverage decide": RubricCoverageDecisionRequest,
     "score rubric decide": RubricSetDecisionRequest,
     "score rubric history": None,
+    "score run": ScoreRequest,
+    "score list": None,
+    "score show": None,
     "evidence source add": EvidenceSourceCreate,
     "evidence source list": None,
     "evidence source download": None,
@@ -266,6 +273,9 @@ CHECK_OUTPUTS = {
     "check history": TypeAdapter(AssessmentListData),
 }
 SCORE_OUTPUTS = {
+    "score run": TypeAdapter(ScorePreview | AssessmentJobAccepted | ScoreJobResult),
+    "score list": TypeAdapter(AssessmentListData),
+    "score show": TypeAdapter(ScoreReportData),
     "score rubric generate": TypeAdapter(
         RubricPreview | AssessmentJobAccepted | RubricGenerateResult
     ),

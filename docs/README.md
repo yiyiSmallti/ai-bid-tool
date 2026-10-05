@@ -70,5 +70,5 @@ kind: readme
 - [单位后台契约](plan/org-console.md)（plan）：网页端招标、抽取与响应卡审阅流程，已实施。
 - [起草预览绑定契约](plan/drafting-binding.md)（plan）：付费起草绑定预览哈希与用户消费上限，已实施。
 - [初稿校验契约](plan/check.md)（plan）：阶段一确定性规则已实施；阶段二语义校验待实施。
-- [评分契约](plan/score.md)（plan）：已批准；阶段 A rubric 规范化与人工确认已实施，阶段 B 评分执行待实施。
+- [评分契约](plan/score.md)（plan）：已批准；rubric 规范化与人工确认、confirmed DraftRun 评分执行与报告已实施。
 - [变更记录](changelog.md)（changelog）：已交付范围。
