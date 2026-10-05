@@ -419,6 +419,9 @@ def test_workflow_invalid_inputs_do_not_send(monkeypatch, capsys, tmp_path):
 
 
 def test_workflow_schema_discovery(capsys):
+    from app.schemas.console_assessments import PageData as AssessmentPageData
+    from app.schemas.team_workflow import PageData as WorkflowPageData
+
     cli.main(["schema", "--json"])
     body = json.loads(capsys.readouterr().out)
     names = body["data"]["commands"]
@@ -440,6 +443,20 @@ def test_workflow_schema_discovery(capsys):
         )
     )
     assert "card assign" not in names and "card signoff add" not in names
+    # Both slices call their envelope PageData; discovery must keep each contract.
+    assert names["task member list"]["output"] == WorkflowPageData.model_json_schema()
+    assert (
+        names["check show"]["variants"]["console"]["coverage"]["output"]
+        == AssessmentPageData.model_json_schema()
+    )
+    assert (
+        names["score rubric show"]["variants"]["console"]["sections"]["output"]
+        == AssessmentPageData.model_json_schema()
+    )
+    assert (
+        names["score show"]["variants"]["console"]["items"]["output"]
+        == AssessmentPageData.model_json_schema()
+    )
 
     assert all(
         "items" in names["task " + name]

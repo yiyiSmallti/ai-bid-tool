@@ -53,6 +53,7 @@ from app.services.certificate_files import read_file as read_certificate_file
 from app.services.template_files import read_template
 from pydantic import ValidationError
 
+from bid_cli.assessments import app as assessment_app
 from bid_cli.budget import register as register_budget_commands
 from bid_cli.check import app as check_app
 from bid_cli.check import check_job_exit
@@ -75,6 +76,7 @@ app.add_typer(provider_app, name="provider")
 app.add_typer(export_app, name="export")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(check_app, name="check")
+app.add_typer(assessment_app, name="assessment")
 app.add_typer(memory_app, name="memory")
 app.add_typer(score_app, name="score")
 org_app, task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(6))
@@ -1609,6 +1611,9 @@ def main(args: list[str] | None = None):
             name = command_name(arguments)
             if (
                 name in NEW_COMMANDS
+                or name.startswith("assessment ")
+                or "--view" in arguments
+                or any(argument.startswith("--view=") for argument in arguments)
                 or any(
                     argument.split("=", 1)[0] in {"--budget", "--budget-currency", "--test-org"}
                     for argument in arguments

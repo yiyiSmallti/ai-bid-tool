@@ -1,0 +1,686 @@
+{
+  "local": {
+    "assessment citation": {
+      "command": "assessment citation",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "entry_id": "00000000-0000-0000-0000-000000000002",
+        "fix": {
+          "current_card_id": null,
+          "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+          "historical_card_revision_id": null,
+          "requirement_id": "00000000-0000-0000-0000-000000000001",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "kind": "tender",
+        "page": 1,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "quote_end": 4,
+        "quote_start": 0,
+        "text_kind": "context",
+        "verified": true,
+        "window": {
+          "next_offset": 4,
+          "offset": 0,
+          "text": "合成引用",
+          "total_characters": 8
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "assessment inputs": {
+      "command": "assessment inputs",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "current_draft": null,
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "latest_draft": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "redaction_enabled": true,
+        "redaction_revision": 1,
+        "task_budget": {
+          "as_of": "2026-10-04T00:00:00Z",
+          "available": null,
+          "currency": "CNY",
+          "history_complete": true,
+          "limit": null,
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reserved": "0",
+          "revision": 1,
+          "spent": "0",
+          "state": "active",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "assessment jobs": {
+      "command": "assessment jobs",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "kind": "check",
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 0
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "check certificates": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "certificates",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check coverage": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "coverage",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check findings": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "findings",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check list console": {
+      "command": "check list",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": "next-page",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "certificate_count": 0,
+          "finding_count": 0,
+          "groups": [],
+          "item_count": 1200,
+          "mode": "rules",
+          "report": {
+            "advisory_only": true,
+            "assessment_date": "2026-10-04",
+            "completion": "partial",
+            "created_at": "2026-10-04T00:00:00Z",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "invalidation_codes": [
+              "draft_changed"
+            ],
+            "job_id": "00000000-0000-0000-0000-000000000001",
+            "notice_count": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "task_id": "00000000-0000-0000-0000-000000000001",
+            "validity": "stale"
+          },
+          "unassessed_count": 1
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "check notices": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "notices",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check summary": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "certificate_count": 0,
+        "finding_count": 0,
+        "groups": [],
+        "item_count": 1200,
+        "mode": "rules",
+        "report": {
+          "advisory_only": true,
+          "assessment_date": "2026-10-04",
+          "completion": "partial",
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "draft_id": "00000000-0000-0000-0000-000000000002",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "invalidation_codes": [
+            "draft_changed"
+          ],
+          "job_id": "00000000-0000-0000-0000-000000000001",
+          "notice_count": 1,
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "validity": "stale"
+        },
+        "unassessed_count": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    }
+  },
+  "remote": {
+    "assessment citation": {
+      "command": "assessment citation",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "entry_id": "00000000-0000-0000-0000-000000000002",
+        "fix": {
+          "current_card_id": null,
+          "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+          "historical_card_revision_id": null,
+          "requirement_id": "00000000-0000-0000-0000-000000000001",
+          "task_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "kind": "tender",
+        "page": 1,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "quote_end": 4,
+        "quote_start": 0,
+        "text_kind": "context",
+        "verified": true,
+        "window": {
+          "next_offset": 4,
+          "offset": 0,
+          "text": "合成引用",
+          "total_characters": 8
+        }
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "assessment inputs": {
+      "command": "assessment inputs",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "actions": [],
+        "current_draft": null,
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+        "latest_draft": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "redaction_enabled": true,
+        "redaction_revision": 1,
+        "task_budget": {
+          "as_of": "2026-10-04T00:00:00Z",
+          "available": null,
+          "currency": "CNY",
+          "history_complete": true,
+          "limit": null,
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "reserved": "0",
+          "revision": 1,
+          "spent": "0",
+          "state": "active",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "assessment jobs": {
+      "command": "assessment jobs",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "kind": "check",
+        "next_cursor": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 0
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": true,
+      "warnings": []
+    },
+    "check certificates": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "certificates",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check coverage": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "coverage",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check findings": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "findings",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check list console": {
+      "command": "check list",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "next_cursor": "next-page",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200
+      },
+      "duration_ms": 0,
+      "items": [
+        {
+          "certificate_count": 0,
+          "finding_count": 0,
+          "groups": [],
+          "item_count": 1200,
+          "mode": "rules",
+          "report": {
+            "advisory_only": true,
+            "assessment_date": "2026-10-04",
+            "completion": "partial",
+            "created_at": "2026-10-04T00:00:00Z",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "draft_id": "00000000-0000-0000-0000-000000000002",
+            "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+            "id": "00000000-0000-0000-0000-000000000001",
+            "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "invalidation_codes": [
+              "draft_changed"
+            ],
+            "job_id": "00000000-0000-0000-0000-000000000001",
+            "notice_count": 1,
+            "org_id": "00000000-0000-0000-0000-000000000001",
+            "task_id": "00000000-0000-0000-0000-000000000001",
+            "validity": "stale"
+          },
+          "unassessed_count": 1
+        }
+      ],
+      "ok": true,
+      "warnings": []
+    },
+    "check notices": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "filtered_total": 0,
+        "next_cursor": null,
+        "parent_id": "00000000-0000-0000-0000-000000000001",
+        "parent_revision": null,
+        "part": "notices",
+        "returned": 0,
+        "snapshot": "synthetic-snapshot",
+        "subject_actions": [],
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "total": 1200,
+        "validity": "stale"
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    },
+    "check summary": {
+      "command": "check show",
+      "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "data": {
+        "certificate_count": 0,
+        "finding_count": 0,
+        "groups": [],
+        "item_count": 1200,
+        "mode": "rules",
+        "report": {
+          "advisory_only": true,
+          "assessment_date": "2026-10-04",
+          "completion": "partial",
+          "created_at": "2026-10-04T00:00:00Z",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "draft_id": "00000000-0000-0000-0000-000000000002",
+          "extraction_job_id": "00000000-0000-0000-0000-000000000002",
+          "id": "00000000-0000-0000-0000-000000000001",
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "invalidation_codes": [
+            "draft_changed"
+          ],
+          "job_id": "00000000-0000-0000-0000-000000000001",
+          "notice_count": 1,
+          "org_id": "00000000-0000-0000-0000-000000000001",
+          "task_id": "00000000-0000-0000-0000-000000000001",
+          "validity": "stale"
+        },
+        "unassessed_count": 1
+      },
+      "duration_ms": 0,
+      "items": [],
+      "ok": false,
+      "warnings": [
+        "synthetic"
+      ]
+    }
+  }
+}

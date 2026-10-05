@@ -7,7 +7,7 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func, select
+from sqlalchemy import func, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -825,24 +825,31 @@ async def list_scores(session, actor, task_id, settings, storage, *, limit=50, c
             anchor = (datetime.fromisoformat(payload["created_at"]), UUID(payload["id"]))
         except (ServiceError, ValueError, KeyError, TypeError):
             cards.fail("invalid_cursor", "Cursor does not match this authorized query")
-    rows = list(
+    conditions = [ScoreReport.task_id == task_id, ScoreReport.org_id == actor.org_id]
+    for manifest in await session.scalars(select(ScoreReport.input_manifest).where(*conditions)):
+        await score_run_inputs.require_dependencies(session, actor, task_id, manifest)
+    total = (
+        await session.scalar(select(func.count()).select_from(ScoreReport).where(*conditions)) or 0
+    )
+    statement = select(ScoreReport).where(*conditions)
+    if anchor is not None:
+        statement = statement.where(
+            tuple_(ScoreReport.created_at, ScoreReport.id)
+            > tuple_(literal(anchor[0]), literal(anchor[1]))
+        )
+    selected = list(
         (
             await session.scalars(
-                select(ScoreReport)
-                .where(ScoreReport.task_id == task_id)
-                .order_by(ScoreReport.created_at, ScoreReport.id)
+                statement.order_by(ScoreReport.created_at, ScoreReport.id).limit(limit + 1)
             )
         ).all()
     )
-    for row in rows:
-        await score_run_inputs.require_dependencies(session, actor, task_id, row.input_manifest)
-    selected = [row for row in rows if anchor is None or (row.created_at, row.id) > anchor]
     next_cursor = None
     if len(selected) > limit:
         last = selected[limit - 1]
         next_cursor = TokenSigner.for_tokens(settings).issue(
             {**binding, "created_at": last.created_at.isoformat(), "id": str(last.id)}, 7 * 86400
         )
-    return AssessmentListData(task_id=task_id, total=len(rows), next_cursor=next_cursor).model_dump(
+    return AssessmentListData(task_id=task_id, total=total, next_cursor=next_cursor).model_dump(
         mode="json"
     ), [await run_view(session, actor, row, settings) for row in selected[:limit]]

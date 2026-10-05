@@ -164,7 +164,7 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
             <td><el-tag :type="jobTag[entry.status] ?? 'info'" size="small">{{ label(jobStatuses, entry.status) }}</el-tag> <el-tag v-if="entry.latest" size="small" effect="plain">最新</el-tag><p v-if="entry.error" class="error">{{ display(entry.error) }}</p></td>
             <td class="hint">{{ formatTime(entry.created_at) }}<br />{{ entry.finished_at ? formatTime(entry.finished_at) : "未结束" }}</td>
             <td class="num">{{ display(entry.saved) }} / {{ display(entry.rejected) }} / {{ display(entry.tokens) }}</td>
-            <td><div class="row-actions"><el-button link type="primary" @click="showJob(entry.job_id)">查看作业</el-button><template v-if="entry.status === 'succeeded'"><RouterLink :to="`/org/tasks/${taskId}/review?job=${entry.job_id}`">审阅要求</RouterLink><RouterLink :to="`/org/tasks/${taskId}/drafts?job=${entry.job_id}`">查看初稿</RouterLink></template></div></td>
+            <td><div class="row-actions"><el-button link type="primary" @click="showJob(entry.job_id)">查看作业</el-button><template v-if="entry.status === 'succeeded'"><RouterLink :to="`/org/tasks/${taskId}/review?job=${entry.job_id}`">审阅要求</RouterLink><RouterLink :to="`/org/tasks/${taskId}/drafts?job=${entry.job_id}`">查看初稿</RouterLink><RouterLink :to="`/org/tasks/${taskId}/checks?job=${entry.job_id}`">检查风险</RouterLink><RouterLink :to="`/org/tasks/${taskId}/scores?job=${entry.job_id}`">评分预估</RouterLink></template></div></td>
           </tr>
           <tr v-if="!history.length"><td colspan="6" class="empty">还没有抽取记录。解析文档后在上方预检并开始抽取。</td></tr>
         </tbody>

@@ -277,7 +277,7 @@ onBeforeUnmount(() => {
         <h2>响应表初稿</h2>
         <p class="subtitle">固定抽取 <code>{{ jobId || "未知" }}</code>。初稿不会导出，也不代表整份投标文件已经完成。</p>
       </div>
-      <el-button @click="router.push(reviewHref())">返回逐条审阅</el-button>
+      <el-button @click="router.push(reviewHref())">返回逐条审阅</el-button><RouterLink :to="`/org/tasks/${taskId}/checks?job=${jobId}${selectedDraft ? `&draft=${selectedDraft.id}` : ''}`">检查风险</RouterLink><RouterLink :to="`/org/tasks/${taskId}/scores?job=${jobId}${selectedDraft ? `&draft=${selectedDraft.id}` : ''}`">评分预估</RouterLink>
     </header>
 
     <el-skeleton v-if="loading" :rows="4" animated aria-label="正在核对抽取记录与历史初稿" />
