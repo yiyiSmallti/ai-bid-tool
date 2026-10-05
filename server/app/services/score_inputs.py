@@ -187,10 +187,11 @@ async def snapshot(
     requirements: list[Requirement] = []
     fixed_requirements: list[dict] = []
     secret_requirements: list[dict] = []
+    citations = cards.citation_validity_batch(
+        (requirement for requirement, _ in located), {chunk.id: chunk for _, chunk in located}
+    )
     for index, (requirement, chunk) in enumerate(located, 1):
-        if requirement.category != "scoring" or not cards.citation_valid_in_chunk(
-            requirement, chunk
-        ):
+        if requirement.category != "scoring" or not citations[requirement.id]:
             integrity()
         source = cards.source(requirement)
         original = source_original(requirement, chunk)

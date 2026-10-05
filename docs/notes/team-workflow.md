@@ -76,6 +76,10 @@ bind org/task, actor visibility, filters, access epoch, event watermark and UTC
 assessment date. Rows use stable requirement UUID order. Scope, page, time and
 serialized-response limits fail explicitly rather than truncate counts. Clock
 validity refreshes within thirty seconds even without a mutation event.
+Citation validity is computed in source groups and reused for each card within
+the snapshot; UUID ordering does not cause source normalization cache thrashing.
+The shared [bulk citation mechanism](docx-citations.md#how-it-works) retains the
+scalar predicate for every saved requirement, including requirements without cards.
 
 Business changes produce metadata-only `board_changed`, `job_progress` and
 `access_changed` records in their own transaction. The independent event head

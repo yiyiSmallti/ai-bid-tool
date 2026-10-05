@@ -3,6 +3,8 @@
 import asyncio
 import hashlib
 import re
+from collections import defaultdict
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import NoReturn
@@ -265,6 +267,59 @@ def citation_valid_in_chunk(requirement: Requirement, chunk: Chunk | None) -> bo
         and locate_quote(block["text"], requirement.quote)[0] is not None
         for block in chunk.blocks
     )
+
+
+def _citation_location_key(value):
+    """Hash JSON locations with the same scalar equality as the persisted dictionaries."""
+    if isinstance(value, dict):
+        return frozenset((key, _citation_location_key(item)) for key, item in value.items())
+    if isinstance(value, list):
+        return tuple(_citation_location_key(item) for item in value)
+    return value
+
+
+def citation_validity_batch(
+    requirements: Iterable[Requirement], chunks: Mapping[UUID, Chunk]
+) -> dict[UUID, bool]:
+    """The scalar citation predicate, grouped by source rather than requirement UUID.
+
+    Keep page and full Word-location bindings before matching. A block's ambiguity
+    is independent of other blocks, including blocks with identical locations.
+    Every source gets one literal/normalized batch; a result is never persisted or
+    reused across projections, so mutable citation corrections remain visible.
+    """
+    from app.services.extraction import locate_spans
+
+    grouped: dict[UUID, list[Requirement]] = defaultdict(list)
+    valid: dict[UUID, bool] = {}
+    for requirement in requirements:
+        grouped[requirement.chunk_id].append(requirement)
+        valid[requirement.id] = False
+    for chunk_id, members in grouped.items():
+        chunk = chunks.get(chunk_id)
+        if chunk is None or not chunk.citation_verified:
+            continue
+        sources: dict[str, list[Requirement]] = defaultdict(list)
+        locations: dict[object, list[Requirement]] = defaultdict(list)
+        for requirement in members:
+            if chunk.task_id != requirement.task_id or chunk.document_id != requirement.document_id:
+                continue
+            if requirement.page is not None:
+                if chunk.page == requirement.page and requirement.location is None:
+                    sources[chunk.text].append(requirement)
+            elif requirement.location and chunk.blocks:
+                locations[_citation_location_key(requirement.location)].append(requirement)
+        for block in chunk.blocks or []:
+            location = {key: value for key, value in block.items() if key != "text"}
+            for requirement in locations.get(_citation_location_key(location), ()):
+                if location == requirement.location:
+                    sources[block["text"]].append(requirement)
+        for original, located in sources.items():
+            spans = locate_spans(original, (row.quote for row in located), require_verbatim=True)
+            for requirement in located:
+                if spans[requirement.quote][0] is not None:
+                    valid[requirement.id] = True
+    return valid
 
 
 async def location_label(session: AsyncSession, requirement: Requirement) -> str:
@@ -864,6 +919,7 @@ class CardReadBatch:
             generation_manifests=generation_manifests,
             by_requirement={row.requirement_id: row for row in loaded_cards.values()},
             images=images,
+            _citations=citation_validity_batch(requirements, chunks),
         )
 
     def citation_valid(self, requirement: Requirement) -> bool:

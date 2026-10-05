@@ -50,10 +50,8 @@ async def load(session, actor, requirements, task_id, assessment_day):
             )
         )
     }
-    session.info["board_requirement_citations"] = {
-        row.id: response_cards.citation_valid_in_chunk(row, chunks.get(row.chunk_id))
-        for row in requirements
-    }
+    citations = response_cards.citation_validity_batch(requirements, chunks)
+    session.info["board_requirement_citations"] = citations
     pairs = list(
         await session.execute(
             select(ResponseCard, ResponseCardRevision)
@@ -329,9 +327,7 @@ async def load(session, actor, requirements, task_id, assessment_day):
         eligibility = response_cards.card_eligibility(
             revision,
             requirement,
-            valid_citation=response_cards.citation_valid_in_chunk(
-                requirement, chunks.get(requirement.chunk_id)
-            ),
+            valid_citation=citations[requirement.id],
             generation_stale=generation_stale,
             invalid_image=invalid_image,
             inactive_evidence=any(not entry["active_selection"] for entry in evidence),

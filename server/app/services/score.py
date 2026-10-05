@@ -102,6 +102,7 @@ async def require_dependencies(session: AsyncSession, actor: Identity, row: Scor
             )
         )
     }
+    citations = cards.citation_validity_batch(requirements.values(), chunks)
     for entry in row.input_manifest["requirements"]:
         requirement = requirements.get(UUID(entry["requirement_id"]))
         chunk = chunks.get(UUID(entry["chunk_id"]))
@@ -115,7 +116,7 @@ async def require_dependencies(session: AsyncSession, actor: Identity, row: Scor
         ):
             raise not_found()
         if (
-            not cards.citation_valid_in_chunk(requirement, chunk)
+            not citations[requirement.id]
             or drafts.digest(cards.source(requirement)) != entry["source_sha256"]
             or drafts.digest(
                 {

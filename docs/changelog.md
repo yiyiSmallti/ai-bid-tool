@@ -8,6 +8,10 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-05: Team workflow slice 1
 
+- Batched board, response-card and scoring citation validation by bound source,
+  sharing exact/normalized searches while preserving verbatim, ambiguity and
+  Unicode-unit checks. Added a 300-page, 5,000-requirement board bound and frozen
+  predicate equivalence coverage; see [bulk citations](notes/docx-citations.md#how-it-works).
 - Corrected offline event production to derive missing org context only for the
   effective privileged database role, preserving strict runtime/direct-append
   checks. Fixed disabled-owner recovery autoflush and released task locks during

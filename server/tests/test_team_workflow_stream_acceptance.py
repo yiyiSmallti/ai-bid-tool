@@ -13,15 +13,17 @@ from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from pathlib import Path
+from time import perf_counter
 from uuid import UUID, uuid4
 
 import pytest
 from app.core.security import TokenSigner
 from app.models.entities import Chunk, Document, Job, Requirement
-from app.services import task_events, task_workflow
+from app.services import extraction, task_events, task_workflow
 from app.services.auth import ROLE_SCOPES, authenticate, set_actor_context
 from sqlalchemy import event, insert, text
 from sqlalchemy.orm import Session
+from test_citation_batch_equivalence import synthetic_page_sources
 from test_team_workflow_membership import add_member, new_task, person
 
 ARTIFACTS = Path(__file__).resolve().parents[2] / "data/work/team-workflow-acceptance/stream"
@@ -40,12 +42,16 @@ def artifact(name, value):
     destination.write_text(json.dumps(value, indent=2, default=str) + "\n")
 
 
-async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0):
+async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0, chunk_count=1):
     """Create ownership through the API, then persist a synthetic saved extraction."""
     task_id = UUID(await new_task(api, headers[tenant]))
     org, user = tenants["orgs"][tenant], tenants["users"][tenant]
-    document_id, chunk_id, job_id = uuid4(), uuid4(), uuid4()
-    quotes = [f"Synthetic located requirement {i:05d}." for i in range(count)]
+    document_id, job_id = uuid4(), uuid4()
+    chunk_ids = [uuid4() for _ in range(chunk_count)]
+    chunk_id = chunk_ids[0]
+    quotes, source_pages = synthetic_page_sources(
+        count, chunk_count, characters=6000 if chunk_count > 1 else 0
+    )
     requirement_ids = [uuid4() for _ in range(count)]
     with Session(admin_engine) as session, session.begin():
         session.execute(
@@ -67,22 +73,23 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0):
                 sha256=sha256(str(task_id).encode()).hexdigest(),
                 storage_key=f"org/{org}/synthetic-extraction/{document_id}.pdf",
                 media_type="application/pdf",
-                page_count=1,
+                page_count=chunk_count,
                 status="parsed",
                 citation_mode="page",
             )
         )
         session.flush()
-        session.add(
+        session.add_all(
             Chunk(
-                id=chunk_id,
+                id=source_id,
                 org_id=org,
                 task_id=task_id,
                 document_id=document_id,
-                page=1,
-                seq=1,
-                text="\n".join(quotes) or "Synthetic empty extraction source.",
+                page=page + 1,
+                seq=page + 1,
+                text=source_pages[page],
             )
+            for page, source_id in enumerate(chunk_ids)
         )
         session.add(
             Job(
@@ -112,8 +119,8 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0):
                         "org_id": org,
                         "task_id": task_id,
                         "document_id": document_id,
-                        "chunk_id": chunk_id,
-                        "page": 1,
+                        "chunk_id": chunk_ids[i % chunk_count],
+                        "page": i % chunk_count + 1,
                         "quote": quote,
                         "text": quote,
                         "category": "technical" if i % 2 == 0 else "qualification",
@@ -130,6 +137,9 @@ async def seed_scope(api, headers, tenants, admin_engine, *, count=0, tenant=0):
         "task_id": task_id,
         "document_id": document_id,
         "chunk_id": chunk_id,
+        "chunk_ids": chunk_ids,
+        "chunk_count": chunk_count,
+        "source_characters": sum(map(len, source_pages)),
         "job_id": job_id,
         "user_id": user,
         "count": count,
@@ -190,7 +200,25 @@ def is_auth_statement(statement):
 async def test_board_complete_bounds_and_query_plan(
     api, headers, tenants, admin_engine, application, count
 ):
-    scope = await seed_scope(api, headers, tenants, admin_engine, count=count)
+    await assert_board_complete_bounds_and_query_plan(
+        api, headers, tenants, admin_engine, application, count=count
+    )
+
+
+async def test_board_5000_requirements_across_300_realistic_page_chunks(
+    api, headers, tenants, admin_engine, application
+):
+    await assert_board_complete_bounds_and_query_plan(
+        api, headers, tenants, admin_engine, application, count=5000, chunk_count=300
+    )
+
+
+async def assert_board_complete_bounds_and_query_plan(
+    api, headers, tenants, admin_engine, application, *, count, chunk_count=1
+):
+    scope = await seed_scope(
+        api, headers, tenants, admin_engine, count=count, chunk_count=chunk_count
+    )
     statements = []
 
     def capture(connection, cursor, statement, parameters, context, executemany):
@@ -198,6 +226,8 @@ async def test_board_complete_bounds_and_query_plan(
         statements.append(statement)
 
     event.listen(application.state.db.engine.sync_engine, "before_cursor_execute", capture)
+    extraction.normalized_spans.cache_clear()
+    started = perf_counter()
     try:
         response = await api.get(
             f"/tasks/{scope['task_id']}/board",
@@ -205,25 +235,40 @@ async def test_board_complete_bounds_and_query_plan(
             params={"extraction_job_id": str(scope["job_id"]), "limit": 100},
         )
     finally:
+        api_elapsed_seconds = perf_counter() - started
         event.remove(application.state.db.engine.sync_engine, "before_cursor_execute", capture)
+    artifact_name = f"board-{count}" + (f"-chunks-{chunk_count}" if chunk_count > 1 else "")
+    artifact(
+        f"{artifact_name}.json",
+        {
+            "fixture": scope,
+            "status": response.status_code,
+            "api_elapsed_seconds": api_elapsed_seconds,
+            "database_backed_api_executed": True,
+        },
+    )
     if count > 5000:
         assert response.status_code == 422, response.text
         assert response.json()["data"]["error"]["code"] == "board_limit_exceeded"
         assert response.json()["items"] == []
         artifact(
-            f"board-{count}.json",
+            f"{artifact_name}.json",
             {
                 "fixture": scope,
                 "status": response.status_code,
                 "error": response.json()["data"]["error"]["code"],
+                "api_elapsed_seconds": api_elapsed_seconds,
+                "database_backed_api_executed": True,
             },
         )
         return
     assert response.status_code == 200, response.text
+    assert api_elapsed_seconds <= 2, f"Board API took {api_elapsed_seconds:.3f}s"
     payload = response.json()
     assert len(response.content) <= 1024 * 1024
     assert payload["data"]["counts"]["total"] == count
     assert payload["data"]["counts"]["gap"] == count
+    assert all("invalid_citation" not in item["blockers"] for item in payload["items"])
     assert sum(v for k, v in payload["data"]["counts"].items() if k != "total") == count
     assert payload["data"]["matching"] == count
     assert payload["data"]["returned"] == min(count, 100)
@@ -231,6 +276,18 @@ async def test_board_complete_bounds_and_query_plan(
     assert bool(payload["data"]["next_cursor"]) == (count > 100)
     projection = [s for s in statements if not is_auth_statement(s)]
     assert len(projection) <= 20, f"{len(projection)} projection SQL statements"
+    invalid = await api.get(
+        f"/tasks/{scope['task_id']}/board",
+        headers=headers[0],
+        params={
+            "extraction_job_id": str(scope["job_id"]),
+            "limit": 100,
+            "blocker": "invalid_citation",
+        },
+    )
+    assert invalid.status_code == 200, invalid.text
+    assert invalid.json()["data"]["matching"] == 0
+    assert invalid.json()["items"] == []
     plan = None
     if count == 5000:
         async with authenticated(application, headers[0]) as (session, _):
@@ -249,7 +306,7 @@ async def test_board_complete_bounds_and_query_plan(
             ).scalar_one()
         assert plan[0]["Plan"]["Actual Rows"] == 5000
     artifact(
-        f"board-{count}.json",
+        f"{artifact_name}.json",
         {
             "fixture": scope,
             "status": response.status_code,
@@ -259,6 +316,9 @@ async def test_board_complete_bounds_and_query_plan(
             "projection_sql_count": len(projection),
             "projection_sql": projection,
             "requirements_plan": plan,
+            "api_elapsed_seconds": api_elapsed_seconds,
+            "database_backed_api_executed": True,
+            "invalid_citation_matching": invalid.json()["data"]["matching"],
         },
     )
 
