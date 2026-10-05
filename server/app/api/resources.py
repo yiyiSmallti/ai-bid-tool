@@ -293,7 +293,7 @@ def create_router(
     async def certificate_file_add(
         certificate_id: UUID,
         metadata: str = Form(...),
-        file: UploadFile = File(...),
+        file: list[UploadFile] = File(...),
         ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
@@ -307,17 +307,26 @@ def create_router(
             raise ServiceError(
                 "invalid_input", "Invalid certificate file metadata", 422, 2
             ) from None
+        # One limit for all files together, as they become one original.
         limit = min(settings.max_upload_bytes, certificate_files.MAX_FILE_BYTES)
-        content = await file.read(limit + 1)
-        if len(content) > limit:
-            raise ServiceError("file_too_large", "File exceeds upload limit", 413, 2)
-        descriptor = await asyncio.to_thread(
-            certificate_files.validate_file, content, file.filename or ""
+        uploads, total = [], 0
+        for upload in file[: certificate_files.MAX_PARTS + 1]:
+            content = await upload.read(limit - total + 1)
+            total += len(content)
+            if total > limit:
+                raise ServiceError("file_too_large", "Files exceed upload limit", 413, 2)
+            uploads.append((upload.filename or "", content))
+        if len(file) > certificate_files.MAX_PARTS:
+            raise certificate_files.invalid(
+                f"Upload between 1 and {certificate_files.MAX_PARTS} files"
+            )
+        descriptor, content, parts = await asyncio.to_thread(
+            certificate_files.compose, uploads, body.parts, body.data.name
         )
         return result(
             "resource certificate file add",
             await certificate_files.create_file(
-                session, actor, certificate_id, body, descriptor, content, storage
+                session, actor, certificate_id, body, descriptor, content, storage, parts
             ),
             warnings=certificate_files.WARNINGS,
         )

@@ -430,14 +430,17 @@ Write `{{secret.bid_total}}` in a card's response text where the value belongs.
 `list` reports `missing` fields; a final export with a missing value is refused.
 The rules are in [confidential-values.md](../notes/confidential-values.md).
 
-## Attach certificate PDF originals
+## Attach certificate originals
 
 A file revision carries the complete certificate data, `expected_revision`,
-and one readable, unencrypted PDF. Limits are in
+and one or more readable PDF, PNG or JPEG files. Several files, or a rotation,
+are composed into one PDF original in the order given; `parts` in the input
+(one `{"rotation": 90}` per file) turns a file's pages clockwise. Limits are in
 [certificate_files.py](../../server/app/services/certificate_files.py).
 
 ```sh
 bid --mode local --state SESSION_FILE resource certificate file add --id CERTIFICATE_ID --input FILE_REVISION.json --file ORIGINAL.pdf --json
+bid --mode local --state SESSION_FILE resource certificate file add --id CERTIFICATE_ID --input FILE_REVISION.json --file FRONT.jpg --file BACK.png --json
 bid --mode local --state SESSION_FILE resource certificate file list --id CERTIFICATE_ID --history --json
 bid --mode local --state SESSION_FILE task certificate file list --task TASK_ID --history --json
 bid --mode local --state SESSION_FILE resource certificate file download --revision CERTIFICATE_REVISION_UUID --output NEW_FILE.pdf --json

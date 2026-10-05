@@ -1,4 +1,4 @@
-# Certificate PDF originals bound to immutable revisions
+# Certificate originals bound to immutable revisions
 
 ## Problem
 
@@ -10,11 +10,14 @@ retaining a PDF does not authenticate the certificate or establish eligibility.
 ## Usage
 
 Create the existing certificate declaration first. The new file-add command takes
-complete CertificateFileCreate metadata, expected_revision and one original PDF.
+complete CertificateFileCreate metadata, expected_revision and one or more files:
+PDF, PNG or JPEG, in page order, with an optional rotation per file. In the console
+the 证照与附件 section of 单位资料 does the same with drag-and-drop, thumbnails,
+reordering and rotation.
 It creates a new declaration revision and file together. Explicitly select that
 revision for a task; repeating the same selection returns the saved snapshot.
 Metadata-only updates still create revisions without files. Download an exact
-revision UUID to a new path using the commands in [cli.md](../guides/cli.md#attach-certificate-pdf-originals).
+revision UUID to a new path using the commands in [cli.md](../guides/cli.md#attach-certificate-originals).
 
 ## How it works
 
@@ -47,13 +50,38 @@ identity, membership and file-read permission. Server and CLI verify length/SHA;
 CLI permits only the matching own-service route, no redirects, and atomically
 creates a 0600 nonsymlink output without overwriting any existing file.
 
+### Composed originals
+
+A single unrotated PDF is stored unchanged, as before. Otherwise `compose` in
+[certificate_files.py](../../server/app/services/certificate_files.py) builds one
+PDF in upload order and stores that as the original, named after the
+certificate. Each image becomes one page: its header dimensions are checked
+(at most 40 megapixels) before any pixel is decoded, MuPDF applies the EXIF
+orientation, and the pixels are re-encoded so EXIF, GPS and other metadata never
+reach the original or its previews. The page's longer side is that of A4, so
+previews render photos and scans alike. A requested rotation turns the file's
+pages clockwise. Every page, evidence source, preview and export attachment then
+works on the composed PDF exactly as on an uploaded one.
+
+Migration 0031 keeps each uploaded file unchanged and encrypted in
+`certificate_file_parts`, with its ordinal, type, hash, size, page range and
+rotation. A trigger like the file's own allows parts only in the transaction that
+created the original, so a committed original never gains, loses or swaps a
+part. File views list the parts; there is no separate part download.
+
+Image pages carry no text layer, so drafting reports them as
+`page_text_unavailable` and never sends the image to a model.
+
 ## Pitfalls
 
 PDF validation requires readable, unrepaired, unencrypted 1–200-page PDF bytes,
 a safe .pdf name and at most 40 MiB (or the server's lower upload limit). PyMuPDF
 checks page rectangles; no PDF actions/JavaScript or external URLs are executed.
 This is not a comprehensive malware scan, OCR, authenticity or metadata-matching
-check. PNG/JPEG and multiple attachments are not supported.
+check. Up to 20 files and 40 MiB together; GIF, HEIC and other formats are refused,
+as is a file whose content does not match its extension. JPEG pages are
+re-encoded at quality 92, so they are not bit-identical to the upload; the
+unchanged upload is the part.
 
 The transaction guard deliberately fails closed for a revision inserted inside a
 savepoint whose subtransaction xmin differs from the top-level transaction. The
@@ -68,7 +96,8 @@ is refused. Do not treat raw-original download as bid export or evidence approva
 - Schemas: server/app/schemas/certificate_file_contracts.py
 - Service: server/app/services/certificate_files.py
 - API/CLI: server/app/api/resources.py; cli/bid_cli/main.py; cli/bid_cli/client.py
-- Migration: server/migrations/versions/0008_certificate_files.py
-- Tests: server/tests/test_certificate_files.py; test_certificate_file_client.py;
+- Migration: server/migrations/versions/0008_certificate_files.py; 0031_certificate_file_parts.py
+- Console: web/src/components/CertificateSection.vue
+- Tests: server/tests/test_certificate_files.py; test_certificate_images.py; test_certificate_file_client.py;
   test_resource_rls.py; test_cli_snapshots.py; test_runtime_integration.py
 - Real storage smoke: scripts/container_smoke.py
