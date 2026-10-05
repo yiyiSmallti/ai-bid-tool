@@ -3,10 +3,59 @@
 import re
 import unicodedata
 from collections import Counter
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 
-RULE_VERSION = "bid-redaction-v2"
+RULE_VERSION = "bid-redaction-v3"
 KINDS = ("amount", "contact", "identity", "bank_account")
 PLACEHOLDER = re.compile(r"\[REDACTED_[A-Z_]+\]")
+# A confidential field reference. Cards keep it; only an export fills in the value.
+SECRET_PLACEHOLDER = re.compile(r"\{\{secret\.([a-z][a-z0-9_]{1,47})\}\}")
+NUMERIC_KINDS = {"identity", "bank_account", "contact"}
+
+
+def secret_placeholder(key: str) -> str:
+    return "{{secret." + key + "}}"
+
+
+def secret_keys(text: str | None) -> list[str]:
+    return SECRET_PLACEHOLDER.findall(text or "")
+
+
+def fill_secrets(text: str, values: Mapping[str, str], labels: Mapping[str, str]) -> str:
+    """Replace each reference with its value, or a visible 【label】 when it has none."""
+    return SECRET_PLACEHOLDER.sub(
+        lambda match: values.get(match[1]) or "【" + labels.get(match[1], match[1]) + "】", text
+    )
+
+
+@dataclass(frozen=True)
+class LibraryValue:
+    key: str
+    pattern: re.Pattern[str]
+
+
+def library_value(key: str, kind: str, value: str) -> LibraryValue | None:
+    """How a stored value is found in outbound text, or None when it is too short to
+    find without also replacing unrelated text (for example "100" or a single character)."""
+    text = unicodedata.normalize("NFKC", value).strip()
+    compact = re.sub(r"[\s\-]", "", text)
+    if kind in NUMERIC_KINDS and re.fullmatch(r"\+?[\dXx*()]+", compact):
+        if sum(char.isdigit() for char in compact) < 4:
+            return None
+        body = r"[ \-]?".join(re.escape(char) for char in compact)
+        return LibraryValue(key, re.compile(rf"(?<![\dA-Za-z]){body}(?![\dA-Za-z])", re.I))
+    if kind == "amount" and re.fullmatch(r"[\d,]+(?:\.\d+)?", compact):
+        whole, _, fraction = compact.replace(",", "").partition(".")
+        if len(whole + fraction) < 4:
+            return None
+        body = "[,]?".join(re.escape(char) for char in whole)
+        body += r"\." + re.escape(fraction) if fraction else ""
+        return LibraryValue(key, re.compile(rf"(?<![\d.]){body}(?!\d|\.\d)"))
+    if len(text) < 2:
+        return None
+    return LibraryValue(key, re.compile(re.escape(text)))
+
 
 # Match on NFKC text, mapping offsets back to the untouched original. A label
 # alone is not a hit: identity, account and phone values must be number-shaped,
@@ -101,49 +150,93 @@ RULES = (
 )
 
 
-def redact(value: str, enabled: bool) -> tuple[str, dict[str, int]]:
-    counts = Counter({kind: 0 for kind in KINDS})
+def redact(
+    value: str, enabled: bool, library: Sequence[LibraryValue] = ()
+) -> tuple[str, dict[str, int]]:
+    """Mask `value` for a vendor. Registered confidential values become their
+    `{{secret.key}}` placeholder; the pattern rules mask the rest as `[REDACTED_…]`.
+    Counts cover both, the placeholders under "confidential"."""
+    counts = Counter({kind: 0 for kind in (*KINDS, "confidential")})
     normalized, offsets = [], []
     for index, char in enumerate(value):
         part = unicodedata.normalize("NFKC", char)
         normalized.append(part)
         offsets.extend([index] * len(part))
     text = "".join(normalized)
+
+    def original(start: int, end: int) -> tuple[int, int]:
+        return offsets[start], offsets[end - 1] + 1
+
+    # Longest registered value first, so a stored account number wins over a stored
+    # suffix of it; a later value never overlaps one already placed.
+    secrets: list[tuple[int, int, str]] = []
+    candidates = sorted(
+        (
+            (match.start(), match.end(), item.key)
+            for item in library
+            for match in item.pattern.finditer(text)
+            if match.end() > match.start()
+        ),
+        key=lambda found: (found[0] - found[1], found[0]),
+    )
+    for start, end, key in candidates:
+        if all(end <= other_start or start >= other_end for other_start, other_end, _ in secrets):
+            secrets.append((start, end, key))
+            counts["confidential"] += 1
+    secrets = [(*original(start, end), key) for start, end, key in sorted(secrets)]
     matches: list[tuple[int, int, str]] = []
     for kind, pattern in RULES:
         for match in pattern.finditer(text):
             start, end = match.span("value") if "value" in pattern.groupindex else match.span()
             if start == end:
                 continue
-            start, end = offsets[start], offsets[end - 1] + 1
+            start, end = original(start, end)
             # Union overlapping detections: a broad labelled value must not leave
             # a sensitive suffix exposed because a numeric sub-pattern matched first.
             counts[kind] += 1
-            matches.append((start, end, kind))
+            # A rule hit on a registered value keeps only the parts outside it, so a
+            # label rule cannot mask the placeholder or expose what surrounds it.
+            for secret_start, secret_end, _ in secrets:
+                if start < secret_end and secret_start < end:
+                    if start < secret_start:
+                        matches.append((start, secret_start, kind))
+                    start = max(start, secret_end)
+            if start < end:
+                matches.append((start, end, kind))
     if not enabled:
         return value, dict(counts)
     merged: list[tuple[int, int, set[str]]] = []
     for start, end, kind in sorted(matches):
+        while start < end and value[start].isspace():
+            start += 1
+        while end > start and value[end - 1].isspace():
+            end -= 1
+        if start == end:
+            continue
         if merged and start < merged[-1][1]:
             old_start, old_end, kinds = merged[-1]
             merged[-1] = old_start, max(end, old_end), kinds | {kind}
         else:
             merged.append((start, end, {kind}))
+    spans = [
+        (start, end, "[REDACTED_" + "_".join(sorted(kinds)).upper() + "]")
+        for start, end, kinds in merged
+    ] + [(start, end, secret_placeholder(key)) for start, end, key in secrets]
     parts, cursor = [], 0
-    for start, end, kinds in merged:
-        parts.extend((value[cursor:start], "[REDACTED_" + "_".join(sorted(kinds)).upper() + "]"))
+    for start, end, replacement in sorted(spans):
+        parts.extend((value[cursor:start], replacement))
         cursor = end
     parts.append(value[cursor:])
     return "".join(parts), dict(counts)
 
 
-def redact_tree(value, enabled: bool):
+def redact_tree(value, enabled: bool, library: Sequence[LibraryValue] = ()):
     """Mask every string leaf, including document location labels and section paths."""
-    counts = Counter({kind: 0 for kind in KINDS})
+    counts = Counter({kind: 0 for kind in (*KINDS, "confidential")})
 
     def visit(item):
         if isinstance(item, str):
-            sent, hits = redact(item, enabled)
+            sent, hits = redact(item, enabled, library)
             counts.update(hits)
             return sent
         if isinstance(item, dict):

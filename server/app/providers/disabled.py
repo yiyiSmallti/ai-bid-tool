@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from uuid import UUID
 
 from app.providers.base import ProviderFailure
@@ -17,5 +18,7 @@ class DisabledLLM:
             "No organization provider or enabled platform default model is configured."
         )
 
-    async def draft(self, requirements: list[dict], materials: list[dict]) -> DraftingOutput:
+    async def draft(
+        self, requirements: list[dict], materials: list[dict], fields: Sequence[dict] = ()
+    ) -> DraftingOutput:
         raise ProviderFailure("No approved drafting model is configured")

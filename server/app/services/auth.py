@@ -134,12 +134,17 @@ ROLE_SCOPES = {
 }
 
 SCOPES.update({"screenshot:read", "screenshot:write"})
+# confidential:write and confidential:reveal are deliberately absent from SCOPES:
+# tokens and agents can name a confidential field but never set or read its value.
+SCOPES.add("confidential:read")
 
 for _role, _scopes in ROLE_SCOPES.items():
     _scopes.update({"provider:read", "screenshot:read"})
     if _role != "viewer":
         _scopes.update({"screenshot:write", "screenshot:ingest"})
-    _scopes.update({"card:read", "draft:read", "sandbox:read"})
+    _scopes.update({"card:read", "draft:read", "sandbox:read", "confidential:read"})
+    if _role in {"admin", "bidder"}:
+        _scopes.update({"confidential:write", "confidential:reveal"})
     if _role != "viewer":
         _scopes.update(
             {

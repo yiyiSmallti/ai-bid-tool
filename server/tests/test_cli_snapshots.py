@@ -1,4 +1,5 @@
 import hashlib
+import io
 import json
 from pathlib import Path
 
@@ -634,6 +635,34 @@ PLATFORM_AUDIT = {
 }
 
 
+CONFIDENTIAL_FIELD = {
+    "id": IDENTIFIER,
+    "key": "bid_total",
+    "placeholder": "{{secret.bid_total}}",
+    "label": "投标总价",
+    "kind": "amount",
+    "scope": "task",
+    "archived": False,
+    "revision": 1,
+    "created_at": "2026-10-01T00:00:00+00:00",
+}
+CONFIDENTIAL_VALUE = {
+    "field_id": IDENTIFIER,
+    "key": "bid_total",
+    "placeholder": "{{secret.bid_total}}",
+    "label": "投标总价",
+    "kind": "amount",
+    "scope": "task",
+    "task_id": IDENTIFIER,
+    "status": "filled",
+    "value_id": IDENTIFIER_2,
+    "version": 1,
+    "tail": None,
+    "set_by": IDENTIFIER,
+    "set_at": "2026-10-01T00:00:00+00:00",
+}
+
+
 async def fake_request(self, method, path, **kwargs):
     # Contract fixtures only: no real service, provider or user data is involved.
     data, items, warnings = {}, [], []
@@ -641,6 +670,30 @@ async def fake_request(self, method, path, **kwargs):
         data = {"session": "synthetic-fixture-session", "org_id": IDENTIFIER, "expires_in": 3600}
     elif path == "/org/current":
         data = {"org_id": IDENTIFIER, "role": "admin"}
+    elif path == "/confidential-fields":
+        if method == "POST":
+            assert kwargs["json"] == {
+                "key": "bid_total",
+                "label": "投标总价",
+                "kind": "amount",
+                "scope": "task",
+            }
+            data = CONFIDENTIAL_FIELD
+        else:
+            data, items = {"count": 1}, [CONFIDENTIAL_FIELD]
+    elif path == f"/confidential-fields/{IDENTIFIER}/revisions":
+        assert kwargs["json"] == {"expected_revision": 1, "label": "合同总价"}
+        data = {**CONFIDENTIAL_FIELD, "label": "合同总价", "revision": 2}
+    elif path == f"/confidential-fields/{IDENTIFIER}/values":
+        if method == "POST":
+            # The value travels in the request body only and is never echoed back.
+            assert kwargs["json"] == {"value": "Synthetic value", "task_id": IDENTIFIER}
+            data = CONFIDENTIAL_VALUE
+        else:
+            data, items = {"count": 1}, [CONFIDENTIAL_VALUE]
+    elif path == "/confidential-values":
+        data = {"task_id": IDENTIFIER, "missing": 0}
+        items = [CONFIDENTIAL_VALUE]
     elif path == "/platform/auth/login":
         data = {
             "session": "synthetic-fixture-session",
@@ -1565,6 +1618,22 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "platform card void": ["platform", "card", "void", "--id", IDENTIFIER],
         "billing balance": ["billing", "balance"],
         "billing redeem": ["billing", "redeem"],
+        "confidential field add": [
+            "confidential", "field", "add", "--key", "bid_total", "--label", "投标总价",
+            "--kind", "amount", "--scope", "task",
+        ],
+        "confidential field list": ["confidential", "field", "list"],
+        "confidential field update": [
+            "confidential", "field", "update", "--key", "bid_total",
+            "--expected-revision", "1", "--label", "合同总价",
+        ],
+        "confidential set": [
+            "confidential", "set", "--key", "bid_total", "--task", IDENTIFIER, "--value-stdin",
+        ],
+        "confidential list": ["confidential", "list", "--task", IDENTIFIER],
+        "confidential history": [
+            "confidential", "history", "--key", "bid_total", "--task", IDENTIFIER,
+        ],
         "schema": ["schema"],
     }  # fmt: skip
     actual = {}
@@ -1578,6 +1647,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "job wait",
     }
     for name, args in commands.items():
+        if name == "confidential set":
+            monkeypatch.setattr("sys.stdin", io.StringIO("Synthetic value\n"))
         try:
             main([*common, *args, "--json"])
         except SystemExit as error:
@@ -1593,6 +1664,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         assert "synthetic-fixture-token" not in json.dumps(body)
         assert "SYNT-HETI-CFIX-TURE" not in json.dumps(body)
         assert "synthetic-fixture-session" not in json.dumps(body)
+        assert "Synthetic value" not in json.dumps(body)
         actual[name] = body
     snapshot = Path(__file__).with_name("snapshots") / "cli-v1.json"
     import os

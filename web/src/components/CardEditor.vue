@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { actorKinds, confirmAction, simulatedSelections, deviations, display, dispositions, domains, downloadOriginal, eligibilities, errorText, formatTime, label, locationLabel, materialKinds, mine, orgAccess, orgRequest, quoteChecks, responseKinds, states, statusTag } from "../org.js";
 import DocumentPreview from "./DocumentPreview.vue";
 import MaterialPanel from "./MaterialPanel.vue";
+import SecretTextEditor from "./SecretTextEditor.vue";
 import SourcePreview from "./SourcePreview.vue";
 const props = defineProps({ row: Object, taskId: String, jobId: String, documentName: String });
 const emit = defineEmits(["updated", "dirty", "next", "close", "materials"]);
@@ -11,6 +12,10 @@ const card = ref(null), content = ref(emptyContent()), baseline = ref(""), ready
 const reviewed = ref([]), warnings = ref([]), reason = ref(""), domain = ref("technical"), history = ref(null), sourceChunk = ref(null);
 const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kindKey = ref(0), marks = ref(new Set());
 simulatedSelections(props.taskId).then((value) => { marks.value = value; }).catch(() => {});
+// Confidential fields the response may name; the export fills their values.
+const secretFields = ref([]);
+orgRequest("GET", "/confidential-fields").then((result) => { secretFields.value = result.items; }).catch(() => {});
+const masked = (value) => /\[REDACTED_[A-Z_]+\]/.test(value ?? "");
 let active = true;
 const dirty = computed(() => ready.value && JSON.stringify(content.value) !== baseline.value);
 const displayedSource = computed(() => card.value?.source ?? props.row.source);
@@ -26,6 +31,7 @@ const confirmBlocker = computed(() => {
   if (conflict.value) return "修订已变化，请先处理修订冲突";
   if (invalid.value) return `${label(eligibilities, card.value.eligibility)}，不能确认`;
   if (!completeResponse.value) return "响应种类、正文、偏离和说明都需要填写，说明不能只写“满足”";
+  if (masked(card.value.content.response_text) || masked(card.value.content.deviation_note)) return "正文含 [REDACTED_…] 遮挡占位，请改用保密字段或写出原文";
   if (card.value.content.response_kind === "evidence" && !card.value.evidence.length) return "证据响应至少需要关联一项材料；没有材料时请标记“需补材料”或驳回";
   if (reviewed.value.length !== card.value.evidence.length) return `请逐项勾选已核对的材料（${reviewed.value.length} / ${card.value.evidence.length}）`;
   if (warnings.value.length !== card.value.warning_codes.length) return `请逐项勾选警示（${warnings.value.length} / ${card.value.warning_codes.length}）`;
@@ -179,14 +185,16 @@ onMounted(async () => {
               <el-radio-button value="commitment">{{ responseKinds.commitment }}</el-radio-button><el-radio-button value="evidence">{{ responseKinds.evidence }}</el-radio-button>
             </el-radio-group>
           </el-form-item>
-          <el-form-item label="响应正文"><el-input v-model="content.response_text" type="textarea" :disabled="!editable" maxlength="20000" :autosize="{ minRows: 4, maxRows: 14 }" /></el-form-item>
+          <el-form-item label="响应正文">
+            <SecretTextEditor v-model="content.response_text" :fields="secretFields" :disabled="!editable" label="响应正文" :maxlength="20000" @change="edit" />
+          </el-form-item>
           <el-form-item label="偏离">
             <el-radio-group v-model="content.deviation" :disabled="!editable" aria-label="偏离" @change="edit">
               <el-radio-button v-for="(text, key) in deviations" :key="key" :value="key">{{ text }}</el-radio-button>
             </el-radio-group>
           </el-form-item>
           <p v-if="content.deviation === 'negative'" class="notice danger">负偏离：将如实保留在响应与初稿中。</p>
-          <el-form-item label="对应关系或具体偏离说明"><el-input v-model="content.deviation_note" type="textarea" :disabled="!editable" maxlength="10000" :autosize="{ minRows: 2, maxRows: 8 }" /></el-form-item>
+          <el-form-item label="对应关系或具体偏离说明"><SecretTextEditor v-model="content.deviation_note" :fields="secretFields" :disabled="!editable" label="对应关系或具体偏离说明" :maxlength="10000" :rows="2" @change="edit" /></el-form-item>
           <ol v-if="content.evidence.length" class="candidates"><li v-for="(input, index) in content.evidence" :key="index"><span class="hint">{{ input.kind }} · {{ input.field_path ?? input.evidence_source_id }}</span><blockquote class="quote">{{ input.quote }}</blockquote><el-button v-if="editable" size="small" type="danger" link @click="content.evidence.splice(index, 1); edit()">移除候选材料 {{ index + 1 }}</el-button></li></ol>
           <div class="actions"><el-button v-if="editable" type="primary" native-type="submit" :loading="busy">保存草稿</el-button><span v-if="dirty" class="hint">有未保存编辑；保存和提交审阅是两个动作。</span></div>
         </el-form>

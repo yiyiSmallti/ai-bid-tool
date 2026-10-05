@@ -15,12 +15,13 @@ from uuid import UUID, uuid4
 from sqlalchemy import select, text
 
 from app.core.errors import ServiceError, not_found
+from app.core.security import Secrets
 from app.jobs.execution import JobExecution
 from app.models.entities import Job
 from app.models.exports import ExportRenderCandidate, ExportRun
 from app.providers.storage import Storage
 from app.schemas.contracts import Cost
-from app.services import evidence_sources, exports, screenshots, templates
+from app.services import confidential, evidence_sources, exports, screenshots, templates
 from app.services.auth import set_actor_context
 from app.services.versioned import audit
 
@@ -154,6 +155,14 @@ async def render(execution: JobExecution, storage: Storage) -> None:
                 run.input_hash,
                 run.manifest_hash,
             )
+            # Decrypted only into the private render directory, by the run's fixed rows.
+            confidential_values = {
+                entry["key"]: await confidential.value_text(
+                    session, UUID(entry["value_id"]), Secrets.for_data(execution.settings)
+                )
+                for entry in manifest.get("confidential", [])
+                if entry["value_id"] is not None
+            }
             template, _ = await templates.read_revision(
                 session, actor, run.template_revision_id, storage
             )
@@ -177,6 +186,7 @@ async def render(execution: JobExecution, storage: Storage) -> None:
         request = {
             "manifest": manifest,
             "pages": pages,
+            "confidential": confidential_values,
             "memory_bytes": settings.export_memory_bytes,
             "limits": {
                 "max_requirements": settings.export_max_requirements,
