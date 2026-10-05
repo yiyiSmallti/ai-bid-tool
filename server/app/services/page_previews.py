@@ -206,15 +206,25 @@ async def job_access(session: AsyncSession, actor: Identity, job: Job) -> None:
     await exports.get_export(session, actor, UUID(job.result["submission"]["export_id"]))
 
 
-async def show_export_preview(session: AsyncSession, actor: Identity, export_id: UUID) -> dict:
+async def show_export_preview(
+    session: AsyncSession, actor: Identity, export_id: UUID, storage: Storage
+) -> dict:
     actor, row = await exports.get_export(session, actor, export_id)
-    return preview_view(row, await current_job(session, row))
+    export = await exports.export_view(session, actor, row, storage)
+    view = {
+        **preview_view(row, await current_job(session, row)),
+        **{key: export[key] for key in ("validity", "issues", "invalidated_requirement_ids")},
+    }
+    if export["validity"] == "stale":
+        view.update(status="invalidated", page_count=None)
+    return view
 
 
 async def export_page(
     session: AsyncSession, actor: Identity, export_id: UUID, page: int, zoom: int, storage: Storage
 ) -> bytes:
     actor, row = await exports.get_export(session, actor, export_id)
+    actor, _ = await exports.download_gate(session, actor, row, storage)
     job = await current_job(session, row)
     preview = (job.result or {}).get("preview") if job is not None else None
     if job is None or job.status != "succeeded" or not preview:
