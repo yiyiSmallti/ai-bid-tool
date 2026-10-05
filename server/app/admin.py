@@ -108,6 +108,7 @@ def bootstrap(org_name: str, email: str):
 # Every column written with Secrets.encrypt. A new encrypted column must be added here.
 ENCRYPTED_COLUMNS = (
     ("card_generation_runs", "encrypted_input"),
+    ("confidential_values", "encrypted_value"),
     ("sandbox_inputs", "encrypted_source_url"),
     ("sandbox_fetch_receipts", "encrypted_request_metadata"),
 )

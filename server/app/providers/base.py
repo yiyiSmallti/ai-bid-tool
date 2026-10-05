@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from typing import TYPE_CHECKING, Protocol
 
 from app.schemas.contracts import LLMResult, OCRText, ProviderUsage
@@ -55,7 +56,9 @@ class LLMProvider(Protocol):
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult: ...
 
-    async def draft(self, requirements: list[dict], materials: list[dict]) -> "DraftingOutput": ...
+    async def draft(
+        self, requirements: list[dict], materials: list[dict], fields: Sequence[dict] = ()
+    ) -> "DraftingOutput": ...
 
 
 class OCRProvider(Protocol):

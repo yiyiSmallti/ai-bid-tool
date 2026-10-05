@@ -25,6 +25,7 @@ kind: readme
 - [tenant-isolation.md](notes/tenant-isolation.md)：RLS、单位上下文、文件隔离。
 - [response-cards.md](notes/response-cards.md)：人工响应卡片、证据确认、原子处置与三表初稿。
 - [model-drafting-redaction.md](notes/model-drafting-redaction.md)：模型起草输入快照、外发遮挡和双文本引用核验。
+- [confidential-values.md](notes/confidential-values.md)：保密字段、外发占位替换与导出时填入。
 - [background-jobs.md](notes/background-jobs.md)：作业状态、取消、重试。
 - [llm-providers.md](notes/llm-providers.md)：抽取与响应起草的模型调用、批次、错误与计费。
 - [docx-citations.md](notes/docx-citations.md)：Word 按章节、段落、表格单元格引用。

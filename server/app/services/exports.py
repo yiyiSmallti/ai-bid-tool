@@ -56,7 +56,15 @@ from app.schemas.export_contracts import (
     binding_is_current,
 )
 from app.schemas.response_card_contracts import EvidenceInput
-from app.services import drafts, evidence_sources, prototype_decisions, screenshots, templates
+from app.services import (
+    confidential,
+    drafts,
+    evidence_sources,
+    prototype_decisions,
+    redaction,
+    screenshots,
+    templates,
+)
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.versioned import audit
@@ -793,11 +801,60 @@ async def build_manifest(
         "issues": issues,
     }
     fixed["issues"].extend(await prototype_gate(session, actor, fixed))
+    used = await confidential_gate(session, task.id, body.mode, items)
+    if used is not None:
+        # Only present when a response names a field, so earlier runs keep their hash.
+        fixed["confidential"], gate = used
+        fixed["issues"].extend(gate)
     fixed["issues"] = sorted(
         {entry["issue_id"]: entry for entry in fixed["issues"]}.values(),
         key=lambda entry: entry["issue_id"],
     )
     return fixed
+
+
+async def confidential_gate(
+    session: AsyncSession, task_id: UUID, mode: str, items: list[dict]
+) -> tuple[list[dict], list[dict]] | None:
+    """The fields the responses name, fixed by value row ID; values stay encrypted."""
+    used: dict[str, list[str]] = {}
+    for item in items:
+        for name in ("response_text", "deviation_note"):
+            for key in redaction.secret_keys(item.get(name)):
+                used.setdefault(key, [])
+                if item["requirement_id"] not in used[key]:
+                    used[key].append(item["requirement_id"])
+    if not used:
+        return None
+    entries = await confidential.task_entries(session, task_id)
+    fields, issues = [], []
+    for key, requirements in sorted(used.items()):
+        entry = entries.get(key)
+        if entry is None:
+            issues.append(issue("confidential_field_unknown", "block", requirements=requirements))
+            continue
+        value = entry.value
+        fields.append(
+            {
+                "key": key,
+                "label": entry.field.label,
+                "scope": entry.field.scope,
+                "field_id": str(entry.field.id),
+                "status": "filled" if value else "missing",
+                "value_id": str(value.id) if value else None,
+                "tail": value.tail if value else None,
+            }
+        )
+        if value is None and mode == "final_section":
+            issues.append(
+                issue(
+                    "confidential_value_missing",
+                    "block",
+                    requirements=requirements,
+                    revision=str(entry.field.id),
+                )
+            )
+    return fields, issues
 
 
 def preview(fixed: dict) -> dict:
@@ -818,6 +875,7 @@ def preview(fixed: dict) -> dict:
             "negative_count": sum(row.get("deviation") == "negative" for row in items),
             "attachment_pages": len(fixed["attachments"]),
             "issues": fixed["issues"],
+            "confidential": fixed.get("confidential", []),
             "estimated_cost": Cost(),
         }
     ).model_dump(mode="json")

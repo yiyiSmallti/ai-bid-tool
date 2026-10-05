@@ -53,6 +53,7 @@ from app.services.template_files import read_template
 from pydantic import ValidationError
 
 from bid_cli.client import Client, State, new_output_path, save_download
+from bid_cli.confidential import register as register_confidential_commands
 from bid_cli.export import app as export_app
 from bid_cli.providers import app as provider_app
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
@@ -1523,6 +1524,7 @@ def main(args: list[str] | None = None):
 
 
 register_screenshot_commands(app)
+register_confidential_commands(app)
 
 
 if __name__ == "__main__":

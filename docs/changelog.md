@@ -6,6 +6,18 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-04：保密字段与导出时填入
+
+- 新增保密字段：报价、证件号、银行账号、联系人、电话等登记为字段，值加密、只增不改（迁移 `0030`）。`org` 字段全单位
+  一个值，`task` 字段每个任务一个值。只有 admin、bidder 的登录会话能设值和查看完整值，查看记审计；令牌永不获得
+  `confidential:write`、`confidential:reveal`。
+- 起草时登记值换成 `{{secret.<key>}}` 再外发，请求附占位符清单，提示词 `card-draft-v3`、遮挡规则 `bid-redaction-v3`；
+  旧版本提交的起草作业以 `generation_rules_changed` 停止。卡片引用未知或已归档字段被拒绝，含 `[REDACTED_…]` 的卡片
+  不能确认。
+- 导出按固定的值行填入占位符：正式件缺值被 `confidential_value_missing` 阻止，审阅件缺值显示“【名称】”，提交后改值
+  需重新提交。控制台新增“保密字段”页、任务页“报价与保密信息”和卡片编辑器的插入按钮；CLI 新增 `bid confidential`。
+  机制见 [confidential-values.md](notes/confidential-values.md)。
+
 ## 2026-10-04：外发遮挡不再误伤招标原文
 
 - 外发遮挡规则升为 `bid-redaction-v2`：标签字样本身不再触发遮挡。身份证、账号、电话后须跟号码形态的值，联系人

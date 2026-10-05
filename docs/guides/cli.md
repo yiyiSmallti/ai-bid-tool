@@ -411,6 +411,25 @@ compliance state and attachment numbers. `provenance` returns who confirmed what
 the evidence and resource revisions, and the hashes, numbered as in the document.
 A binding with `current: false` predates the four-column layout; create a new one.
 
+## Keep confidential values out of the model
+
+An admin or bidder registers each value once; drafts and cards use its
+placeholder, and exports fill it in. `--scope task` fields take a value per task.
+Values are read from stdin only and never printed.
+
+```sh
+bid confidential field add --key bid_total --label 投标总价 --kind amount --scope task --json
+bid confidential field add --key bank_account --label 银行账号 --kind bank_account --scope org --json
+printf '%s' "$VALUE" | bid confidential set --key bid_total --task TASK_ID --value-stdin --json
+bid confidential list --task TASK_ID --json
+bid confidential history --key bid_total --task TASK_ID --json
+bid confidential field update --key bank_account --expected-revision 1 --archived --json
+```
+
+Write `{{secret.bid_total}}` in a card's response text where the value belongs.
+`list` reports `missing` fields; a final export with a missing value is refused.
+The rules are in [confidential-values.md](../notes/confidential-values.md).
+
 ## Attach certificate PDF originals
 
 A file revision carries the complete certificate data, `expected_revision`,

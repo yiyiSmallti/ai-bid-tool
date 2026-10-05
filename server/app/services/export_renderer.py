@@ -31,6 +31,8 @@ from docx.oxml.ns import qn
 from docx.shared import Emu, Pt, RGBColor
 from lxml import etree  # pyright: ignore[reportAttributeAccessIssue]
 
+from app.services import redaction
+
 SECTIONS = (
     "substantive",
     "commercial",
@@ -915,6 +917,30 @@ def _validate_manifest(
     return template, items, attachments
 
 
+def _fill_confidential(
+    manifest: Mapping[str, object], items: list[Mapping[str, Any]], values: Mapping[str, str]
+) -> list[Mapping[str, Any]]:
+    fields = [
+        _mapping(entry, "confidential[]")
+        for entry in _sequence(manifest.get("confidential", []), "confidential")
+    ]
+    labels = {str(entry["key"]): str(entry["label"]) for entry in fields}
+    filled = {str(entry["key"]) for entry in fields if entry.get("value_id") is not None}
+    if set(values) != filled:
+        _fail("invalid_export_manifest", "Confidential values do not match the fixed fields")
+    return [
+        {
+            **item,
+            **{
+                name: redaction.fill_secrets(item[name], values, labels)
+                for name in ("response_text", "deviation_note")
+                if isinstance(item.get(name), str)
+            },
+        }
+        for item in items
+    ]
+
+
 def _find_anchor_paragraphs(document: DocumentObject) -> dict[str, tuple[Any, int]]:
     found: dict[str, tuple[Any, int]] = {}
     section_index = 0
@@ -1494,8 +1520,12 @@ def render_export_docx(
     inputs: AuthorizedExportInputs,
     *,
     limits: RenderLimits = DEFAULT_LIMITS,
+    confidential: Mapping[str, str] | None = None,
 ) -> RenderCandidate:
-    """Synchronously render one fixed export manifest for an isolated child process."""
+    """Synchronously render one fixed export manifest for an isolated child process.
+
+    `confidential` maps field keys to the values of the manifest's fixed value rows;
+    they replace `{{secret.key}}` in response text and never enter the manifest hash."""
 
     template_manifest = _mapping(manifest.get("template"), "template")
     sections = [
@@ -1515,6 +1545,7 @@ def render_export_docx(
     )
     inspection = validate_template(template_bytes, sections, headings, limits=limits)
     template, items, attachments = _validate_manifest(manifest, inspection, limits)
+    items = _fill_confidential(manifest, items, confidential or {})
     if set(inputs.evidence_page_paths) != {int(value["ordinal"]) for value in attachments}:
         _fail(
             "attachment_integrity", "Authorized attachment inputs do not exactly match the manifest"

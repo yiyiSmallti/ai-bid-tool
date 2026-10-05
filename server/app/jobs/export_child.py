@@ -31,6 +31,7 @@ def main() -> int:
                 root / "template.docx", {int(n): root / f"page-{n}.png" for n in request["pages"]}
             ),
             limits=RenderLimits(**request["limits"]),
+            confidential=request.get("confidential", {}),
         )
         descriptor = os.open(root / "candidate.docx", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "wb") as output:

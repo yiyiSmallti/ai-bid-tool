@@ -359,8 +359,9 @@ async def test_export_role_and_unknown_resource_boundaries(tenants, tmp_path, ad
             assert (await api.get(path, headers=headers[0])).status_code == 404
 
 
-async def complete_inputs(api, app, header, tenants, admin_engine, tmp_path):
-    """Create three confirmed tables plus an independent comply-only decision."""
+async def complete_inputs(api, app, header, tenants, admin_engine, tmp_path, *, texts=None):
+    """Create three confirmed tables plus an independent comply-only decision.
+    `texts` replaces the response text of the cards for those requirement indexes."""
     task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
     selected, binding = await setup_template(api, header, task)
     _, _, _, _, page = await select_real_materials(api, header, task, tmp_path)
@@ -374,7 +375,9 @@ async def complete_inputs(api, app, header, tenants, admin_engine, tmp_path):
             requirements[index],
             {
                 "response_kind": "evidence" if index == 1 else "commitment",
-                "response_text": f"Synthetic confirmed response for requirement {index + 1}.",
+                "response_text": (texts or {}).get(
+                    index, f"Synthetic confirmed response for requirement {index + 1}."
+                ),
                 "deviation": "negative" if index == 2 else "none",
                 "deviation_note": "Offered forty days exceeds required thirty days."
                 if index == 2

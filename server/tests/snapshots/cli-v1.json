@@ -812,6 +812,169 @@
     "ok": true,
     "warnings": []
   },
+  "confidential field add": {
+    "command": "confidential field add",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "archived": false,
+      "created_at": "2026-10-01T00:00:00+00:00",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "key": "bid_total",
+      "kind": "amount",
+      "label": "投标总价",
+      "placeholder": "{{secret.bid_total}}",
+      "revision": 1,
+      "scope": "task"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "confidential field list": {
+    "command": "confidential field list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "count": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "archived": false,
+        "created_at": "2026-10-01T00:00:00+00:00",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "key": "bid_total",
+        "kind": "amount",
+        "label": "投标总价",
+        "placeholder": "{{secret.bid_total}}",
+        "revision": 1,
+        "scope": "task"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "confidential field update": {
+    "command": "confidential field update",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "archived": false,
+      "created_at": "2026-10-01T00:00:00+00:00",
+      "id": "00000000-0000-0000-0000-000000000001",
+      "key": "bid_total",
+      "kind": "amount",
+      "label": "合同总价",
+      "placeholder": "{{secret.bid_total}}",
+      "revision": 2,
+      "scope": "task"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "confidential history": {
+    "command": "confidential history",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "count": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "field_id": "00000000-0000-0000-0000-000000000001",
+        "key": "bid_total",
+        "kind": "amount",
+        "label": "投标总价",
+        "placeholder": "{{secret.bid_total}}",
+        "scope": "task",
+        "set_at": "2026-10-01T00:00:00+00:00",
+        "set_by": "00000000-0000-0000-0000-000000000001",
+        "status": "filled",
+        "tail": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "value_id": "00000000-0000-0000-0000-000000000002",
+        "version": 1
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "confidential list": {
+    "command": "confidential list",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "missing": 0,
+      "task_id": "00000000-0000-0000-0000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "field_id": "00000000-0000-0000-0000-000000000001",
+        "key": "bid_total",
+        "kind": "amount",
+        "label": "投标总价",
+        "placeholder": "{{secret.bid_total}}",
+        "scope": "task",
+        "set_at": "2026-10-01T00:00:00+00:00",
+        "set_by": "00000000-0000-0000-0000-000000000001",
+        "status": "filled",
+        "tail": null,
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "value_id": "00000000-0000-0000-0000-000000000002",
+        "version": 1
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "confidential set": {
+    "command": "confidential set",
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "field_id": "00000000-0000-0000-0000-000000000001",
+      "key": "bid_total",
+      "kind": "amount",
+      "label": "投标总价",
+      "placeholder": "{{secret.bid_total}}",
+      "scope": "task",
+      "set_at": "2026-10-01T00:00:00+00:00",
+      "set_by": "00000000-0000-0000-0000-000000000001",
+      "status": "filled",
+      "tail": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "value_id": "00000000-0000-0000-0000-000000000002",
+      "version": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
   "draft": {
     "command": "draft",
     "cost": {
@@ -5038,6 +5201,356 @@
             "type": "object"
           }
         },
+        "confidential field add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "key",
+              "options": [
+                "--key"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "label",
+              "options": [
+                "--label"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "kind",
+              "options": [
+                "--kind"
+              ],
+              "required": true,
+              "type": "choice"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "scope",
+              "options": [
+                "--scope"
+              ],
+              "required": true,
+              "type": "choice"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "key": {
+                "pattern": "^[a-z][a-z0-9_]{1,47}$",
+                "title": "Key",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "label": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Label",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              }
+            },
+            "required": [
+              "key",
+              "label",
+              "kind",
+              "scope"
+            ],
+            "title": "ConfidentialFieldCreate",
+            "type": "object"
+          }
+        },
+        "confidential field list": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "archived",
+              "options": [
+                "--archived"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "confidential field update": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "key",
+              "options": [
+                "--key"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "label",
+              "options": [
+                "--label"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "archived",
+              "options": [
+                "--archived"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "archived": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Archived"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "label": {
+                "anyOf": [
+                  {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Label"
+              }
+            },
+            "required": [
+              "expected_revision"
+            ],
+            "title": "ConfidentialFieldUpdate",
+            "type": "object"
+          }
+        },
+        "confidential history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "key",
+              "options": [
+                "--key"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "confidential list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
+        },
+        "confidential set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "key",
+              "options": [
+                "--key"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "value_stdin",
+              "options": [
+                "--value-stdin"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              },
+              "value": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "title": "Value",
+                "type": "string"
+              }
+            },
+            "required": [
+              "value"
+            ],
+            "title": "ConfidentialValueSet",
+            "type": "object"
+          }
+        },
         "draft": {
           "cli_parameters": [
             {
@@ -6948,6 +7461,79 @@
                 "title": "Cost",
                 "type": "object"
               },
+              "ExportConfidentialField": {
+                "additionalProperties": false,
+                "description": "A confidential field the responses name; the export fills its value.",
+                "properties": {
+                  "field_id": {
+                    "format": "uuid",
+                    "title": "Field Id",
+                    "type": "string"
+                  },
+                  "key": {
+                    "maxLength": 48,
+                    "minLength": 2,
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "label": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Label",
+                    "type": "string"
+                  },
+                  "scope": {
+                    "enum": [
+                      "org",
+                      "task"
+                    ],
+                    "title": "Scope",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "filled",
+                      "missing"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "tail": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Tail"
+                  },
+                  "value_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Value Id"
+                  }
+                },
+                "required": [
+                  "key",
+                  "label",
+                  "scope",
+                  "field_id",
+                  "status",
+                  "value_id",
+                  "tail"
+                ],
+                "title": "ExportConfidentialField",
+                "type": "object"
+              },
               "ExportIssue": {
                 "additionalProperties": false,
                 "properties": {
@@ -7009,6 +7595,13 @@
                     "minimum": 0,
                     "title": "Comply Only Count",
                     "type": "integer"
+                  },
+                  "confidential": {
+                    "items": {
+                      "$ref": "#/$defs/ExportConfidentialField"
+                    },
+                    "title": "Confidential",
+                    "type": "array"
                   },
                   "draft_id": {
                     "format": "uuid",

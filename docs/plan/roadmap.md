@@ -81,7 +81,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | --- | --- | --- | --- |
 | E01 公开测试集 | 未实施 | 公开硬件招标 PDF、人工标注、匹配与指标定义 | 真实指标依赖 API |
 | E02 质量指标 | 未实施 | ★ 召回率等指标的实测 | 依赖 B02、B04、B09 |
-| S01 机密数据 | 对象/起草快照加密、组织隔离、默认外发遮挡与受控开关；数据密钥可轮换，会话与签名链接另用独立密钥；机制见 [model-drafting-redaction.md](../notes/model-drafting-redaction.md) | 保密字段库与导出时填入，草案见 [confidential-values.md](confidential-values.md)；扩充敏感模式、单位自带模型、磁盘加密、保留期限 | 新契约 |
+| S01 机密数据 | 对象/起草快照加密、组织隔离、默认外发遮挡与受控开关；保密字段在外发前换成占位符、导出时填回，机制见 [confidential-values.md](../notes/confidential-values.md)；数据密钥可轮换，会话与签名链接另用独立密钥；机制见 [model-drafting-redaction.md](../notes/model-drafting-redaction.md) | 扩充敏感模式、单位自带模型、磁盘加密、保留期限 | 新契约 |
 | S02 真实材料 | 无伪造接口、模型双文本引用校验、人工确认门禁；真实厂家网页与白皮书经沙箱采集入库 | 导出清单在 Word/WPS 中的正向验收 | 依赖对应业务链 |
 
 ## 真实服务接入范围

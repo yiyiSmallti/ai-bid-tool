@@ -11,6 +11,24 @@ const card = ref(null), content = ref(emptyContent()), baseline = ref(""), ready
 const reviewed = ref([]), warnings = ref([]), reason = ref(""), domain = ref("technical"), history = ref(null), sourceChunk = ref(null);
 const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kindKey = ref(0), marks = ref(new Set());
 simulatedSelections(props.taskId).then((value) => { marks.value = value; }).catch(() => {});
+// Confidential fields the response may name; the export fills their values.
+const secretFields = ref([]), responseInput = ref(null), secretPick = ref("");
+orgRequest("GET", "/confidential-fields").then((result) => { secretFields.value = result.items; }).catch(() => {});
+const SECRET = /\{\{secret\.([a-z][a-z0-9_]{1,47})\}\}/g;
+const usedSecrets = computed(() => {
+  const keys = new Set([...`${content.value.response_text}\n${content.value.deviation_note}`.matchAll(SECRET)].map((match) => match[1]));
+  return [...keys].map((key) => ({ key, field: secretFields.value.find((item) => item.key === key) }));
+});
+const masked = (value) => /\[REDACTED_[A-Z_]+\]/.test(value ?? "");
+function insertSecret(key) {
+  const field = secretFields.value.find((item) => item.key === key);
+  secretPick.value = "";
+  if (!field || !editable.value) return;
+  const area = responseInput.value?.textarea, text = content.value.response_text ?? "";
+  const at = area ? area.selectionStart : text.length;
+  content.value.response_text = text.slice(0, at) + field.placeholder + text.slice(area ? area.selectionEnd : at);
+  edit();
+}
 let active = true;
 const dirty = computed(() => ready.value && JSON.stringify(content.value) !== baseline.value);
 const displayedSource = computed(() => card.value?.source ?? props.row.source);
@@ -26,6 +44,7 @@ const confirmBlocker = computed(() => {
   if (conflict.value) return "修订已变化，请先处理修订冲突";
   if (invalid.value) return `${label(eligibilities, card.value.eligibility)}，不能确认`;
   if (!completeResponse.value) return "响应种类、正文、偏离和说明都需要填写，说明不能只写“满足”";
+  if (masked(card.value.content.response_text) || masked(card.value.content.deviation_note)) return "正文含 [REDACTED_…] 遮挡占位，请改用保密字段或写出原文";
   if (card.value.content.response_kind === "evidence" && !card.value.evidence.length) return "证据响应至少需要关联一项材料；没有材料时请标记“需补材料”或驳回";
   if (reviewed.value.length !== card.value.evidence.length) return `请逐项勾选已核对的材料（${reviewed.value.length} / ${card.value.evidence.length}）`;
   if (warnings.value.length !== card.value.warning_codes.length) return `请逐项勾选警示（${warnings.value.length} / ${card.value.warning_codes.length}）`;
@@ -179,7 +198,15 @@ onMounted(async () => {
               <el-radio-button value="commitment">{{ responseKinds.commitment }}</el-radio-button><el-radio-button value="evidence">{{ responseKinds.evidence }}</el-radio-button>
             </el-radio-group>
           </el-form-item>
-          <el-form-item label="响应正文"><el-input v-model="content.response_text" type="textarea" :disabled="!editable" maxlength="20000" :autosize="{ minRows: 4, maxRows: 14 }" /></el-form-item>
+          <el-form-item label="响应正文">
+            <el-input ref="responseInput" v-model="content.response_text" type="textarea" :disabled="!editable" maxlength="20000" :autosize="{ minRows: 4, maxRows: 14 }" />
+            <div class="secret-row">
+              <el-select v-if="editable && secretFields.length" v-model="secretPick" size="small" placeholder="插入保密字段" style="width: 180px" aria-label="插入保密字段" @change="insertSecret">
+                <el-option v-for="field in secretFields" :key="field.key" :label="field.label" :value="field.key" />
+              </el-select>
+              <span v-if="usedSecrets.length" class="hint">导出时填入：<template v-for="(item, index) in usedSecrets" :key="item.key">{{ index ? "、" : "" }}<span :class="{ error: !item.field }">{{ item.field?.label ?? `未登记的 ${item.key}` }}</span></template></span>
+            </div>
+          </el-form-item>
           <el-form-item label="偏离">
             <el-radio-group v-model="content.deviation" :disabled="!editable" aria-label="偏离" @change="edit">
               <el-radio-button v-for="(text, key) in deviations" :key="key" :value="key">{{ text }}</el-radio-button>
@@ -260,4 +287,5 @@ onMounted(async () => {
 .blocker { color: var(--el-color-warning-dark-2, #b88230); }
 .history { margin-top: 12px; }
 .conflict-actions { justify-content: flex-end; }
+.secret-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 </style>

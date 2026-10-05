@@ -5,6 +5,11 @@ from app.schemas.certificate_contracts import (
 )
 from app.schemas.certificate_file_contracts import CertificateFileCreate
 from app.schemas.citation_repair_contracts import CitationRepairRequest
+from app.schemas.confidential_contracts import (
+    ConfidentialFieldCreate,
+    ConfidentialFieldUpdate,
+    ConfidentialValueSet,
+)
 from app.schemas.contracts import (
     CONTRACT_VERSION,
     JobAction,
@@ -191,6 +196,12 @@ COMMANDS = {
     "screenshot prototype-decisions preview": PrototypeDecisionPreviewInput,
     "screenshot prototype-decisions apply": PrototypeDecisionBatch,
     "screenshot prototype-decisions list": None,
+    "confidential field add": ConfidentialFieldCreate,
+    "confidential field list": None,
+    "confidential field update": ConfidentialFieldUpdate,
+    "confidential set": ConfidentialValueSet,
+    "confidential list": None,
+    "confidential history": None,
 }
 
 EXPORT_OUTPUTS = {

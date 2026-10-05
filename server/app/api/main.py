@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
 from app.api.account import create_router as create_account_router
+from app.api.confidential import create_router as create_confidential_router
 from app.api.exports import create_router as create_export_router
 from app.api.jobs import create_router as create_job_router
 from app.api.org_console import create_router as create_org_console_router
@@ -260,5 +261,6 @@ def create_app(
         create_tender_router(context, settings, db, storage, queue, crypto, llm, resolve, ocr)
     )
     app.include_router(create_resource_router(context, settings, storage, crypto))
+    app.include_router(create_confidential_router(context, settings))
     app.include_router(create_job_router(context, storage))
     return app

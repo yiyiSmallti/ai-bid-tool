@@ -53,6 +53,7 @@ from app.schemas.response_card_contracts import (
     TaskRedactionSet,
 )
 from app.schemas.screenshot_contracts import ImageEvidenceInput
+from app.services import confidential, redaction
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_actor_context
 from app.services.evidence_sources import joined_sources, require_source, source_data
 from app.services.evidence_sources import require_access as require_source_access
@@ -95,6 +96,12 @@ MATERIALS = {
     ),
 }
 CONTENT_FIELDS = ("response_kind", "response_text", "deviation", "deviation_note")
+
+
+def content_texts(content: CardContent) -> tuple[str | None, str | None]:
+    return content.response_text, content.deviation_note
+
+
 COPY_FIELDS = (
     *CONTENT_FIELDS,
     "review_domain",
@@ -1013,6 +1020,7 @@ async def create_card(
     requirement = next((row for row in requirements if row.id == body.requirement_id), None)
     if requirement is None:
         raise not_found()
+    await confidential.check_references(session, content_texts(body.content))
     card = await new_card(session, actor, task_id, body.extraction_job_id, requirement)
     materials = await build_evidence(session, actor, card, body.content, storage)
     revision = await append_revision(
@@ -1045,6 +1053,7 @@ async def update_card(
         or previous.disposition == "comply_only"
     ):
         fail("invalid_transition", "Card cannot be edited in its current state", 409)
+    await confidential.check_references(session, content_texts(body.content))
     materials = await build_evidence(session, actor, card, body.content, storage)
     revision = await append_revision(
         session,
@@ -1166,6 +1175,13 @@ async def card_action(
             )
         if previous.deviation_note == "满足":
             fail("incomplete_response", "Explain the correspondence or concrete difference")
+        texts = (previous.response_text, previous.deviation_note)
+        if any(redaction.PLACEHOLDER.search(text or "") for text in texts):
+            fail(
+                "redacted_placeholder_in_response",
+                "Replace masked text with a confidential field or the actual wording",
+            )
+        await confidential.check_references(session, texts)
         if previous.response_kind == "evidence" and not materials:
             fail("missing_evidence", "Evidence responses require at least one material")
         if previous.response_kind == "commitment" and materials:

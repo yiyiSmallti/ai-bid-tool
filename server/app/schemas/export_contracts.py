@@ -228,6 +228,18 @@ class ExportPrepare(Contract):
         return self
 
 
+class ExportConfidentialField(Contract):
+    """A confidential field the responses name; the export fills its value."""
+
+    key: str = Field(min_length=2, max_length=48)
+    label: str = Field(min_length=1, max_length=100)
+    scope: Literal["org", "task"]
+    field_id: UUID
+    status: Literal["filled", "missing"]
+    value_id: UUID | None
+    tail: str | None
+
+
 class ExportPreview(Contract):
     dry_run: Literal[True] = True
     task_id: UUID
@@ -242,6 +254,7 @@ class ExportPreview(Contract):
     negative_count: int = Field(ge=0, le=2000)
     attachment_pages: int = Field(ge=0, le=300)
     issues: list[ExportIssue]
+    confidential: list[ExportConfidentialField] = Field(default_factory=list)
     estimated_output_bytes: int | None = Field(default=None, ge=0, le=MAX_EXPORT_BYTES)
     estimated_duration_ms: int | None = Field(default=None, ge=0)
     estimated_cost: Cost

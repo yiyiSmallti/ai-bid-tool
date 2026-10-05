@@ -57,6 +57,10 @@ values and tender quotes remain unchanged.
 A label word alone is never a detection, so tender wording such as "刷身份证登录"
 or "管理员账号" is sent unchanged. English labels must be whole words.
 
+Registered confidential values are replaced by their `{{secret.<key>}}`
+placeholders before these rules run; see
+[confidential-values.md](confidential-values.md#outbound-substitution).
+
 Every business-text leaf is processed, including requirement quotes, Word heading
 paths and location labels, resource field values and certificate page text.
 Overlapping matches are masked as one union so a shorter numeric match cannot

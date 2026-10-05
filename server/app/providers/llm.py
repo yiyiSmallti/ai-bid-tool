@@ -7,6 +7,7 @@ import os
 import re
 import ssl
 import time
+from collections.abc import Sequence
 from decimal import ROUND_CEILING, Decimal
 from typing import Any
 from uuid import UUID
@@ -366,10 +367,12 @@ class HTTPExtractor:
         copy.reasoning = name
         return copy
 
-    async def draft(self, requirements: list[dict], materials: list[dict]):
+    async def draft(
+        self, requirements: list[dict], materials: list[dict], fields: Sequence[dict] = ()
+    ):
         from app.providers.drafting import draft
 
-        return await draft(self, requirements, materials)
+        return await draft(self, requirements, materials, fields)
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         limit = asyncio.Semaphore(max(1, self.settings.llm_concurrency))

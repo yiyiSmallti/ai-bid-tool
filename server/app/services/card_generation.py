@@ -44,7 +44,7 @@ from app.schemas.response_card_contracts import (
     PageEvidenceInput,
     ResourceEvidenceInput,
 )
-from app.services import billing, redaction
+from app.services import billing, confidential, redaction
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.drafts import digest
@@ -141,8 +141,17 @@ async def material_inputs(session: AsyncSession, actor: Identity, task_id: UUID,
     return entries, originals, unavailable
 
 
-async def snapshot(session, actor, task, requirements, storage, llm, reasoning):
+async def snapshot(session, actor, task, requirements, storage, llm, reasoning, settings):
     by_requirement = {str(row.id): row for row in requirements}
+    # Registered confidential values become their placeholders before any pattern
+    # rule runs; the task switch turns both off together.
+    registered = await confidential.task_entries(session, task.id)
+    library = (
+        confidential.library(registered, Secrets.for_data(settings))
+        if task.model_redaction_enabled
+        else []
+    )
+    fields = confidential.prompt_fields(registered)
     targets, selected, skipped, original_requirements = {}, [], {}, []
     for requirement in requirements:
         key = str(requirement.id)
@@ -172,18 +181,21 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning):
         await material_inputs(session, actor, task.id, storage) if selected else ([], {}, [])
     )
     sent_requirements = []
-    totals = Counter({kind: 0 for kind in redaction.KINDS})
+    totals = Counter({kind: 0 for kind in (*redaction.KINDS, "confidential")})
     for requirement in original_requirements:
         sent, counts = redaction.redact_tree(
             {"quote": requirement["quote"], "location": requirement["location"]},
             task.model_redaction_enabled,
+            library,
         )
         assert isinstance(sent, dict)
         sent_requirements.append({"requirement_id": requirement["requirement_id"], **sent})
         totals.update(counts)
     sent_materials = []
     for entry in entries:
-        sent, hits = redaction.redact(originals[entry["ref"]], task.model_redaction_enabled)
+        sent, hits = redaction.redact(
+            originals[entry["ref"]], task.model_redaction_enabled, library
+        )
         totals.update(hits)
         entry |= {
             "text_sha256": cards.quote_hash(originals[entry["ref"]]),
@@ -217,6 +229,11 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning):
         "model_redaction_revision": task.model_redaction_revision,
         "redaction_rule_version": redaction.RULE_VERSION,
         "redacted_counts": dict(totals),
+        # Value IDs, never values: a changed value is a new input.
+        "confidential_values": sorted(
+            str(entry.value.id) for entry in registered.values() if entry.value is not None
+        ),
+        "confidential_fields": fields,
         "model": model_identity(llm),
         "reasoning": reasoning,
         "prompt_version": PROMPT_VERSION,
@@ -225,6 +242,7 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning):
     secret = {
         "requirements": sent_requirements,
         "materials": sent_materials,
+        "fields": fields,
         "originals": originals,
     }
     return manifest, secret, targets, selected, skipped
@@ -246,7 +264,7 @@ def estimate(llm, secret: dict) -> dict:
             "cost_basis_reason": "model_unavailable",
         }
     batches = groups(secret["requirements"], secret["materials"], batch_budget(llm.settings))
-    bodies = [request_body(llm, batch, secret["materials"]) for batch in batches]
+    bodies = [request_body(llm, batch, secret["materials"], secret["fields"]) for batch in batches]
     # A conservative first-pass allowance, not a promise about retries or halving.
     input_tokens = sum(len(json.dumps(body, ensure_ascii=False).encode()) + 4096 for body in bodies)
     output_tokens = sum(llm.output_token_bound(body) for body in bodies)
@@ -288,7 +306,7 @@ async def submit_generation(
     if reasoning is None and not warnings:
         warnings.append("The current model has no reasoning levels configured.")
     manifest, secret, targets, selected, skipped = await snapshot(
-        session, actor, task, requirements, storage, llm, reasoning
+        session, actor, task, requirements, storage, llm, reasoning, settings
     )
     manifest["extraction_job_id"] = str(extraction.id)
     input_hash = digest(manifest)
@@ -313,7 +331,9 @@ async def submit_generation(
                 first = groups(
                     secret["requirements"], secret["materials"], batch_budget(llm.settings)
                 )[0]
-                reserved = llm.reservation(request_body(llm, first, secret["materials"]))
+                reserved = llm.reservation(
+                    request_body(llm, first, secret["materials"], secret["fields"])
+                )
                 held = await session.scalar(
                     select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
                         VendorCall.state != "completed"
@@ -556,7 +576,7 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
             raise ProviderFailure(
                 "Drafting requires per-call accounting", code="drafting_accounting_required"
             )
-        output = await llm.draft(secret["requirements"], secret["materials"])
+        output = await llm.draft(secret["requirements"], secret["materials"], secret["fields"])
     else:
         output = DraftingOutput()
     if output.failure and (
@@ -643,6 +663,21 @@ async def publish(session, actor, job, output, secret, storage, settings):
                 and proposal.deviation != "negative"
             ):
                 skipped[key] = "negative_deviation_weakened"
+                continue
+            sent_keys = {field["placeholder"] for field in secret["fields"]}
+            named = {
+                redaction.secret_placeholder(name)
+                for text in (proposal.response_text, proposal.deviation_note)
+                for name in redaction.secret_keys(text)
+            }
+            try:
+                if not named <= sent_keys:
+                    confidential.fail("unknown_confidential_field", "Unknown placeholder", 422)
+                await confidential.check_references(
+                    session, (proposal.response_text, proposal.deviation_note)
+                )
+            except ServiceError as exc:
+                skipped[key] = exc.code
                 continue
             evidence = []
             for citation in proposal.evidence:
