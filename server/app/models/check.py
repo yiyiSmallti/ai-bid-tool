@@ -95,6 +95,7 @@ class CheckItem(Tenant, Base):
     source: Mapped[dict[str, Any]] = mapped_column(JSONB)
     rules: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, default=list)
     semantic_status: Mapped[str] = mapped_column(String(20), default="not_requested")
+    semantic_outcome: Mapped[str | None] = mapped_column(String(20))
     semantic_reason_code: Mapped[str | None] = mapped_column(String(100))
     __table_args__ = (
         *common(),
@@ -192,7 +193,8 @@ class CheckFindingCitation(Tenant, Base):
     __tablename__ = "check_finding_citations"
     task_id: Mapped[UUID] = mapped_column()
     report_id: Mapped[UUID] = mapped_column()
-    finding_id: Mapped[UUID] = mapped_column()
+    finding_id: Mapped[UUID | None] = mapped_column()
+    check_item_id: Mapped[UUID | None] = mapped_column()
     kind: Mapped[str] = mapped_column(String(20))
     quote: Mapped[str] = mapped_column(Text)
     document_id: Mapped[UUID | None] = mapped_column()
@@ -208,6 +210,9 @@ class CheckFindingCitation(Tenant, Base):
         report_fk(),
         fk(
             ["finding_id", "task_id", "report_id"], "check_findings", ["id", "task_id", "report_id"]
+        ),
+        fk(
+            ["check_item_id", "task_id", "report_id"], "check_items", ["id", "task_id", "report_id"]
         ),
         fk(["chunk_id", "task_id", "document_id"], "chunks", ["id", "task_id", "document_id"]),
         fk(["document_id", "task_id"], "documents", ["id", "task_id"]),

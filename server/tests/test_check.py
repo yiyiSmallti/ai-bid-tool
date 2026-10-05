@@ -565,19 +565,6 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
         assert invalid.json()["data"]["error"]["code"] == "invalid_input"
         assert invalid.json()["data"]["error"]["exit_code"] == 2
 
-    combined = await case["api"].post(
-        f"/tasks/{case['task']}/checks",
-        headers=case["header"],
-        json={
-            "draft_id": case["draft"]["id"],
-            "assessment_date": ASSESSMENT_DATE,
-            "mode": "combined",
-            "dry_run": True,
-        },
-    )
-    assert combined.status_code == 400, combined.text
-    assert combined.json()["data"]["error"]["code"] == "check_mode_unavailable"
-
     changed = await case["api"].post(
         f"/tasks/{case['task']}/checks",
         headers=case["header"],

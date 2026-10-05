@@ -17,9 +17,10 @@ report. `bid check list` and `bid check show` read reports; a responsible bidder
 or technical reviewer uses `bid check decide` and `bid check history` to append
 and inspect a dismiss or reopen decision.
 
-The default and only executable mode is `rules`. `combined` is reserved for the
-semantic phase and fails with `check_mode_unavailable`; it never falls back to a
-rules-only result. A dry run makes no job, audit, usage, balance or report write
+The default mode is `rules`. Add `--mode combined` to assess contradictions,
+weak responses and material coverage with the configured model. Combined checks
+require redaction to be enabled; dry-run reports `redaction_required` when it is
+off, and submission refuses the call without changing the setting. A dry run makes no job, audit, usage, balance or report write
 and performs no provider call.
 
 ## How it works
@@ -31,7 +32,10 @@ and rule/schema versions. Every saved requirement must have exactly one response
 comply-only or gap row. Candidate card text is absent from the fixed snapshot;
 only verbatim confirmed response fields and confirmed material can enter it.
 Submission must return the preview hash, and the worker recomputes the input and
-authorization before publication.
+authorization before each model admission and publication. Combined input identity
+also fixes the provider configuration, reasoning level, prices and prompt/schema/
+adapter versions. Tenant configuration takes precedence over the platform catalog;
+a worker never substitutes an environment model or a different catalog revision.
 
 The local rules publish one coverage row per requirement. They report a starred
 or substantive gap, every confirmed negative deviation, and a gap caused by an
@@ -46,6 +50,38 @@ An unknown observation on a mapped requirement is unassessed, so the durable
 job succeeds with `completion=partial` and the CLI returns exit 5. The report is
 still readable. Identical input reuses that terminal report; changing the
 material, assessment date or rules creates the input for a new check.
+
+Combined requests contain only local requirement IDs and text refs. Registered
+confidential values are replaced first, then one `redact_tree` traversal masks
+all outbound text and field hints, including Word labels. Whole requirements are
+batched without splitting fields or truncating text; a single item above the
+configured context budget fails explicitly. Tender and bid instructions remain
+data under a fixed system prompt.
+
+The model returns `no_risk_found`, `risk` or `unknown` for each requested ID.
+Missing, duplicate and unknown IDs cannot imply a pass. Each accepted citation
+must locate a unique contiguous span in both the sent text and the fixed original
+page/block/field. References must belong to that requirement and its bound
+response. No-risk conclusions and contradictions require both tender and bid
+support; no-risk supporting citations attach directly to the coverage item.
+Rejected conclusions lose their model text and retain a fixed reason code.
+Unknown remains unassessed. Requirements containing masked values remain
+`redacted_input_unassessable`; the checker does not infer those values. Reasons
+containing sensitive literals or unknown placeholders are rejected locally.
+
+Every combined call executes inside `JobExecution.activate` through
+`accounted_call`. The existing ledger owns admission, reservations, `UsageRecord`
+and `billing.charge_usage`; returned provider usages only corroborate the ledger.
+Refusal, truncation and late cancelled calls retain incurred usage. Dry-run derives
+an exact-request first-pass upper bound with no writes; unknown prices remain
+null. Per-call balance, job ceiling and `--max-charge` checks apply again at actual
+admission. Org-owned keys retain vendor usage with zero platform charge and a
+warning that the cap does not bound the vendor bill.
+
+A provider or later budget stop may publish completed deterministic coverage plus
+unassessed semantic items as partial. Cancellation, lease loss, changed input and
+accounting failures publish nothing. Reports keep all job usage references,
+including earlier attempts, without resettling those usages.
 
 Findings keep the tender's verified PDF page or Word block source. A negative
 deviation also cites the fixed response item's deviation note; confirmed textual
@@ -87,10 +123,22 @@ RLS and organization-bound composite references.
   authorizes the confirmed-draft snapshot; [check_rules.py](../../server/app/services/check_rules.py)
   evaluates deterministic observations; [check.py](../../server/app/services/check.py)
   submits, publishes, reads and decides reports.
+- [checking.py](../../server/app/providers/checking.py) implements the structured
+  check capability; [check_semantic.py](../../server/app/services/check_semantic.py)
+  owns outbound preparation, estimates and local acceptance.
 - [0032_check.py](../../server/migrations/versions/0032_check.py) creates the RLS,
-  immutable-history and worker/human decision gates.
+  immutable-history and worker/human decision gates;
+  [0033_check_semantic.py](../../server/migrations/versions/0033_check_semantic.py)
+  extends the existing tables and gates for semantic outcomes and item citations.
 - [test_check.py](../../server/tests/test_check.py),
   [test_check_storage.py](../../server/tests/test_check_storage.py),
   [test_check_api.py](../../server/tests/test_check_api.py) and
   [test_check_cli.py](../../server/tests/test_check_cli.py) cover the database,
   API-to-worker and command boundaries with synthetic inputs.
+
+- [test_check_combined.py](../../server/tests/test_check_combined.py) covers combined
+  API/worker/CLI accounting and failure workflows;
+  [test_check_semantic_storage.py](../../server/tests/test_check_semantic_storage.py)
+  covers semantic storage gates. MockTransport boundary tests live in
+  [test_check_provider.py](../../server/tests/test_check_provider.py) and
+  [test_check_semantic_boundary.py](../../server/tests/test_check_semantic_boundary.py).

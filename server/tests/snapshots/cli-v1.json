@@ -6535,7 +6535,10 @@
                     "default": null
                   },
                   "mode": {
-                    "const": "rules",
+                    "enum": [
+                      "rules",
+                      "combined"
+                    ],
                     "title": "Mode",
                     "type": "string"
                   },
@@ -6975,6 +6978,31 @@
                     "title": "Rules",
                     "type": "array"
                   },
+                  "semantic_citations": {
+                    "items": {
+                      "$ref": "#/$defs/VerifiedCitation"
+                    },
+                    "maxItems": 20,
+                    "title": "Semantic Citations",
+                    "type": "array"
+                  },
+                  "semantic_outcome": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "no_risk_found",
+                          "risk",
+                          "unknown"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Semantic Outcome"
+                  },
                   "semantic_reason_code": {
                     "anyOf": [
                       {
@@ -7082,7 +7110,10 @@
                     "type": "array"
                   },
                   "mode": {
-                    "const": "rules",
+                    "enum": [
+                      "rules",
+                      "combined"
+                    ],
                     "title": "Mode",
                     "type": "string"
                   },
@@ -7162,6 +7193,83 @@
                   "usage_record_ids"
                 ],
                 "title": "CheckRunView",
+                "type": "object"
+              },
+              "DraftCitation": {
+                "additionalProperties": false,
+                "properties": {
+                  "card_revision_id": {
+                    "format": "uuid",
+                    "title": "Card Revision Id",
+                    "type": "string"
+                  },
+                  "draft_id": {
+                    "format": "uuid",
+                    "title": "Draft Id",
+                    "type": "string"
+                  },
+                  "field": {
+                    "enum": [
+                      "response_text",
+                      "deviation_note"
+                    ],
+                    "title": "Field",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "draft",
+                    "default": "draft",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  },
+                  "response_item_id": {
+                    "format": "uuid",
+                    "title": "Response Item Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "draft_id",
+                  "response_item_id",
+                  "card_revision_id",
+                  "field",
+                  "quote"
+                ],
+                "title": "DraftCitation",
+                "type": "object"
+              },
+              "EvidenceCitation": {
+                "additionalProperties": false,
+                "properties": {
+                  "evidence_id": {
+                    "format": "uuid",
+                    "title": "Evidence Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "evidence",
+                    "default": "evidence",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "evidence_id",
+                  "quote"
+                ],
+                "title": "EvidenceCitation",
                 "type": "object"
               },
               "Location": {
@@ -7382,6 +7490,47 @@
                 ],
                 "title": "Source",
                 "type": "object"
+              },
+              "TenderCitation": {
+                "additionalProperties": false,
+                "description": "已由服务端对固定原文核验；Pydantic 不替代文本与父对象查询。",
+                "properties": {
+                  "kind": {
+                    "const": "tender",
+                    "default": "tender",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "title": "TenderCitation",
+                "type": "object"
+              },
+              "VerifiedCitation": {
+                "discriminator": {
+                  "mapping": {
+                    "draft": "#/$defs/DraftCitation",
+                    "evidence": "#/$defs/EvidenceCitation",
+                    "tender": "#/$defs/TenderCitation"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/TenderCitation"
+                  },
+                  {
+                    "$ref": "#/$defs/DraftCitation"
+                  },
+                  {
+                    "$ref": "#/$defs/EvidenceCitation"
+                  }
+                ]
               }
             },
             "additionalProperties": false,

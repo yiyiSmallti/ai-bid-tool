@@ -1,4 +1,4 @@
-"""Durable rules reports and human-only, append-only false-positive decisions."""
+"""Durable assessment reports and human-only, append-only false-positive decisions."""
 
 import json
 from datetime import UTC, date, datetime
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets, TokenSigner
+from app.jobs.execution import job_cost
 from app.models.check import (
     CheckCertificate,
     CheckCertificateItem,
@@ -21,6 +22,7 @@ from app.models.check import (
     CheckRun,
 )
 from app.models.entities import Job, Task, UsageRecord
+from app.providers.base import ProviderFailure
 from app.providers.storage import Storage
 from app.schemas.check_contracts import (
     AssessmentInput,
@@ -40,7 +42,7 @@ from app.schemas.check_contracts import (
     FindingView,
 )
 from app.schemas.contracts import Cost
-from app.services import check_inputs, check_rules, drafts
+from app.services import check_inputs, check_rules, check_semantic, drafts
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.check_inputs import ADAPTER_VERSION, RULE_VERSION, SCHEMA_VERSION, CheckSnapshot
@@ -67,13 +69,6 @@ def assessment_input(manifest: dict, input_hash: str) -> dict:
     ).model_dump(mode="json")
 
 
-def request_mode(body: CheckRequest) -> None:
-    if body.mode != "rules":
-        cards.fail(
-            "check_mode_unavailable", "Combined semantic checks are not available until phase 2"
-        )
-
-
 async def submit_check(
     session: AsyncSession,
     actor: Identity,
@@ -82,12 +77,17 @@ async def submit_check(
     storage: Storage,
     settings: Settings,
 ) -> tuple[dict, Job | None]:
-    request_mode(body)
     actor = await check_inputs.access(session, actor, "check:run")
     await check_inputs.lock_inputs(session, actor, task_id)
     try:
         fixed = await check_inputs.snapshot(
-            session, actor, task_id, body.draft_id, body.assessment_date, storage
+            session,
+            actor,
+            task_id,
+            body.draft_id,
+            body.assessment_date,
+            storage,
+            semantic=body.mode == "combined",
         )
     except ServiceError as error:
         if not body.dry_run and error.code == "check_stale_draft":
@@ -100,6 +100,15 @@ async def submit_check(
     # Bound output limits are checked at preview as well as execution. This is
     # deterministic local analysis; it creates no report, audit or usage row.
     check_rules.evaluate(fixed.secret, str(fixed.draft.id))
+    llm, semantic_preview = None, {}
+    if body.mode == "combined":
+        llm = (
+            await check_semantic.resolve(session, settings)
+            if fixed.manifest["model_redaction_enabled"]
+            else None
+        )
+        llm = await check_semantic.prepare(session, fixed, llm, body.reasoning, settings)
+        semantic_preview = await check_semantic.preview(session, fixed, llm, body, settings)
     if body.dry_run:
         return CheckPreview.model_validate(
             {
@@ -112,19 +121,35 @@ async def submit_check(
                 "cost_basis_reason": "no_model_calls",
                 "redaction_revision": fixed.manifest["model_redaction_revision"],
                 "redaction_rule_version": fixed.manifest["redaction_rule_version"],
-                "redacted_counts": {},
-                "mode": "rules",
+                "redacted_counts": fixed.manifest.get("redacted_counts", {}),
+                "mode": body.mode,
                 "rule_version": RULE_VERSION,
-                "prompt_version": None,
-                "schema_version": SCHEMA_VERSION,
+                "prompt_version": fixed.manifest["prompt_version"],
+                "schema_version": fixed.manifest["schema_version"],
                 "rules_applicable": len(fixed.secret["items"]),
-                "semantic_items": 0,
+                "semantic_items": len(fixed.secret["items"]) if body.mode == "combined" else 0,
                 "gap_requirements": sum(
                     item["partition"] == "gap" for item in fixed.secret["items"]
                 ),
                 "limitations": fixed.limitations,
+                "max_charge": body.max_charge,
+                **(
+                    {
+                        "provider_config_id": getattr(llm, "provider_config_id", None),
+                        "provider_source": fixed.manifest["provider_source"],
+                        "platform_model_id": fixed.manifest["model"].get("platform_model_id"),
+                        "model_revision": fixed.manifest["model"].get("model_revision"),
+                        "model": fixed.manifest["model"]["model"],
+                        "reasoning": fixed.manifest["reasoning"],
+                    }
+                    if llm is not None
+                    else {}
+                ),
+                **semantic_preview,
             }
         ).model_dump(mode="json"), None
+    if semantic_preview.get("admission_blocker") == "redaction_required":
+        cards.fail("redaction_required", "Combined checks require redaction to be enabled", 409, 4)
     if fixed.input_hash != body.expected_input_hash:
         cards.fail(
             "check_input_changed",
@@ -145,6 +170,13 @@ async def submit_check(
     job = await session.scalar(select(Job).where(Job.cache_key == cache_key).with_for_update())
     cached = job is not None
     if job is None:
+        if semantic_preview.get("admission_blocker"):
+            cards.fail(
+                semantic_preview["admission_blocker"],
+                "Combined check admission was refused; inspect a new preview",
+                409,
+                4,
+            )
         job = Job(
             id=uuid4(),
             org_id=actor.org_id,
@@ -153,6 +185,9 @@ async def submit_check(
             kind="check",
             cache_key=cache_key,
             status="queued",
+            reasoning=fixed.manifest["reasoning"],
+            provider_config_id=getattr(llm, "provider_config_id", None),
+            provider_identity=fixed.manifest["model"],
             result={
                 "submission": {
                     "input_manifest": fixed.manifest,
@@ -165,6 +200,8 @@ async def submit_check(
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
                     "limitations": fixed.limitations,
+                    "provider_source": fixed.manifest.get("provider_source"),
+                    "max_charge": str(body.max_charge) if body.max_charge is not None else None,
                 }
             },
         )
@@ -189,8 +226,24 @@ async def submit_check(
         job.status in {"failed", "cancelled"}
         or (job.status == "running" and job.lease_until and job.lease_until < datetime.now(UTC))
     ):
+        if semantic_preview.get("admission_blocker"):
+            cards.fail(
+                semantic_preview["admission_blocker"],
+                "Combined check admission was refused",
+                409,
+                4,
+            )
         job.status, job.error, job.queue_id, job.attempts = "queued", None, None, 0
+        if body.max_charge is not None:
+            job.result = {
+                **job.result,
+                "submission": {**job.result["submission"], "max_charge": str(body.max_charge)},
+            }
         job.lease_until, job.finished_at, job.run_id = None, None, None
+    elif body.max_charge is not None and job.status in {"queued", "running"}:
+        cap = job.result["submission"].get("max_charge")
+        if cap is None or Decimal(cap) > body.max_charge:
+            cards.fail("check_cap_conflict", "The existing check has a higher charge cap", 409, 2)
     await session.flush()
     return AssessmentJobAccepted.model_validate(
         {"job_id": job.id, "status": job.status, "cached": cached}
@@ -225,6 +278,36 @@ async def job_access(
     )
 
 
+def store_citation(session, job, run, citation, *, finding_id=None, check_item_id=None):
+    if citation["kind"] == "tender":
+        source = citation["source"]
+        fields = {
+            "document_id": UUID(source["document_id"]),
+            "chunk_id": UUID(source["chunk_id"]),
+            "source": source,
+            "quote": source["quote"],
+        }
+    elif citation["kind"] == "draft":
+        fields = {
+            key: UUID(citation[key]) for key in ("draft_id", "response_item_id", "card_revision_id")
+        }
+        fields |= {"field": citation["field"], "quote": citation["quote"]}
+    else:
+        fields = {"evidence_id": UUID(citation["evidence_id"]), "quote": citation["quote"]}
+    session.add(
+        CheckFindingCitation(
+            id=uuid4(),
+            org_id=job.org_id,
+            task_id=job.task_id,
+            report_id=run.id,
+            finding_id=finding_id,
+            check_item_id=check_item_id,
+            kind=citation["kind"],
+            **fields,
+        )
+    )
+
+
 async def publish(
     session: AsyncSession,
     actor: Identity,
@@ -232,6 +315,7 @@ async def publish(
     fixed: CheckSnapshot,
     evaluated: list[dict],
     settings: Settings,
+    stop_reason: str | None = None,
 ) -> dict:
     submitted = job.result["submission"]
     if job.task_id is None or job.run_id is None:
@@ -251,10 +335,10 @@ async def publish(
         input_hash=fixed.input_hash,
         draft_input_hash=fixed.draft.input_hash,
         assessment_date=date.fromisoformat(fixed.manifest["assessment_date"]),
-        mode="rules",
+        mode=fixed.manifest["mode"],
         rule_version=RULE_VERSION,
-        prompt_version=None,
-        schema_version=SCHEMA_VERSION,
+        prompt_version=fixed.manifest["prompt_version"],
+        schema_version=fixed.manifest["schema_version"],
         input_manifest=fixed.manifest,
         encrypted_input=submitted["encrypted_input"],
         completion=completion,
@@ -286,8 +370,9 @@ async def publish(
             partition=item["partition"],
             source=item["source"],
             rules=result["rules"],
-            semantic_status="not_requested",
-            semantic_reason_code=None,
+            semantic_status=result.get("semantic_status", "not_requested"),
+            semantic_reason_code=result.get("semantic_reason_code"),
+            semantic_outcome=result.get("semantic_outcome"),
         )
         session.add(coverage)
         await session.flush()
@@ -300,7 +385,7 @@ async def publish(
                 report_id=run.id,
                 check_item_id=coverage.id,
                 requirement_id=coverage.requirement_id,
-                method="deterministic",
+                method=finding.get("method", "deterministic"),
                 code=finding["code"],
                 severity=finding["severity"],
                 review_domain=item["review_domain"],
@@ -310,37 +395,9 @@ async def publish(
             session.add(row)
             await session.flush()
             for citation in finding["citations"]:
-                fields = {}
-                if citation["kind"] == "tender":
-                    source = citation["source"]
-                    fields = {
-                        "document_id": UUID(source["document_id"]),
-                        "chunk_id": UUID(source["chunk_id"]),
-                        "source": source,
-                        "quote": source["quote"],
-                    }
-                elif citation["kind"] == "draft":
-                    fields = {
-                        key: UUID(citation[key])
-                        for key in ("draft_id", "response_item_id", "card_revision_id")
-                    }
-                    fields |= {"field": citation["field"], "quote": citation["quote"]}
-                else:
-                    fields = {
-                        "evidence_id": UUID(citation["evidence_id"]),
-                        "quote": citation["quote"],
-                    }
-                session.add(
-                    CheckFindingCitation(
-                        id=uuid4(),
-                        org_id=job.org_id,
-                        task_id=job.task_id,
-                        report_id=run.id,
-                        finding_id=row.id,
-                        kind=citation["kind"],
-                        **fields,
-                    )
-                )
+                store_citation(session, job, run, citation, finding_id=row.id)
+        for citation in result.get("semantic_citations", []):
+            store_citation(session, job, run, citation, check_item_id=coverage.id)
     await session.flush()
     for item in fixed.secret["certificates"]:
         certificate = CheckCertificate(
@@ -381,21 +438,30 @@ async def publish(
             **run.summary,
         },
     )
+    usage_rows = list(
+        (await session.scalars(select(UsageRecord).where(UsageRecord.job_id == job.id))).all()
+    )
+    if run.mode == "rules" and usage_rows:
+        cards.fail("check_usage_integrity", "Rules checks cannot have model usage records", 500, 4)
     return {
         **CheckJobResult.model_validate(
             {
                 "report_id": run.id,
                 "job_id": job.id,
                 "completion": completion,
-                "usage_record_ids": [],
-                "charge": Decimal(0),
+                "usage_record_ids": [row.id for row in usage_rows],
+                "charge": sum(
+                    (Decimal(str(row.charge)) for row in usage_rows if row.charge is not None),
+                    Decimal(0),
+                ),
+                "stop_reason": stop_reason,
                 "billing_currency": settings.billing_currency,
                 "checked_requirements": len(evaluated),
                 "finding_count": finding_count,
                 "unassessed_requirements": unassessed,
             }
         ).model_dump(mode="json"),
-        "cost": Cost().model_dump(mode="json"),
+        "cost": await job_cost(session, job.id),
         "warnings": fixed.limitations,
         "exit_code": 5 if unassessed else 0,
     }
@@ -415,41 +481,60 @@ async def get_run(
 
 
 async def validity(
-    session: AsyncSession, actor: Identity, run: CheckRun, storage: Storage
+    session: AsyncSession, actor: Identity, run: CheckRun, storage: Storage, settings: Settings
 ) -> list[str]:
+    combined = run.mode == "combined"
     if (
         run.rule_version != RULE_VERSION
-        or run.schema_version != SCHEMA_VERSION
-        or run.input_manifest["adapter_version"] != ADAPTER_VERSION
+        or run.schema_version != (check_semantic.SCHEMA_VERSION if combined else SCHEMA_VERSION)
+        or run.input_manifest["adapter_version"]
+        != (check_semantic.ADAPTER_VERSION if combined else ADAPTER_VERSION)
+        or run.prompt_version != (check_semantic.PROMPT_VERSION if combined else None)
     ):
         return ["check_input_changed"]
     try:
         fixed = await check_inputs.snapshot(
-            session, actor, run.task_id, run.draft_id, run.assessment_date, storage
+            session,
+            actor,
+            run.task_id,
+            run.draft_id,
+            run.assessment_date,
+            storage,
+            semantic=combined,
         )
+        if combined:
+            # The immutable model/price identity belongs to this job, never today's default.
+            job = await session.get(Job, run.job_id)
+            if job is None:
+                raise not_found()
+            llm = await check_semantic.resolve(session, settings, job)
+            await check_semantic.prepare(session, fixed, llm, job.reasoning, settings)
+    except ProviderFailure:
+        return ["check_input_changed", "provider_model_changed"]
     except ServiceError as error:
-        # These are recognized changes to inputs after publication. Permission,
-        # missing-parent and storage failures must still fail the read itself.
         if error.code not in {
             "check_stale_draft",
             "invalid_input_citation",
             "check_input_integrity",
             "empty_requirements",
             "invalid_extraction_job",
+            "provider_unavailable",
         }:
             raise
         return ["check_input_changed", error.code]
     return [] if fixed.input_hash == run.input_hash else ["check_input_changed"]
 
 
-async def run_view(session: AsyncSession, actor: Identity, run: CheckRun, storage: Storage) -> dict:
-    invalidated = await validity(session, actor, run, storage)
+async def run_view(
+    session: AsyncSession, actor: Identity, run: CheckRun, storage: Storage, settings: Settings
+) -> dict:
+    invalidated = await validity(session, actor, run, storage, settings)
     usage_ids = list(
         (
             await session.scalars(select(UsageRecord.id).where(UsageRecord.job_id == run.job_id))
         ).all()
     )
-    if usage_ids:
+    if run.mode == "rules" and usage_ids:
         cards.fail("check_usage_integrity", "Rules checks cannot have model usage records", 500, 4)
     return CheckRunView.model_validate(
         {
@@ -469,12 +554,12 @@ async def run_view(session: AsyncSession, actor: Identity, run: CheckRun, storag
             "invalidation_codes": invalidated,
             **run.summary,
             "limitations": run.limitations,
-            "usage_record_ids": [],
+            "usage_record_ids": usage_ids,
         }
     ).model_dump(mode="json")
 
 
-def citation_view(row: CheckFindingCitation) -> dict:
+def citation_payload(row: CheckFindingCitation) -> dict:
     citation: dict = {"kind": row.kind}
     if row.kind == "tender":
         citation["source"] = row.source
@@ -485,13 +570,17 @@ def citation_view(row: CheckFindingCitation) -> dict:
         }
     else:
         citation |= {"evidence_id": row.evidence_id, "quote": row.quote}
+    return citation
+
+
+def citation_view(row: CheckFindingCitation) -> dict:
     return FindingCitationView.model_validate(
         {
             **{
                 key: getattr(row, key)
                 for key in ("id", "org_id", "task_id", "report_id", "finding_id")
             },
-            "citation": citation,
+            "citation": citation_payload(row),
         }
     ).model_dump(mode="json")
 
@@ -545,7 +634,7 @@ async def show_check(
     settings: Settings,
 ) -> tuple[dict, list[dict]]:
     actor, run = await get_run(session, actor, report_id, storage)
-    report = await run_view(session, actor, run, storage)
+    report = await run_view(session, actor, run, storage, settings)
     findings = [
         await finding_view(session, row)
         for row in (
@@ -574,8 +663,19 @@ async def show_check(
                         "rules",
                         "semantic_status",
                         "semantic_reason_code",
+                        "semantic_outcome",
                     )
                 },
+                "semantic_citations": [
+                    citation_payload(citation)
+                    for citation in (
+                        await session.scalars(
+                            select(CheckFindingCitation)
+                            .where(CheckFindingCitation.check_item_id == row.id)
+                            .order_by(CheckFindingCitation.created_at, CheckFindingCitation.id)
+                        )
+                    ).all()
+                ],
                 "finding_ids": [
                     finding["id"] for finding in findings if finding["check_item_id"] == str(row.id)
                 ],
@@ -630,9 +730,15 @@ async def show_check(
                 }
             ).model_dump(mode="json")
         )
-    return CheckReportData.model_validate(
+    data = CheckReportData.model_validate(
         {"report": report, "coverage": coverage, "certificates": certificates}
-    ).model_dump(mode="json"), findings
+    ).model_dump(mode="json")
+    if run.mode == "rules":
+        # Preserve the phase-one JSON while adding outcome/support only to combined.
+        for item in data["coverage"]:
+            item.pop("semantic_outcome")
+            item.pop("semantic_citations")
+    return data, findings
 
 
 def page_cursor(
@@ -726,7 +832,7 @@ async def list_checks(
         await check_inputs.require_dependencies(
             session, actor, task_id, run.input_manifest, storage
         )
-        items.append(await run_view(session, actor, run, storage))
+        items.append(await run_view(session, actor, run, storage, settings))
     next_cursor = (
         page_cursor(
             settings,
@@ -789,7 +895,10 @@ async def decide_finding(
         )
     if actor.role != {"commercial": "bidder", "technical": "technical"}.get(finding.review_domain):
         cards.fail("forbidden", "Review role does not match the finding domain", 403, 4)
-    if await validity(session, actor, run, storage) or body.expected_input_hash != run.input_hash:
+    if (
+        await validity(session, actor, run, storage, settings)
+        or body.expected_input_hash != run.input_hash
+    ):
         cards.fail(
             "check_input_changed", "Only the current report input can receive a decision", 409
         )

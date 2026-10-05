@@ -88,14 +88,7 @@ def check_run(
     json_output: JsonOption = False,
 ):
     cli = _helpers()
-    if mode == "combined":
-        raise ServiceError(
-            "check_mode_unavailable",
-            "Combined semantic checks are unavailable in phase 1",
-            400,
-            2,
-        )
-    if mode != "rules":
+    if mode not in {"rules", "combined"}:
         raise ServiceError("invalid_input", "Mode must be rules or combined", 400, 2)
     if wait and dry_run:
         raise ServiceError("invalid_input", "A dry run does not create a job to wait for", 400, 2)

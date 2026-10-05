@@ -62,7 +62,17 @@ class JobExecution:
         return max(self.settings.job_max_vendor_calls, scaled)
 
     def stop(self, code: str, message: str) -> ProviderFailure:
-        if self.stopped is None:
+        # A check may publish partial coverage after an admission cap. A later
+        # lease/accounting failure must still fence that publication.
+        admission_stops = {
+            "insufficient_balance",
+            "spend_cap_reached",
+            "job_charge_limit_exceeded",
+            "job_call_limit_exceeded",
+        }
+        if self.stopped is None or (
+            self.stopped.code in admission_stops and code not in admission_stops
+        ):
             self.stopped = ProviderFailure(message, code=code)
         return self.stopped
 
