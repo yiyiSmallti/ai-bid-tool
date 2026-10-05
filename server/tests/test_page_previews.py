@@ -12,6 +12,8 @@ Failure modes enumerated before implementation:
 - Reopened cards and revoked initiators invalidate cached pages just like signed downloads,
   including changes during conversion or the read before the gate acquires its locks.
 - Previews call no model provider and record no usage.
+- Untrusted PDF opens happen only in the resource-limited child; child protocol, deadline
+  and resource failures publish no converter output or page image.
 Set BID_CONVERTER_LIVE_URL to also convert the released DOCX with a real Gotenberg.
 """
 

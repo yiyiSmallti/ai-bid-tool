@@ -60,6 +60,7 @@ def create_router(
             storage,
             max_bytes=settings.max_upload_bytes,
             max_pages=settings.max_pages,
+            settings=settings,
         )
         return result(
             "tender upload",
@@ -115,7 +116,9 @@ def create_router(
         ctx=Depends(context, scope="function"),
     ):
         session, identity = ctx
-        png = await page_previews.document_page(session, identity, document_id, page, zoom, storage)
+        png = await page_previews.document_page(
+            session, identity, document_id, page, zoom, storage, settings
+        )
         return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     async def start_job(document_id: UUID, kind: str, body: JobAction, ctx):

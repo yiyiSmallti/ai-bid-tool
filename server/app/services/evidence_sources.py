@@ -1,6 +1,7 @@
 """Archive a genuine PDF page from a fixed task revision without confirming it."""
 
 import asyncio
+import base64
 import hashlib
 import struct
 import threading
@@ -11,8 +12,10 @@ import pymupdf
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import PDFSettings
 from app.core.errors import ServiceError, not_found
-from app.core.pdf_raster import MAX_EDGE_PX, MAX_PIXELS, raster_dimensions
+from app.core.pdf_process import run_pdf_operation, run_pdf_operation_async
+from app.core.pdf_raster import MAX_EDGE_PX, MAX_PIXELS
 from app.models.entities import CertificateFile, EvidenceSource, Task, TaskCertificate
 from app.providers.storage import Storage
 from app.schemas.certificate_file_contracts import CertificateScanFile
@@ -22,11 +25,9 @@ from app.schemas.evidence_source_contracts import (
     EvidenceSourcePreview,
 )
 from app.services.auth import Identity
-from app.services.certificate_files import validate_file
 from app.services.versioned import audit
 
 RENDER_PROFILE = "pdf-page-preview-v1"
-RENDER_SECONDS = 20.0
 RENDER_SLOTS = threading.BoundedSemaphore(2)
 MAX_PREVIEW_BYTES = 40 * 1024 * 1024
 WARNINGS = [
@@ -67,51 +68,73 @@ def check_png(content: bytes, descriptor: EvidenceSourcePreview):
         ) from exc
 
 
-def render_page(
-    content: bytes, original: CertificateScanFile, page_number: int, name: str, max_bytes: int
-) -> tuple[bytes, EvidenceSourcePreview, datetime]:
-    if (
-        len(content) != original.size_bytes
-        or hashlib.sha256(content).hexdigest() != original.sha256
-    ):
-        raise ServiceError("source_original_integrity", "Original failed integrity checks", 502, 4)
-    actual = validate_file(content, original.name)
-    if actual != original:
-        raise ServiceError("source_original_integrity", "Original descriptor changed", 502, 4)
-    if page_number > original.page_count:
-        raise ServiceError("invalid_source_page", "Page is outside original PDF", 400, 2)
+def _render_arguments(
+    original: CertificateScanFile,
+    page_number: int,
+    name: str,
+    max_bytes: int,
+) -> dict:
+    return {
+        "original": original.model_dump(mode="json"),
+        "page_number": page_number,
+        "name": name,
+        "max_bytes": max_bytes,
+        "max_preview_bytes": MAX_PREVIEW_BYTES,
+    }
+
+
+def _render_result(records: list[dict]) -> tuple[bytes, EvidenceSourcePreview, datetime]:
     try:
-        with pymupdf.open(stream=content, filetype="pdf") as pdf:
-            page = pdf[page_number - 1]
-            raster_dimensions(
-                page.rect.width,
-                page.rect.height,
-                150 / 72,
-                code="source_preview_limits",
-            )
-            pixmap = page.get_pixmap(dpi=150, colorspace=pymupdf.csRGB, alpha=False)
-            if (
-                max(pixmap.width, pixmap.height) > MAX_EDGE_PX
-                or pixmap.width * pixmap.height > MAX_PIXELS
-            ):
-                raise ServiceError(
-                    "source_preview_limits", "Page exceeds preview pixel limits", 400, 2
-                )
-            png = pixmap.tobytes("png")
-            if len(png) > min(MAX_PREVIEW_BYTES, max_bytes):
-                raise ServiceError("source_preview_limits", "Preview exceeds file limit", 413, 2)
-            descriptor = EvidenceSourcePreview(
-                name=name,
-                sha256=hashlib.sha256(png).hexdigest(),
-                size_bytes=len(png),
-                width_px=pixmap.width,
-                height_px=pixmap.height,
-            )
-            return png, descriptor, datetime.now(UTC)
-    except ServiceError:
-        raise
-    except Exception as exc:
-        raise ServiceError("source_render_failed", "Cannot render original page", 400, 2) from exc
+        result = records[0]
+        png = base64.b64decode(result["image"], validate=True)
+        descriptor = EvidenceSourcePreview.model_validate(result["preview"])
+        rendered_at = datetime.fromisoformat(result["rendered_at"])
+        if rendered_at.tzinfo is None or rendered_at.utcoffset() is None:
+            raise ValueError("naive timestamp")
+        check_png(png, descriptor)
+        return png, descriptor, rendered_at.astimezone(UTC)
+    except ServiceError as exc:
+        raise ServiceError(
+            "pdf_resource_limits", "PDF renderer returned invalid output", 502, 4
+        ) from exc
+    except (IndexError, KeyError, TypeError, ValueError) as exc:
+        raise ServiceError(
+            "pdf_resource_limits", "PDF renderer returned invalid output", 502, 4
+        ) from exc
+
+
+def render_page(
+    content: bytes,
+    original: CertificateScanFile,
+    page_number: int,
+    name: str,
+    max_bytes: int,
+    settings: PDFSettings | None = None,
+) -> tuple[bytes, EvidenceSourcePreview, datetime]:
+    records = run_pdf_operation(
+        content,
+        "evidence",
+        _render_arguments(original, page_number, name, max_bytes),
+        settings=settings,
+    )
+    return _render_result(records)
+
+
+async def render_page_async(
+    content: bytes,
+    original: CertificateScanFile,
+    page_number: int,
+    name: str,
+    max_bytes: int,
+    settings: PDFSettings | None = None,
+) -> tuple[bytes, EvidenceSourcePreview, datetime]:
+    records = await run_pdf_operation_async(
+        content,
+        "evidence",
+        _render_arguments(original, page_number, name, max_bytes),
+        settings=settings,
+    )
+    return _render_result(records)
 
 
 def source_data(row: EvidenceSource, snapshot: TaskCertificate, original: CertificateFile) -> dict:
@@ -193,13 +216,13 @@ async def source_inputs(
     return snapshot, original, existing
 
 
-def bounded_render(*args) -> tuple[bytes, EvidenceSourcePreview, datetime]:
-    # A timed-out render keeps its thread until it returns, so the slot is held
-    # by the thread itself; stalled renders cannot accumulate past the limit.
+async def bounded_render_async(*args) -> tuple[bytes, EvidenceSourcePreview, datetime]:
+    # The slot covers child launch, wait and reap, so stalled renders cannot
+    # accumulate past this service-level concurrency limit.
     if not RENDER_SLOTS.acquire(blocking=False):
         raise ServiceError("source_render_busy", "Page rendering is busy; try again", 503, 3)
     try:
-        return render_page(*args)
+        return await render_page_async(*args)
     finally:
         RENDER_SLOTS.release()
 
@@ -211,6 +234,7 @@ async def create_source(
     body: EvidenceSourceCreate,
     storage: Storage,
     max_bytes: int,
+    settings: PDFSettings | None = None,
 ) -> dict:
     require_access(actor, "evidence:source:write")
     if await session.get(Task, task_id) is None:
@@ -225,15 +249,9 @@ async def create_source(
     content = await storage.read(actor.org_id, original.storage_key)
     identifier = uuid4()
     name = f"source-{identifier}-page-{body.page}.png"
-    try:
-        png, preview, rendered_at = await asyncio.wait_for(
-            asyncio.to_thread(bounded_render, content, descriptor, body.page, name, max_bytes),
-            timeout=RENDER_SECONDS,
-        )
-    except TimeoutError as exc:
-        # The renderer is pure and may finish late; late results cannot reach any
-        # DB/object writes because those only follow this successful await.
-        raise ServiceError("source_render_timeout", "Page rendering timed out", 503, 3) from exc
+    png, preview, rendered_at = await bounded_render_async(
+        content, descriptor, body.page, name, max_bytes, settings
+    )
     # Certificate selection locks the task first; after taking the same lock, re-read
     # what selection or a concurrent archive may have changed during rendering.
     if await session.scalar(select(Task).where(Task.id == task_id).with_for_update()) is None:

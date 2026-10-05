@@ -9,8 +9,17 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
-class Settings(BaseSettings):
+class PDFSettings(BaseSettings):
+    """PDF limits can also be loaded by standalone parsing without service credentials."""
+
     model_config = SettingsConfigDict(env_prefix="BID_", extra="ignore", env_ignore_empty=True)
+    pdf_timeout_seconds: float = Field(default=600, gt=0, allow_inf_nan=False)
+    pdf_memory_bytes: int = Field(default=1024 * 1024 * 1024, gt=0)
+    pdf_cpu_seconds: int = Field(default=300, ge=1)
+    pdf_output_bytes: int = Field(default=256 * 1024 * 1024, gt=0)
+
+
+class Settings(PDFSettings):
     database_url: SecretStr
     encryption_key: SecretStr
     # Retired data keys, comma separated: still decrypt, never encrypt.

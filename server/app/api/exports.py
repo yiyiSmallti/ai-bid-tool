@@ -136,7 +136,9 @@ def create_router(context, db, storage, queue, settings, crypto):
         zoom: int = Query(1, ge=1, le=2),
         ctx=Depends(context, scope="function"),
     ):
-        png = await page_previews.export_page(ctx[0], ctx[1], export_id, page, zoom, storage)
+        png = await page_previews.export_page(
+            ctx[0], ctx[1], export_id, page, zoom, storage, settings
+        )
         return Response(png, media_type="image/png", headers={"Cache-Control": "no-store"})
 
     @router.get("/exports/{export_id}/provenance", name="export_provenance", response_model=Result)
