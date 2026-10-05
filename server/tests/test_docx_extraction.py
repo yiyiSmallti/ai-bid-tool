@@ -9,7 +9,7 @@ import pytest
 from app.api.main import create_app
 from app.core.config import Settings
 from app.providers.llm import AnthropicExtractor
-from conftest import FakeQueue
+from conftest import FakeQueue, credential_app
 from docx import Document
 from fakes import FakeLLM
 from sqlalchemy import text
@@ -89,7 +89,7 @@ async def test_word_extraction_cites_blocks_and_adds_starred_cells(tenants, tmp_
     settings = settings_for(tmp_path, "anthropic")
     # A tiny batch budget (below the configurable minimum) sends each section separately.
     tiny = settings.model_copy(update={"llm_batch_chars": 40, "llm_concurrency": 1})
-    app = create_app(
+    app = await credential_app(
         settings,
         llm=AnthropicExtractor(tiny, transport=vendor.transport()),
         queue=FakeQueue(),
@@ -142,7 +142,7 @@ async def test_word_citations_must_sit_inside_the_cited_block(items, code, tenan
         *([anthropic_reply([])] if code == "invalid_citation" else []),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -188,7 +188,7 @@ async def test_straight_quotes_match_curly_source_quotes(tenants, tmp_path):
         anthropic_reply([]),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -218,7 +218,7 @@ async def test_unknown_word_ref_is_rejected_without_discarding_a_verified_item(t
         anthropic_reply([]),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -266,7 +266,7 @@ async def test_star_markers_apply_per_segment_and_rule_add_only_missing_starred_
         anthropic_reply([item("t1r1c1", "★内存：≥16 GB，支持 ECC")]),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -313,7 +313,7 @@ async def test_uncited_items_are_dropped_and_reported_while_the_rest_are_saved(t
         anthropic_reply([]),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -353,7 +353,7 @@ async def test_truncated_word_batches_are_halved_until_the_output_fits(tenants, 
         return anthropic_reply([answers[b] for b in blocks if b in answers])
 
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings,
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),
@@ -393,7 +393,7 @@ async def test_a_long_cell_is_split_by_lines_and_cited_as_the_whole_cell(tenants
         return anthropic_reply([item("t1r1c1", line) for line in shown])
 
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings,
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),

@@ -161,7 +161,7 @@ class JobExecution:
                             ),
                             0,
                         ),
-                    ).where(VendorCall.job_id == self.job_id)
+                    ).where(VendorCall.job_id == self.job_id, VendorCall.state != "not_sent")
                 )
             ).one()
             if count >= self.call_ceiling:
@@ -326,4 +326,27 @@ class JobExecution:
             raise self.stop(
                 "usage_accounting_failed",
                 "Could not persist unknown vendor outcome; no more calls allowed",
+            ) from None
+
+    async def not_sent(self, call_id: UUID) -> None:
+        """Release this attempt's pending admission after credential preparation failed.
+
+        The call boundary invokes this only before starting the HTTP operation, so no
+        usage exists and the reservation cannot represent an unknown vendor charge.
+        """
+        try:
+            async with self.db.transaction(self.org_id) as session:
+                await session.execute(
+                    update(VendorCall)
+                    .where(
+                        VendorCall.id == call_id,
+                        VendorCall.job_id == self.job_id,
+                        VendorCall.run_id == self.run_id,
+                        VendorCall.state == "pending",
+                    )
+                    .values(state="not_sent", reserved_charge=Decimal(0), charge=None)
+                )
+        except SQLAlchemyError:
+            raise self.stop(
+                "usage_accounting_failed", "Could not release unsent call admission"
             ) from None

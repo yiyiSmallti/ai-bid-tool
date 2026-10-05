@@ -6,10 +6,17 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05：平台后台管理服务凭据
+
+- 接受 ADR 0006 并纳入全局表与专用数据库角色例外；迁移 `0038` 增加平台凭据、固定管理/解析函数、目录引用校验和仅迁移属主可执行的密文重包裹通路。
+- 平台 TOTP 会话可经 API、CLI 与 Element Plus 控制台创建、替换、启停、移除和测试凭据；响应只含指纹及末四位，变更与审计同事务，移除保留 tombstone。导入支持纯预检、同值重放及整批冲突回滚。
+- 目录模型、Perplexity 和 standalone/eval 每次外发及重试重新解析已提交状态；缺失、停用、移除、解密或数据库失败无后备。API/worker/standalone 拒绝旧厂商密钥 env 与直接配置值。
+- `rotate-encryption --scope provider-secrets` 覆盖平台与 BYOK 历史，支持只读退役 keyring、绑定校验、CAS 重包裹及可重入计数。机制见 [Platform credential authority](notes/platform-credentials.md)。
+
 ## 2026-10-05：单位记忆首片
 
 - 新增记忆 CRUD、history、确切修订人工 approve/reject、disable/delete、关键词检索、检索历史、逐调用使用记录、反馈恢复与单位内评测样本 API/CLI；运行契约迁入 schemas，删除文档草案模块。
-- 迁移 `0037` 增加单位隔离表、复合外键、不可变历史、人工与 worker 数据库 gate。所有新增均 candidate；只有单位 admin 人类会话可审批、管理与审阅样本，未启用作用域显式拒绝。
+- 迁移 `0038` 增加单位隔离表、复合外键、不可变历史、人工与 worker 数据库 gate。所有新增均 candidate；只有单位 admin 人类会话可审批、管理与审阅样本，未启用作用域显式拒绝。
 - `keyword-v1` 以完整规则/偏好进入 card generation 的独立上下文；scope epoch、到期和策略版本参与缓存与准入/发布检查。每个实际调用保存固定记忆与要求清单，结算关联原有用量，不增加 embedding 调用。
 - 人工驳回或编辑模型派生卡片产生加密净化反馈、单位样本及可恢复候选作业；确认只产样本。`feedback-copy-v1` 不调用模型、不自动批准，唯一来源键阻止重复候选。机制见 [Organization memory](notes/memory.md)。
 

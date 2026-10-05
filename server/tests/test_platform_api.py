@@ -12,7 +12,7 @@ import httpx
 import pytest
 from app.api.main import create_app
 from app.models.entities import UsageRecord
-from conftest import PASSWORD, FakeQueue
+from conftest import PASSWORD, FakeQueue, seed_platform_credential
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from test_api import create_document, run_job
@@ -55,7 +55,6 @@ ROUTES = [
 
 @pytest.fixture
 async def console(operator, tmp_path, monkeypatch):
-    monkeypatch.setenv("BID_PLATFORM_CREDENTIAL_MAIN", "synthetic-platform-key")
     vendor = Vendor()
     app = create_app(
         platform_settings(tmp_path), queue=FakeQueue(), llm_transport=vendor.transport()
@@ -67,6 +66,12 @@ async def console(operator, tmp_path, monkeypatch):
         session = (await sign_in(api)).json()["data"]["session"]
         api.app, api.vendor = app, vendor  # pyright: ignore[reportAttributeAccessIssue]
         api.ops = {"Authorization": f"Bearer {session}"}  # pyright: ignore[reportAttributeAccessIssue]
+        settings = app.state.processor.settings
+        await seed_platform_credential(settings)
+        await seed_platform_credential(settings, name="spare")
+        await seed_platform_credential(
+            settings, name="main_openai", provider="openai", endpoint="https://api.openai.com/v1"
+        )
         yield api
 
 
@@ -177,7 +182,7 @@ async def test_model_catalog_revisions_and_single_default(console, monkeypatch):
     assert (
         models["opus-standard"]["default"] is False and models["sonnet-economy"]["default"] is True
     )
-    assert models["sonnet-economy"]["credential_configured"] is False
+    assert models["sonnet-economy"]["credential_configured"] is True
 
     stale = await console.post(
         "/platform/models", headers=console.ops, json={**MODEL, "expected_revision": 5}
@@ -213,6 +218,7 @@ async def test_catalog_rejects_reserved_output_limits(console, provider, options
     body = {
         **MODEL,
         "provider": provider,
+        "credential": "main_openai" if provider == "openai" else "main",
         "reasoning": [{"name": "unsafe", "request_options": options}],
         "default_reasoning": "unsafe",
     }
@@ -220,7 +226,13 @@ async def test_catalog_rejects_reserved_output_limits(console, provider, options
     assert rejected.status_code == 422, rejected.text
     assert (await console.get("/platform/models", headers=console.ops)).json()["items"] == []
     created = await console.post(
-        "/platform/models", headers=console.ops, json={**MODEL, "provider": provider}
+        "/platform/models",
+        headers=console.ops,
+        json={
+            **MODEL,
+            "provider": provider,
+            "credential": "main_openai" if provider == "openai" else "main",
+        },
     )
     assert created.status_code == 200, created.text
     rejected_update = await console.post(
@@ -286,8 +298,14 @@ async def test_default_platform_model_drives_extraction_and_charges(console, ten
 async def test_missing_platform_credential_fails_extraction_explicitly(
     console, tenants, pdf_bytes, monkeypatch
 ):
-    monkeypatch.delenv("BID_PLATFORM_CREDENTIAL_MAIN")
     await console.post("/platform/models", headers=console.ops, json=MODEL)
+    listed = (await console.get("/platform/credentials", headers=console.ops)).json()["items"]
+    main = next(item for item in listed if item["name"] == "main")
+    await console.post(
+        f"/platform/credentials/{main['id']}/active",
+        headers=console.ops,
+        json={"expected_revision": 1, "active": False, "reason": "incident"},
+    )
     header = await org_header(console, tenants["orgs"][0], "a@example.test")
     _, document = await create_document(console, header, pdf_bytes)
     await run_job(console, console.app, header, document, "parse")

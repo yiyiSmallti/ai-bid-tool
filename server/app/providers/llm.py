@@ -3,7 +3,6 @@
 import asyncio
 import json
 import logging
-import os
 import re
 import ssl
 import time
@@ -13,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import httpx
-from pydantic import BaseModel, ConfigDict, SecretStr, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -32,6 +31,7 @@ from app.schemas.contracts import (
     ProviderUsage,
     Source,
 )
+from app.schemas.platform_credentials import CatalogResolveTarget
 from app.services.extraction import cited, fingerprint, locate_span, location_of, normalize
 
 ADAPTER_VERSION = "http-extract-v5"
@@ -334,6 +334,8 @@ class HTTPExtractor:
         sale_usd_per_mtok: tuple[float, float] | None = None,
         provider_config_id: UUID | None = None,
         org_owned: bool = False,
+        credential_resolver=None,
+        credential_target=None,
     ):
         if not settings.llm_model:
             raise ValueError("BID_LLM_MODEL is required")
@@ -343,6 +345,7 @@ class HTTPExtractor:
         self.platform_model_id = platform_model_id
         self.sale = sale_usd_per_mtok
         self.provider_config_id, self.org_owned = provider_config_id, org_owned
+        self.credential_resolver, self.credential_target = credential_resolver, credential_target
 
     def at_reasoning(self, name: str) -> "HTTPExtractor":
         """A copy that sends this level's vendor options and uses its batch size."""
@@ -361,6 +364,8 @@ class HTTPExtractor:
             sale_usd_per_mtok=self.sale,
             provider_config_id=self.provider_config_id,
             org_owned=self.org_owned,
+            credential_resolver=self.credential_resolver,
+            credential_target=self.credential_target,
         )
         copy.version = self.version
         copy.model_revision = self.model_revision
@@ -673,14 +678,68 @@ class HTTPExtractor:
         reserved_charge: Decimal | None = None,
         image_usage: tuple[int, str, str] | None = None,
     ) -> tuple[dict, ProviderUsage]:
+        key = self.settings.llm_api_key
+        request_headers = dict(headers)
+
+        async def prepare():
+            nonlocal key, request_headers
+            if self.credential_resolver is not None and self.credential_target is None:
+                self.credential_target = await self.credential_resolver.select_service(
+                    "standalone_llm"
+                )
+            if self.credential_target is not None:
+                assert self.credential_resolver is not None
+                try:
+                    credential = await self.credential_resolver.resolve_for_call(
+                        self.credential_target
+                    )
+                except ServiceError as exc:
+                    if self.platform_model_id is None:
+                        raise
+                    raise ServiceError(
+                        "provider_unavailable",
+                        "Selected provider is unavailable",
+                        503,
+                        exc.exit_code,
+                    ) from None
+                expected_provider = "anthropic" if self.name == "anthropic" else "openai"
+                expected_endpoint = (
+                    self.settings.llm_base_url
+                    or (
+                        "https://api.anthropic.com"
+                        if self.name == "anthropic"
+                        else "https://api.openai.com/v1"
+                    )
+                ).rstrip("/")
+                if (
+                    credential.provider != expected_provider
+                    or credential.endpoint != expected_endpoint
+                ):
+                    raise ServiceError(
+                        "provider_unavailable",
+                        "Selected provider is unavailable",
+                        503,
+                        4,
+                    )
+                key = credential.api_key
+                request_headers = {
+                    name: value
+                    for name, value in headers.items()
+                    if name.lower() not in {"authorization", "x-api-key"}
+                }
+                if self.name == "anthropic":
+                    request_headers["x-api-key"] = key.get_secret_value()
+                else:
+                    request_headers["Authorization"] = "Bearer " + key.get_secret_value()
+
         async def request():
             started = time.monotonic()
-            response = await self.send(client, url, headers, body)
+            response = await self.send(client, url, request_headers, body)
             try:
                 payload = response.json()
             except ValueError:
                 if response.status_code != 200:
-                    self.check_status(response)
+                    self.check_status(response, key=key)
                 raise ProviderFailure(
                     "LLM service returned a non-JSON response", code="invalid_provider_output"
                 ) from None
@@ -689,7 +748,7 @@ class HTTPExtractor:
                     "LLM response is not an object", code="invalid_provider_output"
                 )
             if response.status_code != 200 and "usage" not in payload:
-                self.check_status(response)
+                self.check_status(response, key=key)
             reported_model = payload.get("model") or self.model
             # Known Anthropic fallback identities are metadata, never free-form
             # model text. An unrecognized echo is still charged, then rejected.
@@ -702,7 +761,6 @@ class HTTPExtractor:
                 )
                 is not None
             )
-            key = self.settings.llm_api_key
             # Compare JSON-escaped strings as well, so quotes/backslashes in a key
             # cannot hide an echo in a response field or its reported model name.
             echoed_key = key is not None and json.dumps(key.get_secret_value(), ensure_ascii=False)[
@@ -725,9 +783,10 @@ class HTTPExtractor:
                 self.reservation(body) if reserved_charge is None else reserved_charge,
                 self.platform_model_id is not None,
                 request,
+                before_send=prepare,
             )
             # Account error envelopes that include usage before applying their error/retry policy.
-            self.check_status(response, [usage])
+            self.check_status(response, [usage], key=key)
             if echoed_key:
                 raise ProviderFailure(
                     "Vendor response echoed a credential",
@@ -769,7 +828,7 @@ class HTTPExtractor:
         return response
 
     def check_status(
-        self, response: httpx.Response, usages: list[ProviderUsage] | None = None
+        self, response: httpx.Response, usages: list[ProviderUsage] | None = None, *, key=None
     ) -> None:
         if response.status_code != 200:
             try:
@@ -794,8 +853,9 @@ class HTTPExtractor:
             if response.status_code == 402 or codes & (QUOTA_CODES | QUOTA_TYPES):
                 # Only a reset timestamp is taken from the vendor message.
                 message = str(error.get("message") or "")
-                if self.settings.llm_api_key is not None:
-                    message = message.replace(self.settings.llm_api_key.get_secret_value(), "")
+                key = key or self.settings.llm_api_key
+                if key is not None:
+                    message = message.replace(key.get_secret_value(), "")
                 reset = RESET_TIME.search(message)
                 raise ProviderFailure(
                     f"Model quota is used up or the plan is unavailable ({kind})"
@@ -833,11 +893,9 @@ class AnthropicExtractor(HTTPExtractor):
 
     async def call(self, client, batch):
         settings = self.settings
-        assert settings.llm_api_key is not None
-        headers = {
-            "x-api-key": settings.llm_api_key.get_secret_value(),
-            "anthropic-version": "2023-06-01",
-        }
+        headers = {"anthropic-version": "2023-06-01"}
+        if settings.llm_api_key is not None:
+            headers["x-api-key"] = settings.llm_api_key.get_secret_value()
         body: dict[str, Any] = {
             "model": self.model,
             "max_tokens": settings.llm_max_output_tokens,
@@ -917,11 +975,17 @@ class OpenAICompatibleExtractor(HTTPExtractor):
         return self.parse(message.get("content") or "", usage), usage
 
 
-def create_llm(settings: Settings):
+def create_llm(settings: Settings, *, credential_resolver=None, credential_target=None):
+    settings.assert_vendor_credentials_absent()
+    if settings.llm_provider != "disabled" and credential_resolver is None:
+        from app.services.platform_credentials import PlatformCredentialResolver
+
+        credential_resolver = PlatformCredentialResolver(settings)
+    kwargs = {"credential_resolver": credential_resolver, "credential_target": credential_target}
     if settings.llm_provider == "anthropic":
-        return AnthropicExtractor(settings)
+        return AnthropicExtractor(settings, **kwargs)
     if settings.llm_provider == "openai":
-        return OpenAICompatibleExtractor(settings)
+        return OpenAICompatibleExtractor(settings, **kwargs)
     return DisabledLLM()
 
 
@@ -947,22 +1011,21 @@ class UnavailablePlatformModel(DisabledLLM):
         return self
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
-        raise ProviderFailure("The platform model's credential is not configured")
+        raise ProviderFailure("Selected provider is unavailable", code="provider_unavailable")
 
 
-def credential_value(name: str) -> str | None:
-    return os.environ.get(f"BID_PLATFORM_CREDENTIAL_{name.upper()}") or None
+def platform_llm(
+    settings: Settings, entry: PlatformModel, transport=None, *, credential_resolver=None
+):
+    if credential_resolver is None:
+        from app.services.platform_credentials import PlatformCredentialResolver
 
-
-def platform_llm(settings: Settings, entry: PlatformModel, transport=None):
-    key = credential_value(entry.credential)
-    if key is None and (entry.provider == "anthropic" or not entry.base_url):
-        return UnavailablePlatformModel(entry)
+        credential_resolver = PlatformCredentialResolver(settings)
     configured = settings.model_copy(
         update={
             "llm_provider": entry.provider,
             "llm_model": entry.model,
-            "llm_api_key": SecretStr(key) if key else None,
+            "llm_api_key": None,
             "llm_base_url": entry.base_url,
             "llm_input_usd_per_mtok": float(entry.vendor_input_usd_per_mtok),
             "llm_output_usd_per_mtok": float(entry.vendor_output_usd_per_mtok),
@@ -973,6 +1036,10 @@ def platform_llm(settings: Settings, entry: PlatformModel, transport=None):
         configured,
         transport,
         platform_model_id=entry.id,
+        credential_resolver=credential_resolver,
+        credential_target=CatalogResolveTarget(
+            model_id=entry.id, expected_model_revision=entry.revision
+        ),
         sale_usd_per_mtok=(
             float(entry.sale_input_per_mtok),
             float(entry.sale_output_per_mtok),

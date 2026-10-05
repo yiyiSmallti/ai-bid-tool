@@ -204,7 +204,7 @@ async def submit(session, actor, task_id: UUID, body: ProductSimulationInput, pr
                 for item in items
             ],
             "requirement_count": sum(len(item["requirement_ids"]) for item in items),
-            "search_identity": manifest["search_identity"],
+            "search_identity": provider.public_identity if provider else None,
             "admission_blocker": blocker,
         }, None
     if body.expected_input_hash != input_hash:
@@ -448,12 +448,14 @@ async def record(session, actor, task_id: UUID, job_id: UUID, outcome: dict) -> 
 async def process(execution: JobExecution, processor, llm) -> None:
     from app.providers.search import create_search_provider
 
-    search = create_search_provider(processor.settings, processor.search_transport)
+    search = await create_search_provider(processor.settings, processor.search_transport)
     if search is None:
         raise ProviderFailure("Vendor search is not configured", code="search_unavailable")
     async with execution.db.transaction(execution.org_id) as session:
         job = await execution.owned_job(session)
         manifest = job.result["submission"]["input_manifest"]
+        if manifest.get("search_identity") != search.identity:
+            images.fail("simulation_input_changed", "Fixed search identity changed", 409, 3)
         task_id, job_id = job.task_id, job.id
         assert task_id is not None
         _, items = await items_for(session, task_id, UUID(manifest["extraction_job_id"]))

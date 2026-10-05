@@ -13,6 +13,8 @@ AI 标书工具：帮投标单位解析招标文件、抽取要求、查证技�
    - 所有业务表必须有 `org_id`（NOT NULL）并启用 PostgreSQL 行级安全策略（RLS）。新建表时，同一次改动里必须带上 RLS 策略和隔离测试。
    - `User` 是全局身份表，是单位 `org_id` 与 RLS 要求的唯一例外，仅保存登录身份与认证信息；一个全局账号可以加入多个单位。单位归属、角色和权限保存在 `Membership` 中，`Membership` 及其余单位业务表仍必须有 `org_id`（NOT NULL）并启用 RLS。
    - 平台运营后台另有经批准的例外：全局表 `platform_models`（平台模型目录）、`platform_audit_logs`（只能新增、不能改删）和 `platform_cards`（充值卡密，只存哈希与末 4 位），以及 `NOLOGIN`、无 `BYPASSRLS` 的角色 `bid_platform_fn`。该角色只在 `orgs`、`memberships`、`usage_records`、`org_balances` 上有只读跨单位策略，只作为固定函数的属主；函数不得返回任何单位业务内容，入账只能经 `redeem_card` 和 `platform_adjust_balance`。决定与理由见 `docs/adr/0001-platform-console-access.md` 和 `docs/adr/0002-prepaid-billing.md`。
+   - [ADR 0006](docs/adr/0006-platform-credentials.md) 批准一个范围受限的新全局表 `platform_credentials`，无 `org_id`，不采用租户 RLS。它只保存平台持有的出站服务凭据、加密和管理元数据；不得保存单位 BYOK、业务内容、登录身份、平台管理员名单或用于解锁自身的密钥。不新增全局凭据历史明文/密文表。
+   - 沿用 `bid_platform_fn` 的受限函数属主模式，但不把新密文访问权扩大给该已有角色。新 `bid_platform_credentials_fn` 为 `NOLOGIN NOSUPERUSER NOBYPASSRLS NOINHERIT`，只拥有固定凭据函数所需的表权限，不获任何单位业务表权限。单位运行角色 `bid_app` 无该表的直接权限，也无这些函数的 EXECUTE/角色成员资格。`bid_platform_app`（平台管理专用连接）只可执行元数据和写函数；`bid_credential_reader`（API/worker 的凭据解析专用连接）只可执行按已验证消费对象定位的单条密文解析函数及 readiness 元数据函数。二者不获表的 SELECT/UPDATE，不继承属主，不拥有任何 `BYPASSRLS` 能力。函数固定 `search_path`、全限定对象名，撤销 PUBLIC EXECUTE，禁止动态 SQL。TOTP 在平台应用边界核验，数据库不把可伪造的 `SET app.*` 当作认证；不同连接角色是单位 SQL 路径的隔离边界，不宣称能隔离已被攻陷且持有根密钥的整个服务进程。
    - 登录成功不代表可以访问任意单位；切换或访问单位前必须校验有效的 `Membership`，再设置该请求的单位上下文。
    - 数据库会话通过 `SET app.current_org = ...` 设置单位上下文；应用代码不得使用绕过 RLS 的数据库角色。
    - 对象存储路径一律以 `org/{org_id}/` 开头；下载只发放带签名的短期链接。

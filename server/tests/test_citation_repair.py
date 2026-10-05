@@ -37,11 +37,10 @@ from uuid import UUID
 import httpx
 import pymupdf
 import pytest
-from app.api.main import create_app
 from app.core.config import Settings
 from app.models.entities import Membership
 from app.providers.llm import AnthropicExtractor
-from conftest import PASSWORD, FakeQueue
+from conftest import PASSWORD, FakeQueue, credential_app
 from docx import Document
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -162,7 +161,7 @@ async def login(api: httpx.AsyncClient, org_id: UUID, label: str) -> dict[str, s
 async def repair_client(tenants, tmp_path: Path, *, vendor_replies: int = 1):
     vendor = Vendor(*(anthropic_reply(extraction_items()) for _ in range(vendor_replies)))
     settings = settings_for(tmp_path)
-    app = create_app(
+    app = await credential_app(
         settings,
         llm=AnthropicExtractor(settings, transport=vendor.transport()),
         queue=FakeQueue(),
@@ -382,7 +381,7 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
     # Word text, while persistence and confirmation use the exact paragraph span.
     word_vendor = Vendor(anthropic_reply([acceptance_item()]))
     word_settings = settings_for(tmp_path)
-    word_app = create_app(
+    word_app = await credential_app(
         word_settings,
         llm=AnthropicExtractor(word_settings, transport=word_vendor.transport()),
         queue=FakeQueue(),

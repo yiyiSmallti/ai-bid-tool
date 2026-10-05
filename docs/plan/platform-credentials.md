@@ -2,15 +2,15 @@
 kind: plan
 ---
 
-# 契约草案：平台后台管理服务凭据
+# 平台后台管理服务凭据
 
-状态：**待批准，未实施。** 对应[路线图](roadmap.md) F10、P04。
+状态：**已批准，推荐默认值全部采纳。** 对应[路线图](roadmap.md) F10、P04。
 
 [agent.md](../../agent.md#工作方式)要求先确认 Pydantic 模型、Provider 接口和 CLI JSON。
-[契约类型](platform-credentials/platform_credentials_contracts.py)仅供审查，不注册路由、
-命令或数据库对象。全局表例外、信任边界与取舍由
-[ADR 0006](../adr/0006-platform-credentials.md)定义；本页中的新增行为均为提议，
-待决定事项按推荐默认值展开，不代表已经批准。
+[批准的契约类型](platform-credentials/platform_credentials_contracts.py)定义输入、输出和内部接口；
+运行类型位于 [platform_credentials.py](../../server/app/schemas/platform_credentials.py)。
+全局表例外、信任边界与取舍由已接受的 [ADR 0006](../adr/0006-platform-credentials.md)定义。
+机制与实现入口见[平台凭据机制](../notes/platform-credentials.md)。
 
 ## 目标与范围
 
@@ -21,7 +21,7 @@ API、worker 与 standalone/eval 共用数据库权威值，变更不依赖修�
 
 精确迁移边界如下。未列入的厂商能力需要后续契约，不自动接收任意秘密名称。
 
-| 配置 / 现有入口 | 提议归属与接入要求 |
+| 配置 / 现有入口 | 归属与接入要求 |
 | --- | --- |
 | `BID_PLATFORM_CREDENTIAL_<NAME>`；[llm.py](../../server/app/providers/llm.py) `credential_value/platform_llm` | 入库，`purpose=catalog_llm`；沿用 `PlatformModel.credential` 名称，大小写映射不改变 |
 | `BID_PERPLEXITY_API_KEY`；[search.py](../../server/app/providers/search.py) `create_search_provider` | 入库，`purpose=vendor_search`；固定 Perplexity endpoint，唯一未移除服务凭据 |
@@ -35,7 +35,7 @@ API、worker 与 standalone/eval 共用数据库权威值，变更不依赖修�
 | `BID_SEARCH_URL`、`BID_LLM_BASE_URL`、S3 endpoint/bucket、转换/OCR 参数 | 非秘密配置；拒绝 URL 内认证值。SearXNG、Gotenberg、本地 OCR 目前没有应迁入此表的出站 API key |
 
 原 `platform_llm` 在 OpenAI 自定义 endpoint 缺 key 时允许匿名调用。本提案要求平台目录
-必须引用有效凭据，不再把“缺失/停用”解释成匿名许可；匿名本地模型的显式契约列为待决定。
+必须引用有效凭据，不再把“缺失/停用”解释成匿名许可；匿名本地模型不在批准范围内，需另立显式契约。
 所有真实调用入口均移除 env fallback，测试仍可显式注入假 Provider，不能把测试旁路注册到生产。
 
 ## 现有机制与必要接入点
@@ -107,8 +107,8 @@ probe_id。resolve-operator-check 接收目标 UUID、expected_revision 和 impo
 
 ### 迁移和部署顺序
 
-1. ADR/契约批准后，补充 `agent.md` 的唯一例外说明；以实际 Alembic head 为父创建迁移，
-   不预占未核验的迁移号。先建立表、角色、函数、审计约束，默认拒绝一切未显式授权的访问。
+1. `agent.md` 硬规则 1 纳入批准例外；迁移为 `0038_platform_credentials.py`（接在记忆迁移 `0037` 之后）。
+   建立表、角色、函数、审计约束，默认拒绝一切未显式授权的访问。
 2. 先建目录 name 外键为 NOT VALID；新目录写仍校验引用。将已有同名但 provider/endpoint
    不一致的目录列为迁移冲突，先明确拆分；不自动将一个 key 授权给多个 endpoint。
 3. 在维护窗口停止接收相关付费提交并排空在途工作，准备 API/worker/standalone 的一致版本、
@@ -290,6 +290,10 @@ interrupted（结果未知），不伪造 finish。finish 审计持久化失败�
 遵守纯预检不写审计的约定；失败审计也不得导致把 key 记录进异常文本。表权限/触发器保证审计
 只能追加，新维护通路也不能 UPDATE/DELETE 它。
 
+未认证请求在专用凭据连接前拒绝，普通审计连接只追加 `platform.credential_denied`，
+使用固定内部 actor 和 `invalid_session` 分类；它不属于 `credential.*` 探针授权事件。
+已认证请求的无效输入仍使用凭据审计函数记录固定错误码。
+
 ## 一次性导入与禁止 env 后备
 
 import-env 是显式恢复/迁移工具，不是服务启动钩子。CLI 从受保护 env-file 只读取 manifest
@@ -345,9 +349,9 @@ credential.rewrap 审计同事务；BYOK 维护路径仅迁移属主可执行，
 
 ## 实施顺序与测试计划
 
-批准后按“迁移与权限 → 加密/轮换及 resolver → API/CLI → 控制台与导入切换”的依赖实施，
-每条真实入口都必须接上 resolver，不能留下 env 分支。只在此草案阶段运行末尾的静态检查；
-以下数据库、浏览器和端到端测试均是后续验收要求，本次不运行服务或访问厂商。
+按“迁移与权限 → 加密/轮换及 resolver → API/CLI → 控制台与导入切换”的依赖实施，
+每条真实入口都必须接上 resolver，不能留下 env 分支。以下场景定义验收门禁；
+数据库套件由主集成会话在隔离 PostgreSQL 运行，不以静态检查替代运行时验收。
 
 | 验收场景 | 必须证明的结果 |
 | --- | --- |
@@ -370,7 +374,7 @@ credential.rewrap 审计同事务；BYOK 维护路径仅迁移属主可执行，
 不在 docs 下保存验证日志、截图或证据，不保存请求 body、secret、解密值或原始 HAR。
 可分享的工件只含安全视图、角色授权断言及通过/失败摘要。
 
-草案的静态验证命令：
+契约的静态验证命令：
 
 ```sh
 uv run ruff check docs/plan/platform-credentials/
@@ -379,9 +383,9 @@ uv run pyright docs/plan/platform-credentials/platform_credentials_contracts.py
 uv run python -c "import runpy; runpy.run_path('docs/plan/platform-credentials/platform_credentials_contracts.py')"
 ```
 
-## 待决定
+## 已定决定
 
-| 决定 | 推荐默认值 | 理由 / 需要确认的影响 |
+| 决定 | 已批准选择 | 理由 / 影响 |
 | --- | --- | --- |
 | 全局表与数据库连接隔离 | 采纳 ADR 0006；独立管理/解析角色与连接池 | 能用真实 org 数据库角色证明无密文访问；增加两条 bootstrap 连接的运维工作，不能仅靠共享 bid_app + actor GUC |
 | 首期迁入范围 | 三类厂商 key 全迁，包括 standalone/eval；S3/沙箱/信任根留部署渠道 | standalone 在线调用将依赖 DB；不把基础设施恢复身份纳入运行期供应商表 |
@@ -394,4 +398,4 @@ uv run python -c "import runpy; runpy.run_path('docs/plan/platform-credentials/p
 | 连接测试 | 首期认证元数据探针，Perplexity/未验证适配器返回 unsupported；不做收费合成搜索 | 保持“每次内容调用计量”和 org 隔离；如需实际收费测试，先批准专用测试单位及预算计划，不能新增无 org 用量例外 |
 | 管理 CLI | 与后台同一 TOTP 会话、只读 key-file，提供显式 import-env | 支持可重复运维，不把 key 放 argv 或一般配置 JSON；不提供 token 管理能力 |
 
-这些决定确认后才实施表、函数、服务、路由、CLI、页面和迁移；本草案不宣称已经满足运行时验收。
+全部选择按推荐默认值批准；数据库和端到端验收通过后才可进行部署切换。

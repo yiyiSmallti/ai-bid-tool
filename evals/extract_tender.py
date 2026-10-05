@@ -1,7 +1,6 @@
 """Run the configured real LLM on one public tender (PDF or Word) and save a reviewable artifact.
 
-Calls the vendor API and costs money. Not part of CI. Reads BID_LLM_* settings from
-the environment; the database is not touched.
+Calls the vendor API and costs money. Not part of CI. Reads non-secret BID_LLM_* settings and resolves standalone credentials from PostgreSQL.
 
     uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --output NEW_RESULT.json
     uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --batch-chars 200000 --output WHOLE.json
@@ -32,7 +31,7 @@ STAR = "★"
 
 
 def settings(batch_chars: int | None) -> Settings:
-    # Only the LLM and OCR settings matter here; storage and database stay unused.
+    # Stored credential roots and the dedicated reader URL remain required deployment inputs.
     os.environ.setdefault("BID_DATABASE_URL", "postgresql+psycopg://unused@localhost/unused")
     os.environ.setdefault("BID_ENCRYPTION_KEY", Fernet.generate_key().decode())
     os.environ.setdefault("BID_TOKEN_KEY", Fernet.generate_key().decode())
@@ -68,7 +67,9 @@ def star_recall(items, units) -> dict:
 async def run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict, int]:
     config = settings(batch_chars)
     if config.llm_provider == "disabled":
-        raise SystemExit("Set BID_LLM_PROVIDER and its key before running this evaluation")
+        raise SystemExit(
+            "Set BID_LLM_PROVIDER and an active standalone database credential before running this evaluation"
+        )
     llm = create_llm(config)
     suffix = Path(name).suffix.lower()
     pages, _, parse_warnings = await parse_document(
@@ -109,6 +110,10 @@ async def run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict,
         artifact["usage"] = [usage.model_dump() for usage in exc.usage]
         print(f"Extraction failed: {exc.code} ({exc})")
         return artifact, 1
+    finally:
+        from app.core.credential_db import close_connections
+
+        await close_connections(config)
     items = result.extraction.items
     valid = [cited(item, by_id.get(item.source.chunk_id)) for item in items]
     try:
@@ -162,7 +167,14 @@ def main():
     args = parser.parse_args()
     if args.output.exists():
         raise SystemExit("Choose a new output path; existing files are not overwritten")
-    artifact, code = asyncio.run(run(args.file.name, args.file.read_bytes(), args.batch_chars))
+    try:
+        artifact, code = asyncio.run(run(args.file.name, args.file.read_bytes(), args.batch_chars))
+    except ServiceError as exc:
+        print(json.dumps({"error": {"code": exc.code}}), file=sys.stderr)
+        raise SystemExit(exc.exit_code) from None
+    except ValueError:
+        print(json.dumps({"error": {"code": "invalid_input"}}), file=sys.stderr)
+        raise SystemExit(4) from None
     args.output.write_text(json.dumps(artifact, ensure_ascii=False, indent=2))
     print(f"Artifact written to {args.output}")
     raise SystemExit(code)

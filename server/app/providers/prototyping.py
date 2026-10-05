@@ -88,11 +88,11 @@ async def call(llm: "HTTPExtractor", client: httpx.AsyncClient, spec: dict):
     settings = llm.settings
     headers = {}
     if llm.name == "anthropic":
-        assert settings.llm_api_key is not None
         headers = {
-            "x-api-key": settings.llm_api_key.get_secret_value(),
             "anthropic-version": "2023-06-01",
         }
+        if settings.llm_api_key is not None:
+            headers["x-api-key"] = settings.llm_api_key.get_secret_value()
         if settings.llm_anthropic_fallback:
             headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
         url = (settings.llm_base_url or "https://api.anthropic.com").rstrip("/") + "/v1/messages"

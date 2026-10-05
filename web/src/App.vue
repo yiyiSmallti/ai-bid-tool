@@ -12,6 +12,7 @@ const menus = computed(() => area.value === "platform"
   ? [
       { key: "orgs", to: "/platform/orgs", title: "单位", icon: OfficeBuilding },
       { key: "models", to: "/platform/models", title: "模型", icon: Monitor },
+      { key: "credentials", to: "/platform/credentials", title: "服务凭据", icon: Lock },
       { key: "cards", to: "/platform/cards", title: "卡密", icon: Tickets },
       { key: "usage", to: "/platform/usage", title: "用量与账单", icon: DataAnalysis },
       { key: "audit", to: "/platform/audit", title: "审计", icon: Files },

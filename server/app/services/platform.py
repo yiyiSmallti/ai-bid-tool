@@ -2,7 +2,6 @@
 
 import asyncio
 import hashlib
-from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -19,21 +18,21 @@ from app.core.security import TokenSigner, hash_password
 from app.core.totp import matching_counter
 from app.models.entities import PlatformAuditLog, PlatformCard, PlatformModel, User
 from app.providers.base import ProviderFailure
-from app.providers.llm import HTTPExtractor, credential_value, platform_llm
+from app.providers.llm import HTTPExtractor, platform_llm
 from app.schemas.platform_contracts import (
     PlatformBalanceAdjust,
     PlatformCardCreate,
     PlatformModelSet,
 )
+from app.schemas.platform_credentials import CatalogResolveTarget, PlatformOperator
+from app.services.platform_credentials import PlatformCredentialResolver
 
 LOGIN_ACTION = "platform.login"
 SETUP_SECONDS = 24 * 3600
 UNUSABLE_PASSWORD = "!setup"
 
 
-@dataclass
-class PlatformIdentity:
-    email: str
+PlatformIdentity = PlatformOperator
 
 
 def audit(
@@ -88,7 +87,7 @@ async def login(
     await attempts.authenticate(email, password, source, consume_totp)
     return {
         "session": crypto.issue(
-            {"kind": "platform", "email": email}, settings.platform_session_seconds
+            {"kind": "platform", "email": email, "totp": True}, settings.platform_session_seconds
         ),
         "email": email,
         "expires_in": settings.platform_session_seconds,
@@ -99,9 +98,15 @@ def identify(settings: Settings, crypto: TokenSigner, bearer: str) -> PlatformId
     payload = crypto.open(bearer)
     email = payload.get("email")
     # Removing an operator from the deployment config revokes their sessions at once.
-    if payload.get("kind") != "platform" or email not in settings.platform_admins():
+    if (
+        payload.get("kind") != "platform"
+        or payload.get("totp") is not True
+        or email not in settings.platform_admins()
+    ):
         raise ServiceError("invalid_session", "Invalid credentials", 401, 4)
-    return PlatformIdentity(email=email)
+    return PlatformIdentity(
+        email=email, session_expires_at=datetime.fromtimestamp(payload["exp"], UTC)
+    )
 
 
 def fingerprint(password_hash: str) -> str:
@@ -209,17 +214,23 @@ MODEL_FIELDS = (
 )  # fmt: skip
 
 
-def model_view(row: PlatformModel) -> dict:
+def model_view(row: PlatformModel, configured: bool = False) -> dict:
     view = {field: plain(getattr(row, field)) for field in MODEL_FIELDS}
     view["default"] = row.is_default
-    # Only whether the deployment holds the key; the key itself never leaves the environment.
-    view["credential_configured"] = credential_value(row.credential) is not None
+    # Active metadata is not proof of decryption or vendor connectivity.
+    view["credential_configured"] = configured
     return view
 
 
-async def list_models(session: AsyncSession) -> list[dict]:
+async def list_models(session: AsyncSession, resolver: PlatformCredentialResolver) -> list[dict]:
     rows = await session.scalars(select(PlatformModel).order_by(PlatformModel.id))
-    return [model_view(row) for row in rows]
+    views = []
+    for row in rows:
+        state = await resolver.readiness(
+            CatalogResolveTarget(model_id=row.id, expected_model_revision=row.revision)
+        )
+        views.append(model_view(row, state.configured))
+    return views
 
 
 async def set_model(session: AsyncSession, actor: PlatformIdentity, body: PlatformModelSet) -> dict:
@@ -395,6 +406,33 @@ async def audit_entries(session: AsyncSession, limit: int) -> list[dict]:
     rows = await session.scalars(
         select(PlatformAuditLog).order_by(PlatformAuditLog.created_at.desc()).limit(limit)
     )
+    rows = list(rows)
+    probe_ids = [
+        row.details.get("probe_id") for row in rows if row.action == "credential.probe_start"
+    ]
+    finished = (
+        set(
+            await session.scalars(
+                select(PlatformAuditLog.details["probe_id"].as_string()).where(
+                    PlatformAuditLog.action == "credential.probe_finish",
+                    PlatformAuditLog.details["probe_id"].as_string().in_(probe_ids),
+                )
+            )
+        )
+        if probe_ids
+        else set()
+    )
+
+    def outcome(row):
+        if row.action == "credential.probe_start" and row.outcome == "success":
+            if row.details.get("probe_id") not in finished:
+                return (
+                    "interrupted"
+                    if (datetime.now(UTC) - row.created_at).total_seconds() > 30
+                    else "in_progress"
+                )
+        return row.outcome
+
     return [
         {
             "id": str(row.id),
@@ -402,7 +440,7 @@ async def audit_entries(session: AsyncSession, limit: int) -> list[dict]:
             "actor_email": row.actor_email,
             "action": row.action,
             "object_id": row.object_id,
-            "outcome": row.outcome,
+            "outcome": outcome(row),
             "details": row.details,
         }
         for row in rows

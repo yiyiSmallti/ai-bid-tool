@@ -5,7 +5,9 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.platform_credentials import create_router as create_credentials_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
@@ -22,7 +24,9 @@ from app.schemas.platform_contracts import (
     PlatformOrgActive,
     PlatformOrgCreate,
 )
+from app.schemas.platform_credentials import CatalogResolveTarget
 from app.services import platform
+from app.services.platform_credentials import PlatformCredentialResolver, database_error
 
 
 def result(command: str, data=None, items=None) -> dict:
@@ -98,13 +102,20 @@ def create_router(
             return result(
                 "platform model list",
                 {"currency": settings.billing_currency},
-                await platform.list_models(session),
+                await platform.list_models(session, PlatformCredentialResolver(settings)),
             )
 
     @router.post("/platform/models", name="platform_model_set", response_model=Result)
     async def model_set(body: PlatformModelSet, actor=Depends(operator)):
-        async with db.transaction() as session:
-            data = await platform.set_model(session, actor, body)
+        try:
+            async with db.transaction() as session:
+                data = await platform.set_model(session, actor, body)
+        except SQLAlchemyError as exc:
+            raise database_error(exc) from None
+        state = await PlatformCredentialResolver(settings).readiness(
+            CatalogResolveTarget(model_id=data["id"], expected_model_revision=data["revision"])
+        )
+        data["credential_configured"] = state.configured
         return result("platform model set", data)
 
     @router.post(
@@ -162,4 +173,5 @@ def create_router(
         async with db.transaction() as session:
             return result("platform audit", items=await platform.audit_entries(session, limit))
 
+    router.include_router(create_credentials_router(settings, operator))
     return router

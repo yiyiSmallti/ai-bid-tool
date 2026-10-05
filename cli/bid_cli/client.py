@@ -192,6 +192,30 @@ class Client:
             raise ServiceError(
                 "invalid_server_response", "Server returned an invalid response", 502, 3
             ) from exc
+        if platform and (
+            path == "/platform/credentials" or path.startswith("/platform/credentials/")
+        ):
+            from bid_cli.platform_credentials import safe_result
+
+            actions = {
+                "replace": "replace",
+                "active": "set-active",
+                "remove": "remove",
+                "test": "test",
+                "import-env": "import-env",
+            }
+            tail = path.rsplit("/", 1)[-1]
+            action = (
+                ("list" if method.upper() == "GET" else "create")
+                if path == "/platform/credentials"
+                else actions.get(tail, "show")
+            )
+            result = safe_result(body, "platform credential " + action)
+            if response.is_success != result["ok"]:
+                raise ServiceError(
+                    "invalid_server_response", "Server returned invalid credential status", 502, 4
+                )
+            return result
         if not response.is_success:
             data = body.get("data", {})
             error = data.get("error", {})

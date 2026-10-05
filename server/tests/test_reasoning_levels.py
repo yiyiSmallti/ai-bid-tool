@@ -8,7 +8,7 @@ import pymupdf
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from conftest import FakeQueue
+from conftest import FakeQueue, seed_platform_credential
 from fakes import FakeLLM
 from sqlalchemy import text
 from test_api import create_document
@@ -87,7 +87,6 @@ class Vendor:
 
 @pytest.fixture
 async def glm(operator, tmp_path, monkeypatch, tenants):
-    monkeypatch.setenv("BID_PLATFORM_CREDENTIAL_MAIN", "synthetic-platform-key")
     vendor = Vendor()
     app = create_app(
         platform_settings(tmp_path), queue=FakeQueue(), llm_transport=httpx.MockTransport(vendor)
@@ -97,6 +96,9 @@ async def glm(operator, tmp_path, monkeypatch, tenants):
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
         ops = {"Authorization": f"Bearer {(await sign_in(api)).json()['data']['session']}"}
+        await seed_platform_credential(
+            app.state.processor.settings, provider="openai", endpoint=GLM["base_url"]
+        )
         saved = await api.post("/platform/models", headers=ops, json=GLM)
         assert saved.status_code == 200, saved.text
         org = tenants["orgs"][0]
@@ -249,7 +251,7 @@ async def test_models_without_levels_ignore_the_level_with_a_warning(tenants, tm
         assert status["status"] == "succeeded" and status["reasoning"] is None
 
 
-async def test_model_test_reports_every_level_without_a_credential(glm):
+async def test_model_without_a_credential_is_rejected_before_testing(glm):
     api, _, vendor, _, ops, _, _ = glm
     claude = {
         **GLM,
@@ -262,11 +264,13 @@ async def test_model_test_reports_every_level_without_a_credential(glm):
         "reasoning": [{"name": "low", "effort": "low"}, {"name": "high", "effort": "high"}],
         "default_reasoning": "high",
     }
-    assert (await api.post("/platform/models", headers=ops, json=claude)).status_code == 200
-    tested = (await api.post("/platform/models/claude/test", headers=ops)).json()["data"]
-    assert tested["passed"] is False and tested["error"]["code"] == "provider_unavailable"
-    assert [(level["reasoning"], level["error"]["code"]) for level in tested["levels"]] == [
-        ("low", "provider_unavailable"),
-        ("high", "provider_unavailable"),
-    ]
+    # ADR 0006 requires a matching active credential before a new catalog row exists.
+    rejected = await api.post("/platform/models", headers=ops, json=claude)
+    assert rejected.status_code == 409
+    assert rejected.json()["data"]["error"]["code"] == "credential_reference_mismatch"
+    assert rejected.json()["data"]["error"]["exit_code"] == 2
+    models = (await api.get("/platform/models", headers=ops)).json()["items"]
+    assert all(model["id"] != "claude" for model in models)
+    tested = await api.post("/platform/models/claude/test", headers=ops)
+    assert tested.status_code == 404 and tested.json()["data"]["error"]["code"] == "not_found"
     assert vendor.bodies == []

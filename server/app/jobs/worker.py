@@ -13,6 +13,9 @@ from app.services import billing
 
 async def run():
     settings = Settings.load()
+    from app.core.credential_db import get_connections
+
+    await get_connections(settings).reader.verify()
     db = Database(settings)
     await db.verify_role()
     await billing.verify_currency(db, settings.billing_currency)
@@ -33,6 +36,9 @@ async def run():
         async with queue.app.open_async():
             await queue.app.run_worker_async(queues=["bid"])
     finally:
+        from app.core.credential_db import close_connections
+
+        await close_connections(settings)
         await db.engine.dispose()
 
 

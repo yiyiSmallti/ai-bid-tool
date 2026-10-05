@@ -13,12 +13,11 @@ from uuid import uuid4
 import httpx
 import pymupdf
 import pytest
-from app.api.main import create_app
 from app.core.config import Settings
 from app.models.entities import Requirement, UsageRecord
 from app.providers.base import ProviderFailure
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
-from conftest import FakeQueue
+from conftest import FakeQueue, credential_app
 from pydantic import ValidationError
 from sqlalchemy import select
 from test_api import create_document, run_job
@@ -122,7 +121,7 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
         tmp_path, "anthropic", llm_input_usd_per_mtok=4.0, llm_output_usd_per_mtok=20.0
     )
     llm = AnthropicExtractor(settings, transport=vendor.transport())
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         assert (await api.get("/health")).json()["data"]["real_llm_configured"] is True
         _, document = await create_document(api, header, pdf_bytes)
@@ -177,7 +176,7 @@ async def test_openai_compatible_extraction_without_prices_records_unknown_cost(
     vendor = Vendor(httpx.Response(200, json=reply))
     settings = settings_for(tmp_path, "openai", llm_base_url="https://llm.example.test/v1")
     llm = OpenAICompatibleExtractor(settings, transport=vendor.transport())
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
@@ -220,7 +219,11 @@ async def test_pdf_items_keep_exact_source_spans_and_reject_unknown_and_ambiguou
     vendor = Vendor(provider_reply(provider, items))
     settings = settings_for(tmp_path, provider)
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
-    app = create_app(settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue())
+    app = await credential_app(
+        settings,
+        llm=adapter(settings, vendor.transport()),
+        queue=FakeQueue(),
+    )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         task, document = await create_document(api, header, content)
         await run_job(api, app, header, document, "parse")
@@ -325,7 +328,7 @@ async def test_vendor_failures_map_to_job_states(case, tenants, tmp_path, pdf_by
     reply, job_status, code, exit_code, billed_calls = FAILURES[case]
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=Vendor(reply).transport())
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
@@ -363,7 +366,7 @@ async def test_failure_in_later_batch_keeps_usage_of_finished_batches(tenants, t
     vendor = Vendor(anthropic_reply([]), httpx.Response(500, json={"error": {"type": "api_error"}}))
     settings = settings_for(tmp_path, "anthropic", llm_batch_chars=1000)
     llm = AnthropicExtractor(settings, transport=vendor.transport())
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         _, document = await create_document(api, header, content)
         await run_job(api, app, header, document, "parse")
@@ -377,9 +380,7 @@ async def test_failure_in_later_batch_keeps_usage_of_finished_batches(tenants, t
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"llm_provider": "anthropic"},
         {"llm_provider": "openai", "llm_api_key": SYNTHETIC_KEY},
-        {"llm_provider": "openai", "llm_model": "synthetic-model"},
         {"llm_provider": "unknown"},
     ],
 )
@@ -502,7 +503,7 @@ async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(tenant
         return anthropic_reply(GOOD_ITEMS[:1], stop="max_tokens")
 
     settings = settings_for(tmp_path, "anthropic", llm_concurrency=1)
-    app = create_app(
+    app = await credential_app(
         settings,
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),
@@ -530,7 +531,7 @@ async def test_quota_message_names_the_reset_time_but_no_other_vendor_text(
     reply = httpx.Response(429, json={"error": {"code": "1308", "message": vendor_message}})
     settings = settings_for(tmp_path, "openai", llm_base_url="https://llm.example.test/v1")
     llm = OpenAICompatibleExtractor(settings, transport=Vendor(reply).transport())
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
@@ -564,7 +565,7 @@ async def test_malformed_output_is_retried_in_smaller_parts(recovers, tenants, t
         return anthropic_reply([GOOD_ITEMS[int(pages[0]) - 1]])
 
     settings = settings_for(tmp_path, "anthropic", llm_concurrency=1)
-    app = create_app(
+    app = await credential_app(
         settings,
         llm=AnthropicExtractor(settings, transport=httpx.MockTransport(vendor)),
         queue=FakeQueue(),
@@ -592,7 +593,7 @@ async def test_items_with_an_empty_quote_are_rejected_not_fatal(tenants, tmp_pat
     reply = anthropic_reply([GOOD_ITEMS[0], GOOD_ITEMS[1] | {"quote": "  "}])
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=Vendor(reply).transport())
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
@@ -616,7 +617,7 @@ async def test_unexpected_failure_keeps_billed_usage_and_logs_no_message(
     monkeypatch.setattr(AnthropicExtractor, "attach", broken)
     settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=Vendor(anthropic_reply(GOOD_ITEMS)).transport())
-    app = create_app(settings, llm=llm, queue=FakeQueue())
+    app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
@@ -639,7 +640,7 @@ async def test_dropped_connections_are_retried_within_the_batch(
     replies.append(anthropic_reply(GOOD_ITEMS) if recovers else httpx.ReadTimeout("synthetic"))
     vendor = Vendor(*replies)
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, transport=vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):

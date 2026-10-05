@@ -7,9 +7,8 @@ import re
 import httpx
 import pymupdf
 import pytest
-from app.api.main import create_app
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
-from conftest import FakeQueue
+from conftest import FakeQueue, credential_app
 from docx import Document
 from test_api import run_job
 from test_docx_extraction import item
@@ -90,7 +89,9 @@ async def test_word_parameter_gaps_are_filled_and_each_call_is_recorded(
         tmp_path, provider, llm_input_usd_per_mtok=4, llm_output_usd_per_mtok=20
     )
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
-    app = create_app(settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue())
+    app = await credential_app(
+        settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue()
+    )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         status, rows = await extract_document(api, app, header, parameter_word())
         usages = await usage_rows(app, tenants)
@@ -134,7 +135,7 @@ async def test_gap_fill_rejects_invented_and_joined_quotes_and_counts_only_new_s
         ),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -162,7 +163,7 @@ async def test_no_gap_call_when_specs_are_covered_or_no_specs_exist(complete, te
     quotes = ["内存：≥16 GB", "屏幕比例：16:9"] if complete else []
     vendor = Vendor(anthropic_reply([item("t1r1c1", q) for q in quotes]))
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -186,7 +187,7 @@ async def test_uncited_first_pass_does_not_hide_gaps_in_another_block(tenants, t
         anthropic_reply([item("t1r1c1", q) for q in source.split("；")]),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -218,7 +219,7 @@ async def test_parameter_coverage_uses_the_actual_segment_not_a_name_substring(
         anthropic_reply([item("t1r1c1", first)]),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -250,7 +251,9 @@ async def test_a_whole_list_quote_covers_no_segments_but_a_single_segment_does(
     )
     settings = settings_for(tmp_path, provider)
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
-    app = create_app(settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue())
+    app = await credential_app(
+        settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue()
+    )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         status, rows = await extract_document(api, app, header, parameter_word(source))
 
@@ -297,7 +300,7 @@ async def test_gap_call_outcomes_keep_all_billed_usage(failure, tenants, tmp_pat
         ),
     )
     settings = settings_for(tmp_path, "anthropic", llm_concurrency=1)
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -349,7 +352,7 @@ async def test_pdf_gaps_keep_page_numbers_and_do_not_borrow_coverage_from_other_
         anthropic_reply([item("2", "Memory: 16 GB"), item("2", "Storage: 512 GB")]),
     )
     settings = settings_for(tmp_path, "anthropic")
-    app = create_app(
+    app = await credential_app(
         settings, llm=AnthropicExtractor(settings, vendor.transport()), queue=FakeQueue()
     )
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):

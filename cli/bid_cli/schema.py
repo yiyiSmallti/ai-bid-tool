@@ -73,6 +73,22 @@ from app.schemas.platform_contracts import (
     PlatformOrgActive,
     PlatformOrgCreate,
 )
+from app.schemas.platform_credentials import (
+    CredentialCreateInput,
+    CredentialData,
+    CredentialErrorData,
+    CredentialImportData,
+    CredentialImportItem,
+    CredentialImportManifest,
+    CredentialListData,
+    CredentialListQuery,
+    CredentialProbeData,
+    CredentialRemove,
+    CredentialReplace,
+    CredentialSetActive,
+    CredentialTest,
+    CredentialView,
+)
 from app.schemas.profile_contracts import (
     OrgProfileCreate,
     OrgProfileUpdate,
@@ -236,6 +252,14 @@ COMMANDS = {
     "platform model list": None,
     "platform model set": PlatformModelSet,
     "platform model test": None,
+    "platform credential list": CredentialListQuery,
+    "platform credential show": None,
+    "platform credential create": CredentialCreateInput,
+    "platform credential replace": CredentialReplace,
+    "platform credential set-active": CredentialSetActive,
+    "platform credential remove": CredentialRemove,
+    "platform credential test": CredentialTest,
+    "platform credential import-env": CredentialImportManifest,
     "platform usage": None,
     "platform audit": None,
     "auth setup-password": PasswordSetup,
@@ -356,7 +380,18 @@ MEMORY_OUTPUTS.update(
         "memory samples review": TypeAdapter(MemoryEvalData),
     }
 )
-OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS | MEMORY_OUTPUTS
+CREDENTIAL_OUTPUTS = {
+    "platform credential " + action: TypeAdapter(CredentialData | CredentialErrorData)
+    for action in ("show", "create", "replace", "set-active", "remove")
+}
+CREDENTIAL_OUTPUTS.update(
+    {
+        "platform credential list": TypeAdapter(CredentialListData | CredentialErrorData),
+        "platform credential test": TypeAdapter(CredentialProbeData | CredentialErrorData),
+        "platform credential import-env": TypeAdapter(CredentialImportData | CredentialErrorData),
+    }
+)
+OUTPUTS = EXPORT_OUTPUTS | CHECK_OUTPUTS | SCORE_OUTPUTS | MEMORY_OUTPUTS | CREDENTIAL_OUTPUTS
 
 
 def command_schema(app=None) -> dict:
@@ -413,6 +448,16 @@ def command_schema(app=None) -> dict:
                 "input": model.model_json_schema() if model else None,
                 "cli_parameters": parameters.get(name, []),
                 **({"output": OUTPUTS[name].json_schema()} if name in OUTPUTS else {}),
+                **(
+                    {"items": TypeAdapter(CredentialView).json_schema()}
+                    if name == "platform credential list"
+                    else {}
+                ),
+                **(
+                    {"items": TypeAdapter(CredentialImportItem).json_schema()}
+                    if name == "platform credential import-env"
+                    else {}
+                ),
             }
             for name, model in COMMANDS.items()
         },

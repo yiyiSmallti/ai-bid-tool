@@ -3,6 +3,7 @@ import { orgSession, session } from "./api.js";
 import { errorText, orgAccess, orgRequest } from "./org.js";
 import Audit from "./views/Audit.vue";
 import Cards from "./views/Cards.vue";
+import Credentials from "./views/Credentials.vue";
 import Login from "./views/Login.vue";
 import Models from "./views/Models.vue";
 import OrgBilling from "./views/OrgBilling.vue";
@@ -25,6 +26,7 @@ export const router = createRouter({
     { path: "/platform", redirect: "/platform/orgs" },
     { path: "/platform/orgs", component: Orgs, meta: { area: "platform", title: "单位", nav: "orgs" } },
     { path: "/platform/models", component: Models, meta: { area: "platform", title: "模型", nav: "models" } },
+    { path: "/platform/credentials", component: Credentials, meta: { area: "platform", title: "服务凭据", nav: "credentials" } },
     { path: "/platform/cards", component: Cards, meta: { area: "platform", title: "卡密", nav: "cards" } },
     { path: "/platform/usage", component: Usage, meta: { area: "platform", title: "用量与账单", nav: "usage" } },
     { path: "/platform/audit", component: Audit, meta: { area: "platform", title: "审计", nav: "audit" } },
