@@ -30,7 +30,13 @@ from app.models.entities import (
 )
 from app.models.score import ScoreRubricSet
 from app.schemas.contracts import ProviderUsage
-from app.schemas.score_contracts import RubricGenerateResult, RubricPreview, RubricReportData
+from app.schemas.score_contracts import (
+    RubricGenerateResult,
+    RubricPreview,
+    RubricReportData,
+    RubricStructureOutput,
+)
+from app.services import drafts
 from sqlalchemy import func, select
 from test_check import LiveCheckClient, check_client, invoke_live_cli
 from test_check_combined import platform_llm, seed_platform, semantic_llm
@@ -42,6 +48,12 @@ class RubricVendor:
         self.requests: list[dict] = []
         self.bodies: list[dict] = []
         self.mode = "valid"
+        self.stages: list[str] = []
+        self.structure_output: dict | None = None
+        self.item_failures: dict[int, str] = {}
+        self.item_calls = 0
+        self.block_stage: str | None = None
+        self.expected_inflight = 1
         self.entered: asyncio.Event | None = None
         self.release: asyncio.Event | None = None
 
@@ -50,8 +62,17 @@ class RubricVendor:
         self.bodies.append(body)
         payload = json.loads(body["messages"][-1]["content"])
         self.requests.append(payload)
-        if self.entered is not None and self.release is not None:
-            self.entered.set()
+        stage = "items" if "structure_hash" in payload else "structure"
+        self.stages.append(stage)
+        if stage == "items":
+            self.item_calls += 1
+        if (
+            self.entered is not None
+            and self.release is not None
+            and self.block_stage in {None, stage}
+        ):
+            if self.block_stage != "items" or self.item_calls >= self.expected_inflight:
+                self.entered.set()
             await self.release.wait()
         refs = {
             entry["ref"]: entry["text"].split("\n招标原文：\n", 1)[-1]
@@ -73,17 +94,18 @@ class RubricVendor:
                     "cap": None,
                     "included_in_overall_total": True,
                     "ambiguity_reason": None,
-                    "citations": [source],
+                    "review_domain": None,
+                    "citations": [source.copy()],
                 }
             ],
             "items": [
                 {
                     "requirement_id": row["requirement_id"],
                     "section_key": "technical",
-                    "key": f"item-{index}",
+                    "key": f"{row['tender_ref'].removesuffix('.tender')}.item-1",
                     "title": f"Synthetic score item {index}",
                     "rule_text": refs[row["tender_ref"]],
-                    "order": index,
+                    "order": int(row["tender_ref"].split(".")[0][1:]),
                     "assessment_mode": "model_assessable",
                     "score_range": {"minimum": "0", "maximum": "5"},
                     "weight": None,
@@ -96,15 +118,19 @@ class RubricVendor:
             "overall_rule_text": None,
             "overall_score_range": {"minimum": "0", "maximum": str(5 * len(rows))},
             "overall_cap": None,
+            "overall_citations": [source.copy()],
         }
-        if self.mode in {"whole_table", "whole_table_malformed"}:
+        if self.mode.startswith("whole_table"):
             technical = [row for row in rows if "Technical" in refs[row["tender_ref"]]]
             commercial = [row for row in rows if "Commercial" in refs[row["tender_ref"]]]
-            assert technical and commercial, "Every call must retain both sections"
+            if stage == "structure":
+                assert technical and commercial, "Structure call must retain both sections"
             output["sections"] = []
             for order, (key, members) in enumerate(
                 (("technical", technical), ("commercial", commercial)), 1
             ):
+                if not members:
+                    continue
                 output["sections"].append(
                     {
                         "key": key,
@@ -117,6 +143,7 @@ class RubricVendor:
                         "cap": None,
                         "included_in_overall_total": True,
                         "ambiguity_reason": None,
+                        "review_domain": key,
                         "citations": [
                             {
                                 "ref": members[0]["tender_ref"],
@@ -130,12 +157,40 @@ class RubricVendor:
             output["overall_aggregation"] = "capped_sum"
             output["overall_cap"] = "12"
             output["overall_score_range"] = {"minimum": "0", "maximum": "12"}
-            if self.mode == "whole_table_malformed" and len(self.requests) == 1:
+            if self.mode == "whole_table_malformed" and stage == "structure":
                 output.pop("overall_aggregation")
-        if self.mode == "unknown_ref":
+        if stage == "structure":
+            output.pop("items")
+            if self.mode == "structure_bad_ref":
+                output["sections"][0]["citations"][0]["ref"] = "untrusted-sensitive-ref"
+            elif self.mode == "structure_bad_quote":
+                output["sections"][0]["citations"][0]["quote"] = "Absent synthetic quotation"
+            elif self.mode == "structure_bad_overall_ref":
+                output["overall_citations"][0]["ref"] = "untrusted-sensitive-ref"
+            self.structure_output = output
+        else:
+            output = {"items": output["items"]}
+        if self.mode == "unknown_ref" and stage == "items":
             output["items"][0]["citations"][0]["ref"] = "untrusted-sensitive-ref"
+        if self.mode == "whole_table_unknown_section" and stage == "items":
+            output["items"][0]["section_key"] = "untrusted-sensitive-section"
+        if self.mode == "whole_table_crossbatch_requirement" and stage == "items":
+            structure = self.requests[0]
+            sent_ids = {row["requirement_id"] for row in rows}
+            foreign = next(
+                row for row in structure["requirements"] if row["requirement_id"] not in sent_ids
+            )
+            foreign_texts = {
+                entry["ref"]: entry["text"].split("\n招标原文：\n", 1)[-1]
+                for entry in structure["context"]["texts"]
+            }
+            output["items"][0]["requirement_id"] = foreign["requirement_id"]
+            output["items"][0]["citations"] = [
+                {"ref": foreign["tender_ref"], "quote": foreign_texts[foreign["tender_ref"]]}
+            ]
+        failure = self.item_failures.get(self.item_calls) if stage == "items" else self.mode
         message = {"content": json.dumps(output)}
-        if self.mode == "refused":
+        if failure == "refused":
             message["refusal"] = "Synthetic refusal"
         return httpx.Response(
             200,
@@ -143,7 +198,7 @@ class RubricVendor:
                 "model": "synthetic-check-model",
                 "choices": [
                     {
-                        "finish_reason": "length" if self.mode == "truncated" else "stop",
+                        "finish_reason": "length" if failure == "truncated" else "stop",
                         "message": message,
                     }
                 ],
@@ -233,6 +288,8 @@ async def rubric_case(rubric_input_case):
     assert submitted.status_code == 200, submitted.text
     terminal = await finish_rubric(case, submitted.json()["data"])
     assert terminal["status"] == "succeeded", terminal
+    assert terminal["result"]["completion"] == "complete", terminal["result"]
+    assert terminal["result"]["candidate_items"] > 0, terminal["result"]
     report = await case["api"].get(
         f"/tasks/{case['task']}/score-rubrics/{terminal['result']['rubric_id']}",
         headers=case["header"],
@@ -253,6 +310,9 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     assert preview["scoring_requirement_ids"] == [case["requirements"][0]["id"]]
     assert preview["estimate_kind"] == "first_pass_upper_bound"
     assert preview["estimated_charge"] == "0"
+    assert preview["prompt_version"] == "score-rubric-v3"
+    assert preview["schema_version"] == "score-rubric-wire-v2"
+    assert preview["estimated_cost"]["llm_tokens"] >= 2 * case["llm"].settings.llm_max_output_tokens
 
     stale = await submit_rubric(case, preview, expected_input_hash="0" * 64)
     assert stale.status_code == 409 and not case["vendor"].requests
@@ -263,7 +323,8 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     result = RubricGenerateResult.model_validate(terminal["result"])
     assert result.completion == "complete" and result.candidate_items == 1
     assert result.unresolved_requirements == 0
-    assert len(result.usage_record_ids) == len(case["vendor"].requests) == 1
+    assert len(result.usage_record_ids) == len(case["vendor"].requests) == 2
+    assert case["vendor"].stages == ["structure", "items"]
     sent = json.dumps(case["vendor"].requests)
     assert "condition" not in sent
     assert case["requirements"][0]["id"] not in sent
@@ -276,6 +337,23 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
         "status": "succeeded",
         "cached": True,
     }
+    assert await rubric_counts(case) == after
+
+    cached_preview = await case["api"].post(
+        f"/v4/tasks/{case['task']}/score-rubrics/preview",
+        headers=case["header"],
+        json={"extraction_job_id": case["extraction"], "dry_run": True},
+    )
+    assert cached_preview.status_code == 200, cached_preview.text
+    preflight = cached_preview.json()["data"]["budget_preflight"]
+    assert preflight["cached_job_id"] == str(result.job_id)
+    assert preflight["planned_calls"] == 0
+    assert preflight["estimate"]["basis"] == "cache_hit"
+    assert Decimal(preflight["estimate"]["charge"]) == 0
+    assert Decimal(preflight["estimate"]["task_amount"]) == 0
+    assert preflight["cached_result_cost"] is not None
+    assert cached_preview.json()["cost"]["basis"] == "cache_hit"
+    assert len(case["vendor"].requests) == 2
     assert await rubric_counts(case) == after
 
     path = f"/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
@@ -350,17 +428,18 @@ async def add_whole_scoring_table(case):
             )
 
 
-async def test_rubric_whole_table_cross_section_and_overall_survive_one_request(
+async def test_rubric_whole_table_structure_survives_fixed_section_item_batches(
     rubric_input_case, monkeypatch
 ):
     case = rubric_input_case
     await add_whole_scoring_table(case)
     case["vendor"].mode = "whole_table"
-    llm = semantic_llm(case["tmp_path"], case["vendor"], llm_batch_chars=8000)
+    llm = semantic_llm(case["tmp_path"], case["vendor"], llm_batch_chars=1000)
     install_rubric_resolver(monkeypatch, llm)
     preview = await preview_rubric(case)
     assert preview["admission_blocker"] is None
     assert len(preview["scoring_requirement_ids"]) == 3
+    assert preview["estimated_cost"]["llm_tokens"] >= 4 * llm.settings.llm_max_output_tokens
     submitted = await submit_rubric(case, preview)
     assert submitted.status_code == 200, submitted.text
     terminal = await finish_rubric(case, submitted.json()["data"])
@@ -368,10 +447,28 @@ async def test_rubric_whole_table_cross_section_and_overall_survive_one_request(
     assert terminal["result"]["completion"] == "complete"
     assert terminal["result"]["candidate_items"] == 3
     assert terminal["result"]["unresolved_requirements"] == 0
-    assert len(case["vendor"].requests) == len(terminal["result"]["usage_record_ids"]) == 1
-    assert all(len(json.dumps(payload)) > 8000 for payload in case["vendor"].requests)
-    assert all(len(payload["requirements"]) == 3 for payload in case["vendor"].requests)
-    assert all(payload == case["vendor"].requests[0] for payload in case["vendor"].requests)
+    vendor = case["vendor"]
+    assert len(vendor.requests) == len(terminal["result"]["usage_record_ids"]) == 4
+    assert vendor.stages == ["structure", "items", "items", "items"]
+    structure_request, *item_requests = vendor.requests
+    assert len(json.dumps(structure_request)) > 8000
+    assert len(structure_request["requirements"]) == 3
+    assert "sections" not in structure_request and "structure_hash" not in structure_request
+    assert all(len(payload["requirements"]) == 1 for payload in item_requests)
+    assert {
+        row["requirement_id"] for payload in item_requests for row in payload["requirements"]
+    } == {row["requirement_id"] for row in structure_request["requirements"]}
+    assert len({payload["structure_hash"] for payload in item_requests}) == 1
+    assert vendor.structure_output is not None
+    fixed_sections = [
+        {key: value for key, value in section.items() if key != "citations"}
+        for section in vendor.structure_output["sections"]
+    ]
+    for payload in item_requests:
+        assert payload["sections"] == fixed_sections
+        assert {row["ref"] for row in payload["context"]["texts"]} == {
+            row["tender_ref"] for row in payload["requirements"]
+        }
     shown = await case["api"].get(
         f"/tasks/{case['task']}/score-rubrics/{terminal['result']['rubric_id']}",
         headers=case["header"],
@@ -379,8 +476,50 @@ async def test_rubric_whole_table_cross_section_and_overall_survive_one_request(
     assert shown.status_code == 200, shown.text
     report = shown.json()["data"]
     assert {row["key"] for row in report["sections"]} == {"technical", "commercial"}
+    assert all(row["review_domain"] is None for row in report["sections"])
     assert report["rubric"]["overall_aggregation"] == "capped_sum"
     assert Decimal(report["rubric"]["overall_cap"]) == 12
+    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        rubric = await session.get(ScoreRubricSet, UUID(terminal["result"]["rubric_id"]))
+        assert (
+            rubric.input_manifest["rubric_structure"]["structure_hash"]
+            == item_requests[0]["structure_hash"]
+        )
+        assert rubric.input_hash == report["rubric"]["input_hash"]
+        assert rubric.input_hash != preview["input"]["input_hash"]
+        assert rubric.input_hash == drafts.digest(rubric.input_manifest)
+        structure_manifest = rubric.input_manifest["rubric_structure"]
+        assert {row["review_domain"] for row in structure_manifest["sections"]} == {
+            "technical",
+            "commercial",
+        }
+        structure_proposal = RubricStructureOutput.model_validate(
+            vendor.structure_output
+        ).model_dump(mode="json")
+        assert structure_manifest["proposal"] == structure_proposal
+        assert structure_manifest["structure_hash"] == drafts.digest(
+            {
+                "output": structure_proposal,
+                "structure_prompt_version": rubric.input_manifest["structure_prompt_version"],
+                "items_prompt_version": rubric.input_manifest["items_prompt_version"],
+                "schema_version": rubric.input_manifest["schema_version"],
+            }
+        )
+        job = await session.get(Job, UUID(terminal["id"]))
+        submission = job.result["submission"]
+        assert submission["input_hash"] == rubric.input_hash
+        assert submission["input_manifest"] == rubric.input_manifest
+        assert submission["preview_input_hash"] == preview["input"]["input_hash"]
+    after = await rubric_counts(case)
+    cached = await submit_rubric(case, preview)
+    assert cached.status_code == 200, cached.text
+    assert cached.json()["data"] == {
+        "job_id": terminal["id"],
+        "status": "succeeded",
+        "cached": True,
+    }
+    assert await rubric_counts(case) == after
+    assert len(vendor.requests) == 4
     artifact = case["tmp_path"] / "rubric-whole-table.json"
     artifact.write_text(
         json.dumps(
@@ -388,15 +527,27 @@ async def test_rubric_whole_table_cross_section_and_overall_survive_one_request(
                 "preview": preview,
                 "job": terminal,
                 "report": report,
-                "requests": case["vendor"].bodies,
+                "structure_proposal": structure_proposal,
+                "structure_manifest": structure_manifest,
+                "requests": vendor.bodies,
             },
             indent=2,
         )
     )
-    assert len(json.loads(artifact.read_text())["requests"]) == 1
+    assert len(json.loads(artifact.read_text())["requests"]) == 4
 
 
-@pytest.mark.parametrize("mode", ["whole_table_malformed", "truncated"])
+@pytest.mark.parametrize(
+    "mode",
+    [
+        "whole_table_malformed",
+        "truncated",
+        "refused",
+        "structure_bad_ref",
+        "structure_bad_quote",
+        "structure_bad_overall_ref",
+    ],
+)
 async def test_rubric_structure_failure_keeps_whole_table_and_accounts_one_call(
     rubric_input_case, monkeypatch, mode
 ):
@@ -411,6 +562,7 @@ async def test_rubric_structure_failure_keeps_whole_table_and_accounts_one_call(
     terminal = await finish_rubric(case, submitted.json()["data"])
     assert terminal["status"] == "failed", terminal
     assert len(case["vendor"].requests) == 1
+    assert case["vendor"].stages == ["structure"]
     assert len(case["vendor"].requests[0]["requirements"]) == 3
     job_id = UUID(terminal["id"])
     async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
@@ -502,6 +654,255 @@ async def test_rubric_full_request_limit_rejects_preview_and_submit_without_call
     assert json.loads(artifact.read_text())["vendor_calls"] == 0
 
 
+@pytest.mark.parametrize(
+    "mode", ["whole_table_unknown_section", "whole_table_crossbatch_requirement"]
+)
+async def test_rubric_items_reject_unknown_sections_and_crossbatch_bindings(
+    rubric_input_case, monkeypatch, mode
+):
+    case = rubric_input_case
+    await add_whole_scoring_table(case)
+    case["vendor"].mode = mode
+    install_rubric_resolver(
+        monkeypatch,
+        semantic_llm(case["tmp_path"], case["vendor"], llm_batch_chars=1000),
+    )
+    preview = await preview_rubric(case)
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 200, submitted.text
+    terminal = await finish_rubric(case, submitted.json()["data"])
+    assert terminal["status"] == "succeeded", terminal
+    result = terminal["result"]
+    assert result["completion"] == "partial"
+    assert result["candidate_items"] == 0 and result["unresolved_requirements"] == 3
+    assert len(result["usage_record_ids"]) == len(case["vendor"].requests) == 4
+    shown = await case["api"].get(
+        f"/tasks/{case['task']}/score-rubrics/{result['rubric_id']}", headers=case["header"]
+    )
+    assert shown.status_code == 200, shown.text
+    report = shown.json()["data"]
+    assert {section["key"] for section in report["sections"]} == {"technical", "commercial"}
+    assert report["items"] == []
+    assert all(row["disposition"] == "pending" for row in report["coverage"])
+    assert "untrusted-sensitive" not in json.dumps({"job": terminal, "report": report})
+    artifact = case["tmp_path"] / f"rubric-items-boundary-{mode}.json"
+    artifact.write_text(
+        json.dumps({"preview": preview, "job": terminal, "report": report}, indent=2)
+    )
+    assert json.loads(artifact.read_text())["job"]["result"]["unresolved_requirements"] == 3
+
+
+@pytest.mark.parametrize("failure", ["refused", "task_budget_exceeded"])
+async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_cli_exit5(
+    rubric_input_case, monkeypatch, failure
+):
+    from bid_cli import main as cli
+
+    case = rubric_input_case
+    await add_whole_scoring_table(case)
+    await seed_platform(
+        case["admin_engine"], case["app"].state.processor.settings, case["tenants"]["orgs"][0]
+    )
+    vendor = case["vendor"]
+    vendor.mode = "whole_table"
+    if failure == "refused":
+        vendor.item_failures = {2: "refused"}
+    else:
+        # Exercise the shared admission seam and durable partial publication;
+        # cumulative task-budget ledger enforcement belongs to its migration suite.
+        original_admit = JobExecution.admit
+
+        async def budget_admit(execution, quote):
+            if len(vendor.requests) == 2:
+                raise execution.stop("task_budget_exceeded", "Synthetic task budget reached")
+            return await original_admit(execution, quote)
+
+        monkeypatch.setattr(JobExecution, "admit", budget_admit)
+    llm = platform_llm(case["app"].state.processor.settings, vendor)
+    llm.settings = llm.settings.model_copy(update={"llm_batch_chars": 1000, "llm_concurrency": 1})
+    install_rubric_resolver(monkeypatch, llm)
+    before = await rubric_counts(case)
+    preview = await preview_rubric(case)
+    assert await rubric_counts(case) == before and vendor.requests == []
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 200, submitted.text
+    terminal = await finish_rubric(case, submitted.json()["data"])
+    assert terminal["status"] == "succeeded", terminal
+    result = terminal["result"]
+    assert result["completion"] == "partial"
+    assert result["candidate_items"] == 1 and result["unresolved_requirements"] == 2
+    assert result["stop_reason"] is not None
+    expected_calls = 3 if failure == "refused" else 2
+    assert vendor.stages == ["structure", *(["items"] * (expected_calls - 1))]
+    assert len(result["usage_record_ids"]) == expected_calls
+    if failure == "task_budget_exceeded":
+        assert result["stop_reason"] == failure
+    shown = await case["api"].get(
+        f"/tasks/{case['task']}/score-rubrics/{result['rubric_id']}", headers=case["header"]
+    )
+    assert shown.status_code == 200, shown.text
+    report = shown.json()["data"]
+    assert {section["key"] for section in report["sections"]} == {"technical", "commercial"}
+    assert len(report["items"]) == 1
+    assert report["rubric"]["overall_aggregation"] == "capped_sum"
+    assert Decimal(report["rubric"]["overall_cap"]) == 12
+    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        job_id = UUID(result["job_id"])
+        usages = list(
+            (await session.scalars(select(UsageRecord).where(UsageRecord.job_id == job_id))).all()
+        )
+        calls = list(
+            (await session.scalars(select(VendorCall).where(VendorCall.job_id == job_id))).all()
+        )
+        entries = list(
+            (
+                await session.scalars(
+                    select(BalanceEntry).where(
+                        BalanceEntry.usage_record_id.in_([row.id for row in usages])
+                    )
+                )
+            ).all()
+        )
+        assert len(usages) == len(calls) == len(entries) == expected_calls
+        assert {row.call_id for row in usages} == {row.id for row in calls}
+        assert all(call.state == "completed" for call in calls)
+        assert all(row.charge > 0 for row in usages)
+        assert await session.scalar(select(OrgBalance.balance)) == Decimal("10") - sum(
+            (row.charge for row in usages), Decimal(0)
+        )
+    monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
+    monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
+    monkeypatch.setattr(
+        cli,
+        "Client",
+        lambda mode, server, state: LiveCheckClient(
+            mode, server, state, case["app"].state.processor.settings
+        ),
+    )
+    # The terminal job reports the partial generation (exit 5 for `generate --wait`); showing
+    # the retained candidate rubric afterwards is a successful read.
+    job_exit, job_body = await asyncio.to_thread(invoke_live_cli, ["job", "status", terminal["id"]])
+    assert job_exit == 5 and job_body["data"]["result"]["completion"] == "partial"
+    exit_code, cli_body = await asyncio.to_thread(
+        invoke_live_cli,
+        ["score", "rubric", "show", "--task", case["task"], "--rubric", result["rubric_id"]],
+    )
+    assert exit_code == 0 and cli_body["data"] == report
+    artifact = case["tmp_path"] / "rubric-item-batch-partial.json"
+    artifact.write_text(
+        json.dumps(
+            {"preview": preview, "job": terminal, "report": report, "cli": cli_body}, indent=2
+        )
+    )
+    assert (
+        len(
+            json.loads(artifact.read_text())["cli"]["data"]["rubric"]["completeness"][
+                "pending_requirement_ids"
+            ]
+        )
+        == 3
+    )
+
+
+async def test_rubric_item_batches_run_concurrently_after_structure_verification(
+    rubric_input_case, monkeypatch
+):
+    case = rubric_input_case
+    await add_whole_scoring_table(case)
+    vendor = case["vendor"]
+    vendor.mode = "whole_table"
+    vendor.block_stage = "items"
+    vendor.expected_inflight = 2
+    vendor.entered, vendor.release = asyncio.Event(), asyncio.Event()
+    install_rubric_resolver(
+        monkeypatch,
+        semantic_llm(case["tmp_path"], vendor, llm_batch_chars=1000, llm_concurrency=2),
+    )
+    preview = await preview_rubric(case)
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 200, submitted.text
+    job_id = submitted.json()["data"]["job_id"]
+    worker = asyncio.create_task(case["app"].state.processor(case["header"]["X-Org-Id"], job_id))
+    try:
+        await asyncio.wait_for(vendor.entered.wait(), 10)
+        assert vendor.stages == ["structure", "items", "items"]
+        assert vendor.structure_output is not None
+        assert vendor.requests[1]["structure_hash"] == vendor.requests[2]["structure_hash"]
+    finally:
+        vendor.release.set()
+        await asyncio.wait_for(worker, 10)
+    terminal = (await case["api"].get(f"/jobs/{job_id}", headers=case["header"])).json()["data"]
+    assert terminal["status"] == "succeeded" and terminal["result"]["completion"] == "complete"
+    assert terminal["result"]["candidate_items"] == 3
+    assert len(terminal["result"]["usage_record_ids"]) == len(vendor.requests) == 4
+    artifact = case["tmp_path"] / "rubric-concurrent-items.json"
+    artifact.write_text(
+        json.dumps(
+            {"job": terminal, "stages": vendor.stages, "requests": vendor.requests}, indent=2
+        )
+    )
+    assert json.loads(artifact.read_text())["stages"] == ["structure", "items", "items", "items"]
+
+
+@pytest.mark.parametrize(
+    "version_field,old_version",
+    [
+        ("prompt_version", "score-rubric-v2"),
+        ("schema_version", "score-rubric-wire-v1"),
+        ("items_prompt_version", "score-rubric-items-v1"),
+    ],
+)
+async def test_rubric_old_queued_versions_fail_before_resolution_or_vendor_calls(
+    rubric_input_case, monkeypatch, version_field, old_version
+):
+    case = rubric_input_case
+    preview = await preview_rubric(case)
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 200, submitted.text
+    job_id = UUID(submitted.json()["data"]["job_id"])
+    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        job = await session.get(Job, job_id)
+        job.result = {
+            **job.result,
+            "submission": {
+                **job.result["submission"],
+                "input_manifest": {
+                    **job.result["submission"]["input_manifest"],
+                    version_field: old_version,
+                },
+            },
+        }
+
+    async def must_not_resolve(*args, **kwargs):
+        raise AssertionError("Legacy queued rubric must be rejected before provider resolution")
+
+    monkeypatch.setattr("app.services.score_generation.resolve", must_not_resolve)
+    terminal = await finish_rubric(case, submitted.json()["data"])
+    assert terminal["status"] == "failed", terminal
+    assert terminal["error"]["code"] == "score_rubric_version_unsupported"
+    assert case["vendor"].requests == []
+    async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job_id)
+            )
+            == 0
+        )
+        assert (
+            await session.scalar(
+                select(func.count()).select_from(VendorCall).where(VendorCall.job_id == job_id)
+            )
+            == 0
+        )
+        assert await session.scalar(select(func.count()).select_from(ScoreRubricSet)) == 0
+    artifact = case["tmp_path"] / f"rubric-old-job-{version_field}.json"
+    artifact.write_text(json.dumps({"job": terminal, "vendor_calls": 0}, indent=2))
+    assert (
+        json.loads(artifact.read_text())["job"]["error"]["code"]
+        == "score_rubric_version_unsupported"
+    )
+
+
 @pytest.mark.parametrize("mode", ["valid", "refused", "truncated", "unknown_ref"])
 async def test_rubric_platform_calls_settle_once_even_when_output_refused(
     rubric_input_case, monkeypatch, mode
@@ -536,8 +937,19 @@ async def test_rubric_platform_calls_settle_once_even_when_output_refused(
                 )
             ).all()
         )
-        assert len(calls) == len(usages) == len(entries) == len(case["vendor"].requests) == 1
-        assert len({(row.org_id, row.job_id, row.run_id, row.call_id) for row in usages}) == 1
+        expected_calls = 2 if mode in {"valid", "unknown_ref"} else 1
+        assert (
+            len(calls)
+            == len(usages)
+            == len(entries)
+            == len(case["vendor"].requests)
+            == expected_calls
+        )
+        assert (
+            len({(row.org_id, row.job_id, row.run_id, row.call_id) for row in usages})
+            == expected_calls
+        )
+        assert {row.call_id for row in usages} == {row.id for row in calls}
         assert balance == Decimal("10") - sum((row.charge for row in usages), Decimal(0))
         assert all(row.charge > 0 for row in usages)
         settled = usages[0]
@@ -701,7 +1113,7 @@ async def test_rubric_cancel_retry_and_live_expired_lease(rubric_input_case):
     assert takeover.status_code == 200 and takeover.json()["data"]["status"] == "queued"
     terminal = await finish_rubric(case, takeover.json()["data"])
     assert terminal["status"] == "succeeded", terminal
-    assert len(case["vendor"].requests) == 1
+    assert len(case["vendor"].requests) == 2
 
 
 @pytest.mark.parametrize("change", ["redaction_revision", "expired_lease", "run_takeover"])

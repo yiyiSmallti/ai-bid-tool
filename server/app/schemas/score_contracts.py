@@ -747,7 +747,7 @@ class RubricProviderRequest(Contract):
     context: OutboundContext
 
 
-class ProposedRubricSection(Contract):
+class RubricSectionContext(Contract):
     key: NonBlank
     title: NonBlank
     order: int = Field(ge=1)
@@ -758,7 +758,7 @@ class ProposedRubricSection(Contract):
     cap: Money | None = None
     included_in_overall_total: bool
     ambiguity_reason: NonBlank | None = None
-    citations: list[ModelEvidenceRef] = Field(min_length=1)
+    review_domain: ReviewDomain | None = None
 
     @model_validator(mode="after")
     def cap_matches_aggregation(self) -> Self:
@@ -767,6 +767,15 @@ class ProposedRubricSection(Contract):
         if self.aggregation in {"formula", "non_additive"} and self.aggregation_rule_text is None:
             raise ValueError("unsupported aggregation rules require their fixed original wording")
         return self
+
+
+class ProposedRubricSection(RubricSectionContext):
+    citations: list[ModelEvidenceRef] = Field(min_length=1)
+
+
+class RubricItemsRequest(RubricProviderRequest):
+    sections: list[RubricSectionContext] = Field(min_length=1)
+    structure_hash: Sha256
 
 
 class ProposedRubricItem(Contract):
@@ -791,13 +800,13 @@ class ProposedRubricItem(Contract):
         return self
 
 
-class RubricWireOutput(Contract):
-    sections: list[ProposedRubricSection]
-    items: list[ProposedRubricItem]
+class RubricStructureOutput(Contract):
+    sections: list[ProposedRubricSection] = Field(min_length=1)
     overall_aggregation: AggregationRule
     overall_rule_text: NonBlank | None = None
     overall_score_range: ScoreRange | None = None
     overall_cap: Money | None = None
+    overall_citations: list[ModelEvidenceRef] = Field(min_length=1)
 
     @model_validator(mode="after")
     def cap_matches_aggregation(self) -> Self:
@@ -811,16 +820,28 @@ class RubricWireOutput(Contract):
         return self
 
 
+class RubricStructureResult(Contract):
+    output: RubricStructureOutput | None = None
+    usages: list[ProviderUsage]
+    failure: AssessmentFailure | None = None
+
+
+class RubricItemsWireOutput(Contract):
+    items: list[ProposedRubricItem]
+
+
 class RubricAnsweredBatch(Contract):
     requested_requirement_ids: list[UUID]
     sent_refs: list[str]
-    output: RubricWireOutput
+    structure_hash: Sha256
+    output: RubricItemsWireOutput
 
 
 class RubricProviderResult(Contract):
     batches: list[RubricAnsweredBatch]
     usages: list[ProviderUsage]
     failure: AssessmentFailure | None = None
+    failures: list[AssessmentFailure] = Field(default_factory=list)
 
 
 class RubricProvider(Protocol):
@@ -829,7 +850,9 @@ class RubricProvider(Protocol):
     version: str
     test_only: bool
 
-    async def extract_rubric(self, request: RubricProviderRequest) -> RubricProviderResult: ...
+    async def extract_structure(self, request: RubricProviderRequest) -> RubricStructureResult: ...
+
+    async def extract_items(self, request: RubricItemsRequest) -> RubricProviderResult: ...
 
 
 class ScoreProviderItem(Contract):
