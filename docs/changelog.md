@@ -10,6 +10,10 @@ kind: changelog
 
 - 导出声明检查功能与产品的全部根标记，模拟功能修订改绑普通产品后仍阻止正式件，审阅件仍需确认警告；机制见 [product-simulation.md](notes/product-simulation.md)。
 
+## 2026-10-04：缓存导出预览的实时门禁
+
+- 缓存预览页复用 DOCX 下载门禁，输入或发起人权限失效后拒绝读取；预览状态沿用导出有效性并停止提供失效页面，机制见 [page-previews.md](notes/page-previews.md)。
+
 ## 2026-10-04：证照图片与多文件原件
 
 - 证书原件可上传多个 PDF、PNG、JPEG，按顺序合成一份 PDF 原件，每张图一页，可逐个旋转；单个未旋转的 PDF 仍原样保存。

@@ -9,6 +9,8 @@ Failure modes enumerated before implementation:
   failed job stays visible and only an explicit retry requeues it.
 - Repeated opens reuse one conversion per export file; pages before success are refused.
 - The generic job reader neither leaks the stored PDF location nor bypasses export access.
+- Reopened cards and revoked initiators invalidate cached pages just like signed downloads,
+  including changes during conversion or the read before the gate acquires its locks.
 - Previews call no model provider and record no usage.
 Set BID_CONVERTER_LIVE_URL to also convert the released DOCX with a real Gotenberg.
 """
@@ -20,16 +22,19 @@ from uuid import UUID
 
 import httpx
 import pymupdf
+import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from app.models.entities import Job, UsageRecord
+from app.models.entities import Job, Membership, UsageRecord
 from conftest import FakeQueue
 from sqlalchemy import func, select
-from test_exports import draft, prepared, setup_template
+from sqlalchemy.orm import Session
+from test_exports import complete_inputs, draft, prepared, setup_template
 from test_response_cards import (
     PhaseOneExtraction,
     create_tender,
     login,
+    require_action,
     select_real_materials,
     set_role,
 )
@@ -217,3 +222,107 @@ async def test_previews_are_bounded_isolated_and_publish_only_readable_pdfs(
                 select(func.count()).select_from(UsageRecord).where(UsageRecord.job_id == job.id)
             )
             assert usage == 0
+
+
+@pytest.mark.parametrize("invalidation", ["completed", "converting", "reading", "initiator"])
+async def test_cached_final_preview_obeys_live_download_gate(
+    tenants, tmp_path, admin_engine, monkeypatch, invalidation
+):
+    fake = FakeConverter()
+    fake.reply = two_page_pdf()
+    async with preview_client(tenants, tmp_path, "http://converter.test") as (api, app, headers):
+        app.state.processor.converter_transport = httpx.MockTransport(fake.handler)
+        header = headers[0]
+        task, body, reviewed, _ = await complete_inputs(
+            api, app, header, tenants, admin_engine, tmp_path
+        )
+        run = await prepared(api, app, header, task, body)
+        released = await api.post(
+            f"/export-runs/{run['id']}/release",
+            headers=header,
+            json={
+                "expected_input_hash": run["input_hash"],
+                "expected_candidate_sha256": run["candidate_sha256"],
+            },
+        )
+        assert released.status_code == 200, released.text
+        export = released.json()["data"]
+        assert export["mode"] == "final_section" and export["completion"] == "complete"
+        base = f"/exports/{export['id']}"
+        link = await api.get(f"{base}/download-link", headers=header)
+        assert link.status_code == 200, link.text
+        download_url = link.json()["data"]["url"]
+        assert (await api.get(download_url, headers=header)).status_code == 200
+        opened = await api.post(f"{base}/preview", headers=header)
+        assert opened.status_code == 200, opened.text
+        job_id = opened.json()["data"]["job_id"]
+
+        async def reopen():
+            await require_action(
+                api, header, reviewed[1], "reopen", reason="Synthetic preview invalidation."
+            )
+
+        if invalidation == "converting":
+
+            async def convert_after_reopen(request):
+                await reopen()
+                return fake.handler(request)
+
+            app.state.processor.converter_transport = httpx.MockTransport(convert_after_reopen)
+        await app.state.processor(header["X-Org-Id"], job_id)
+        job = await api.get(f"/jobs/{job_id}", headers=header)
+        assert job.json()["data"]["status"] == "succeeded", job.text
+        if invalidation != "converting":
+            ready = await api.get(f"{base}/preview", headers=header)
+            assert ready.json()["data"]["status"] == "succeeded", ready.text
+            assert is_png(await api.get(f"{base}/preview/pages/1", headers=header))
+
+        if invalidation == "completed":
+            await reopen()
+        elif invalidation == "initiator":
+            # A different active bidder keeps access while the original initiator is revoked.
+            with Session(admin_engine) as session, session.begin():
+                session.add(
+                    Membership(
+                        org_id=tenants["orgs"][0], user_id=tenants["users"][1], role="bidder"
+                    )
+                )
+            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer")
+            header = {**headers[1], "X-Org-Id": headers[0]["X-Org-Id"]}
+        elif invalidation == "reading":
+            read = app.state.storage.read
+            reopened = False
+
+            async def read_then_reopen(org_id, key):
+                nonlocal reopened
+                content = await read(org_id, key)
+                if not reopened and "/exports/" in key:
+                    reopened = True
+                    await reopen()
+                return content
+
+            monkeypatch.setattr(app.state.storage, "read", read_then_reopen)
+
+        page = await api.get(f"{base}/preview/pages/1", headers=header)
+        if invalidation == "reading":
+            assert reopened, "The preview must recheck the released DOCX before serving pages"
+        download = await api.get(download_url, headers=header)
+        assert download.status_code == 409, download.text
+        assert page.status_code == download.status_code, page.text
+        expected_error = download.json()["data"]["error"]
+        assert expected_error["code"] == "export_input_changed"
+        assert page.json()["data"]["error"] == expected_error
+        for path in (f"{base}/download-link", f"{base}/preview"):
+            refused = await api.request(
+                "POST" if path.endswith("/preview") else "GET", path, headers=header
+            )
+            assert refused.status_code == download.status_code, refused.text
+            assert refused.json()["data"]["error"] == expected_error
+        shown = await api.get(base, headers=header)
+        status = await api.get(f"{base}/preview", headers=header)
+        assert shown.status_code == status.status_code == 200
+        view, preview = shown.json()["data"], status.json()["data"]
+        assert preview["status"] == "invalidated" and preview["page_count"] is None
+        assert preview["validity"] == view["validity"] == "stale"
+        assert preview["issues"] == view["issues"]
+        assert preview["invalidated_requirement_ids"] == view["invalidated_requirement_ids"]
