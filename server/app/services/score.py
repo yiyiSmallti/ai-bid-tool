@@ -7,7 +7,7 @@ from inspect import signature
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, literal, select, text, tuple_, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -79,9 +79,29 @@ async def require_dependencies(session: AsyncSession, actor: Identity, row: Scor
         raise not_found()
     if document.sha256 != row.input_manifest["document_sha256"]:
         cards.fail("rubric_input_changed", "The fixed scoring document has changed", 409)
+    requirements = {
+        value.id: value
+        for value in await session.scalars(
+            select(Requirement).where(
+                Requirement.id.in_(
+                    [UUID(entry["requirement_id"]) for entry in row.input_manifest["requirements"]]
+                )
+            )
+        )
+    }
+    chunks = {
+        value.id: value
+        for value in await session.scalars(
+            select(Chunk).where(
+                Chunk.id.in_(
+                    [UUID(entry["chunk_id"]) for entry in row.input_manifest["requirements"]]
+                )
+            )
+        )
+    }
     for entry in row.input_manifest["requirements"]:
-        requirement = await session.get(Requirement, UUID(entry["requirement_id"]))
-        chunk = await session.get(Chunk, UUID(entry["chunk_id"]))
+        requirement = requirements.get(UUID(entry["requirement_id"]))
+        chunk = chunks.get(UUID(entry["chunk_id"]))
         if (
             requirement is None
             or chunk is None
@@ -439,13 +459,46 @@ async def list_rubrics(
     actor = await access(session, actor)
     if await session.get(Task, task_id) is None:
         raise not_found()
-    rows = []
-    for row in (
-        await session.scalars(select(ScoreRubricSet).where(ScoreRubricSet.task_id == task_id))
-    ).all():
+    if not 1 <= limit <= 200:
+        cards.fail("invalid_input", "Limit must be between 1 and 200")
+    anchor = cursor_read(settings, actor, task_id, None, cursor)
+    conditions = [ScoreRubricSet.task_id == task_id, ScoreRubricSet.org_id == actor.org_id]
+    for row in await session.scalars(select(ScoreRubricSet).where(*conditions)):
         await require_dependencies(session, actor, row)
-        rows.append((row.created_at, row.id, (await report_data(session, row))["rubric"]))
-    return page(settings, actor, task_id, None, rows, cursor, limit)
+    total = (
+        await session.scalar(select(func.count()).select_from(ScoreRubricSet).where(*conditions))
+        or 0
+    )
+    statement = select(ScoreRubricSet).where(*conditions)
+    if anchor is not None:
+        statement = statement.where(
+            tuple_(ScoreRubricSet.created_at, ScoreRubricSet.id)
+            > tuple_(literal(anchor[0]), literal(anchor[1]))
+        )
+    selected = list(
+        (
+            await session.scalars(
+                statement.order_by(ScoreRubricSet.created_at, ScoreRubricSet.id).limit(limit + 1)
+            )
+        ).all()
+    )
+    next_cursor = None
+    if len(selected) > limit:
+        last = selected[limit - 1]
+        next_cursor = TokenSigner.for_tokens(settings).issue(
+            {
+                "kind": "rubric_cursor",
+                "org_id": str(actor.org_id),
+                "task_id": str(task_id),
+                "rubric_id": None,
+                "created_at": last.created_at.isoformat(),
+                "id": str(last.id),
+            },
+            7 * 86400,
+        )
+    return AssessmentListData(task_id=task_id, total=total, next_cursor=next_cursor).model_dump(
+        mode="json"
+    ), [(await report_data(session, row))["rubric"] for row in selected[:limit]]
 
 
 async def human_set(
@@ -844,6 +897,8 @@ async def decide_rubric(
     body: RubricSetDecisionRequest,
     storage: Storage,
     settings: Settings,
+    *,
+    console: bool = False,
 ) -> dict:
     actor, row = await human_set(session, actor, task_id, rubric_id)
     human_role(actor, "bidder")
@@ -869,6 +924,10 @@ async def decide_rubric(
     session.add(event)
     await session.flush()
     review_audit(session, actor, row, event)
+    if console:
+        from app.services.assessment_rubrics import summary
+
+        return (await summary(session, actor, task_id, row.id)).model_dump(mode="json")
     return (await report_data(session, row))["rubric"]
 
 
@@ -884,70 +943,95 @@ async def rubric_history(
     limit: int = 50,
 ) -> tuple[dict, list[dict]]:
     actor, row = await get_set(session, actor, task_id, rubric_id)
-    rows = []
-    for cls, view in (
-        (ScoreRubricDecision, RubricDecisionView),
-        (ScoreRubricClassification, RubricClassificationView),
-    ):
-        for event in (await session.scalars(select(cls).where(cls.rubric_id == row.id))).all():
-            rows.append(
-                (event.decided_at, event.id, view.model_validate(event).model_dump(mode="json"))
-            )
-    for event in (
-        await session.scalars(
-            select(ScoreRubricCoverageDecision).where(
-                ScoreRubricCoverageDecision.rubric_id == row.id
-            )
-        )
-    ).all():
-        item_ids = list(
+    if not 1 <= limit <= 200:
+        cards.fail("invalid_input", "Limit must be between 1 and 200")
+    anchor = cursor_read(settings, actor, task_id, rubric_id, cursor)
+    event_types = {
+        "decision": (ScoreRubricDecision, RubricDecisionView),
+        "classification": (ScoreRubricClassification, RubricClassificationView),
+        "coverage": (ScoreRubricCoverageDecision, RubricCoverageDecisionView),
+        "revision": (ScoreRubricRevisionEvent, RubricRevisionView),
+    }
+    statements = []
+    for kind, (model, _) in event_types.items():
+        created = model.revised_at if model is ScoreRubricRevisionEvent else model.decided_at
+        condition = (
             (
-                await session.scalars(
-                    select(ScoreRubricCoverageItem.rubric_item_id).where(
-                        ScoreRubricCoverageItem.coverage_decision_id == event.id
-                    )
-                )
-            ).all()
-        )
-        value = RubricCoverageDecisionView.model_validate(
-            {
-                **fields(
-                    event,
-                    (
-                        "id",
-                        "org_id",
-                        "task_id",
-                        "rubric_id",
-                        "requirement_id",
-                        "revision",
-                        "action",
-                        "canonical_requirement_id",
-                        "reason",
-                        "decided_by",
-                        "decided_at",
-                        "actor_kind",
-                    ),
-                ),
-                "rubric_item_ids": item_ids,
-            }
-        ).model_dump(mode="json")
-        rows.append((event.decided_at, event.id, value))
-    for event in (
-        await session.scalars(
-            select(ScoreRubricRevisionEvent).where(
                 (ScoreRubricRevisionEvent.rubric_id == row.id)
                 | (ScoreRubricRevisionEvent.prior_rubric_id == row.id)
             )
+            if model is ScoreRubricRevisionEvent
+            else model.rubric_id == row.id
         )
-    ).all():
-        rows.append(
-            (
-                event.revised_at,
-                event.id,
-                RubricRevisionView.model_validate(event).model_dump(mode="json"),
+        statements.append(
+            select(
+                model.id.label("id"), created.label("created_at"), literal(kind).label("kind")
+            ).where(condition)
+        )
+    events = union_all(*statements).subquery()
+    total = await session.scalar(select(func.count()).select_from(events)) or 0
+    statement = select(events)
+    if anchor is not None:
+        statement = statement.where(
+            tuple_(events.c.created_at, events.c.id)
+            > tuple_(literal(anchor[0]), literal(anchor[1]))
+        )
+    positions = (
+        await session.execute(statement.order_by(events.c.created_at, events.c.id).limit(limit + 1))
+    ).all()
+    items = []
+    for position in positions[:limit]:
+        model, view = event_types[position.kind]
+        event = await session.get(model, position.id)
+        if event is None:
+            raise not_found()
+        if model is ScoreRubricCoverageDecision:
+            mapped = list(
+                (
+                    await session.scalars(
+                        select(ScoreRubricCoverageItem.rubric_item_id).where(
+                            ScoreRubricCoverageItem.coverage_decision_id == event.id
+                        )
+                    )
+                ).all()
             )
+            keys = (
+                "id",
+                "org_id",
+                "task_id",
+                "rubric_id",
+                "requirement_id",
+                "revision",
+                "action",
+                "canonical_requirement_id",
+                "reason",
+                "decided_by",
+                "decided_at",
+                "actor_kind",
+            )
+            value = RubricCoverageDecisionView.model_validate(
+                {**fields(event, keys), "rubric_item_ids": mapped}
+            )
+        else:
+            value = view.model_validate(event)
+        items.append(value.model_dump(mode="json"))
+    next_cursor = None
+    if len(positions) > limit:
+        last = positions[limit - 1]
+        next_cursor = TokenSigner.for_tokens(settings).issue(
+            {
+                "kind": "rubric_cursor",
+                "org_id": str(actor.org_id),
+                "task_id": str(task_id),
+                "rubric_id": str(rubric_id),
+                "created_at": last.created_at.isoformat(),
+                "id": str(last.id),
+            },
+            7 * 86400,
         )
-    return page(settings, actor, task_id, rubric_id, rows, cursor, limit)
+    return AssessmentListData(task_id=task_id, total=total, next_cursor=next_cursor).model_dump(
+        mode="json"
+    ), items
 
 
 @review_denials
@@ -959,6 +1043,8 @@ async def revise_rubric(
     body: RubricReviseRequest,
     storage: Storage,
     settings: Settings,
+    *,
+    console: bool = False,
 ) -> dict:
     actor, prior = await human_set(session, actor, task_id, rubric_id)
     if actor.role not in {"bidder", "technical"}:
@@ -1193,4 +1279,8 @@ async def revise_rubric(
     session.add(event)
     await session.flush()
     review_audit(session, actor, row, event, "revised")
+    if console:
+        from app.services.assessment_rubrics import summary
+
+        return (await summary(session, actor, task_id, row.id)).model_dump(mode="json")
     return await report_data(session, row)

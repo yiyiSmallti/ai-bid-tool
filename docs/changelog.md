@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Check and score console assessments
+
+- Implemented the approved rules-check, combined-check, rubric-review and score-report console flow with Element Plus, Chinese labels, explicit preview/consent, durable job recovery and links to the responsible response-card review.
+- Added bounded assessment input, job and verified-citation reads plus opt-in check/rubric/score projections. SQL keysets precede narrative hydration; principal/snapshot-bound cursors, complete-row byte limits and two-org API tests preserve existing authorization. No migration or Provider algorithm change was introduced.
+- Added full-snapshot rubric replacement, separate classification/coverage/domain/set decisions and compact transactional receipts. Preserved null, partial, stale and unavailable-score semantics without browser-side totals.
+- Connected enforced task-budget preflight and Result 4.0 cost fields, added matching CLI discovery/console variants and intentional snapshots, and supplied stateful mocked built-app Playwright acceptance. See [console assessment mechanisms](notes/console-assessments.md) and [acceptance limits](plan/console-assessments.md#implementation-acceptance-note).
+
 ## 2026-10-05: Export render exit race
 
 - The Linux render memory probe treats a renderer that exits while `/proc/<pid>/statm` is being read (ESRCH) as exited instead of failing the render job.

@@ -20,6 +20,8 @@ each page declares one `kind`, and each fact has one home. Kind mappings are in
 - [bid CLI](guides/cli.md): login, tender workflow, resource maintenance, vendor (厂家) evidence (证据) capture, result handling and tokens.
 - [Sandbox runtime setup and acceptance](guides/sandbox-runtime.md): Colima/Docker, runsc, Unix/mTLS control channels, open capture networking on development nodes, and repeatable verification steps.
 
+<a id="机制笔记"></a>
+
 ## Mechanism notes
 
 Notes use the structure required by [the agent workflow](../agent.md#workflow).
@@ -28,6 +30,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [tenant-isolation.md](notes/tenant-isolation.md): RLS, org (organization/tenant; 单位) context and file isolation.
 - [memory.md](notes/memory.md): human approval of org memory (记忆), keyword retrieval, per-call traceability, cache invalidation and feedback candidates.
 - [response-cards.md](notes/response-cards.md): human response cards (响应卡), evidence confirmation, atomic disposition and three-table drafts (初稿).
+- [console-assessments.md](notes/console-assessments.md): bounded check/score console reads, human review, budget preflight and complete rubric replacement.
 - [check.md](notes/check.md): deterministic risk checks on confirmed drafts, certificate (证书) dates, citations and human false-positive decisions.
 - [task-budgets.md](notes/task-budgets.md): task liability, atomic reservations, human changes and low-balance notices.
 - [score.md](notes/score.md): two-stage scoring-rubric generation, fixed inputs, human classification, coverage decisions, per-item confirmation and immutable history.

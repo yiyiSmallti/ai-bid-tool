@@ -4,14 +4,15 @@ kind: plan
 
 # Check and score in the org console
 
-Status: **Pending approval, not implemented.** Covers the console gaps in
+Status: **Approved, implemented.** Covers the console gaps in
 [roadmap](roadmap.md) B09, B10, U01 and U02.
 
-The review-only [Pydantic contract](console-assessments/console_assessments_contracts.py)
-defines proposed read projections and service interfaces and imports existing write,
-Provider and Result contracts. Approval of this draft is required before implementation.
-It does not approve the separate [budget proposal](budget.md) or a new rubric Provider
-algorithm. Product terminology follows the [glossary](../glossary.md).
+The approved [Pydantic contract](console-assessments/console_assessments_contracts.py)
+defines read projections and service interfaces and imports existing write,
+Provider and Result contracts. All recommended defaults were approved for implementation.
+The merged [task budget contract](budget.md) owns enforcement and Result 4.0 costs;
+the separate rubric Provider algorithm remains outside this delivery. Product terminology follows the [glossary](../glossary.md). Mechanism and code links are
+in the [console assessment note](../notes/console-assessments.md).
 
 ## Goal, boundary and first vertical slice
 
@@ -36,8 +37,10 @@ reopen with a reason → decision history → card correction → reassemble and
 It must work for two orgs and all four roles, without a model service. The next slice
 adds combined checking through the same flow. Rubric generation/review is then delivered
 through whole-set confirmation; scoring preview/run/report follows that prerequisite.
-Each slice includes its browser acceptance before the next starts. Later slices are
-fully specified here, not represented by inactive production placeholders.
+Each slice includes its browser acceptance before the next starts. The implementation
+delivery proceeded after a browser-startup blocker so that all four approved slices
+could be completed; this acceptance-order exception is recorded below. Later slices
+are fully specified here, not represented by inactive production placeholders.
 
 ## Code basis and explicit differences
 
@@ -50,20 +53,20 @@ fully specified here, not represented by inactive production placeholders.
 | [score execution](../../server/app/services/score_execution.py) `submit_score`, `preview_cost`, `run_view`, `show_score`; [aggregation](../../server/app/services/score_semantic.py) `aggregate` | Estimates are bounded by a confirmed rubric. Unavailable totals remain unavailable even when a subtotal or possible range exists. |
 | [score inputs](../../server/app/services/score_inputs.py) `snapshot`, `source_original`; [score run inputs](../../server/app/services/score_run_inputs.py) `fixed_rows` | Rubric input is the selected extraction's scoring requirements and cited original blocks, not a fresh full-document scan. Scoring uses pinned card-revision text, not the latest editable card text. |
 | [authentication](../../server/app/services/auth.py) `Identity`, `SCOPES`, `ROLE_SCOPES`; [response cards](../../server/app/services/response_cards.py) `access` | Revalidate active membership, token status and role/scope intersection on each operation; browser capability hints do not authorize writes. |
-| [org console reads](../../server/app/api/org_console.py) `task_get`, `task_job_list`; [job service](../../server/app/services/jobs.py) `status`, `cancel` | Task metadata and single-job reads exist. Task-job discovery accepts only `kind=parse`; assessment job discovery is proposed here. |
+| [org console reads](../../server/app/api/org_console.py) `task_get`, `task_job_list`; [job service](../../server/app/services/jobs.py) `status`, `cancel` | Task metadata and single-job reads are reused. Task-job discovery additionally accepts `check`, `score_rubric` and `score` while preserving the parse projection. |
 | [router](../../web/src/router.js), [API adapter](../../web/src/api.js) `checkedPath`, `parseResult`, [org helpers](../../web/src/org.js), [JobPanel](../../web/src/components/JobPanel.vue) | Reuse org identity checks, Chinese labels, precise same-origin paths and polling. Assessment paths and partial-result cases must be added explicitly to the adapter during implementation. |
-| [runtime contracts](../../server/app/schemas/contracts.py) `CONTRACT_VERSION`, `Cost`, `Result` | The code uses Result **3.0**. The budget draft's proposed Result 4.0 is not registered. Its older statements that check/score are unimplemented disagree with these modules. No 4.0 cost object is introduced by this console contract. |
+| [runtime contracts](../../server/app/schemas/contracts.py) `CONTRACT_VERSION`, `Cost`, `Result` | The code uses Result **4.0**, including cost basis, platform charge, billing currency, task amount and unresolved/unpriced call counts. Console reads and preflight use these runtime types. |
 | [design](../design.md#dashboard-and-agent-design) | Its pending/fixed/ignored risk cards and SSE are not current check behavior. Actual findings have open/dismissed states plus decision history, and jobs are polled. There is no “mark fixed” operation. |
 | [checking plan](check.md), [checking notes](../notes/check.md), [scoring plan](score.md), [scoring notes](../notes/score.md) | Check decision-history reads currently do not attach stale warnings, despite the check plan's wording; obtain current report validity separately. Rules coverage serializes `semantic_outcome:null` and `semantic_citations:[]`, not absent fields. Score schema permits `range_only`, but `aggregate` currently emits `estimated` or `unavailable`. |
 
 The existing [org console contract](org-console.md) excludes checking/scoring and uses
-full-set reads for response review. This proposal extends that scope explicitly and
+full-set reads for response review. This contract extends that scope explicitly and
 requires bounded assessment projections; it does not silently change existing card APIs.
 
 ## Navigation and shared page behavior
 
 Add task-local entries “检查风险” and “评分预估” to the task, review and draft pages. Keep the
-existing task navigation shell from [App.vue](../../web/src/App.vue), with these proposed
+existing task navigation shell from [App.vue](../../web/src/App.vue), with these approved
 browser routes (the router's `/app/` base is included here):
 
 | Page | Route and primary action |
@@ -121,15 +124,16 @@ The preview panel contains these server-derived values and plain-language explan
 | `estimated_cost` | “预计服务用量成本（美元）”; unknown `usd` is “暂无法估算”. Rules mode is “不调用模型，费用为 0”; no-model-call combined cases retain their explicit reason. |
 | `estimated_charge`, `billing_currency`, `cost_basis_reason` | “预计平台扣费上限（首轮）”; show actual currency, known/unknown basis, and that retries/actual usage can differ. It is not a final invoice. |
 | `max_charge` | “本次作业平台扣费上限”; for model runs require explicit confirmation of a positive cap, initially rounded upward from the estimate where known. Do not send a cap or reasoning for rules mode. An org-owned key's zero platform charge is not free vendor usage, and this cap does not bound its vendor bill. |
-| Recorded task budget | “任务预算（美元，仅记录，尚未强制执行）”; null means “未设置”. Do not compute remaining budget from `cost.usd`, usage IDs or platform charges. Do not claim org monthly caps are enforced. |
+| Enforced task budget | “任务预算（实际执行）”; use `TaskBudgetView` limit, currency, spent, reserved and available from the API. Null limit means “未设置”; null available means unknown. Read `budget_preflight` for admission blockers and first-pass estimates; never derive remaining budget from `cost.usd` or platform charges. |
 | Provider/model/revision, reasoning, redaction (遮挡) revision/counts | “使用的模型”, “外发内容已遮挡”; keep values from the actual preview. Do not send originals or render private prompt manifests. |
 | `admission_blocker`, limitations, nullable duration | Persistent Chinese blocker with the next owner/action. Unknown time is “耗时暂无法估算”; no countdown prediction. |
 
-The task-budget/Result 4.0 work owns enforcement and its cost terminology. When that
-contract actually merges, replace this legacy budget projection with the approved
-runtime types and versioned route/CLI behavior, plus updated snapshots; do not import
-the review-only budget module or silently mix v4 fields into a v3 envelope. Until then
-show the recorded cap and the real per-call/prepaid-balance (预付余额) blockers only.
+Task budgets are enforced by the merged budget service and Result 4.0. Previews expose
+`budget_preflight`, including the current `TaskBudgetView`, next-call admission blocker,
+first-pass estimate and uncertainty. Display those server values without predicting
+admission from a browser balance calculation. Newly added assessment reads and console
+CLI variants require contract version 4.0; legacy no-option commands retain their
+existing behavior. This does not claim that org monthly caps are enforced.
 The existing `/billing` page is for authorized admins, so other users see “请联系管理员
 补充余额”, not a forbidden balance page or an invented balance figure.
 
@@ -170,7 +174,7 @@ published report. A cached receipt reuses the existing job and shows “已复�
 The planned generation algorithm is **stage 1: derive sections and the overall rule
 from the whole scoring table; stage 2: generate items in batches against those fixed
 sections**. This is distinct from the existing product flow rubric → score run.
-The proposed optional `StageProgress` carries a strategy version, scheme, stage,
+The optional `StageProgress` carries a strategy version, scheme, stage,
 completed/total batch counts and the stage-two fixed-section hash. It never publishes
 prompts, raw stage output or vendor call bodies.
 
@@ -301,7 +305,7 @@ Save one `RubricReviseRequest`, with all coverage requirement IDs exactly matchi
 fixed scoring set and a required reason. Show “将创建新版本；所有职责分类、条目确认和覆盖
 决定需要重新完成”. The new rubric and children have new IDs; prior state is superseded,
 new children are unclassified candidates, and coverage resets to pending. Proposed
-replacement mappings are suggestions, not carried approvals. A narrowly scoped proposed
+replacement mappings are suggestions, not carried approvals. A narrowly scoped
 read of the existing revision event's `replacement_snapshot` recovers these suggestions
 after refresh; the existing history DTO does not expose them. It is never replayed with
 its old expected revision/hash as a new authorization, and it never replaces the
@@ -385,7 +389,7 @@ NOT NULL org_id, FORCE RLS, composite keys, least-privilege grants and two-org t
 ## HTTP interfaces and bounded reads
 
 All routes return the existing seven-key `Result`. No browser-specific mutation or
-assessment-run orchestrator is proposed. Existing registrations in the linked APIs are:
+assessment-run orchestrator is introduced. Existing registrations in the linked APIs are:
 
 | Existing route | Input → `data` / `items` |
 | --- | --- |
@@ -407,12 +411,12 @@ assessment-run orchestrator is proposed. Existing registrations in the linked AP
 | `GET /jobs/{J}`, `POST /jobs/{J}/cancel` | Existing status/cancel with each kind's `job_access`; no new status or cancel endpoint |
 
 Existing paged list/history limits are 50 by default, at most 200. Keep their full-mode
-JSON and command names compatible. The following **proposals** are the minimum extra
+JSON and command names compatible. The following **approved interfaces** are the minimum extra
 reads and opt-in variants used by this console:
 
 | Proposed route/variant | Purpose and contract |
 | --- | --- |
-| `GET /tasks/{T}/assessment-inputs?job=E` | `AssessmentInputsData`: explicit extraction, latest/current draft IDs and validity, recorded budget, redaction state, run/generate capabilities. Avoid fetching every draft's response body just to start. |
+| `GET /tasks/{T}/assessment-inputs?job=E` | `AssessmentInputsData`: explicit extraction, latest/current draft IDs and validity, enforced task budget, redaction state, run/generate capabilities. Avoid fetching every draft's response body just to start. |
 | Extend `GET /tasks/{T}/jobs?kind=check\|score_rubric\|score&extraction_job_id=E&cursor=&limit=` | `AssessmentJobPageData` / `AssessmentJobView[]`; recover unfinished jobs after refresh. Each row uses the kind's existing access checks; safe result ID/error/progress only. Existing parse projection remains unchanged. |
 | `GET /tasks/{T}/checks\|score-rubrics\|scores?view=console&extraction_job_id=E&cursor=&limit=` | `AssessmentHistoryQuery` → existing `AssessmentListData` / the corresponding compact summary items; these are three existing collection routes, not a literal combined path. Default full-mode results remain unchanged. |
 | `GET /checks/{C}?view=console&part=summary` | `CheckSummaryData` / `[]`, no coverage/citation arrays |
@@ -444,7 +448,7 @@ from matching text or combine unrelated duplicate errors across pages.
 Cursor signatures bind org, authenticated principal, task, parent, part, filters,
 sort and review snapshot, with expiry. Stable child ordering uses saved order/key/ID
 or requirement order/ID, and finding severity/domain/ID; history retains revision order.
-A decision changes the review snapshot: reject old cursors with proposed
+A decision changes the review snapshot: reject old cursors with
 `assessment_view_changed` (409/exit 2), refetch summary and return to the affected group.
 Never merge pages from different rubric revisions for confirmation or replacement.
 Totals describe the entire authorized graph, not only loaded pages. Use SQL keyset
@@ -474,7 +478,7 @@ projection before commit, never turn a committed action into an ambiguous size e
 Cap each new encoded Result page at **2 MiB UTF-8**, including metadata. End a page
 before the next whole row would exceed the cap and issue a continuation cursor; do
 not cut verified quotes, omit items or mark the query complete. A single oversized
-row returns proposed `assessment_entry_too_large` (422/exit 2) with its authorized ID
+row returns `assessment_entry_too_large` (422/exit 2) with its authorized ID
 and keeps the detail unavailable; this is a visible delivery limit, not an empty
 success. The open decision below proposes compact row metadata plus separately paged
 narratives if real data exceeds that limit. Summary diagnostics are counts; full
@@ -538,7 +542,7 @@ The wire envelope remains exactly:
   },
   "items": [],
   "warnings": [],
-  "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+  "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0, "basis": "zero", "charge": "0", "billing_currency": "USD", "task_amount": "0", "unpriced_calls": 0, "unresolved_calls": 0},
   "duration_ms": 0
 }
 ```
@@ -553,7 +557,7 @@ pair mapped to `Result.data/items`, not a second public envelope.
 | Exit | Required behavior |
 | --- | --- |
 | 0 | Valid read, successful preview (including a reported admission blocker), accepted job or complete available result; a stale readable report alone does not imply failure |
-| 2 | Argument/shape/input errors, invalid cursor, stale hash/CAS/review conflicts and proposed projection-size errors; correct input before retry |
+| 2 | Argument/shape/input errors, invalid cursor, stale hash/CAS/review conflicts and projection-size errors; correct input before retry |
 | 3 | Retryable transport/rate-limit/queue failure; retain durable job ID and honor Retry-After |
 | 4 | Human/role denial, terminal non-retryable failure/cancellation, explicit admission rejection or integrity failure; use actual service `data.error.exit_code`, not HTTP status guesses |
 | 5 | Check/rubric/score partial completion; score show also when unassessable items exist or total_status is not estimated; preserve useful rows and warnings |
@@ -660,8 +664,7 @@ screen-reader announcements.
 
 ## Acceptance plan
 
-This draft does not run database/browser implementation acceptance. Future implementation
-must retain existing check/score gates and add the cases below. No real external Provider
+Implementation acceptance must retain existing check/score gates and add the cases below. No real external Provider
 is used; mocked browser tests prove UI behavior, while database/API tests prove isolation
 and authorization. Neither substitutes for the other.
 
@@ -677,7 +680,7 @@ and retained append-only/publication constraints as applicable. Extend the exist
 [score storage](../../server/tests/test_score_storage.py) scenarios, rather than inventing
 console-owned persistence. Any later added table requires the same matrix.
 
-Parameterize every existing/proposed route and each projection part with A→B parent,
+Parameterize every existing/new route and each projection part with A→B parent,
 child, draft, extraction, rubric, citation, cursor and same-org/wrong-task IDs. Include
 inputs/job discovery/summary/filtered pages/notices/replacement/source windows/history,
 preview/submit/decisions/job status/cancel. Assert 404 equivalence with missing IDs,
@@ -706,7 +709,7 @@ publication fencing must preserve the current score-total behavior.
 ### CLI contract snapshots
 
 Snapshot seven-key Result and registered `bid schema` output for every existing command
-used above and every proposed read command/variant: preview allowed/blocked, accepted,
+used above and every new read command/variant: preview allowed/blocked, accepted,
 cached, complete/partial/stale, unavailable total, empty and multipage read, complete
 replacement, wrong-role human decision and each exit 0/2/3/4/5. Keep old no-option show
 snapshots unchanged. Verify Decimal-string charge/ranges versus numeric/null Cost.usd,
@@ -714,7 +717,7 @@ and explicit service error exit codes rather than treating all 409 as retryable.
 
 ### Playwright with a mocked API
 
-Add a future `web/e2e/console-assessments.spec.js` using the static-built-app interception
+Use `web/e2e/console-assessments.spec.js` using the static-built-app interception
 pattern in [platform-credentials.spec.js](../../web/e2e/platform-credentials.spec.js):
 `E2E_STATIC_DIR` serves built assets through page.route; synthetic org sessions and
 stateful route handlers supply exact typed Result envelopes. Abort unexpected requests
@@ -759,12 +762,12 @@ Save a repeatable artifact under `data/work/console-assessments-validation/<run-
 screenshots of synthetic states and the exact synthetic fixture/seed version. Retain
 request shapes/revision/hash assertions, not Authorization/Cookie/signed URLs/raw traces.
 Use the existing [Playwright config](../../web/playwright.config.js); a representative
-future command is `E2E_BASE_URL=http://console.test E2E_STATIC_DIR=dist
+command is `E2E_BASE_URL=http://console.test E2E_STATIC_DIR=dist
 E2E_OUTPUT=../data/work/console-assessments-validation/browser npx playwright test
 e2e/console-assessments.spec.js` from `web/`, after a normal local build. Keep artifacts
 outside `docs/`. Browser acceptance cannot be claimed until those pages are implemented.
 
-### Draft verification
+### Contract verification
 
 Verify the companion module with the installed local tools, without a service or
 dependency installation:
@@ -776,12 +779,12 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/pyright --project pyproject.toml --pythonpat
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=server:cli .venv/bin/python -c 'import importlib.util; p="docs/plan/console-assessments/console_assessments_contracts.py"; s=importlib.util.spec_from_file_location("console_assessments_contracts", p); m=importlib.util.module_from_spec(s); s.loader.exec_module(m)'
 ```
 
-These checks establish a loadable, typed contract draft only. They do not establish
+These checks establish a loadable, typed contract only. They do not establish
 runtime authorization, RLS, query performance or UI delivery.
 
-## Open decisions
+## 已定决定
 
-| Decision | Recommended default | Reason |
+| Decision | Approved choice | Reason |
 | --- | --- | --- |
 | First delivery order | Rules check end to end, then combined, rubric review, score report | Gives ordinary staff a usable path without waiting on a model; preserves prerequisite order. |
 | New persistence | None | Existing jobs/reports/decisions contain the business state; duplicated console state would drift. |
@@ -789,8 +792,23 @@ runtime authorization, RLS, query performance or UI delivery.
 | Bounded reads | Opt-in console variants plus only input/citation/job discovery reads | Keeps existing CLI JSON compatible and avoids full reports on page mount. |
 | Page limits and pathological single rows | 50 default/100 maximum, 2 MiB encoded Result; fail explicitly on an oversized single row | Provides measurable limits without truncating verified text. If representative data exceeds it, amend to compact row metadata and separately paged narratives before large-data release. |
 | Full replacement editing | Complete same-snapshot form, 512 KiB serialized save limit, recover stored proposal separately | Matches current atomic replacement and CLI limit; visible page edits cannot erase other-domain content. |
-| Budget compatibility | Runtime Result 3.0 and clearly unenforced recorded budget until budget work merges | Avoids presenting a planned cap or 4.0 cost object as existing admission control. |
+| Budget compatibility | Enforced task budget, runtime TaskBudgetView and Result 4.0 Cost; display real budget_preflight and admission blockers | The task-budget work is merged into the implementation base; no legacy unenforced projection remains. |
 | Progress transport | Existing polling, optional observed StageProgress; no SSE prerequisite | Works with current single-pass and later fixed-section two-stage workers without invented percentages. |
 | Unknown/unavailable scores | Preserve backend null/state/reason; no frontend totals | Partial or unsupported calculations cannot become a misleading total. |
 | Human batches and automatic repair | Individual review actions only; explicit whole-set confirmation after server checks | Makes responsibility and reason visible and avoids a second bulk-decision contract. |
 | UI acceptance | Static built Vue with stateful mocked API plus separate two-org API/DB gate suite | Repeatable browser behavior without paid services; mocks do not establish RLS or authorization. |
+
+## Implementation acceptance note
+
+The four slices are implemented in the approved order without a migration or Provider
+algorithm change. The companion module re-exports the runtime schemas so the approved
+transport contract has one definition. Enforced budgets use the runtime task-budget
+view and Result 4.0 rather than the earlier recorded-budget draft.
+
+The built-app Playwright suite uses stateful mocked API responses, real versioned
+request paths and synthetic fixtures. Browser startup was blocked by the execution
+sandbox before any page interaction; no browser acceptance pass is claimed. Database
+isolation and route tests are supplied for the integration environment because this
+worktree's sandbox cannot reach PostgreSQL. Executable tests and generated artifacts
+are linked from the [mechanism note](../notes/console-assessments.md#code); artifacts
+remain under `data/work/`, outside the documentation tree.

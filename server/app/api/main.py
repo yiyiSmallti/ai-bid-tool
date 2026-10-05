@@ -209,9 +209,36 @@ def create_app(
         budget_route = path in {"/billing/low-balance-policy", "/billing/notices"} or (
             path.startswith("/tasks/") and "/budget" in path
         )
+        parts = path.strip("/").split("/")
+        assessment_route = (
+            (
+                len(parts) == 3
+                and parts[0] == "tasks"
+                and parts[2] in {"assessment-inputs", "assessment-citation"}
+            )
+            or (
+                len(parts) == 3
+                and parts[0] == "tasks"
+                and parts[2] == "jobs"
+                and request.query_params.get("kind") in {"check", "score_rubric", "score"}
+            )
+            or (
+                request.query_params.get("view") == "console"
+                and (
+                    path.startswith("/checks/")
+                    or (
+                        path.startswith("/tasks/")
+                        and any(
+                            segment in {"checks", "score-rubrics", "scores"}
+                            for segment in parts[2:]
+                        )
+                    )
+                )
+            )
+        )
         response = (
             error_response(request, ServiceError("not_found", "Resource not found", 404, 4))
-            if version == "3.0" and budget_route
+            if version == "3.0" and (budget_route or assessment_route)
             else await call_next(request)
         )
         response.headers["X-Bid-Contract-Version"] = version
@@ -372,7 +399,7 @@ def create_app(
     from app.api.budgets import create_router as create_budget_router
 
     app.include_router(create_budget_router(context, settings))
-    app.include_router(create_org_console_router(context))
+    app.include_router(create_org_console_router(context, storage, settings))
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
     app.include_router(
         create_provider_router(context, db, settings, llm, resolve, processor, llm_transport)
