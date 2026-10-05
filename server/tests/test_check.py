@@ -86,8 +86,8 @@ CANDIDATE_MARKER = "PRIVATE UNCONFIRMED CANDIDATE MUST NOT LEAK"
 class CheckExtraction(PhaseOneExtraction):
     """Make the synthetic fixture include substantive and second starred rules."""
 
-    async def extract(self, chunks, schema):
-        result = await super().extract(chunks, schema)
+    async def _extract(self, chunks, schema):
+        result = await super()._extract(chunks, schema)
         for item in result.extraction.items:
             if item.source.page == 4:
                 item.category = Category.substantive

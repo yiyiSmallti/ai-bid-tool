@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pymupdf
+from app.providers.calls import standalone_evaluation
 from app.providers.local_ocr import LocalOCR
 
 
@@ -14,7 +15,8 @@ async def verify(data_dir: Path, output: Path):
         page = document.new_page(width=600, height=200)
         page.insert_text((30, 70), "合成测试 内存不少于64 GB", fontname="china-s", fontsize=26)
         image = page.get_pixmap(matrix=pymupdf.Matrix(3, 3)).tobytes("png")
-    result = await LocalOCR("chi_sim+eng", str(data_dir)).recognize(image, 1)
+    with standalone_evaluation():
+        result = await LocalOCR("chi_sim+eng", str(data_dir)).recognize(image, 1)
     compact = "".join(result.text.split())
     assert "合成测试" in compact and "64" in compact and "GB" in compact, (
         "Synthetic Chinese text was not recognized"
@@ -24,7 +26,7 @@ async def verify(data_dir: Path, output: Path):
         "synthetic_only": True,
         "recognized": result.text,
         "boxes": len(result.boxes),
-        "usage": result.usage.model_dump(),
+        "usage": result.usage.model_dump(mode="json"),
     }
     evidence["limitations"] = (
         "OCR may misrecognize characters; inspect the original raster before accepting citations."

@@ -487,7 +487,7 @@ async def many_rubric_case(tenants, tmp_path, admin_engine, monkeypatch):
     )
 
     async with check_client(tenants, tmp_path) as (api, app, headers, provider):
-        original = provider.extract
+        original = provider._extract
 
         async def all_scoring(chunks, schema):
             result = await original(chunks, schema)
@@ -495,7 +495,7 @@ async def many_rubric_case(tenants, tmp_path, admin_engine, monkeypatch):
                 item.category = Category.scoring
             return result
 
-        monkeypatch.setattr(provider, "extract", all_scoring)
+        monkeypatch.setattr(provider, "_extract", all_scoring)
         task, document, extraction, requirements = await create_tender(
             api, app, headers[0], tmp_path, suffix="multi-rubric"
         )

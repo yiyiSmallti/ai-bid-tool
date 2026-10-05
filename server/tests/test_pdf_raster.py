@@ -67,10 +67,10 @@ class RecordingOCR(FakeOCR):
         self.text = text
         self.images = []
 
-    async def recognize(self, image, page):
+    async def _recognize(self, image, page):
         pixmap = pymupdf.Pixmap(image)
         self.images.append((page, pixmap.width, pixmap.height))
-        result = await super().recognize(image, page)
+        result = await super()._recognize(image, page)
         return result.model_copy(update={"text": self.text})
 
 

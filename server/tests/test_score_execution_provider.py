@@ -258,7 +258,8 @@ async def test_concurrent_admission_error_drains_an_already_admitted_call(tmp_pa
             super().__init__()
             self.attempts = 0
 
-        async def admit(self, reserved_charge: Decimal, platform_billed: bool):
+        async def admit(self, quote):
+            reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
             self.attempts += 1
             self.reservations.append(reserved_charge)
             self.platform_billed.append(platform_billed)

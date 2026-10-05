@@ -488,7 +488,16 @@ async def test_new_call_ledger_and_usage_remain_tenant_isolated(tenants, tmp_pat
                         org_id=tenants["orgs"][0],
                         job_id=UUID(job),
                         run_id=call.run_id,
-                        reserved_charge=0,
+                        task_id=call.task_id,
+                        budget_revision=call.budget_revision,
+                        capability=call.capability,
+                        payer=call.payer,
+                        currency=call.currency,
+                        price_revision=call.price_revision,
+                        request_sha256=call.request_sha256,
+                        reserved_charge=call.reserved_charge,
+                        reserved_task_amount=call.reserved_task_amount,
+                        quote=call.quote,
                     )
                 )
         with pytest.raises(DBAPIError):
@@ -499,7 +508,16 @@ async def test_new_call_ledger_and_usage_remain_tenant_isolated(tenants, tmp_pat
                         org_id=tenants["orgs"][1],
                         job_id=UUID(job),
                         run_id=call.run_id,
-                        reserved_charge=0,
+                        task_id=call.task_id,
+                        budget_revision=call.budget_revision,
+                        capability=call.capability,
+                        payer=call.payer,
+                        currency=call.currency,
+                        price_revision=call.price_revision,
+                        request_sha256=call.request_sha256,
+                        reserved_charge=call.reserved_charge,
+                        reserved_task_amount=call.reserved_task_amount,
+                        quote=call.quote,
                     )
                 )
         assert usages[0].call_id == call.id
@@ -825,7 +843,7 @@ async def test_proven_unsent_credential_failure_releases_hold_without_delete_or_
                     "https://api.anthropic.com/v1/messages",
                     {},
                     {"max_tokens": 1024},
-                    reserved_charge=Decimal("0.02"),
+                    reserved_charge=llm.reservation({"max_tokens": 1024}),
                 )
             assert caught.value.code == "provider_unavailable"
             calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job_id)
@@ -840,7 +858,7 @@ async def test_proven_unsent_credential_failure_releases_hold_without_delete_or_
                 "https://api.anthropic.com/v1/messages",
                 {},
                 {"max_tokens": 1024},
-                reserved_charge=Decimal("0.02"),
+                reserved_charge=llm.reservation({"max_tokens": 1024}),
             )
         calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job_id)
         assert len(requests) == len(usages) == len(entries) == 1

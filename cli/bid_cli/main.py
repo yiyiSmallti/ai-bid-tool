@@ -53,6 +53,7 @@ from app.services.certificate_files import read_file as read_certificate_file
 from app.services.template_files import read_template
 from pydantic import ValidationError
 
+from bid_cli.budget import register as register_budget_commands
 from bid_cli.check import app as check_app
 from bid_cli.check import check_job_exit
 from bid_cli.client import Client, State, new_output_path, save_download
@@ -116,6 +117,7 @@ JsonOption = Annotated[
     bool, typer.Option("--json", help="Emit the versioned machine-readable result")
 ]
 runtime: Client | None = None
+output_contract_version = "4.0"
 started = 0.0
 
 
@@ -129,9 +131,14 @@ def configure(
     mode: Annotated[str, typer.Option()] = "remote",
     server: Annotated[str, typer.Option()] = "http://127.0.0.1:8000",
     state: Annotated[Path, typer.Option()] = Path("data/cli-session.enc"),
+    contract_version: Annotated[str, typer.Option(help="4.0 or legacy 3.0")] = "4.0",
 ):
-    global runtime
+    global runtime, output_contract_version
+    output_contract_version = contract_version
+    if contract_version not in {"3.0", "4.0"}:
+        raise ServiceError("invalid_input", "Contract version must be 3.0 or 4.0", 400, 2)
     runtime = Client(mode, server, State(state))
+    runtime.contract_version = contract_version
 
 
 def client() -> Client:
@@ -145,8 +152,15 @@ def emit(body: dict, command: str, as_json: bool, exit_code: int = 0):
     body["command"] = command
     body["duration_ms"] = int((time.monotonic() - started) * 1000)
     value = Result.model_validate(body)
+    from app.schemas.compatibility import legacy_projection
+
+    legacy = output_contract_version == "3.0"
     if as_json:
-        typer.echo(value.model_dump_json())
+        typer.echo(
+            json.dumps(legacy_projection(value.model_dump(mode="json")), ensure_ascii=False)
+            if legacy
+            else value.model_dump_json()
+        )
     elif value.ok:
         typer.echo(
             json.dumps(
@@ -213,10 +227,21 @@ def task_create(
     tender_number: Annotated[str | None, typer.Option()] = None,
     deadline: Annotated[datetime | None, typer.Option(formats=["%Y-%m-%dT%H:%M:%S%z"])] = None,
     budget_usd: Annotated[float | None, typer.Option()] = None,
+    budget: Annotated[str | None, typer.Option()] = None,
+    budget_currency: Annotated[str | None, typer.Option()] = None,
     json_output: JsonOption = False,
 ):
     if tender is not None and not tender.is_file():
         raise ServiceError("missing_file", "Upload file does not exist", 400, 2)
+    if (budget is None) != (budget_currency is None) or (
+        budget is not None and budget_usd is not None
+    ):
+        raise ServiceError(
+            "invalid_input",
+            "Use --budget and --budget-currency together; do not combine legacy --budget-usd",
+            400,
+            2,
+        )
     body = call(
         "POST",
         "/tasks",
@@ -225,6 +250,11 @@ def task_create(
             "tender_number": tender_number,
             "deadline": deadline.isoformat() if deadline else None,
             "budget_usd": budget_usd,
+            **(
+                {"budget": {"limit": budget, "currency": budget_currency}}
+                if budget is not None
+                else {}
+            ),
         },
     )
     if tender is not None:
@@ -433,6 +463,33 @@ def task_redaction_set(
         "task redaction set",
         json_output,
     )
+
+
+simulation_app = typer.Typer()
+app.add_typer(simulation_app, name="product")
+
+
+@simulation_app.command("simulate")
+def product_simulate(
+    task: Annotated[UUID, typer.Option()],
+    job: Annotated[UUID, typer.Option()],
+    expected_input_hash: Annotated[str | None, typer.Option()] = None,
+    dry_run: Annotated[bool, typer.Option()] = False,
+    retry: Annotated[bool, typer.Option()] = False,
+    wait: Annotated[bool, typer.Option()] = False,
+    timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
+    json_output: JsonOption = False,
+):
+    from app.schemas.simulation_contracts import ProductSimulationInput
+
+    request = ProductSimulationInput(
+        extraction_job_id=job, expected_input_hash=expected_input_hash, dry_run=dry_run, retry=retry
+    )
+    body = call("POST", f"/tasks/{task}/product-simulations", json=request.model_dump(mode="json"))
+    if wait and not dry_run:
+        terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
+        body = merge_job_result(body, terminal)
+    emit(body, "product simulate", json_output, partial_completion_exit(body))
 
 
 @product_app.command("add")
@@ -928,13 +985,6 @@ async def wait_for_job(job_id: UUID, limit_seconds: float) -> dict:
         body = await client().request("GET", f"/jobs/{job_id}")
         status = body["data"]["status"]
         if status in {"succeeded", "failed", "cancelled"}:
-            if status != "succeeded":
-                error = body["data"].get("error") or {
-                    "code": "cancelled",
-                    "message": "Job was cancelled",
-                    "exit_code": 4,
-                }
-                raise ServiceError(error["code"], error["message"], 400, error["exit_code"])
             return body
         await asyncio.sleep(0.3)
     raise ServiceError(
@@ -945,10 +995,31 @@ async def wait_for_job(job_id: UUID, limit_seconds: float) -> dict:
 def partial_completion_exit(body: dict) -> int:
     data = body.get("data", {})
     result = data.get("result") if isinstance(data.get("result"), dict) else data
-    if result.get("completion") == "partial":
+    budget = result.get("budget") or {}
+    if result.get("completion") == "partial" or budget.get("completion") == "partial":
         body["ok"] = False
         return 5
+    if data.get("status") in {"failed", "cancelled"} or budget.get("completion") == "failed":
+        body["ok"] = False
+        error = data.get("error") or result.get("error") or {}
+        return error.get("exit_code", 4)
+    if not body.get("ok", True):
+        return (data.get("error") or {}).get("exit_code", 4)
     return 0
+
+
+def merge_job_result(body: dict, terminal: dict) -> dict:
+    """Keep terminal accounting, budget diagnostics and domain items when waiting."""
+    result = terminal["data"].get("result") or {}
+    body["data"].update(result)
+    body["data"]["status"] = terminal["data"]["status"]
+    if terminal["data"].get("error"):
+        body["data"]["error"] = terminal["data"]["error"]
+    body["ok"] = terminal.get("ok", True)
+    body["cost"] = terminal.get("cost", result.get("cost", body.get("cost", {})))
+    body["warnings"] = terminal.get("warnings", result.get("warnings", []))
+    body["items"] = terminal.get("items", result.get("items", []))
+    return body
 
 
 @card_app.command("generate")
@@ -983,11 +1054,7 @@ def card_generate(
     body = call("POST", f"/tasks/{task}/cards/generations", json=request.model_dump(mode="json"))
     if wait and not dry_run:
         terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
-        output = terminal["data"]["result"]
-        body["data"].update(output)
-        body["data"]["status"] = terminal["data"]["status"]
-        body["cost"] = output["cost"]
-        body["warnings"] = output.get("warnings", [])
+        body = merge_job_result(body, terminal)
     emit(body, "card generate", json_output, partial_completion_exit(body))
 
 
@@ -1014,6 +1081,13 @@ def draft_run(
     body = call("POST", f"/tasks/{task}/drafts", json=request)
     if wait and not dry_run:
         terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
+        if partial_completion_exit(terminal):
+            emit(
+                merge_job_result(body, terminal),
+                "draft",
+                json_output,
+                partial_completion_exit(terminal),
+            )
         result = terminal["data"].get("result") or {}
         draft_id = result.get("draft_id")
         if not draft_id:
@@ -1067,10 +1141,9 @@ def process(
     body = call("POST", f"/documents/{document}/{kind}", json=request)
     if wait and not dry_run:
         terminal = asyncio.run(wait_for_job(UUID(body["data"]["job_id"]), timeout))
-        body["data"].update(terminal["data"]["result"])
-        body["data"]["status"] = "succeeded"
-        body["warnings"] = terminal["data"]["result"].get("warnings", [])
-        body["cost"] = terminal["data"]["result"].get("cost", body["cost"])
+        body = merge_job_result(body, terminal)
+        if partial_completion_exit(body):
+            emit(body, command, as_json, partial_completion_exit(body))
         if kind == "parse":
             body["items"] = call("GET", f"/documents/{document}/chunks")["items"]
         else:
@@ -1078,7 +1151,7 @@ def process(
             task = call("GET", f"/documents/{document}")["data"]["task_id"]
             job = body["data"]["job_id"]
             body["items"] = call("GET", f"/tasks/{task}/requirements", params={"job": job})["items"]
-    emit(body, command, as_json)
+    emit(body, command, as_json, partial_completion_exit(body))
 
 
 @tender_app.command("parse")
@@ -1296,13 +1369,21 @@ def platform_model_set(input: Annotated[Path, typer.Option()], json_output: Json
 
 @platform_model_app.command("test")
 def platform_model_test(
-    model_id: Annotated[str, typer.Option("--id")], json_output: JsonOption = False
+    model_id: Annotated[str, typer.Option("--id")],
+    test_org: Annotated[UUID | None, typer.Option()] = None,
+    dry_run: Annotated[bool, typer.Option()] = False,
+    json_output: JsonOption = False,
 ):
-    emit(
-        call("POST", f"/platform/models/{model_id}/test", platform=True),
-        "platform model test",
-        json_output,
+    from app.schemas.budget_contracts import BudgetPlatformModelTest
+
+    request = BudgetPlatformModelTest(dry_run=dry_run, test_org_id=test_org)
+    body = call(
+        "POST",
+        f"/platform/models/{model_id}/test",
+        platform=True,
+        json=request.model_dump(mode="json"),
     )
+    emit(body, "platform model test", json_output, partial_completion_exit(body))
 
 
 @platform_app.command("usage")
@@ -1331,6 +1412,8 @@ def platform_audit(
 platform_card_app, billing_app = typer.Typer(), typer.Typer()
 platform_app.add_typer(platform_card_app, name="card")
 app.add_typer(billing_app, name="billing")
+
+register_budget_commands(task_app, billing_app)
 
 
 @platform_card_app.command("create")
@@ -1459,7 +1542,9 @@ def auth_setup_password(json_output: JsonOption = False):
 @app.command("schema")
 def schema_command(json_output: JsonOption = False):
     emit(
-        Result(ok=True, command="schema", data=command_schema(app)).model_dump(mode="json"),
+        Result(
+            ok=True, command="schema", data=command_schema(app, client().contract_version)
+        ).model_dump(mode="json"),
         "schema",
         json_output,
     )
@@ -1501,10 +1586,34 @@ def command_name(arguments: list[str]) -> str:
 
 
 def main(args: list[str] | None = None):
-    global started
+    global started, runtime, output_contract_version
+    runtime = None
+    output_contract_version = "4.0"
     started = time.monotonic()
     arguments = list(sys.argv[1:] if args is None else args)
     try:
+        version = next(
+            (item.split("=", 1)[1] for item in arguments if item.startswith("--contract-version=")),
+            None,
+        )
+        if "--contract-version" in arguments:
+            index = arguments.index("--contract-version")
+            if index + 1 < len(arguments):
+                version = arguments[index + 1]
+        if version == "3.0":
+            output_contract_version = "3.0"
+            from app.schemas.compatibility import NEW_COMMANDS
+
+            name = command_name(arguments)
+            if (
+                name in NEW_COMMANDS
+                or any(
+                    argument.split("=", 1)[0] in {"--budget", "--budget-currency", "--test-org"}
+                    for argument in arguments
+                )
+                or (name in {"provider test", "platform model test"} and "--dry-run" in arguments)
+            ):
+                raise ServiceError("invalid_input", "This command requires contract 4.0", 400, 2)
         app(args=arguments, standalone_mode=False)
     except ServiceError as exc:
         data: dict = {

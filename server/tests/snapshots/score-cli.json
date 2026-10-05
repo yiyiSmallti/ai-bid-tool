@@ -3,8 +3,14 @@
     "score rubric classify": {
       "command": "score rubric classify",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -30,8 +36,14 @@
     "score rubric classify item": {
       "command": "score rubric classify",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -57,8 +69,14 @@
     "score rubric coverage decide": {
       "command": "score rubric coverage decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -87,8 +105,14 @@
     "score rubric decide": {
       "command": "score rubric decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -137,8 +161,14 @@
     "score rubric generate": {
       "command": "score rubric generate",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -150,8 +180,14 @@
         "estimate_kind": "first_pass_upper_bound",
         "estimated_charge": "0.04",
         "estimated_cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
           "llm_tokens": 800,
           "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
           "usd": 0.02
         },
         "estimated_duration_ms": null,
@@ -191,8 +227,14 @@
     "score rubric history": {
       "command": "score rubric history",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -238,8 +280,14 @@
     "score rubric item decide": {
       "command": "score rubric item decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -265,8 +313,14 @@
     "score rubric list": {
       "command": "score rubric list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -326,8 +380,14 @@
     "score rubric revise": {
       "command": "score rubric revise",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -475,8 +535,14 @@
     "score rubric section decide": {
       "command": "score rubric section decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -502,8 +568,14 @@
     "score rubric show": {
       "command": "score rubric show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -653,8 +725,14 @@
     "score rubric classify": {
       "command": "score rubric classify",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -680,8 +758,14 @@
     "score rubric classify item": {
       "command": "score rubric classify",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -707,8 +791,14 @@
     "score rubric coverage decide": {
       "command": "score rubric coverage decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -737,8 +827,14 @@
     "score rubric decide": {
       "command": "score rubric decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -787,8 +883,14 @@
     "score rubric generate": {
       "command": "score rubric generate",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -800,8 +902,14 @@
         "estimate_kind": "first_pass_upper_bound",
         "estimated_charge": "0.04",
         "estimated_cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
           "llm_tokens": 800,
           "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
           "usd": 0.02
         },
         "estimated_duration_ms": null,
@@ -841,8 +949,14 @@
     "score rubric history": {
       "command": "score rubric history",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -888,8 +1002,14 @@
     "score rubric item decide": {
       "command": "score rubric item decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -915,8 +1035,14 @@
     "score rubric list": {
       "command": "score rubric list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -976,8 +1102,14 @@
     "score rubric revise": {
       "command": "score rubric revise",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -1125,8 +1257,14 @@
     "score rubric section decide": {
       "command": "score rubric section decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -1152,8 +1290,14 @@
     "score rubric show": {
       "command": "score rubric show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {

@@ -5,8 +5,9 @@ from sqlalchemy import select
 
 from app.models.entities import Job, UsageRecord
 from app.models.provider_configs import ProviderConfig
+from app.schemas.budget_contracts import BudgetProviderTest
 from app.schemas.contracts import ProviderUsage, Result
-from app.schemas.provider_contracts import ProviderConfigSet, ProviderTest
+from app.schemas.provider_contracts import ProviderConfigSet
 from app.services import provider_configs as service
 
 
@@ -37,10 +38,19 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
         )
 
     @router.post("/providers/test", name="provider_test", response_model=Result)
-    async def provider_test(body: ProviderTest, ctx=Depends(context, scope="function")):
+    async def provider_test(body: BudgetProviderTest, ctx=Depends(context, scope="function")):
         session, actor = ctx
         await service.require_access(session, actor, write=True)
         provider = await resolve(session) if resolve else llm
+        if body.dry_run:
+            data, warnings = await service.preview_test(session, actor, body, provider, settings)
+            return Result(
+                ok=True,
+                command="provider test",
+                data=data,
+                warnings=warnings,
+                cost=data["budget_preflight"]["estimate"],
+            )
         job = await service.submit_test(session, actor, body, provider, settings)
         await session.commit()
         # The response waits for the same processor used by queued extraction/drafting.
@@ -67,6 +77,9 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
                 else None,
                 "month_usage": await service.monthly_usage(read, saved.provider_config_id),
                 **({"error": saved.error} if saved.error else {}),
+            }
+            data["result"] = {
+                key: value for key, value in saved.result.items() if key != "submission"
             }
             cost, warnings = saved.result.get("cost", {}), saved.result.get("warnings", [])
         data["balance"] = await service.balance_view(config, settings, transport)

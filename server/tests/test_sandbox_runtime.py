@@ -25,6 +25,7 @@ from uuid import uuid4
 
 import pytest
 from app.providers.browser import SocketBrowserProvider
+from app.providers.calls import standalone_evaluation
 from app.providers.sandbox_runtime import RunDescriptor, RuntimeConfig, SandboxFailure
 
 
@@ -60,7 +61,8 @@ async def test_real_prototype_pipeline():
     provider = SocketBrowserProvider(config)
     html = b"<!doctype html><html><body><h1>Sandbox synthetic acceptance</h1></body></html>"
     run = replace(descriptor(html), synthetic_input=config.synthetic_only)
-    result = await provider.render_prototype(run, html)
+    with standalone_evaluation():
+        result = await provider.render_prototype(run, html)
     assert result.cleanup_state == "complete"
     assert {x.kind for x in result.artifacts} == {"prototype_png", "rendered_html"}
     target = Path(

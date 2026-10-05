@@ -59,7 +59,7 @@ def interface(monkeypatch):
         assert "x-org-id" not in request.headers
         body = json.loads(request.content) if request.content else None
         calls.append((request.method, request.url.path, body, dict(request.url.params)))
-        path = request.url.path
+        path = request.url.path.removeprefix("/v4")
         if path.endswith("/test"):
             data = {
                 "error": {

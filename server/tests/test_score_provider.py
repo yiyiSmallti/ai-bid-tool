@@ -51,7 +51,8 @@ class Accounting:
     def plan(self, first_pass_calls: int) -> None:
         self.planned.append(first_pass_calls)
 
-    async def admit(self, reserved_charge: Decimal, platform_billed: bool):
+    async def admit(self, quote):
+        reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
         assert platform_billed is self.platform_billed
         if self.block_after is not None and len(self.reservations) >= self.block_after:
             raise ProviderFailure("Synthetic budget stop", code=self.block_code)

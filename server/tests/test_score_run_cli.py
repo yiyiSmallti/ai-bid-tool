@@ -183,7 +183,7 @@ class MockClient(Client):
 
 
 def handler(request: httpx.Request) -> httpx.Response:
-    path = request.url.path
+    path = request.url.path.removeprefix("/v4")
     query = dict(request.url.params)
     payload = json.loads(request.content) if request.content else None
     if path == f"/tasks/{TASK}/scores/preview":

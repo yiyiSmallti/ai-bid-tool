@@ -38,6 +38,9 @@ from app.services.response_cards import fail
 
 # Only these admission stops permit retaining already completed deterministic coverage.
 PARTIAL_STOPS = {
+    "task_budget_exceeded",
+    "task_budget_unpriced",
+    "task_budget_currency_review_required",
     "insufficient_balance",
     "spend_cap_reached",
     "job_charge_limit_exceeded",

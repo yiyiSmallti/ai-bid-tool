@@ -238,6 +238,12 @@ def check_interface(
         queue.enqueue = unavailable  # pyright: ignore[reportAttributeAccessIssue]
     application = FastAPI()
 
+    @application.middleware("http")
+    async def versioned_router(request, call_next):
+        if request.url.path.startswith("/v4/"):
+            request.scope["path"] = request.scope["path"][3:]
+        return await call_next(request)
+
     @application.exception_handler(ServiceError)
     async def service_error(request: Request, error: ServiceError):
         body = Result(

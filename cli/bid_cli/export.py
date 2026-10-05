@@ -73,6 +73,7 @@ def _load_input(
 def _preview_exit(body: dict, model: type[ExportPreview] | type[ExportBindingPreview]) -> int:
     data = dict(body.get("data", {}))
     data.pop("error", None)
+    data.pop("budget_preflight", None)
     try:
         preview = model.model_validate(data)
     except ValueError:
@@ -96,7 +97,12 @@ async def _request_preview(path: str, request: dict) -> dict:
     }
     try:
         async with runtime.transport() as transport:
-            response = await transport.request("POST", path, headers=headers, json=request)
+            response = await transport.request(
+                "POST",
+                "/v4" + path if runtime.contract_version == "4.0" else path,
+                headers=headers,
+                json=request,
+            )
     except httpx.TransportError as exc:
         raise ServiceError(
             "network_unavailable", "Server is unavailable or timed out", 503, 3

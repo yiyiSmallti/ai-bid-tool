@@ -200,15 +200,41 @@ def create_app(
     @app.middleware("http")
     async def contract_header(request: Request, call_next):
         start = time.monotonic()
-        response = await call_next(request)
-        response.headers["X-Bid-Contract-Version"] = CONTRACT_VERSION
+        version = "4.0" if request.url.path.startswith("/v4/") else "3.0"
+        if version == "4.0":
+            request.scope["path"] = request.scope["path"][3:]
+            request.scope["raw_path"] = request.scope["path"].encode()
+        request.state.contract_version = version
+        path = request.scope["path"]
+        budget_route = path in {"/billing/low-balance-policy", "/billing/notices"} or (
+            path.startswith("/tasks/") and "/budget" in path
+        )
+        response = (
+            error_response(request, ServiceError("not_found", "Resource not found", 404, 4))
+            if version == "3.0" and budget_route
+            else await call_next(request)
+        )
+        response.headers["X-Bid-Contract-Version"] = version
         response.headers["X-Duration-Ms"] = str(int((time.monotonic() - start) * 1000))
         response.headers["Cache-Control"] = "no-store"
         if response.headers.get("content-type", "").startswith("application/json"):
-            raw = b"".join([part async for part in response.body_iterator])
+            raw = (
+                bytes(response.body)
+                if isinstance(response, JSONResponse)
+                else b"".join([part async for part in response.body_iterator])
+            )
             payload = json.loads(raw)
             if isinstance(payload, dict) and "command" in payload and "duration_ms" in payload:
                 payload["duration_ms"] = int((time.monotonic() - start) * 1000)
+                if "budget_preflight" in payload.get("data", {}):
+                    payload["cost"] = payload["data"]["budget_preflight"]["estimate"]
+                cost = payload.get("cost", {})
+                if cost.get("basis") in {"zero", "cache_hit"}:
+                    cost["billing_currency"] = settings.billing_currency
+                if version == "3.0":
+                    from app.schemas.compatibility import legacy_projection
+
+                    payload = legacy_projection(payload)
                 raw = json.dumps(payload, ensure_ascii=False).encode()
             headers = {
                 key: value for key, value in response.headers.items() if key != "content-length"
@@ -322,7 +348,7 @@ def create_app(
         )
 
     app.include_router(
-        create_platform_router(settings, db, crypto, password_attempts, llm_transport)
+        create_platform_router(settings, db, crypto, password_attempts, llm_transport, processor)
     )
     if settings.web_dir is not None:
         mount_console(app, settings.web_dir)
@@ -343,6 +369,9 @@ def create_app(
             session.info["memory_settings"] = settings
             yield session, identity
 
+    from app.api.budgets import create_router as create_budget_router
+
+    app.include_router(create_budget_router(context, settings))
     app.include_router(create_org_console_router(context))
     app.include_router(create_response_router(context, db, storage, queue, settings, llm, resolve))
     app.include_router(

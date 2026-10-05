@@ -353,11 +353,7 @@ def _job_result(body: dict, wait: bool, dry_run: bool, timeout: float) -> tuple[
                 "invalid_server_response", "Server did not identify the screenshot job", 502, 4
             ) from None
         terminal = asyncio.run(cli.wait_for_job(job_id, timeout))
-        result = terminal["data"].get("result") or {}
-        body["data"].update(result)
-        body["data"]["status"] = terminal["data"]["status"]
-        body["warnings"] = result.get("warnings", [])
-        body["cost"] = result.get("cost", body.get("cost", {}))
+        body = cli.merge_job_result(body, terminal)
     return body, cli.partial_completion_exit(body)
 
 

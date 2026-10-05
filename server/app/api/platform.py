@@ -13,6 +13,7 @@ from app.core.db import Database
 from app.core.errors import ServiceError
 from app.core.password_attempts import PasswordAttempts
 from app.core.security import TokenSigner
+from app.schemas.budget_contracts import BudgetPlatformModelTest
 from app.schemas.contracts import Result
 from app.schemas.platform_contracts import (
     OrgLookup,
@@ -41,6 +42,7 @@ def create_router(
     crypto: TokenSigner,
     attempts: PasswordAttempts,
     transport=None,
+    processor=None,
 ) -> APIRouter:
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False)
@@ -121,9 +123,16 @@ def create_router(
     @router.post(
         "/platform/models/{model_id}/test", name="platform_model_test", response_model=Result
     )
-    async def model_test(model_id: str, actor=Depends(operator)):
-        data = await platform.test_model(db, settings, actor, model_id, transport)
-        return result("platform model test", data)
+    async def model_test(model_id: str, body: BudgetPlatformModelTest, actor=Depends(operator)):
+        data = await platform.test_model(
+            db, settings, actor, model_id, transport, body=body, processor=processor
+        )
+        return Result(
+            ok=data.get("passed", True),
+            command="platform model test",
+            data=data,
+            cost=data.get("budget_preflight", {}).get("estimate", data.get("cost", {})),
+        )
 
     @router.post(
         "/platform/orgs/{org_id}/balance", name="platform_org_balance", response_model=Result

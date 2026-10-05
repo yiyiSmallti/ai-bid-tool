@@ -1,3 +1,4 @@
+import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
@@ -157,7 +158,10 @@ for _role, _scopes in ROLE_SCOPES.items():
     _scopes.add("score:read")
     if _role != "viewer":
         _scopes.add("score:rubric:review")
+    if _role == "admin":
+        _scopes.add("billing:alert:write")
     if _role in {"admin", "bidder"}:
+        _scopes.add("task:budget:write")
         _scopes.update({"confidential:write", "confidential:reveal"})
     if _role in {"bidder", "technical"}:
         _scopes.add("check:decide")
@@ -198,13 +202,16 @@ class Identity:
 
 async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
     """Only authenticated server code supplies transaction-local decision identity."""
+    session.info["actor"] = actor
     await session.execute(
         text(
             "SELECT set_config('app.actor_kind', :kind, true), "
             "set_config('app.actor_user_id', :user, true), "
-            "set_config('app.actor_token_id', :token, true)"
+            "set_config('app.actor_token_id', :token, true), "
+            "set_config('app.actor_scopes', :scopes, true)"
         ),
         {
+            "scopes": json.dumps(sorted(actor.scopes)),
             "kind": actor.actor_kind,
             "user": str(actor.user_id),
             "token": str(actor.token_id) if actor.token_id else "",
