@@ -180,7 +180,7 @@ gates protect budget writes and history/notices cannot be updated or deleted.
 Audits contain IDs, revisions, currency, reason hashes and safe result codes, never
 budget values, raw reasons, URLs, prompts, quotes or secrets.
 
-Migration `0039_task_budget.py` has revision `0039`, parent `0038` on this branch.
+Migration `0040_task_budget.py` has revision `0040`, parent `0039`.
 Cutover requirements:
 
 1. Stop old workers and drain determinable calls. Preserve pending/unknown holds;

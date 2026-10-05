@@ -128,7 +128,7 @@ transition. Read-only queries never emit a notice.
 - [Budget schemas](../../server/app/schemas/budget_contracts.py): budgets, quotes,
   preflight, intervention, job attachment and alert policy.
 - [Budget persistence](../../server/app/services/budgets.py) and
-  [migration](../../server/migrations/versions/0039_task_budget.py): exposure,
+  [migration](../../server/migrations/versions/0040_task_budget.py): exposure,
   human changes, history, tenant constraints and notification transitions.
 - [Execution](../../server/app/jobs/execution.py): lock order, live grants,
   reservation, settlement, cumulative cost and terminal budget attachment.
