@@ -16,6 +16,9 @@ class DisabledLLM:
     model = "unconfigured"
     version = "disabled-v1"
     test_only = False
+    # This adapter never dispatches; preserve its explicit unavailable diagnostic
+    # instead of treating the intentional negative capability as an unmetered call.
+    records_calls = True
 
     async def extract(self, chunks: list[dict], schema: dict) -> LLMResult:
         raise ProviderFailure(

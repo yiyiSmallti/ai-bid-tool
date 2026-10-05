@@ -971,7 +971,17 @@ async def submit_export(
         max_attachments=settings.export_max_attachments,
     )
     if body.dry_run:
-        return preview(fixed), None
+        from app.services import budget_preflight
+
+        return await budget_preflight.attach(
+            session,
+            preview(fixed),
+            command="export prepare",
+            task_id=task_id,
+            input_hash=digest(fixed),
+            currency=settings.billing_currency,
+            planned_calls=0,
+        ), None
     ensure_ready(fixed)
     if body.expected_input_hash != digest(fixed):
         raise ServiceError(

@@ -262,6 +262,8 @@ async def test_certificate_roles_preserve_old_grants(
             "score:run",
             "score:rubric:generate",
             "score:rubric:review",
+            "task:budget:write",
+            "billing:alert:write",
             "memory:read",
             "memory:write",
             "memory:retrieve",

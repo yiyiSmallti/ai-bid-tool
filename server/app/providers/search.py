@@ -6,6 +6,7 @@ The deployment selects one provider explicitly; there is no credential fallback.
 """
 
 import json
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 
@@ -14,6 +15,10 @@ import httpx
 from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.providers.base import ProviderFailure
+from app.providers.calls import accounted_call
+from app.providers.quotes import serialized_request, zero_quote
+from app.schemas.budget_contracts import BudgetCallQuote
+from app.schemas.contracts import ProviderUsage
 
 MAX_RESULTS_PER_QUERY = 30
 TIMEOUT_SECONDS = 20.0
@@ -40,6 +45,8 @@ class SearchResult:
 
 class SearXNGSearch:
     name = "searxng"
+    version = "searxng-search-v1"
+    records_calls = True
     filters_domains = False
 
     def __init__(self, base_url: str, transport: httpx.AsyncBaseTransport | None = None):
@@ -54,17 +61,44 @@ class SearXNGSearch:
     def public_identity(self) -> str:
         return self.identity
 
+    def request(self, query: str) -> httpx.Request:
+        return httpx.Request(
+            "GET",
+            self.base_url + "/search",
+            params={"q": query, "format": "json", "language": "zh-CN"},
+        )
+
+    def quote(self, query: str, domains: Sequence[str] = ()) -> BudgetCallQuote:
+        request = self.request(query)
+        return zero_quote(
+            "search",
+            "platform_absorbed",
+            self.name,
+            "search",
+            self.version,
+            str(request.url).encode("utf-8"),
+            search_requests=1,
+        )
+
     async def search(self, query: str, domains: Sequence[str] = ()) -> SearchResult:
         """`domains` narrows only providers that filter by domain; SearXNG ignores it."""
         try:
             async with httpx.AsyncClient(
                 transport=self.transport, timeout=TIMEOUT_SECONDS, trust_env=False
             ) as client:
-                response = await client.get(
-                    self.base_url + "/search",
-                    params={"q": query, "format": "json", "language": "zh-CN"},
-                    follow_redirects=False,
-                )
+
+                async def dispatch():
+                    started = time.monotonic()
+                    response = await client.send(self.request(query), follow_redirects=False)
+                    return response, ProviderUsage(
+                        provider=self.name,
+                        model="search",
+                        version=self.version,
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                        search_requests=1,
+                    )
+
+                response, _ = await accounted_call(self.quote(query, domains), dispatch)
             response.raise_for_status()
             body = response.json()
             results = body.get("results")
@@ -94,6 +128,8 @@ class SearXNGSearch:
 
 class PerplexitySearch:
     name = "perplexity"
+    version = "perplexity-search-v1"
+    records_calls = True
     filters_domains = True
 
     def __init__(
@@ -114,7 +150,8 @@ class PerplexitySearch:
     def public_identity(self) -> str:
         return f"{self.name}:{PERPLEXITY_URL}"
 
-    async def search(self, query: str, domains: Sequence[str] = ()) -> SearchResult:
+    @staticmethod
+    def request_body(query: str, domains: Sequence[str] = ()) -> dict:
         body: dict = {
             "query": query,
             "max_results": PERPLEXITY_MAX_RESULTS,
@@ -122,26 +159,66 @@ class PerplexitySearch:
         }
         if domains:
             body["search_domain_filter"] = list(domains)[:20]
-        try:
-            credential = await self.credential_resolver.resolve_for_call(self.credential_target)
-        except ServiceError as exc:
-            raise ServiceError(
-                "provider_unavailable", "Selected provider is unavailable", 503, exc.exit_code
-            ) from None
-        if (
-            credential.provider != "perplexity"
-            or credential.endpoint != "https://api.perplexity.ai"
-        ):
-            raise ServiceError("provider_unavailable", "Selected provider is unavailable", 503, 4)
+        return body
+
+    def quote(self, query: str, domains: Sequence[str] = ()) -> BudgetCallQuote:
+        return zero_quote(
+            "search",
+            "platform_absorbed",
+            self.name,
+            "search",
+            self.version,
+            serialized_request(self.request_body(query, domains)),
+            search_requests=1,
+        )
+
+    async def search(self, query: str, domains: Sequence[str] = ()) -> SearchResult:
+        body = self.request_body(query, domains)
+        credential = None
+
+        async def prepare():
+            nonlocal credential
+            try:
+                credential = await self.credential_resolver.resolve_for_call(self.credential_target)
+            except ServiceError as exc:
+                raise ServiceError(
+                    "provider_unavailable", "Selected provider is unavailable", 503, exc.exit_code
+                ) from None
+            if (
+                credential.provider != "perplexity"
+                or credential.endpoint != "https://api.perplexity.ai"
+            ):
+                raise ServiceError(
+                    "provider_unavailable", "Selected provider is unavailable", 503, 4
+                )
+
         try:
             async with httpx.AsyncClient(
                 transport=self.transport, timeout=TIMEOUT_SECONDS, trust_env=False
             ) as client:
-                response = await client.post(
-                    PERPLEXITY_URL,
-                    json=body,
-                    headers={"Authorization": f"Bearer {credential.api_key.get_secret_value()}"},
-                    follow_redirects=False,
+
+                async def dispatch():
+                    assert credential is not None
+                    started = time.monotonic()
+                    response = await client.post(
+                        PERPLEXITY_URL,
+                        content=serialized_request(body),
+                        headers={
+                            "Authorization": f"Bearer {credential.api_key.get_secret_value()}",
+                            "Content-Type": "application/json",
+                        },
+                        follow_redirects=False,
+                    )
+                    return response, ProviderUsage(
+                        provider=self.name,
+                        model="search",
+                        version=self.version,
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                        search_requests=1,
+                    )
+
+                response, _ = await accounted_call(
+                    self.quote(query, domains), dispatch, before_send=prepare
                 )
         except httpx.HTTPError:
             raise ProviderFailure(
@@ -155,6 +232,7 @@ class PerplexitySearch:
                 retryable=response.status_code in RETRYABLE_STATUS,
             )
         try:
+            assert credential is not None
             payload = response.json()
             if not isinstance(payload, dict):
                 raise ValueError("results")

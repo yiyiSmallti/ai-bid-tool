@@ -6,6 +6,14 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05: Task budget enforcement and cost preflight
+
+- Add migration `0039`, task revision history, human admin/bidder budget changes, tenant constraints, safe audit and admin-controlled low-balance policies/notices.
+- Reserve task liability and prepaid funds in the existing admission transaction; enforce Task → Job → OrgBalance locks, live submitter permissions, durable unknown holds and idempotent late settlement.
+- Meter search, local OCR and Browser operations; expose task preflight, Result 4.0 and a legacy projection, and retain actual cost and human intervention through failed or partial job status/wait.
+- Preserve actorless local worker provenance without granting Provider admission, retain validated actual-model receipts beside fixed requested-model quotes, and serialize deterministic draft cost to JSON before persistence.
+- Approve the English [budget contract](plan/budget.md) and [ADR 0007](adr/0007-task-budget-reservations.md). Mechanism: [Task budgets](notes/task-budgets.md). Plans and monthly quotas remain outside this slice.
+
 ## 2026-10-05：平台后台管理服务凭据
 
 - 接受 ADR 0006 并纳入全局表与专用数据库角色例外；迁移 `0038` 增加平台凭据、固定管理/解析函数、目录引用校验和仅迁移属主可执行的密文重包裹通路。

@@ -23,6 +23,7 @@ from app.models.check import (
 )
 from app.models.entities import Job, Task, UsageRecord
 from app.providers.base import ProviderFailure
+from app.providers.llm import HTTPExtractor
 from app.providers.storage import Storage
 from app.schemas.check_contracts import (
     AssessmentInput,
@@ -110,7 +111,7 @@ async def submit_check(
         llm = await check_semantic.prepare(session, fixed, llm, body.reasoning, settings)
         semantic_preview = await check_semantic.preview(session, fixed, llm, body, settings)
     if body.dry_run:
-        return CheckPreview.model_validate(
+        data = CheckPreview.model_validate(
             {
                 "input": assessment_input(fixed.manifest, fixed.input_hash),
                 "selected_item_ids": [item["requirement_id"] for item in fixed.secret["items"]],
@@ -151,7 +152,37 @@ async def submit_check(
                 ),
                 **semantic_preview,
             }
-        ).model_dump(mode="json"), None
+        ).model_dump(mode="json")
+        from app.services import budget_preflight
+
+        quotes = []
+        if (
+            body.mode == "combined"
+            and isinstance(llm, HTTPExtractor)
+            and semantic_preview.get("estimated_charge") is not None
+        ):
+            adapter = check_semantic.check_provider(llm)
+            quotes = [
+                llm.quote(adapter.request_body(request))
+                for request in check_semantic.requests_for(fixed.secret["outbound"], llm)
+            ]
+        data = await budget_preflight.attach(
+            session,
+            data,
+            command="check run",
+            task_id=task_id,
+            input_hash=fixed.input_hash,
+            currency=settings.billing_currency,
+            settings=settings,
+            quotes=quotes,
+            planned_calls=len(quotes)
+            if quotes
+            or body.mode == "rules"
+            or semantic_preview.get("cost_basis_reason") == "no_model_calls"
+            else None,
+            max_charge=body.max_charge,
+        )
+        return data, None
     if semantic_preview.get("admission_blocker") == "redaction_required":
         cards.fail("redaction_required", "Combined checks require redaction to be enabled", 409, 4)
     if fixed.input_hash != body.expected_input_hash:

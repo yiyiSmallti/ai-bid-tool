@@ -27,6 +27,12 @@ ATTEMPT_ID = "00000000-0000-0000-0000-000000000004"
 SHA256 = "a" * 64
 
 
+@pytest.fixture(params=("3.0", "4.0"))
+def contract_version(request):
+    """Version metadata endpoints while preserving signed raw download paths."""
+    return request.param
+
+
 class SyntheticState(State):
     def load(self):
         return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
@@ -335,10 +341,14 @@ def test_render_cli_rejects_bad_local_input_before_network(failure, monkeypatch,
     assert error.value.code == 2 and body["command"] == "sandbox render" and not calls
 
 
-def sandbox_download_client(tmp_path, content, *, link=None, served=None):
+def sandbox_download_client(tmp_path, content, *, link=None, served=None, contract_version="3.0"):
     client = Client(
-        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+        "remote",
+        "https://synthetic.example.test",
+        SyntheticState(tmp_path / "unused.enc"),
+        contract_version=contract_version,
     )
+    prefix = "/v4" if contract_version == "4.0" else ""
     path = f"/sandbox-artifacts/{IDENTIFIER}/download"
     calls = []
 
@@ -346,7 +356,7 @@ def sandbox_download_client(tmp_path, content, *, link=None, served=None):
         calls.append(request.url)
         assert request.headers["Authorization"] == "Bearer synthetic-only-session"
         assert request.headers["X-Org-Id"] == IDENTIFIER
-        if request.url.path == path + "-link":
+        if request.url.path == prefix + path + "-link":
             return httpx.Response(
                 200,
                 json=Result(
@@ -373,10 +383,12 @@ def sandbox_download_client(tmp_path, content, *, link=None, served=None):
     return client, calls
 
 
-async def test_download_is_verified_atomic_private_and_does_not_decode_on_host(tmp_path):
+async def test_download_is_verified_atomic_private_and_does_not_decode_on_host(
+    contract_version, tmp_path
+):
     content = b"not-decoded-on-host"
     output = tmp_path.resolve() / "artifact.bin"
-    client, calls = sandbox_download_client(tmp_path, content)
+    client, calls = sandbox_download_client(tmp_path, content, contract_version=contract_version)
     result = await download_artifact(client, UUID(IDENTIFIER), output)
     assert result["data"]["artifact"]["sha256"] == hashlib.sha256(content).hexdigest()
     assert result["data"]["output_path"] == str(output)
@@ -397,10 +409,12 @@ async def test_download_is_verified_atomic_private_and_does_not_decode_on_host(t
         (None, b"x" * 1024),
     ],
 )
-async def test_download_rejects_unsafe_link_or_bad_bytes(tmp_path, link, served):
+async def test_download_rejects_unsafe_link_or_bad_bytes(contract_version, tmp_path, link, served):
     content = b"synthetic-artifact"
     output = tmp_path.resolve() / "artifact.bin"
-    client, _ = sandbox_download_client(tmp_path, content, link=link, served=served)
+    client, _ = sandbox_download_client(
+        tmp_path, content, link=link, served=served, contract_version=contract_version
+    )
     with pytest.raises(ServiceError) as error:
         await download_artifact(client, UUID(IDENTIFIER), output)
     assert error.value.exit_code == 4 and not output.exists()

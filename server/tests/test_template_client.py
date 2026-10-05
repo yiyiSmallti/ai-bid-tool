@@ -13,6 +13,12 @@ from bid_cli.main import main
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 
 
+@pytest.fixture(params=("3.0", "4.0"))
+def contract_version(request):
+    """Version metadata endpoints while preserving signed raw download paths."""
+    return request.param
+
+
 class SyntheticState(State):
     def load(self):
         return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
@@ -27,10 +33,15 @@ def download_client(
     redirect=False,
     wrong_scope=False,
     transport_error=None,
+    contract_version="3.0",
 ):
     client = Client(
-        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+        "remote",
+        "https://synthetic.example.test",
+        SyntheticState(tmp_path / "unused.enc"),
+        contract_version=contract_version,
     )
+    prefix = "/v4" if contract_version == "4.0" else ""
     path = f"/resources/templates/revisions/{IDENTIFIER}/download"
     descriptor = {
         "name": "synthetic.docx",
@@ -44,7 +55,7 @@ def download_client(
         calls.append(request.url)
         assert request.headers["Authorization"] == "Bearer synthetic-only-session"
         assert request.headers["X-Org-Id"] == IDENTIFIER
-        if request.url.path == "/resources/templates":
+        if request.url.path == prefix + "/resources/templates":
             return httpx.Response(
                 200,
                 json=Result(
@@ -59,7 +70,7 @@ def download_client(
                     ],
                 ).model_dump(mode="json"),
             )
-        if request.url.path == path + "-link":
+        if request.url.path == prefix + path + "-link":
             return httpx.Response(
                 200,
                 json=Result(
@@ -87,10 +98,10 @@ def download_client(
 
 
 async def test_template_download_verified_atomic_private_file_and_no_overwrite(
-    tmp_path, docx_bytes
+    contract_version, tmp_path, docx_bytes
 ):
     output = tmp_path.resolve() / "new.docx"
-    client, calls = download_client(tmp_path, docx_bytes)
+    client, calls = download_client(tmp_path, docx_bytes, contract_version=contract_version)
     result = await client.download_template(UUID(IDENTIFIER), output)
     assert (
         result["ok"] and result["data"]["file"]["sha256"] == hashlib.sha256(docx_bytes).hexdigest()
@@ -113,8 +124,12 @@ async def test_template_download_verified_atomic_private_file_and_no_overwrite(
         f"/resources/templates/revisions/{IDENTIFIER}/download?signature=synthetic-only#extra",
     ],
 )
-async def test_template_download_rejects_external_or_malformed_links(tmp_path, docx_bytes, link):
-    client, calls = download_client(tmp_path, docx_bytes, link=link)
+async def test_template_download_rejects_external_or_malformed_links(
+    contract_version, tmp_path, docx_bytes, link
+):
+    client, calls = download_client(
+        tmp_path, docx_bytes, link=link, contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
         await client.download_template(UUID(IDENTIFIER), output)
@@ -122,7 +137,9 @@ async def test_template_download_rejects_external_or_malformed_links(tmp_path, d
 
 
 @pytest.mark.parametrize("failure", ["hash", "short", "long", "redirect", "foreign"])
-async def test_template_download_never_writes_bad_response(tmp_path, docx_bytes, failure):
+async def test_template_download_never_writes_bad_response(
+    contract_version, tmp_path, docx_bytes, failure
+):
     served = {
         "hash": b"x" * len(docx_bytes),
         "short": docx_bytes[:-1],
@@ -134,6 +151,7 @@ async def test_template_download_never_writes_bad_response(tmp_path, docx_bytes,
         served=served,
         redirect=failure == "redirect",
         wrong_scope=failure == "foreign",
+        contract_version=contract_version,
     )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
@@ -146,9 +164,11 @@ async def test_template_download_never_writes_bad_response(tmp_path, docx_bytes,
     "transport_error", [httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError]
 )
 async def test_template_download_network_and_partial_connection_errors_are_retryable(
-    tmp_path, docx_bytes, transport_error
+    contract_version, tmp_path, docx_bytes, transport_error
 ):
-    client, _ = download_client(tmp_path, docx_bytes, transport_error=transport_error)
+    client, _ = download_client(
+        tmp_path, docx_bytes, transport_error=transport_error, contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
         await client.download_template(UUID(IDENTIFIER), output)
@@ -159,9 +179,14 @@ async def test_template_download_network_and_partial_connection_errors_are_retry
 @pytest.mark.parametrize(
     "transport_error", [httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError]
 )
-async def test_template_metadata_transport_errors_share_cli_contract(tmp_path, transport_error):
+async def test_template_metadata_transport_errors_share_cli_contract(
+    contract_version, tmp_path, transport_error
+):
     client = Client(
-        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+        "remote",
+        "https://synthetic.example.test",
+        SyntheticState(tmp_path / "unused.enc"),
+        contract_version=contract_version,
     )
 
     def failure(request):

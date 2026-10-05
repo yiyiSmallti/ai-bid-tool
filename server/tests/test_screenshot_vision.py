@@ -130,7 +130,8 @@ class Accounting:
         self.planned.append(first_pass_calls)
         self.events.append("plan")
 
-    async def admit(self, reserved_charge: Decimal, platform_billed: bool):
+    async def admit(self, quote):
+        reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
         assert platform_billed is True
         self.events.append("admit")
         self.reservations.append(reserved_charge)

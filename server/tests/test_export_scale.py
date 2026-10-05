@@ -15,7 +15,6 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import pytest
-from app.providers.base import LLMProvider
 from app.schemas.contracts import (
     Category,
     ExtractedRequirement,
@@ -23,7 +22,7 @@ from app.schemas.contracts import (
     LLMResult,
     ProviderUsage,
 )
-from fakes import source_for
+from fakes import FakeLLM, source_for
 from test_exports import draft, prepared
 from test_response_cards import (
     create_card,
@@ -52,7 +51,7 @@ def is_qualification(number: int) -> bool:
     return number % 5 == 2
 
 
-class ScaleExtraction(LLMProvider):
+class ScaleExtraction(FakeLLM):
     """Labelled fake: one requirement per tender page, no model call."""
 
     name = "test-fake"
@@ -60,7 +59,7 @@ class ScaleExtraction(LLMProvider):
     version = "test-v1"
     test_only = True
 
-    async def extract(self, chunks, schema):
+    async def _extract(self, chunks, schema):
         items = [
             ExtractedRequirement(
                 category=Category.qualification

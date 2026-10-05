@@ -1,21 +1,35 @@
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CONTRACT_VERSION = "3.0"
+CONTRACT_VERSION = "4.0"
 
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
-class Cost(Contract):
+class LegacyCost(Contract):
     llm_tokens: int = 0
     ocr_pages: int = 0
     usd: float | None = 0.0
+
+
+class Cost(LegacyCost):
+    basis: Literal["actual", "first_pass_upper_bound", "unknown", "zero", "cache_hit"] = "zero"
+    charge: Decimal | None = Field(
+        default=Decimal(0), ge=0, max_digits=18, decimal_places=8, allow_inf_nan=False
+    )
+    billing_currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    task_amount: Decimal | None = Field(
+        default=Decimal(0), ge=0, max_digits=18, decimal_places=8, allow_inf_nan=False
+    )
+    unpriced_calls: int = Field(default=0, ge=0)
+    unresolved_calls: int = Field(default=0, ge=0)
 
 
 class Result(Contract):
@@ -26,6 +40,10 @@ class Result(Contract):
     warnings: list[str] = Field(default_factory=list)
     cost: Cost = Field(default_factory=Cost)
     duration_ms: int = 0
+
+
+class LegacyResult(Result):
+    cost: LegacyCost = Field(default_factory=LegacyCost)
 
 
 class Login(Contract):
@@ -134,6 +152,14 @@ class ProviderUsage(Contract):
     # Set only for calls billed to the org through a platform catalog model.
     platform_model_id: str | None = None
     charge: float | None = Field(default=None, ge=0)
+    capability: Literal["llm", "vision", "ocr", "search", "embedding", "browser"] = "llm"
+    payer: Literal["org_platform", "org_direct", "platform_absorbed", "local_free"] = "org_direct"
+    billing_currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
+    task_amount: Decimal | None = Field(
+        default=None, ge=0, max_digits=18, decimal_places=8, allow_inf_nan=False
+    )
+    price_revision: str = Field(default="legacy", min_length=1, max_length=100)
+    search_requests: int = Field(default=0, ge=0)
 
 
 class PageText(Contract):

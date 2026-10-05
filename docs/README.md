@@ -20,6 +20,8 @@ kind: readme
 
 ## 机制笔记
 
+- [Task budgets](notes/task-budgets.md): task liability, atomic reservations, human changes and low-balance notices.
+
 - [Platform credential authority](notes/platform-credentials.md)：平台凭据权限、逐次解析、导入与根密钥轮换。
 
 英文，结构为 Problem / Usage / How it works / Pitfalls / Code。
@@ -55,6 +57,8 @@ kind: readme
 - [screenshot-evidence.md](notes/screenshot-evidence.md)：截图像素脱敏与隐私放行、厂家网页/PDF 采集与归档、厂家来源搜索、响应卡图片证据、原型交付决定、分析准入计费及失效重算。
 
 ## 决策记录
+
+- [0007 Task liability and prepaid reservations](adr/0007-task-budget-reservations.md) (adr)
 
 - [0001 平台运营后台的跨单位访问](adr/0001-platform-console-access.md)（adr）
 - [0002 预付余额与充值卡密](adr/0002-prepaid-billing.md)（adr）

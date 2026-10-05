@@ -4,8 +4,14 @@
     "output": {
       "command": "memory show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -32,8 +38,14 @@
     "output": {
       "command": "memory show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -60,8 +72,14 @@
     "output": {
       "command": "memory show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -88,8 +106,14 @@
     "output": {
       "command": "memory add",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -173,8 +197,14 @@
     "output": {
       "command": "memory approve",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -246,8 +276,14 @@
     "output": {
       "command": "memory candidates run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -284,8 +320,14 @@
     "output": {
       "command": "memory delete",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -356,8 +398,14 @@
     "output": {
       "command": "memory disable",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -428,8 +476,14 @@
     "output": {
       "command": "memory feedback list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -472,8 +526,14 @@
     "output": {
       "command": "memory history",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -540,8 +600,14 @@
     "output": {
       "command": "memory list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -616,8 +682,14 @@
     "output": {
       "command": "memory reject",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -689,8 +761,14 @@
     "output": {
       "command": "memory retrieval show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -758,8 +836,14 @@
     "output": {
       "command": "memory retrieve",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -844,8 +928,14 @@
     "output": {
       "command": "memory samples list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -891,8 +981,14 @@
     "output": {
       "command": "memory samples review",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -937,8 +1033,14 @@
     "output": {
       "command": "memory samples show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -979,8 +1081,14 @@
     "output": {
       "command": "memory show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -1047,8 +1155,14 @@
     "output": {
       "command": "memory update",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -1127,8 +1241,14 @@
     "output": {
       "command": "memory used",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -1152,15 +1272,27 @@
     "output": {
       "command": "memory candidates run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
         "completion": "partial",
         "cost": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
           "llm_tokens": 0,
           "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
           "usd": 0.0
         },
         "generator_version": "feedback-copy-v1",

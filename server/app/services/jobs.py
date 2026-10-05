@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
+from app.jobs.execution import job_cost
 from app.models.entities import Job
 from app.providers.storage import Storage
 from app.schemas.contracts import Result
@@ -33,6 +33,8 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
     job = await session.get(Job, job_id)
     if job is None:
         raise not_found()
+    if job.task_id is not None:
+        identity.require("task:read")
     if job.kind == "export_render":
         from app.services.exports import job_access
 
@@ -59,17 +61,25 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         await job_access(session, identity, job)
     await sandbox_guard_job(session, identity, job)
     payload = Result(
-        ok=True,
+        ok=job.status not in {"failed", "cancelled"} and job.result.get("completion") != "partial",
         command="job status",
         data=jsonable_encoder({field: getattr(job, field) for field in FIELDS}),
     ).model_dump(mode="json")
+    settings = session.info.get("memory_settings")
+    payload["cost"] = await job_cost(
+        session, job.id, settings.billing_currency if settings else None
+    )
+    public_budget = job.result.get("budget")
+    if isinstance(public_budget, dict):
+        refreshed = {**public_budget, "cost": payload["cost"]}
+        payload["data"]["result"]["budget"] = refreshed
     if job.kind in {"screenshot_render", "screenshot_analyze"}:
         from app.services.screenshot_jobs import check_job_access
 
         await check_job_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
         payload["ok"] = job.result.get("completion") != "partial"
-        payload["cost"] = job.result.get("cost", payload["cost"])
+
     if job.kind == "product_simulation":
         identity.require("task:read")
         payload["data"]["result"] = _public_result(job)
@@ -83,20 +93,20 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
 
         await prototype_access(session, identity, job)
         payload["data"]["result"] = _public_result(job)
-        payload["cost"] = job.result.get("cost", payload["cost"])
+
     if job.kind == "sandbox" and job.status in {"failed", "cancelled"}:
         payload["ok"] = False
     if job.kind == "provider_test":
         identity.require("provider:read")
         payload["data"]["result"] = _public_result(job)
-        payload["cost"] = job.result.get("cost", payload["cost"])
+
     if job.kind in {"check", "score_rubric", "score"}:
         public = _public_result(job)
         for internal_envelope_field in ("cost", "warnings", "exit_code"):
             public.pop(internal_envelope_field, None)
         payload["data"]["result"] = public
         payload["warnings"] = job.result.get("warnings", [])
-        payload["cost"] = job.result.get("cost", payload["cost"])
+
         if job.status in {"failed", "cancelled"} or job.result.get("completion") == "partial":
             payload["ok"] = False
     if job.kind == "memory_candidate":
@@ -104,10 +114,15 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         payload["ok"] = (
             job.status not in {"failed", "cancelled"} and job.result.get("completion") != "partial"
         )
-        payload["cost"] = job.result.get("cost", payload["cost"])
+
         payload["warnings"] = job.result.get("warnings", [])
     if job.kind == "export_render":
         payload["data"]["result"] = _public_result(job)
+        if isinstance(payload["data"]["result"].get("budget"), dict):
+            payload["data"]["result"]["budget"] = {
+                **payload["data"]["result"]["budget"],
+                "cost": payload["cost"],
+            }
         return payload
     if job.kind == "export_preview":
         # The stored PDF location is served only through the export preview routes.
@@ -116,6 +131,11 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
             **_public_result(job),
             "preview": {"page_count": preview["page_count"]} if preview else None,
         }
+        if isinstance(payload["data"]["result"].get("budget"), dict):
+            payload["data"]["result"]["budget"] = {
+                **payload["data"]["result"]["budget"],
+                "cost": payload["cost"],
+            }
         return payload
     if job.kind in {"draft", "card_generate"}:
         identity.require("draft:read" if job.kind == "draft" else "card:read")
@@ -133,14 +153,34 @@ async def status(session: AsyncSession, identity: Identity, job_id: UUID, storag
         if job.result.get("completion") == "partial":
             payload["ok"] = False
         payload["warnings"] = job.result.get("warnings", [])
-        payload["cost"] = job.result.get("cost", payload["cost"])
+
         payload["data"]["result"] = _public_result(job)
+    if job.kind not in {"check", "score_rubric", "score"}:
+        payload["data"]["result"] = _public_result(job)
+
+    payload["warnings"] = job.result.get("warnings", payload["warnings"])
+    if (
+        not job.vendor_cost_history_complete
+        and "historical_vendor_cost_unavailable" not in payload["warnings"]
+    ):
+        payload["warnings"] = [*payload["warnings"], "historical_vendor_cost_unavailable"]
+    payload["items"] = job.result.get("items", [])
+    payload["ok"] = (
+        job.status not in {"failed", "cancelled"} and job.result.get("completion") != "partial"
+    )
+    if isinstance(payload["data"]["result"].get("budget"), dict):
+        payload["data"]["result"]["budget"] = {
+            **payload["data"]["result"]["budget"],
+            "cost": payload["cost"],
+        }
     return payload
 
 
 async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storage: Storage) -> Job:
+    from app.jobs.execution import locked_job
+
     identity.require("job:cancel")
-    job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+    job = await locked_job(session, job_id)
     if job is None:
         raise not_found()
     if job.kind == "export_render":

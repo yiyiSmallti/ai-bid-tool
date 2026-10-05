@@ -326,6 +326,8 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
         "score:run",
         "score:rubric:generate",
         "score:rubric:review",
+        "task:budget:write",
+        "billing:alert:write",
         "memory:read",
         "memory:write",
         "memory:retrieve",

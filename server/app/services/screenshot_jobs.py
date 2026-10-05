@@ -62,6 +62,10 @@ async def create_job(session, actor, task_id, extraction, kind, manifest, retry,
             cache_key=cache_key,
             status="queued",
             reasoning=reasoning,
+            provider_identity=manifest.get("model"),
+            provider_config_id=UUID(manifest["model"]["provider_config_id"])
+            if (manifest.get("model") or {}).get("provider_config_id")
+            else None,
             result={"submission": submission(actor, manifest)},
         )
         session.add(job)
@@ -127,16 +131,26 @@ async def submit_render(session, actor, asset_id, body, storage, billing_currenc
     )
     extraction, _ = await cards.extraction_scope(session, asset.task_id, asset.extraction_job_id)
     if body.dry_run:
-        return {
-            "dry_run": True,
-            "parent_rendition_id": str(body.parent_rendition_id),
-            "input_hash": images.digest(manifest),
-            "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
-            "estimated_charge": 0,
-            "billing_currency": billing_currency,
-            "cost_basis": "known",
-            "estimated_duration_ms": None,
-        }, None
+        from app.services import budget_preflight
+
+        return await budget_preflight.attach(
+            session,
+            {
+                "dry_run": True,
+                "parent_rendition_id": str(body.parent_rendition_id),
+                "input_hash": images.digest(manifest),
+                "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+                "estimated_charge": 0,
+                "billing_currency": billing_currency,
+                "cost_basis": "known",
+                "estimated_duration_ms": None,
+            },
+            command="screenshot annotate",
+            task_id=asset.task_id,
+            input_hash=images.digest(manifest),
+            currency=billing_currency,
+            planned_calls=0,
+        ), None
     await cards.task_lock(session, asset.task_id)
     await images.asset_access(session, actor, asset.id, active=True)
     return await create_job(
@@ -408,7 +422,37 @@ async def submit_analysis(session, actor, task_id, body, storage, provider, sett
     extraction, manifest, requirements, outgoing = await analysis_inputs(
         session, actor, task_id, body, storage, provider
     )
-    estimates = [preview(provider, requirements, [image], body.purposes) for image in outgoing]
+    try:
+        estimates = [preview(provider, requirements, [image], body.purposes) for image in outgoing]
+    except ProviderFailure as error:
+        if not body.dry_run or error.code not in {
+            "billing_price_unavailable",
+            "billing_bound_unavailable",
+        }:
+            raise
+        from app.services import budget_preflight
+
+        input_hash = images.digest(manifest)
+        return await budget_preflight.attach(
+            session,
+            {
+                "dry_run": True,
+                "input_hash": input_hash,
+                "outbound_image_hashes": [item["image_sha256"] for item in manifest["images"]],
+                "outbound_text_hashes": [item["text_sha256"] for item in manifest["requirements"]],
+                "admission_blocker": "billing_price_unavailable",
+                "estimated_charge": None,
+                "estimated_cost": {"usd": None},
+                "cost_basis": "unknown",
+            },
+            command="screenshot analyze",
+            task_id=task_id,
+            input_hash=input_hash,
+            currency=settings.billing_currency,
+            settings=settings,
+            quotes=[],
+            planned_calls=len(outgoing),
+        ), None
     manifest["price_revision"] = estimates[0]["price_revision"]
     input_hash = images.digest(manifest)
     bound = sum((Decimal(str(item["estimated_charge"])) for item in estimates), Decimal(0))
@@ -422,29 +466,42 @@ async def submit_analysis(session, actor, task_id, body, storage, provider, sett
         "insufficient_balance"
         if balance - held < Decimal(str(estimates[0]["estimated_charge"]))
         else "job_charge_limit_exceeded"
-        if bound > settings.job_max_charge
+        if Decimal(str(estimates[0]["estimated_charge"])) > settings.job_max_charge
         else None
     )
     if body.dry_run:
-        return {
-            "dry_run": True,
-            "input_hash": input_hash,
-            "outbound_image_hashes": [x["image_sha256"] for x in manifest["images"]],
-            "outbound_text_hashes": [x["text_sha256"] for x in manifest["requirements"]],
-            "catalog_identity": images.digest(manifest["model"]),
-            "price_revision": manifest["price_revision"],
-            "input_image_count": len(outgoing),
-            "planned_calls": len(outgoing),
-            "estimated_cost": {
-                "llm_tokens": sum(e["input_tokens"] + e["output_tokens"] for e in estimates),
-                "ocr_pages": 0,
-                "usd": None,
+        from app.providers.screenshot_vision import quote
+        from app.services import budget_preflight
+
+        return await budget_preflight.attach(
+            session,
+            {
+                "dry_run": True,
+                "input_hash": input_hash,
+                "outbound_image_hashes": [x["image_sha256"] for x in manifest["images"]],
+                "outbound_text_hashes": [x["text_sha256"] for x in manifest["requirements"]],
+                "catalog_identity": images.digest(manifest["model"]),
+                "price_revision": manifest["price_revision"],
+                "input_image_count": len(outgoing),
+                "planned_calls": len(outgoing),
+                "estimated_cost": {
+                    "llm_tokens": sum(e["input_tokens"] + e["output_tokens"] for e in estimates),
+                    "ocr_pages": 0,
+                    "usd": None,
+                },
+                "estimated_charge": str(bound),
+                "billing_currency": settings.billing_currency,
+                "cost_basis": "first_pass_upper_bound",
+                "admission_blocker": blocker,
             },
-            "estimated_charge": str(bound),
-            "billing_currency": settings.billing_currency,
-            "cost_basis": "first_pass_upper_bound",
-            "admission_blocker": blocker,
-        }, None
+            command="screenshot analyze",
+            task_id=task_id,
+            input_hash=input_hash,
+            currency=settings.billing_currency,
+            settings=settings,
+            quotes=[quote(provider, requirements, [image], body.purposes) for image in outgoing],
+            planned_calls=len(outgoing),
+        ), None
     if body.expected_input_hash != input_hash:
         images.fail("screenshot_input_changed", "Preflight input changed; preview again", 409, 3)
     if blocker:

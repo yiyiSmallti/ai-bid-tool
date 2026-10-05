@@ -2,6 +2,7 @@
 
 import hashlib
 from collections.abc import Awaitable, Callable
+from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
 
@@ -11,20 +12,59 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import PDFSettings
 from app.core.errors import ServiceError, not_found
-from app.models.entities import Document, Task
+from app.models.entities import AuditLog, Document, Task
 from app.providers.storage import Storage
+from app.schemas.budget_contracts import BudgetTaskCreate, TaskBudgetInput
 from app.schemas.contracts import TaskCreate
+from app.services import budgets
 from app.services.auth import Identity
 from app.services.parsing import validate_document_async
 
 TASK_FIELDS = ("id", "name", "org_id", "model_redaction_enabled", "model_redaction_revision")
 
 
-async def create_task(session: AsyncSession, identity: Identity, body: TaskCreate) -> Task:
+async def create_task(
+    session: AsyncSession,
+    identity: Identity,
+    body: TaskCreate,
+    currency: str = "USD",
+) -> Task:
     identity.require("task:create")
-    task = Task(org_id=identity.org_id, created_by=identity.user_id, **body.model_dump())
+    data = body.model_dump(exclude={"budget"})
+    initial = body.budget if isinstance(body, BudgetTaskCreate) else None
+    if body.budget_usd is not None:
+        if currency != "USD":
+            raise ServiceError(
+                "billing_currency_mismatch", "Legacy USD budgets require USD billing", 400, 2
+            )
+        initial = TaskBudgetInput(limit=Decimal(str(body.budget_usd)), currency="USD")
+    if initial is not None:
+        await budgets._human(session, identity, "task:budget:write", {"admin", "bidder"})
+        if initial.currency != currency:
+            raise ServiceError(
+                "billing_currency_mismatch", "Budget currency must match billing currency", 400, 2
+            )
+    task = Task(
+        org_id=identity.org_id,
+        created_by=identity.user_id,
+        **data,
+        budget_limit=initial.limit if initial else None,
+        budget_currency=currency,
+        budget_revision=1,
+        budget_state="active",
+    )
     session.add(task)
     await session.flush()
+    session.add(
+        AuditLog(
+            org_id=identity.org_id,
+            actor_user_id=identity.user_id,
+            actor_token_id=identity.token_id,
+            action="task.budget.created",
+            object_id=task.id,
+            details={"revision": 1, "currency": currency},
+        )
+    )
     return task
 
 

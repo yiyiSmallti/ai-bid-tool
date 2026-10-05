@@ -446,7 +446,7 @@ async def submit(
     if not browser.available:
         issues.append(SandboxIssue(code="sandbox_runtime_unavailable", severity="block"))
     if body.dry_run:
-        return SandboxPreview(
+        data = SandboxPreview(
             request_hash=request_hash,
             purpose=body.spec.purpose,
             profile=profile,
@@ -455,7 +455,19 @@ async def submit(
             issues=issues,
             estimated_cost=Cost(usd=0),
             estimate_basis="no_vendor_call",
-        ).model_dump(mode="json"), None
+        ).model_dump(mode="json")
+        from app.services import budget_preflight
+
+        settings = session.info.get("memory_settings")
+        return await budget_preflight.attach(
+            session,
+            data,
+            command="sandbox render" if prototype else "sandbox capture",
+            task_id=task_id,
+            input_hash=request_hash,
+            currency=settings.billing_currency if settings else "USD",
+            planned_calls=0,
+        ), None
     if body.expected_request_hash != request_hash:
         raise ServiceError("sandbox_request_conflict", "Preflight request changed", 409, 2)
     criteria = (

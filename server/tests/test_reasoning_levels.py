@@ -15,7 +15,7 @@ from test_api import create_document
 from test_job_boundaries import session_for
 from test_llm_providers import GOOD_ITEMS
 from test_platform_api import org_header
-from test_platform_auth import platform_settings, sign_in
+from test_platform_auth import OPERATOR, platform_settings, sign_in
 
 LEVELS = [
     {
@@ -224,7 +224,24 @@ async def test_catalog_validates_levels_and_tests_each_one(glm):
     assert [level["name"] for level in model["reasoning"]] == ["low", "high", "max"]
     assert model["default_reasoning"] == "max"
 
-    tested = (await api.post("/platform/models/glm/test", headers=ops)).json()["data"]
+    created = await api.post(
+        "/platform/orgs",
+        headers=ops,
+        json={"name": "Synthetic reasoning probe", "admin_email": OPERATOR},
+    )
+    assert created.status_code == 200, created.text
+    test_org = created.json()["data"]["org_id"]
+    funded = await api.post(
+        f"/platform/orgs/{test_org}/balance",
+        headers=ops,
+        json={"mode": "add", "amount": 10, "reason": "Synthetic reasoning probe allowance"},
+    )
+    assert funded.status_code == 200
+    probe = await api.post(
+        "/v4/platform/models/glm/test", headers=ops, json={"test_org_id": test_org}
+    )
+    assert probe.status_code == 200, probe.text
+    tested = probe.json()["data"]
     assert tested["passed"] is True
     assert [(level["reasoning"], level["passed"]) for level in tested["levels"]] == [
         ("low", True),
@@ -271,6 +288,6 @@ async def test_model_without_a_credential_is_rejected_before_testing(glm):
     assert rejected.json()["data"]["error"]["exit_code"] == 2
     models = (await api.get("/platform/models", headers=ops)).json()["items"]
     assert all(model["id"] != "claude" for model in models)
-    tested = await api.post("/platform/models/claude/test", headers=ops)
+    tested = await api.post("/platform/models/claude/test", headers=ops, json={"dry_run": True})
     assert tested.status_code == 404 and tested.json()["data"]["error"]["code"] == "not_found"
     assert vendor.bodies == []

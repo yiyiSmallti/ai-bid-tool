@@ -6,6 +6,8 @@ Failure modes enumerated before these gates:
 * Projection drift: row/comply-only/gap snapshots, source order, evidence order,
   partial completion, negative deviations and invalidation order must exactly
   match the retained slow reference, for current and stale drafts.
+* Contract drift: versioned reads retain the complete 4.0 Result, while legacy
+  reads retain exactly the same domain result with the strict three-field Cost.
 * Freshness drift: changed card pointers, newly created cards for old gaps,
   replaced material selections, repaired quotes and invalid citations must keep
   their precedence, including already-reported invalid-citation gaps.
@@ -459,11 +461,12 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
                 references[draft_id] = await slow_show_draft(session, actor, UUID(draft_id))
                 scope_warnings = await cards.scope_warnings(session, UUID(fixture["extraction"]))
         slow_counts.append(counter["statements"])
-    fast_counts = []
+    fast_counts, legacy_counts = [], []
     for draft_id in draft_ids:
         with statement_count(app) as counter:
-            response = await api.get(f"/drafts/{draft_id}", headers=header)
+            response = await api.get(f"/v4/drafts/{draft_id}", headers=header)
         assert response.status_code == 200, response.text
+        assert response.headers["X-Bid-Contract-Version"] == "4.0"
         reference = references[draft_id]
         warnings = [
             f"negative_deviation:{row['requirement_id']}"
@@ -474,12 +477,23 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         if reference["validity"] == "stale":
             warnings.append("stale_draft")
         # Identical except the request timing.
-        assert {**response.json(), "duration_ms": 0} == Result(
+        expected_result = Result(
             ok=reference["completion"] != "partial",
             command="draft show",
             data=reference,
             warnings=warnings,
         ).model_dump(mode="json")
+        assert {**response.json(), "duration_ms": 0} == expected_result
+        with statement_count(app) as legacy_counter:
+            legacy_response = await api.get(f"/drafts/{draft_id}", headers=header)
+        assert legacy_response.status_code == 200, legacy_response.text
+        assert legacy_response.headers["X-Bid-Contract-Version"] == "3.0"
+        assert {**legacy_response.json(), "duration_ms": 0} == {
+            **expected_result,
+            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+        }
+        assert legacy_counter["statements"] == counter["statements"]
+        legacy_counts.append(legacy_counter["statements"])
         partition = [row["requirement_id"] for rows in reference["tables"].values() for row in rows]
         partition += [row["requirement_id"] for row in reference["comply_only"] + reference["gaps"]]
         assert len(partition) == len(set(partition)) == len(fixture["requirements"])
@@ -488,11 +502,12 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
         assert slow_counts[len(fast_counts) - 1] > counter["statements"]
     with statement_count(app) as counter:
         response = await api.get(
-            f"/tasks/{fixture['task']}/drafts",
+            f"/v4/tasks/{fixture['task']}/drafts",
             headers=header,
             params={"job": fixture["extraction"]},
         )
     assert response.status_code == 200, response.text
+    assert response.headers["X-Bid-Contract-Version"] == "4.0"
     summary_keys = (
         "id",
         "task_id",
@@ -521,17 +536,33 @@ async def compare_reads(api, app, header, actor, fixture, draft_ids):
             {key: references[str(run.id)][key] for key in summary_keys} | {"summary": run.summary}
             for run in runs
         ]
-    assert {**response.json(), "duration_ms": 0} == Result(
+    expected_result = Result(
         ok=True,
         command="draft list",
         data={"task_id": fixture["task"], "extraction_job_id": fixture["extraction"]},
         items=expected,
         warnings=scope_warnings,
     ).model_dump(mode="json")
+    assert {**response.json(), "duration_ms": 0} == expected_result
     assert counter["statements"] <= 40
+    with statement_count(app) as legacy_counter:
+        legacy_response = await api.get(
+            f"/tasks/{fixture['task']}/drafts",
+            headers=header,
+            params={"job": fixture["extraction"]},
+        )
+    assert legacy_response.status_code == 200, legacy_response.text
+    assert legacy_response.headers["X-Bid-Contract-Version"] == "3.0"
+    assert {**legacy_response.json(), "duration_ms": 0} == {
+        **expected_result,
+        "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+    }
+    assert legacy_counter["statements"] == counter["statements"]
     return {
         "detail_queries": fast_counts,
         "list_queries": counter["statements"],
+        "legacy_detail_queries": legacy_counts,
+        "legacy_list_queries": legacy_counter["statements"],
         "slow_detail_queries": slow_counts,
         "response_hashes": [
             hashlib.sha256(json.dumps(view, sort_keys=True).encode()).hexdigest()
@@ -668,6 +699,8 @@ async def test_large_draft_reads_match_reference_and_have_bounded_queries(
                 == 1
             )
             for path in (
+                f"/v4/drafts/{first}",
+                f"/v4/tasks/{fixture['task']}/drafts?job={fixture['extraction']}",
                 f"/drafts/{first}",
                 f"/tasks/{fixture['task']}/drafts?job={fixture['extraction']}",
             ):
@@ -696,6 +729,8 @@ async def test_large_draft_reads_match_reference_and_have_bounded_queries(
                     ],
                 )
                 for path in (
+                    f"/v4/drafts/{first}",
+                    f"/v4/tasks/{fixture['task']}/drafts?job={fixture['extraction']}",
                     f"/drafts/{first}",
                     f"/tasks/{fixture['task']}/drafts?job={fixture['extraction']}",
                 ):

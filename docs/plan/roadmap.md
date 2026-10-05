@@ -21,10 +21,10 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | F03 文件隔离 | 招标文件、模板、证书原件（含合成前的上传文件）、来源 PNG 已加密并受签名下载约束 | 合同、区域截图、网页、导出件 | 新契约 |
 | F04 账号与角色 | 全局 User、Membership、四种角色；平台管理员（配置名单、TOTP、运营后台） | 单位成员管理入口、任务成员、评论权限、OIDC、全局记忆维护 | 新契约；SSO 需授权 |
 | F05 ApiToken | 签发、范围、期限；DB 禁止确认/导出范围 | 吊销入口、令牌列表、签发与吊销审计 | 新接口确认 |
-| F06 Org/Task | 任务名称、编号、截止、预算字段 | 套餐与月度预算、任务成员与归档、[预算执行草案](budget.md)、一次性组合创建 | 计费规则待定 |
+| F06 Org/Task | Task metadata and [human-revised task budgets](../notes/task-budgets.md), enforced across calls, jobs and retries | Plans and monthly quotas; task membership and archival; combined creation | [Approved budget contract](budget.md); subscription rules remain undecided |
 | F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/export_preview/sandbox/截图/原型生成/厂家搜索/模拟拟投/score_rubric/score 作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
 | F08 AuditLog | 资源、卡片人工决策、模型起草、评分 rubric 生成与人工决定、评分执行、遮挡设置及组表审计 | 登录、令牌、导出、其他配置及 agent 调用审计与查询 | 新契约 |
-| F09 UsageRecord | OCR、抽取、模型起草和评分 rubric 生成与评分执行的逐次用量记录；平台计费调用按售价从预付余额扣除，充值卡密 | 存储计量、[预算预检与低余额通知草案](budget.md)、在线支付 | 新契约 |
+| F09 UsageRecord | Per-call LLM/Vision/OCR/search/Browser accounting, task liability and prepaid reservation/settlement; durable low-balance notices | Storage metering; online payments | [Task budgets](../notes/task-budgets.md) |
 | F10 部署与质量 | 本机迁移、Compose（含 SearXNG、Gotenberg）、锁定依赖、GitHub Actions 在每个 PR 上按改动范围运行，测试按 worker 分库并行；平台凭据专用角色与根轮换 | 生产对象存储、TLS、备份、[平台凭据数据库验收与部署切换](platform-credentials.md)、私有化包装 | 平台凭据契约已批准；生产需授权 |
 
 ## 覆盖矩阵：资源与任务选择
@@ -73,7 +73,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记见 [agent.md](agent.md#审计与-a02-来源标记)；可选 `mcp serve` | 新接口确认 |
 | C01 CLI 契约 | Result 七键、schema 注册、统一退出码、两种模式；`bid check run/list/show/decide/history` 与 `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history` | 后续命令、主版本兼容周期 | 新命令确认 |
 | C02 缓存 | 模型起草、check/score 固定输入缓存；记忆 scope epoch、到期与策略版本失效，保留人工确认并提醒 | 其他能力的跨依赖失效；记忆 PostgreSQL 并发验收 | [记忆缓存契约](memory.md#起草消费使用审计与-c02-缓存失效) |
-| C03 dry-run/预算 | 起草、评分 rubric 与评分执行的外发清单与首轮费用上界、预付余额/调用上限拦截；组表与 rules check 零费用预检；combined check 固定模型价格的零写入预检与逐次准入 | 更精确 token/耗时估算；[费用预检与任务预算草案](budget.md) | 价格与测量依赖服务 |
+| C03 dry-run/budget | Read-only budget preflight, first-pass estimates and next-call blockers; Result 4.0 with legacy projection; preserved cost/intervention on terminal jobs | Measured duration profiles; bounded estimates for future providers | [Approved budget contract](budget.md) |
 
 ## 覆盖矩阵：评测与保密
 
