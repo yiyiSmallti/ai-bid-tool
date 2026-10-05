@@ -53,6 +53,7 @@ from app.services.certificate_files import read_file as read_certificate_file
 from app.services.template_files import read_template
 from pydantic import ValidationError
 
+from bid_cli.agent import app as agent_app
 from bid_cli.budget import register as register_budget_commands
 from bid_cli.check import app as check_app
 from bid_cli.check import check_job_exit
@@ -75,6 +76,7 @@ app.add_typer(export_app, name="export")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(check_app, name="check")
 app.add_typer(memory_app, name="memory")
+app.add_typer(agent_app, name="agent")
 app.add_typer(score_app, name="score")
 org_app, task_app, tender_app, req_app, job_app, token_app = (typer.Typer() for _ in range(6))
 resource_app, product_app, task_resource_app = (typer.Typer() for _ in range(3))
@@ -151,6 +153,17 @@ def emit(body: dict, command: str, as_json: bool, exit_code: int = 0):
     body = dict(body)
     body["command"] = command
     body["duration_ms"] = int((time.monotonic() - started) * 1000)
+    if command.startswith("agent ") and "error" in body.get("data", {}):
+        from app.schemas.agent_contracts import AgentErrorData, AgentFailureData
+
+        error = body["data"]["error"]
+        body["data"] = AgentFailureData(
+            error=AgentErrorData(
+                code=error["code"], message=error["message"], retryable=exit_code == 3
+            ),
+            session_id=body["data"].get("session_id"),
+            job_id=body["data"].get("job_id"),
+        ).model_dump(mode="json")
     value = Result.model_validate(body)
     from app.schemas.compatibility import legacy_projection
 

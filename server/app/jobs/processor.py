@@ -3,6 +3,7 @@ import hashlib
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, select
@@ -12,7 +13,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, log_unexpected
 from app.jobs.execution import JobExecution, authorized_job, job_cost, locked_job
-from app.models.entities import Chunk, Document, Job, Requirement
+from app.models.entities import Chunk, Document, Requirement
 from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
 from app.providers.llm import uncovered_parameters, with_reasoning
 from app.providers.storage import Storage
@@ -42,9 +43,14 @@ class Processor:
         # Test seams for the vendor search and document converter HTTP transports.
         self.search_transport = None
         self.converter_transport = None
+        self.queue: Any = None
 
     async def __call__(self, org: str, job: str):
         org_id, job_id = UUID(org), UUID(job)
+        from app.jobs.agent import process_if_agent
+
+        if await process_if_agent(self, org_id, job_id):
+            return
         from app.jobs.sandbox import process_if_sandbox
 
         if await process_if_sandbox(self, org_id, job_id):
@@ -58,6 +64,25 @@ class Processor:
                 and current.lease_until
                 and current.lease_until > datetime.now(UTC)
             ):
+                return
+            if current.agent_session_id is not None and current.status == "running":
+                from app.models.entities import VendorCall
+
+                admitted = await session.scalar(
+                    select(VendorCall.id)
+                    .where(VendorCall.job_id == current.id, VendorCall.state != "not_sent")
+                    .limit(1)
+                )
+                current.status, current.finished_at, current.lease_until = (
+                    "failed",
+                    datetime.now(UTC),
+                    None,
+                )
+                current.error = {
+                    "code": "agent_request_uncertain" if admitted else "agent_child_interrupted",
+                    "message": "Recover this job through its agent session",
+                    "exit_code": 4,
+                }
                 return
             if current.kind == "card_generate":
                 from app.memory.retrieval import recover_unsettled_calls
@@ -236,16 +261,9 @@ class Processor:
                     async with self.db.transaction(org_id) as session:
                         # Submission and selection changes use this same lock order.
                         await task_lock(session, task_id)
-                        current = await session.scalar(
-                            select(Job).where(Job.id == job_id).with_for_update()
-                        )
-                        if (
-                            current is None
-                            or current.status != "running"
-                            or current.run_id != run_id
-                        ):
-                            return
+                        current = await execution.owned_job(session)
                         result = await complete_draft(session, current, self.storage)
+                        await execution.owned_job(session)
                         current.status, current.result, current.error = "succeeded", result, None
                         current.finished_at = datetime.now(UTC)
                     return
@@ -464,7 +482,12 @@ class Processor:
                     current = await locked_job(session, job_id)
                     if current is None or current.status == "cancelled" or current.run_id != run_id:
                         return
-                    should_retry = retryable and current.attempts < 3 and kind != "provider_test"
+                    should_retry = (
+                        retryable
+                        and current.attempts < 3
+                        and kind != "provider_test"
+                        and current.agent_session_id is None
+                    )
                     current.status = "queued" if should_retry else "failed"
                     current.error = error
                     current.result = {
@@ -475,12 +498,15 @@ class Processor:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)
                     if kind in {"score_rubric", "score"}:
+                        from app.services.auth import set_actor_context
                         from app.services.score_generation import worker
                         from app.services.versioned import audit
 
+                        actor = worker(current)
+                        await set_actor_context(session, actor)
                         audit(
                             session,
-                            worker(current),
+                            actor,
                             f"{kind}.failed",
                             job_id,
                             {
@@ -497,12 +523,15 @@ class Processor:
 
                         await failure_audit(session, current, error["code"])
                     if kind == "card_generate":
+                        from app.services.auth import set_actor_context
                         from app.services.card_generation import worker
                         from app.services.versioned import audit
 
+                        actor = worker(current)
+                        await set_actor_context(session, actor)
                         audit(
                             session,
-                            worker(current),
+                            actor,
                             "card.generate.retry" if should_retry else "card.generate.failed",
                             job_id,
                             {

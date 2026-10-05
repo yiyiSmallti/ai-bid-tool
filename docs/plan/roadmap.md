@@ -5,7 +5,7 @@ kind: plan
 # 剩余范围与路线
 
 本页列出[设计文档](../AI%20标书工具设计文档.md)中尚未完成的部分、待定决定和建议顺序。
-已交付的行为以[机制笔记](../README.md#机制笔记)和源码为准，交付历史见
+已交付的行为见[机制笔记](../README.md#机制笔记)及各笔记 Code 节指定的入口，交付历史见
 [changelog.md](../changelog.md)。设计“非目标”中的材料伪造、电子投标平台对接、
 报价策略和自研模型不列入。
 
@@ -16,14 +16,14 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 | ID | 现状 | 缺口 | 依赖 |
 | --- | --- | --- | --- |
-| F01 架构 | 服务端技术栈、真实 Procrastinate worker 与 Vue 3 + Element Plus 控制台已落地 | 内置 agent 入口 | 新接口确认 |
+| F01 架构 | 服务端技术栈、真实 Procrastinate worker、Vue 3 + Element Plus 控制台与 [agent API/CLI/控制器](../notes/builtin-agent.md#code) | A01 数据库与队列验收；agent UI | [agent 契约](agent.md)；UI 另立契约 |
 | F02 数据库隔离 | 现有业务表均 NOT NULL `org_id`、FORCE RLS、组织复合外键 | 每张新表、每个新接口同次带双单位与缺上下文测试 | 硬规则 |
 | F03 文件隔离 | 招标文件、模板、证书原件（含合成前的上传文件）、来源 PNG 已加密并受签名下载约束 | 合同、区域截图、网页、导出件 | 新契约 |
 | F04 账号与角色 | 全局 User、Membership、四种角色；平台管理员（配置名单、TOTP、运营后台） | 单位成员管理入口、任务成员、评论权限、OIDC、全局记忆维护 | 新契约；SSO 需授权 |
 | F05 ApiToken | 签发、范围、期限；DB 禁止确认/导出范围 | 吊销入口、令牌列表、签发与吊销审计 | 新接口确认 |
 | F06 Org/Task | Task metadata and [human-revised task budgets](../notes/task-budgets.md), enforced across calls, jobs and retries | Plans and monthly quotas; task membership and archival; combined creation | [Approved budget contract](budget.md); subscription rules remain undecided |
-| F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/export_preview/sandbox/截图/原型生成/厂家搜索/模拟拟投/score_rubric/score 作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
-| F08 AuditLog | 资源、卡片人工决策、模型起草、评分 rubric 生成与人工决定、评分执行、遮挡设置及组表审计 | 登录、令牌、导出、其他配置及 agent 调用审计与查询 | 新契约 |
+| F07 后台作业 | parse/extract/card_generate/draft/provider_test/export_render/export_preview/sandbox/截图/原型生成/厂家搜索/模拟拟投/score_rubric/score/agent 作业持久化、取消、有限重试、租约与 `run_id` 防覆盖 | 其他命令的作业、SSE、遗留作业自动恢复 | 新接口确认 |
+| F08 AuditLog | 资源、卡片人工决策、模型起草、评分 rubric 生成与人工决定、评分执行、遮挡设置及组表审计；[agent/令牌调用来源](../notes/builtin-agent.md#how-it-works) | 登录、令牌签发、导出、其他配置审计及审计查询 | 新契约 |
 | F09 UsageRecord | Per-call LLM/Vision/OCR/search/Browser accounting, task liability and prepaid reservation/settlement; durable low-balance notices | Storage metering; online payments | [Task budgets](../notes/task-budgets.md) |
 | F10 部署与质量 | 本机迁移、Compose（含 SearXNG、Gotenberg）、锁定依赖、GitHub Actions 在每个 PR 上按改动范围运行，测试按 worker 分库并行；平台凭据专用角色与根轮换 | 生产对象存储、TLS、备份、[平台凭据数据库验收与部署切换](platform-credentials.md)、私有化包装 | 平台凭据契约已批准；生产需授权 |
 
@@ -59,7 +59,7 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 
 | ID | 现状 | 缺口 | 依赖 |
 | --- | --- | --- | --- |
-| P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身；起草与模拟拟投共用的结构化 JSON 调用；独立 CheckProvider 和 RubricProvider 及对应结构化 HTTP adapter | ScoreProvider、agent 接入结构化调用 | 需相应能力契约 |
+| P01 LLMProvider | `extract`/`draft` 协议、两个 HTTP adapter、DisabledLLM、测试替身；起草与模拟拟投共用的结构化 JSON 调用；独立 CheckProvider 和 RubricProvider 及对应结构化 HTTP adapter；[agent 的闭合决策 adapter](../notes/builtin-agent.md#code) | ScoreProvider；agent 真实 Provider 受控评测 | 需相应能力契约 |
 | P02 OCRProvider | 本地 Tesseract | 坐标持久化、单位级语言与开关、云 OCR | 云服务需授权 |
 | P03 Vision/Search/Embedding/Browser | 截图多模态匹配、区域建议与读字；沙箱 Browser 离线渲染与厂家采集；Perplexity Search API 或自托管 SearXNG 搜索 | Embedding 后续边界见 [memory.md](memory.md#pgvector-与后续索引)；本机浏览器采集、仅用 SearXNG 时搜索引擎限流下的召回；代理节点内核级出网过滤、沙箱租约接管与断连/存储失败注入验收 | 新契约 |
 | P04 ProviderConfig | 平台模型目录与计费；单位自带模型与平台模型选择、`provider set/list/history/test`；[平台后台凭据管理与逐次解析](../notes/platform-credentials.md)；机制见 [provider-config.md](../notes/provider-config.md) | [平台凭据数据库验收与切换](platform-credentials.md)；视觉、搜索等其他能力的单位配置 | 平台凭据契约已批准；其他新契约 |
@@ -69,8 +69,8 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 | M03 自动候选 | 人工模型卡 reject/edit 的净化确定性候选与单位评测样本、恢复作业 | LLM 泛化、风险卡误报、历史回填 | [反馈契约](memory.md#自动候选样本与作业) |
 | U01 看板 | 单位后台招标任务、解析抽取、响应卡审阅、起草预览、初稿、导出文件、模拟拟投、单位资料与保密字段页面，招标原件、证书原件和导出件在线按页预览；机制见 [org-console.md](../notes/org-console.md) | 产品、功能、证书、模板管理页；配置与记忆管理页 | 新契约 |
 | U02 卡片/SSE | API/CLI 卡片修订与状态迁移 | 看板交互、SSE | 界面契约 |
-| A01 内置 agent | 未实施 | 契约草案见 [agent.md](agent.md) | 待批准 |
-| A02 外部 agent | CLI、`bid schema`、范围令牌 | 调用审计与看板标记见 [agent.md](agent.md#审计与-a02-来源标记)；可选 `mcp serve` | 新接口确认 |
+| A01 Built-in agent | API/CLI owner-only sessions, seven command tools, human pauses, persistent recovery, immutable session limits and no-memory generation; [mechanism](../notes/builtin-agent.md) | PostgreSQL/RLS, queue crash recovery, concurrent budget and full human-review workflow acceptance; Vue pages and later tools | [Approved contract and acceptance requirements](agent.md#acceptance-requirements); all recommended defaults adopted |
+| A02 External agents | CLI, `bid schema`, scoped tokens and authenticated invocation/token-automation provenance; [shared contract](agent.md#audit-and-a02-provenance) | Database provenance acceptance, product-specific identity and optional `mcp serve` | Product identity and MCP require their own contract |
 | C01 CLI 契约 | Result 七键、schema 注册、统一退出码、两种模式；`bid check run/list/show/decide/history` 与 `bid score rubric generate/list/show/revise/classify/section decide/item decide/coverage decide/decide/history` | 后续命令、主版本兼容周期 | 新命令确认 |
 | C02 缓存 | 模型起草、check/score 固定输入缓存；记忆 scope epoch、到期与策略版本失效，保留人工确认并提醒 | 其他能力的跨依赖失效；记忆 PostgreSQL 并发验收 | [记忆缓存契约](memory.md#起草消费使用审计与-c02-缓存失效) |
 | C03 dry-run/budget | Read-only budget preflight, first-pass estimates and next-call blockers; Result 4.0 with legacy projection; preserved cost/intervention on terminal jobs | Measured duration profiles; bounded estimates for future providers | [Approved budget contract](budget.md) |
@@ -87,8 +87,9 @@ Provider 接口和 CLI JSON 结构供确认，再实现。
 ## 真实服务接入范围
 
 接入层支持：要求抽取、响应起草、原型生成与模拟拟投的平台 LLM（Anthropic、OpenAI 兼容）、截图多模态分析、
-Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg 文档转换。score rubric 生成和评分执行复用结构化模型接入；尚未接入：agent 的模型调用、语义向量与云 OCR，
-以及这些能力的评测。
+Perplexity Search API 或自托管 SearXNG 厂家来源搜索，以及 Gotenberg 文档转换。score rubric 生成、评分执行和
+[agent 决策](../notes/builtin-agent.md#code)复用结构化 HTTP 模型接入。语义向量与云 OCR 尚未接入；
+agent 的真实服务受控评测与 [A01 数据库/队列验收](agent.md#acceptance-requirements)仍待完成。
 
 不依赖真实服务、可各自立契约推进的是：本地浏览器取证、Rust 标注、
 确定性规则、Vue 界面、记忆 CRUD 与审批、预算机制、公开评测集准备。

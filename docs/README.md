@@ -20,6 +20,7 @@ kind: readme
 
 ## 机制笔记
 
+- [Built-in agent orchestration](notes/builtin-agent.md): bounded command tools, owner authority, durable pauses and recovery.
 - [Task budgets](notes/task-budgets.md): task liability, atomic reservations, human changes and low-balance notices.
 
 - [Platform credential authority](notes/platform-credentials.md)：平台凭据权限、逐次解析、导入与根密钥轮换。
@@ -79,4 +80,5 @@ kind: readme
 - [初稿校验契约](plan/check.md)（plan）：阶段一确定性规则已实施；阶段二语义校验待实施。
 - [评分契约](plan/score.md)（plan）：已批准；rubric 规范化与人工确认、confirmed DraftRun 评分执行与报告已实施。
 - [记忆契约](plan/memory.md)（plan）：已批准的单位层首片与后续作用域边界。
+- [Built-in agent contract](plan/agent.md) (plan): approved command orchestration, human pauses, recovery and shared provenance.
 - [变更记录](changelog.md)（changelog）：已交付范围。

@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import Field, field_validator, model_validator
 
+from app.schemas.agent_provenance import AgentProvenance
 from app.schemas.contracts import Category, Contract, Cost, Source
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive
 from app.schemas.screenshot_contracts import ImageEvidenceInput, PixelRect, RenditionView
@@ -252,6 +253,7 @@ class CardGeneratePreview(_TrimmedContract):
 
 
 class CardGenerateResult(_TrimmedContract):
+    agent_provenance: AgentProvenance | None = None
     generation_job_id: UUID
     completion: Literal["complete", "partial"]
     created_revision_ids: list[UUID]
@@ -380,6 +382,7 @@ class EvidenceView(_TimestampContract):
 
 
 class CardView(_TimestampContract):
+    agent_provenance: AgentProvenance | None = None
     id: UUID
     org_id: UUID
     task_id: UUID
@@ -554,6 +557,7 @@ class DraftGap(_TrimmedContract):
 
 
 class DraftView(_TrimmedContract):
+    agent_provenance: AgentProvenance | None = None
     id: UUID
     org_id: UUID
     task_id: UUID
@@ -597,6 +601,7 @@ class DraftView(_TrimmedContract):
 
 
 class DraftSummary(_TimestampContract):
+    agent_provenance: AgentProvenance | None = None
     id: UUID
     task_id: UUID
     extraction_job_id: UUID

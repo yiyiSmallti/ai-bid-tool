@@ -76,6 +76,8 @@ async def locked_job(session: AsyncSession, job_id: UUID) -> Job | None:
     job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
     if job is not None and job.task_id != task_id:
         raise ProviderFailure("Job task binding changed", code="job_attempt_stopped")
+    if job is not None:
+        session.info["execution_job"] = job
     return job
 
 
@@ -101,6 +103,19 @@ async def authorized_job(session: AsyncSession, job: Job) -> Identity:
             raise ProviderFailure("Submission token is no longer active", code="forbidden")
         scopes &= set(token.scopes) & SCOPES
     actor = Identity(user.id, job.org_id, scopes, member.role, job.actor_token_id, job.actor_kind)
+    if job.agent_principal_id is not None:
+        from app.models.agent import AgentPrincipal
+        from app.services.auth import agent_identity
+
+        principal = await session.get(AgentPrincipal, job.agent_principal_id)
+        if principal is None:
+            raise ProviderFailure("Agent authority is unavailable", code="agent_authority_expired")
+        actor = await agent_identity(session, principal)
+        actor.scopes &= scopes
+        actor.session_id, actor.step_id = job.agent_session_id, job.agent_step_id
+        actor.invocation_id = job.invocation_id
+        actor.job_id, actor.run_id = job.id, job.run_id
+        actor.actor_kind = "worker"
     if job.kind == "sandbox":
         from app.models.sandbox import SandboxInput, SandboxRun
 
@@ -194,6 +209,7 @@ class JobExecution:
         self.planned_calls = 0
         self.before_admit: Callable[[AsyncSession], Awaitable[None]] | None = None
         self.intervention: BudgetIntervention | None = None
+        self.call_deadline: datetime | None = None
 
     def plan(self, first_pass_calls: int) -> None:
         self.planned_calls = max(self.planned_calls, first_pass_calls)
@@ -230,6 +246,10 @@ class JobExecution:
             raise self.stop(
                 "job_attempt_stopped", "Job attempt was cancelled, superseded or expired"
             )
+        if job.agent_session_id is not None and job.kind != "agent":
+            from app.services.agent_limits import guard_job
+
+            await guard_job(session, job, self.settings)
         return job
 
     async def heartbeat(self) -> None:
@@ -341,16 +361,25 @@ class JobExecution:
                 .limit(1)
             )
             if existing is None:
-                session.add(
-                    AuditLog(
-                        org_id=self.org_id,
-                        actor_user_id=job.actor_user_id,
-                        actor_token_id=job.actor_token_id,
-                        action=action,
-                        object_id=self.job_id,
-                        details=details,
-                    )
+                from app.services.auth import set_actor_context
+                from app.services.versioned import audit
+
+                actor = Identity(
+                    job.actor_user_id,
+                    job.org_id,
+                    set(job.actor_scopes),
+                    "viewer",
+                    job.actor_token_id,
+                    "worker",
+                    principal_id=job.agent_principal_id,
+                    session_id=job.agent_session_id,
+                    step_id=job.agent_step_id,
+                    invocation_id=job.invocation_id,
+                    job_id=job.id,
+                    run_id=self.run_id,
                 )
+                await set_actor_context(session, actor)
+                audit(session, actor, action, self.job_id, details)
 
     async def admit(
         self, quote: BudgetCallQuote | Decimal, platform_billed: bool | None = None
@@ -380,6 +409,12 @@ class JobExecution:
                 raise self.stop(
                     "billing_currency_mismatch", "Call currency differs from deployment currency"
                 )
+            if job.agent_session_id is not None:
+                from app.services.agent_limits import guard_job
+
+                guarded = await guard_job(session, job, self.settings, quote)
+                assert guarded is not None
+                _, self.call_deadline = guarded
             task = await session.get(Task, job.task_id) if job.task_id else None
             if task is not None:
                 view = await budgets.view(session, task, self.settings)
@@ -501,7 +536,7 @@ class JobExecution:
                 )
             )
             await session.flush()
-            if job.kind == "card_generate":
+            if job.kind == "card_generate" and job.agent_session_id is None:
                 from app.memory.retrieval import attach_call
 
                 await attach_call(session, self, call_id, current_drafting_input.get())
@@ -620,6 +655,12 @@ class JobExecution:
                 and call.reserved_task_amount is not None
                 and task_amount > call.reserved_task_amount
             )
+            if job.agent_session_id is not None and quote.vendor_usd_upper_bound is not None:
+                exceeded = (
+                    exceeded
+                    or usage.usd is None
+                    or (Decimal(str(usage.usd)) > quote.vendor_usd_upper_bound)
+                )
         return exceeded
 
     async def complete(self, call_id: UUID, usage: ProviderUsage) -> None:
@@ -728,7 +769,7 @@ class JobExecution:
             result = job.result or {}
             stop = result.get("stop_reason") or (job.error or {}).get("code")
             completion = (
-                "failed" if job.status != "succeeded" else result.get("completion", "complete")
+                "failed" if job.status != "succeeded" else (result.get("completion") or "complete")
             )
             unresolved = list(
                 (

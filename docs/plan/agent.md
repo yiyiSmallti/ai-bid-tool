@@ -2,396 +2,513 @@
 kind: plan
 ---
 
-# 契约草案：内置 agent 的命令编排与人工暂停
+# Built-in agent command orchestration and human pauses
 
-状态：**待批准，未实施。** 对应[路线图](roadmap.md) A01；调用来源标记同时供 A02 使用。
+Status: **Approved. All recommended defaults are adopted.** This contract covers
+[roadmap](roadmap.md) A01; invocation provenance also serves A02. Approval satisfies
+the interface-first requirement in [project rules](../../agent.md#工作方式).
+The [approved interface models](agent/agent_contracts.py) retain the reviewed
+contract; [runtime models](../../server/app/schemas/agent_contracts.py), the
+[agent API](../../server/app/api/agent.py), [CLI](../../cli/bid_cli/agent.py) and
+[controller](../../server/app/jobs/agent.py) implement it. PostgreSQL/RLS, real
+queue recovery and concurrent budget acceptance remain required by
+[Acceptance requirements](#acceptance-requirements); static checks and fake
+Provider responses do not establish those guarantees. Adopted choices are in
+[Decided decisions](#decided-decisions).
 
-依照[项目规则](../../agent.md#工作方式)，先确认 Pydantic、Provider 和 CLI JSON 契约，
-再实施。[契约模型](agent/agent_contracts.py)仅供审阅，未注册到运行 API、CLI 或 worker，
-也不创建表。本页的选择均为提案，待决定项集中在[待决定](#待决定)。
+## Objective and boundaries
 
-## 目标与边界
+The [agent design](../AI%20标书工具设计文档.md#看板与-agent-设计) requires intent
+understanding, command dispatch, bounded retries, summaries, server-side recovery
+and human intervention before exceeding budgets. The built-in agent (内置 agent),
+console and external agents share CLI command requests and Result contracts.
+The agent cannot confirm evidence, change confirmed cards or export. Execution
+follows the [agent tool boundary](sandbox.md#后续内置-agent-工具边界).
 
-[设计文档的 agent 部分](../AI%20标书工具设计文档.md#看板与-agent-设计)要求理解意图、
-派发命令、有限重试、汇总、服务器状态恢复和超预算先问人。内置 agent 与控制台、外部
-agent 共用 CLI 命令的请求和 Result，不具备证据确认、修改已确认卡片或导出权限。
-执行边界沿用 [sandbox.md 的 agent 工具边界](sandbox.md#后续内置-agent-工具边界)。
+The first workflow starts with **an existing task, a real tender Document and a
+successful extraction job**: a human submits a goal and limits; the agent reads
+that extraction's requirements and cards; it previews and submits `card generate`;
+it waits for the generation job; it shows proposals and pauses; the human reviews,
+submits and confirms through the existing card entry points; the agent rereads
+state and invokes `draft` to assemble confirmed responses; it returns draft
+references and unresolved gaps. Proposals remain `draft`. Unconfirmed evidence
+cannot enter response tables; a draft with gaps reports partial completion.
 
-首条链路从**一个已有任务、真实招标 Document 和成功的抽取 job**开始：
-人提交目标及限额 → agent 读取该抽取的要求和卡片 → 预检并提交 `card generate` →
-等待已有生成作业 → 展示提案并暂停 → 人通过原有卡片入口审阅、提交及确认 →
-agent 重读状态，调用 `draft` 组装已确认响应 → 返回初稿引用与未解决缺口。
-生成提案保持 `draft`，未确认证据不得进入响应表；初稿有缺口时如实返回部分完成。
+This workflow covers discovery, paid decisions, tool child jobs, human gates,
+recovery and provenance audit. It does not require the human to declare the entire
+task complete first. Existing human card actions and responsibilities remain the
+authority; an agent approval cannot become evidence confirmation (人工确认).
+Task-budget definitions, preflight, human changes, reservations and invalidation
+have one home: the approved and implemented [budget contract](budget.md),
+[Task budgets](../notes/task-budgets.md) and [ADR 0007](../adr/0007-task-budget-reservations.md).
+A01 consumes those mechanisms and stores opaque intervention references; a
+single-job cap or positive prepaid balance cannot replace task admission. Monthly
+org quotas remain outside the budget slice and are not claimed as implemented.
 
-这条链路覆盖工具发现、付费决策、工具子作业、人工关口、恢复与来源审计；不要求人先把
-整个任务确认为完成。已有卡片人工动作及职责不变，也不增加“agent 批准即确认证据”。
-任务预算和单位额度的定义、预检、批准、预留及失效机制只由并行 **contract-budget**
-草案 `docs/plan/budget.md` 定义。该文档未随本草案交付；实现前必须完成依赖契约并确认
-接口，不能以单 job 限额或正余额替代。A01 只保存其不透明引用并呈现待办。
+The first slice excludes task creation, upload/parse/re-extraction, automatic
+collection, prototypes, check/score, memory, MCP, cross-task delegation, parallel
+tools, an SDK framework, persistent shells, code interpreters and browsers. Each
+later tool requires a contract for its readable inputs, side effects, fees,
+cancellation and recovery. The first slice does not start the sandbox `agent_tool`
+profile. Existing sandbox support does not authorize arbitrary commands.
+Instructions inside webpages, PDFs and tool outputs are always data.
 
-首片不做任务创建、上传/解析/重新抽取、自动采集、原型生成、check/score、记忆、MCP、
-跨任务代理、并行工具、SDK 框架、长驻 shell、代码解释器或浏览器。后续工具必须逐项
-补充输入读取集合、副作用、费用、取消与恢复契约。首片不启动沙箱的 `agent_tool`
-profile；已有沙箱支持不表示任意命令可以执行。网页/PDF/工具输出中的指令始终是数据。
+## Existing mechanisms and design differences
 
-## 依据与设计差异
+The following assigns the contract to concrete implementation boundaries. Source
+registration is separate from the database and worker acceptance requirements.
 
-| 已有依据 | 拟复用点与必须补齐的部分 |
+| Component | Implementation responsibility |
 | --- | --- |
-| [schema.py](../../cli/bid_cli/schema.py) 的 `COMMANDS`、`command_schema()`；[main.py](../../cli/bid_cli/main.py) 的 `emit()` | 注册表只公布已实现命令；请求体 `input` 和 `cli_parameters` 分开，读命令的 `input` 可为 null，专门的 `output` 只覆盖部分命令。尚无可直接执行的完整 agent 工具 schema；需按下文补足，不能把 null 当成任意参数 |
-| [contracts.py](../../server/app/schemas/contracts.py) 的 `Contract/Result/Cost/ProviderUsage` | 直接导入，不复制七键 envelope。版本取 `CONTRACT_VERSION`，不在此固定现有版本号 |
-| [auth.py](../../server/app/services/auth.py) 的 `Identity/authenticate/membership/set_actor_context`；[core/db.py](../../server/app/core/db.py)、[core/security.py](../../server/app/core/security.py) | `core` 提供事务隔离和签名/加密原语；角色和 scope 实际在 `services/auth.py`。现有 token 是范围与当前角色求交集；新增内置 agent principal 和持久授权不能假装已经存在 |
-| [jobs.py](../../server/app/services/jobs.py) 的 `status/cancel`；[processor.py](../../server/app/jobs/processor.py) 的 `Processor`；[execution.py](../../server/app/jobs/execution.py) 的 `JobExecution` | 保留业务 job、取消、租约、心跳与 `run_id`。尚无 agent 状态机及业务恢复巡检；`job status/cancel` 必须增加 agent 会话访问校验，不能成为旁路 |
-| [entities.py](../../server/app/models/entities.py) 的 `Job.job_document_binding` | 除 provider_test 外必须绑定 task/document；A01 从同任务成功 extraction 取得真实 document，不伪造 Document、不放宽该约束 |
-| [base.py](../../server/app/providers/base.py) 的 `LLMProvider`；[llm.py](../../server/app/providers/llm.py) 的 `HTTPExtractor.post/resolve_llm/with_reasoning`；[structured.py](../../server/app/providers/structured.py) 的 `json_request/json_call/strict_schema` | 已有协议只有 extract/draft；起草等能力已用结构化 HTTP 调用。新增 `decide`，不把设计中的通用“消息 + Schema”接口说成已有实现 |
-| [execution.py](../../server/app/jobs/execution.py) 的 `JobExecution.admit/complete`、`job_cost`；[calls.py](../../server/app/providers/calls.py) 的 `accounted_call`；[billing.py](../../server/app/services/billing.py) 的 `require_funds` | 复用逐次 UsageRecord 和预付结算。余额、单 job charge/call ceiling 已有，任务预算执行属于 contract-budget；不能靠反复创建 agent job 重置累计上限 |
-| [response_cards.py](../../server/app/services/response_cards.py)、[card_generation.py](../../server/app/services/card_generation.py) 的 `submit_generation/check_input_access`、[drafts.py](../../server/app/services/drafts.py) 的 `submit_draft/show_draft` | 复用受保护卡片跳过、版本校验、固定输入、费用预检和仅消费确认内容；不让 agent 改写这些规则 |
-| [versioned.py](../../server/app/services/versioned.py) 的 `audit()`；[entities.py](../../server/app/models/entities.py) 的 `AuditLog` | 已有 user/token 和业务审计，尚无统一调用审计与可约束的 agent 来源列；A01/A02 共享下文来源模型 |
-| [保密机制](../notes/confidential-values.md)、[模型输入规则](../notes/model-drafting-redaction.md) | 现有关闭任务遮挡会同时关闭登记值替换。A01 不允许把此状态用于 agent 外发；首片要求遮挡开启且每次准入重验，不自动修改开关 |
+| [schema.py](../../cli/bid_cli/schema.py) `COMMANDS`, `command_schema()`; [main.py](../../cli/bid_cli/main.py) `emit()` | Publish implemented commands only. Preserve separate body `input` and `cli_parameters`; null read input does not mean arbitrary arguments. Complete executable agent invocation schemas; dedicated `output` previously covered only some commands. |
+| [contracts.py](../../server/app/schemas/contracts.py) `Contract/Result/Cost/ProviderUsage` | Import directly; do not copy the seven-key envelope. Take the version from `CONTRACT_VERSION`, without fixing a release number here. |
+| [auth.py](../../server/app/services/auth.py) `Identity/agent_identity/set_actor_context`; [agents.py](../../server/app/services/agents.py) `human_access/owned/start/resume`; [db.py](../../server/app/core/db.py), [security.py](../../server/app/core/security.py) | Core supplies transaction isolation, signing and encryption. Live Membership grants intersect immutable initial grants and reduced principal scopes; owner authorization and delegation renewal remain separate from token authentication. |
+| [jobs.py](../../server/app/services/jobs.py) `status/cancel`; [agent controller](../../server/app/jobs/agent.py) `process_if_agent/fragment/wake`; [execution.py](../../server/app/jobs/execution.py) `JobExecution` | Business jobs retain cancellation, leases, heartbeats and `run_id`. Agent controllers checkpoint between decisions, tools and human pauses; job status/cancel apply session authorization before exposing or changing agent-owned jobs. |
+| [entities.py](../../server/app/models/entities.py) `Job.job_document_binding` | Except provider_test, jobs remain task/document bound. Derive a real Document from a successful extraction in the same task; never fabricate one or relax the constraint. |
+| [agent contracts](../../server/app/schemas/agent_contracts.py) `AgentReasoningProvider`; [agent adapter](../../server/app/providers/agent.py) `HTTPAgentProvider`; [structured.py](../../server/app/providers/structured.py) `json_request/json_call_with_usage/strict_schema` | The narrow `decide` capability wraps the existing HTTP model adapter and returns a closed decision with trusted usage. It does not add a general SDK, message executor or arbitrary tool protocol. |
+| [execution.py](../../server/app/jobs/execution.py) `JobExecution.admit/complete`, `job_cost`; [agent limits](../../server/app/services/agent_limits.py) `enforce/guard_job/cost_view`; [calls.py](../../server/app/providers/calls.py) `accounted_call` | Reuse per-call UsageRecord, prepaid settlement and task admission. Every owned descendant checks parent exposure and deadlines as well as original job/balance gates; fresh controller jobs cannot reset cumulative session ceilings. |
+| [response_cards.py](../../server/app/services/response_cards.py), [card_generation.py](../../server/app/services/card_generation.py) `submit_generation/check_input_access`, [drafts.py](../../server/app/services/drafts.py) `submit_draft/show_draft` | Preserve protected-card skipping, revision checks, fixed inputs, cost preflight and confirmed-only assembly. The agent cannot rewrite these rules. |
+| [versioned.py](../../server/app/services/versioned.py) `audit()`; [shared provenance](../../server/app/schemas/agent_provenance.py) `AgentProvenance`; [migration](../../server/migrations/versions/0041_builtin_agent.py) `agent_origin_guard` | Preserve immediate actor and immutable invocation origin separately. Database-validated Job/audit columns supply A01/A02 provenance; public card, generation and draft views do not trust client-supplied identity. |
+| [Confidential values](../notes/confidential-values.md), [model input rules](../notes/model-drafting-redaction.md) | Disabling task redaction also disables registered-value replacement. Agent outbound calls require redaction enabled and checked at every admission; the agent never changes the switch. |
 
-设计中的 `evidence fetch/stamp` 没有对应完整同名命令；取证与标注已有分阶段命令，
-`check/score` 未注册。它们不进入首片工具表。设计先用外部 CLI agent、再考虑 SDK，
-本提案选择现有 worker 加窄 Provider，不引入 SDK。设计的卡片恢复也不足以恢复已付费
-模型决策和提交中的子作业，须新增持久步骤记录。本地模式仍为 PostgreSQL/RLS，
-不采用设计早期描述可能暗示的纯文件存储模式。
+The design's `evidence fetch/stamp` names do not map to complete commands of those
+names; collection and annotation have staged commands. They and existing
+check/score commands are outside this tool set. The design proposes external CLI
+agents before an SDK; this approved slice uses the existing worker with a narrow
+Provider, without an SDK. Card state alone cannot recover a paid decision or a
+child submission in progress; persistent steps are required. Local mode remains
+PostgreSQL/RLS and does not adopt a file-only database interpretation of the early
+design.
 
-## 接口
+## Interfaces
 
-所有路由经既有认证、`X-Org-Id` 和单位事务。`S/T` 为 UUID；body 不接收 org、owner、
-principal、actor、有效 scopes、job/run ID 等服务端归属字段。新入口与模型均为提案。
+Every route uses existing authentication, `X-Org-Id` and org transactions. `S/T`
+are UUIDs. Bodies cannot supply org, owner, principal, actor, effective scopes,
+job/run IDs or other server-owned identity fields.
 
-| HTTP | CLI（均支持 `--json`） | 输入与 Result 内容 |
+| HTTP | CLI (all support `--json`) | Input and Result content |
 | --- | --- | --- |
-| `POST /tasks/{T}/agent-sessions` | `bid agent start --task T --input REQUEST.json [--dry-run]` | `AgentStartRequest`；`data=AgentMutationData`，只受理并返回 job；dry-run 为 `AgentPreviewData` |
-| `GET /tasks/{T}/agent-sessions` | `bid agent list --task T [--cursor ID] [--limit N]` | `AgentListRequest` query；`data=AgentPageData`，`items=AgentSessionView[]` |
-| `GET /agent-sessions/{S}` | `bid agent show --id S` | `data=AgentShowData` |
-| `GET /agent-sessions/{S}/messages` | `bid agent messages --id S [--cursor ID] [--limit N]` | 分页；`items=AgentMessageView[]` |
-| `GET /agent-sessions/{S}/steps` | `bid agent steps --id S [--cursor ID] [--limit N]` | 分页；`items=AgentStepView[]` |
-| `POST /agent-sessions/{S}/messages` | `bid agent message --id S --input REQUEST.json` | `AgentMessageRequest`；仅 paused 接受，追加人类消息但不自动续跑；`data=AgentMutationData` |
-| `POST /agent-sessions/{S}/resume` | `bid agent resume --id S --input REQUEST.json` | `AgentResumeRequest`；校验暂停和当前事实后排队；`data=AgentMutationData` |
-| `POST /agent-sessions/{S}/cancel` | `bid agent cancel --id S --input REQUEST.json` | `AgentCancelRequest`；持久取消会话及其自有在途 job；`data=AgentMutationData` |
-| 既有 `GET /jobs/{J}` | `bid job status/wait J` | 控制作业的 `data.result=AgentJobResult`，扩展该 kind 的访问守卫；子 job 保持原契约 |
-| 既有 `POST /jobs/{J}/cancel` | `bid job cancel J` | 控制作业取消等同会话取消；独立取消自有子 job 会让会话停止派发并报告取消原因 |
-| 既有 schema 入口 | `bid schema --json` | 新增 agent 命令及下节工具调用结构；schema 发现不授予权限 |
+| `POST /tasks/{T}/agent-sessions` | `bid agent start --task T --input REQUEST.json [--dry-run]` | `AgentStartRequest`; `data=AgentMutationData`, admission and job receipt only; dry-run uses `AgentPreviewData`. |
+| `GET /tasks/{T}/agent-sessions` | `bid agent list --task T [--cursor ID] [--limit N]` | `AgentListRequest` query; `data=AgentPageData`, `items=AgentSessionView[]`. |
+| `GET /agent-sessions/{S}` | `bid agent show --id S` | `data=AgentShowData`. |
+| `GET /agent-sessions/{S}/messages` | `bid agent messages --id S [--cursor ID] [--limit N]` | Pagination; `items=AgentMessageView[]`. |
+| `GET /agent-sessions/{S}/steps` | `bid agent steps --id S [--cursor ID] [--limit N]` | Pagination; `items=AgentStepView[]`. |
+| `POST /agent-sessions/{S}/messages` | `bid agent message --id S --input REQUEST.json` | `AgentMessageRequest`; paused only; append a human message without resuming; `data=AgentMutationData`. |
+| `POST /agent-sessions/{S}/resume` | `bid agent resume --id S --input REQUEST.json` | `AgentResumeRequest`; validate pause/current facts, then queue; `data=AgentMutationData`. |
+| `POST /agent-sessions/{S}/cancel` | `bid agent cancel --id S --input REQUEST.json` | `AgentCancelRequest`; durable session and owned in-flight job cancellation; `data=AgentMutationData`. |
+| Existing `GET /jobs/{J}` | `bid job status/wait J` | Controller `data.result=AgentJobResult`; extend authorization for this kind. Child jobs retain their contracts. |
+| Existing `POST /jobs/{J}/cancel` | `bid job cancel J` | Controller cancellation equals session cancellation. Cancelling an owned child independently stops session dispatch and reports why. |
+| Existing schema entry | `bid schema --json` | Add agent commands and tool invocation structures below. Discovery grants no permissions. |
 
-消息内容从 JSON 文件读取，不做终端交互式提问。命令缺参退出 2。首片新增命令不另加
-长轮询 `--wait`；show 展示会话状态，既有 job wait 只等待指定作业片段，不能把片段完成
-当作会话完成。列表游标按 `(created_at,id)` 稳定排序，由同一查询范围内的 ID 定位；
-跨单位、跨任务、别人的会话游标与不存在的游标均 404。
+Messages come from JSON files; there are no interactive terminal questions.
+Missing arguments exit 2. New commands do not add long-polling `--wait`. Show
+reports session state; job wait waits for one controller segment and does not
+establish session completion. Lists sort stably by `(created_at,id)`; a cursor ID
+must belong to the same query scope. Cross-org/task/owner and nonexistent cursors
+all return 404.
 
-修改须 `expected_revision` 和调用方生成的 UUID 幂等键。幂等记录随主记录持久化：
-相同主体、同端点、同键、同规范化请求重放原回执；同键异参为 409/exit 2。先查重再查
-expected_revision，避免成功后的网络重放被误判冲突。首次 start 的 `task + owner + key`
-在本单位唯一。dry-run 不消费幂等键，不产生会话、审计、用量、对象或队列记录。
+Mutations require `expected_revision` and a caller-generated UUID idempotency
+key. Persist the record with the main row. The same principal, endpoint, key and
+normalized request replay the original receipt; the same key with changed input
+returns 409/exit 2. Check replay before revision, so a successful network replay
+does not become a conflict. Initial `task + owner + key` is unique within the org.
+Dry-run consumes no key and creates no session, audit, usage, object or queue row.
 
-## CLI 工具映射
+## CLI tool mapping
 
-工具名严格等于注册的 CLI 命令名，一个工具只表示一个命令；不提供万能 `run(command)`。
-`AgentToolProvider` 是可信 broker 协议，不是模型执行 shell 的接口。参数必须通过
-`ToolCall` 的命令分支、当前注册表 Schema 和业务服务三层校验。CLI 参数的文件路径只
-存在于 CLI 读入环节，broker 接收类型化 body，不能读取模型指定的本机文件。
+Tool names exactly match registered CLI command names; each tool represents one
+command. There is no generic `run(command)`. `AgentToolProvider` is a trusted
+broker protocol, not a model shell. Arguments pass three checks: the `ToolCall`
+command branch, current registry Schema and business service. Local file paths
+exist only at CLI input reading; the broker receives a typed body and cannot read
+model-selected local files.
 
-| 工具名与参数模型 | 既有 CLI / HTTP 映射 | 最小 scopes 与行为 |
+| Tool and argument model | CLI / HTTP mapping | Minimum scopes and behavior |
 | --- | --- | --- |
-| `req list` / `ExtractionArguments` | `--task --job` → `GET /tasks/{T}/requirements?job=J` | `task:read`；固定本会话 extraction；不允许省略 job 而悄悄读取新的抽取 |
-| `card list` / `ExtractionArguments` | `--task --job` → `GET /tasks/{T}/cards?job=J` | `task:read, card:read`；读取该抽取的卡片槽位 |
-| `card show` / `CardShowArguments` | `--id [--history]` → `GET /cards/{C}?history=...` | `task:read, card:read` 加服务的材料访问校验；必须属于固定任务/抽取 |
-| `card generate` / `CardGenerateArguments` | `task` 对应 `--task`；`input: CardGenerateRequest` 的 extraction_job_id 对应 `--job`，其余按 `card_generate()` flags 映射 → `POST /tasks/{T}/cards/generations` | `task:read, card:read, card:generate` 及固定材料的 read grants；先 dry-run，再绑定 expected_input_hash/max_charge 提交原有 job；外发仅原 Provider 路径，提案恒未确认 |
-| `draft` / `DraftArguments` | `task` 对应 `--task`，`input: DraftRequest` 对应 `--job/--dry-run/--retry` → `POST /tasks/{T}/drafts` | `task:read, card:read, draft:run` 及材料读取；已有组表 job；零模型费用，缺口仍可形成 partial 初稿 |
-| `draft show` / `DraftShowArguments` | `--id` → `GET /drafts/{D}` | `task:read, draft:read` 及原服务依赖校验；只读本会话关联初稿 |
-| `job status` / `JobStatusArguments` | 位置参数 J → `GET /jobs/{J}` | `job:read` 及该 kind 的动态权限；只读本会话控制/子作业及固定 extraction，排除任意 job、export/provider_test |
+| `req list` / `ExtractionArguments` | `--task --job` → `GET /tasks/{T}/requirements?job=J` | `task:read`; fixed session extraction. Never omit job and silently read a newer extraction. |
+| `card list` / `ExtractionArguments` | `--task --job` → `GET /tasks/{T}/cards?job=J` | `task:read, card:read`; slots from that extraction. |
+| `card show` / `CardShowArguments` | `--id [--history]` → `GET /cards/{C}?history=...` | `task:read, card:read` plus service material access checks; fixed task/extraction only. |
+| `card generate` / `CardGenerateArguments` | `task` → `--task`; `input: CardGenerateRequest.extraction_job_id` → `--job`; other flags follow `card_generate()` → `POST /tasks/{T}/cards/generations` | `task:read, card:read, card:generate` and fixed material read grants. Dry-run first, then bind expected_input_hash/max_charge to existing job submission. Outbound work uses the existing Provider; proposals remain unconfirmed. |
+| `draft` / `DraftArguments` | `task` → `--task`; `input: DraftRequest` → `--job/--dry-run/--retry` → `POST /tasks/{T}/drafts` | `task:read, card:read, draft:run` and material reads. Existing assembly job, no model charge; gaps may produce a partial draft. |
+| `draft show` / `DraftShowArguments` | `--id` → `GET /drafts/{D}` | `task:read, draft:read` plus existing dependency checks; session-linked drafts only. |
+| `job status` / `JobStatusArguments` | Positional J → `GET /jobs/{J}` | `job:read` and dynamic kind permissions; session controller/child jobs and fixed extraction only. Exclude arbitrary jobs, export and provider_test. |
 
-材料 read grants 从真实 `check_input_access`/材料解析获取，不能只靠上表三项固定 scope；
-首片 `AgentScope` 仅允许这些路径所需的读取与生成/组表范围。被保护、pending、confirmed
-或人工 comply-only 卡片继续由原服务跳过；负偏离不得被模型改成满足。工具参数中的
-task、job、card、draft、requirement ID 都重新验证父链，不因来自之前一次响应就受信任。
-模型不能控制 `--wait/--timeout`、认证、URL、方法、重试次数或全局 CLI 配置。
-`retry=true` 只有 broker 验证原 job 可安全重试时接受，未知调用不重试。生成请求中的
-expected_input_hash 必须来自本步骤预检；max_charge 由 broker 按预检、已批准预算和
-会话剩余金额校验/收紧，模型填写这些字段不构成授权，也不能增加原来批准的金额。
+Resolve material grants through real `check_input_access`/material resolution;
+the three fixed generation scopes alone are insufficient. `AgentScope` permits
+only these reading, generation and assembly paths. Existing services still skip
+protected, pending, confirmed and human comply-only cards. Models cannot convert
+recorded negative deviations (负偏离) to compliance. Revalidate the parent chain of
+every task/job/card/draft/requirement ID; a prior response does not make it trusted.
+Models cannot control `--wait/--timeout`, credentials, URL, method, retry count or
+global CLI settings. Accept `retry=true` only after the broker proves safe retry;
+unknown calls are not retried. expected_input_hash must come from this step's
+preflight. The broker checks/tightens max_charge against preflight, approved budget
+and remaining session amount; model fields cannot authorize or increase spending.
 
-实施时在 `command_schema()` 增加向后兼容的 `invocation_input`：路径/查询选择器加原有
-Pydantic body 的完整 JSON Schema；保留原 `input/cli_parameters`。工具表中的参数模型
-就是对应 schema 的草案，`req list` 仅在 agent profile 收紧为显式 job。控制台和外部
-调用可发现同一结构；CLI 保持已有 flags，以确定性映射形成该对象。完整 schema 随
-Result schema、命令名生成哈希，保存到会话和步骤。升级后哈希不符须暂停重新预检，
-不得用旧计划配新 schema 执行。批准后做注册表、CLI flags、broker、API 的一致性快照，
-不维护第二份手抄工具定义；不兼容变更依项目规则升主版本。
+Add backward-compatible `invocation_input` to `command_schema()`: path/query
+selectors plus the full existing Pydantic body schema. Preserve
+`input/cli_parameters`. The argument models above define that schema; only the
+agent profile tightens `req list` to require job explicitly. Console and external
+callers discover the same structure. Existing CLI flags map deterministically to
+it. Hash the complete schema with Result schema and command names, persisting it
+on sessions/steps. An upgrade mismatch pauses for preflight; an old plan cannot
+execute a new schema. Verify registry, CLI flags, broker and API consistency in
+snapshots instead of maintaining a second handwritten tool definition. Incompatible
+changes follow the project's major-version rule.
 
-broker 在进程内调用**与 API route 相同的认证后命令服务**，返回同一 Result 和退出码，
-不 fork `bid`、不构造任意 HTTP、不复制业务算法。HTTP 与 broker 共用提交事务边界，
-以便子 job 与步骤关联原子提交。它仍执行 `Identity`、单位事务、材料/卡片守卫、预算和
-审计；不能把“进程内”解释成跳过 API 安全层。首片工具输出保持既有结构，发给模型的
-只是一份受限、遮挡后的投影；投影不冒充原始 Result，也不作为证据保存。
+The broker invokes **the same authenticated command services as API routes**, in
+process, returning the same Result and exit code. It does not fork `bid`, construct
+arbitrary HTTP or duplicate business algorithms. HTTP/broker submission shares a
+transaction boundary so child job and step link commit atomically. Identity, org
+transactions, material/card guards, budgets and audit still apply. Model-visible
+output is a restricted redacted projection; it is neither the original Result
+nor stored evidence.
 
-## 身份、权限与人工关口
+## Identity, permissions and human gates
 
-新增持久 `agent_principals`，由已认证人类 session 在 start 时创建，绑定有效 Membership、
-user、org、授权到期和 scope 快照。`actor_kind=agent`，没有可复用的用户 Bearer/Cookie。
-每步有效权限为 **创建时人类 grants ∩ 当前 Membership/角色 grants ∩ 请求缩减范围 ∩
-服务端 A01 白名单**，任何一方缺失即拒绝。以后增加角色权限不自动扩张既有会话。
-即使发起者是管理员/bidder，也永久删除确认、导出、保密值写入/揭示、provider/token/
-资源管理、红线开关与人工处置权限；只减 scope 不足以保护人的职责，还须保留 actor_kind。
+An authenticated human session creates persistent `agent_principals` at start,
+bound to valid Membership/user/org, authority expiry and a scope snapshot.
+`actor_kind=agent`; no reusable user Bearer/Cookie is stored. At each step,
+effective permissions are **initial human grants ∩ current Membership/role grants
+∩ requested reduced scopes ∩ server A01 allowlist**. Any missing grant rejects the
+action. Later role increases cannot expand a session. Even for an admin/bidder
+owner, permanently remove confirmation, export, confidential write/reveal,
+provider/token/resource management, redline switches and human disposition.
+Scope reduction alone cannot protect human responsibility; retain actor_kind.
 
-新增 `agent:read/run/cancel` 只授予人类：admin/bidder/technical 可 run/cancel，viewer
-只有 read；首片会话只由发起人读取和控制，其他同单位成员也返回 404，不默认给管理员
-会话旁观权。run 还须具有上述首片业务 scopes；已有角色本身不会保证所选材料可读。
-人因降权不能续跑，但有效所有者保留撤销自己会话的能力。退出单位或单位停用立即封闭
-worker 准入，且不能借仍有效 principal 绕过 Membership。API token 不可申请这些
-agent 管理 scopes，不能创建内置代理或嵌套代理；A02 继续使用原命令范围令牌。
+`agent:read/run/cancel` are human-only: admin/bidder/technical can run/cancel;
+viewer can read. Sessions are owner-only; another org member gets 404, including
+an administrator. Run also requires the workflow's business grants; a role alone
+does not establish material access. Demotion blocks resume while a valid owner
+retains cancellation of their session. Membership removal or org disablement
+immediately blocks worker admission; a principal cannot bypass Membership.
+API tokens cannot request agent management scopes, create built-in agents or nest
+agents. A02 uses existing command-scoped tokens.
 
-API token 永远不能有 `evidence:confirm`、`export`、`confidential:write/reveal`，沿用
-[tokens.create_token](../../server/app/services/tokens.py) 和数据库约束。内置 agent 不使用
-人为签发的 API token 伪装发起人；子 worker 的即时 actor_kind 保持 worker，另携带不可
-变的 agent 来源。所有 human-only 服务与数据库门禁都明确拒绝 agent/token/worker。
+API tokens never receive `evidence:confirm`, `export` or
+`confidential:write/reveal`; preserve [tokens.create_token](../../server/app/services/tokens.py)
+and database constraints. The agent never impersonates its owner with a manually
+issued token. Child workers keep immediate actor_kind=worker and immutable agent
+provenance. All human-only services/database gates reject agent/token/worker.
 
-授权期限取发起 session 的剩余有效期与 8 小时中较短者；只保存签发/到期元数据，
-不存原 session 凭据。已有签名会话并无持久撤销 ID，因此不宣称浏览器退出会立即撤销
-委托；显式 cancel、授权到期、成员/单位失效会阻止新调用。到期进入 authority pause，
-只有同一用户的新有效 session 可 resume，重新缩减 grants，仍不增加累计限额。
+Authority expires at the earlier of the initiating session's expiry and eight
+hours. Store issuance/expiry metadata, never the original session credential.
+Existing signed sessions have no durable revocation ID, so browser logout is not
+claimed to immediately revoke delegation. Explicit cancel, expiry and member/org
+invalidation block new calls. Expiry creates an authority pause; only a new valid
+session of the same user can resume, reducing grants again without resetting
+cumulative limits.
 
-人工暂停使用单独 `agent_pauses`，不是向终端提问。模型可提出 `HumanActionNeeded`，
-系统也可因门禁创建暂停；question 和结果须脱敏、限长。`export/confidential_reveal`
-只能产生给人的固定动作指引，不执行对应命令；完整保密值绝不回流对话或模型。用户
-通过原有业务界面或 CLI 自行操作，resume 只重读事实并解除相应暂停，不代行确认。
-`review_cards` 的响应列表记录 card/revision ID；发现新版本/新输入先刷新待办，不把一句
-“已批准”视为 confirm。用户可明确结束审阅并让已有 draft 服务如实列出缺口。
+Human pauses (人工暂停) live in `agent_pauses`, not terminal prompts. The model may
+request `HumanActionNeeded`; server gates may also create pauses. Questions and
+results are redacted and bounded. `export/confidential_reveal` only yield fixed
+human action instructions, never command execution; full confidential values
+never return to conversation/model. Humans act through existing business UI/CLI.
+Resume rereads facts and resolves the pause without confirming evidence.
+`review_cards` records card/revision IDs. New revisions/inputs refresh the pending
+work first; saying “approved” is not confirmation. A human may explicitly finish
+review and let the existing draft service report remaining gaps accurately.
 
-## 数据模型与迁移轮廓
+## Data model and migration outline
 
-新增下表六张业务表，**每张均有 NOT NULL `org_id`、UNIQUE(org_id,id)、ENABLE/FORCE
-RLS、带 USING/WITH CHECK 的策略**。按[单位隔离机制](../notes/tenant-isolation.md)，
-使用 `Database.transaction(org_id)` 与 transaction-local `app.current_org`；缺上下文
-不可读写。运行角色非属主、无 BYPASSRLS/SUPERUSER，不使用跨单位特权扫描恢复。
+Add six org business tables. **Each has NOT NULL `org_id`, UNIQUE(org_id,id),
+ENABLE/FORCE RLS and USING/WITH CHECK policies.** Follow
+[Tenant isolation](../notes/tenant-isolation.md), `Database.transaction(org_id)` and
+transaction-local `app.current_org`; missing context permits no read/write.
+Runtime roles are nonowners without BYPASSRLS/SUPERUSER. Recovery cannot scan
+business rows under a cross-org privileged role.
 
-| 表 / 公共 view | 存储内容与约束 |
+| Table / public view | Content and constraints |
 | --- | --- |
-| `agent_principals` / `AgentPrincipalView` | owner user、membership、授权初始 grants/缩减 scopes、签发与到期、revoked_at；membership 与 user 必须匹配。初始 grants 不可改，续权只更新缩减后的有效范围与期限并审计 |
-| `agent_sessions` / `AgentSessionView` | task/document/extraction/principal、owner、state/revision、limits、步骤/调用数/活动时间、active_since、固定 schema/model/input 哈希、当前控制 job/run/pause；start 与唯一终态 cancel 分别保存请求哈希/幂等键/加密回执；终态不可重开 |
-| `agent_messages` / `AgentMessageView` | session、递增 ordinal、role/author/step、加密内容、脱敏 content 与 hash、幂等键/请求哈希/回执；UNIQUE(org_id,session_id,ordinal)，只追加，不保存推理链 |
-| `agent_steps` / `AgentStepView` | decision/tool、序号、稳定 invocation_id、不可变 created_by_job_id/run_id、step revision 和 last_transition_job_id/run_id、固定调用结构/参数哈希/input refs/schema 哈希、child job、状态/结果哈希/退出码/usage IDs；调用结构和完整回执加密，公共 view 不含参数原文；UNIQUE(org_id,session_id,ordinal)、UNIQUE(org_id,invocation_id)；终态不可覆盖 |
-| `agent_pauses` / `AgentPauseView` | 类型、待办对象、输入快照、脱敏问题、contract-budget 不透明引用、状态/处理人/时间；resume 幂等键及原回执；每会话至多一个 pending 暂停，只有受权人可解决 |
-| `agent_job_links` / `AgentJobLinkView` | session/step/job、controller/tool、owned、创建时间；同会话同 job 唯一。部分唯一索引 UNIQUE(org_id,job_id) WHERE owned=true，归属与新 Job 同事务创建；owned=true 聚合该 job 全部用量，历史缓存只读引用为 owned=false，永不计入本会话消费 |
+| `agent_principals` / `AgentPrincipalView` | Owner user/membership, initial grants/reduced scopes, issuance/expiry/revoked_at. Membership and user must match. Initial grants are immutable; renewal changes only reduced effective scope/expiry with audit. |
+| `agent_sessions` / `AgentSessionView` | task/document/extraction/principal, owner, state/revision/limits, step/call/active-time counters, active_since, fixed schema/model/input hashes, current controller job/run/pause. Start and the unique terminal cancel separately retain request hash/key/encrypted receipt. Terminal sessions cannot reopen. |
+| `agent_messages` / `AgentMessageView` | session, increasing ordinal, role/author/step, encrypted original, redacted content/hash, key/request hash/receipt. UNIQUE(org_id,session_id,ordinal); append-only; no chain of thought. |
+| `agent_steps` / `AgentStepView` | decision/tool, ordinal, stable invocation_id, immutable created_by_job_id/run_id, revision/last_transition_job_id/run_id, fixed invocation/argument hash/input refs/schema hash, child job, state/result hash/exit/usage IDs. Invocation/full receipts are encrypted; public views exclude raw arguments. UNIQUE(org_id,session_id,ordinal), UNIQUE(org_id,invocation_id); terminal steps cannot be overwritten. |
+| `agent_pauses` / `AgentPauseView` | Kind, pending objects/input snapshot, redacted question, opaque budget reference, status/resolver/time, resume key/original receipt. At most one pending pause/session; only an authorized human resolves it. |
+| `agent_job_links` / `AgentJobLinkView` | session/step/job, controller/tool, owned, created_at. Unique session/job. Partial UNIQUE(org_id,job_id) WHERE owned=true; ownership commits with the new Job. Aggregate all usage for owned jobs. Historical cache references have owned=false and never enter session expenditure. |
 
-所有父链采用含 org 的复合外键：principal → `(org_id,membership_id,user_id)` 的
-Membership 候选键；session → task、`(org_id,task_id,document_id)` 的 Document 候选键、
-`(org_id,task_id,document_id,extraction_job_id)` 的 Job 候选键及同 owner 的 principal；
-message/step/pause/link → 同单位 session；step/pause 相互引用时包含 session_id；
-link/step child_job → 同 org/task/document 的 Job，不能混绑另一任务。
-必要的父表复合 UNIQUE 约束随迁移添加。User 仍为全局身份表，业务归属通过 Membership
-校验，不能把一个全局 user FK 当作单位成员证明。extraction 必须 kind=extract 且成功，
-类型/状态与当前 revision 由服务和数据库 trigger 共同验证，RLS 本身不保证同单位同任务。
+All parent chains use org-composite foreign keys: principal → Membership candidate
+key `(org_id,membership_id,user_id)`; session → task, Document candidate key
+`(org_id,task_id,document_id)`, Job candidate key
+`(org_id,task_id,document_id,extraction_job_id)` and same-owner principal;
+message/step/pause/link → same-org session. Step/pause references also include
+session_id. Link/step child jobs must match org/task/document, never another task.
+Add required parent UNIQUE constraints in the migration. User remains global;
+Membership proves org affiliation, not a global user FK. Extraction must be
+kind=extract and successful. Services/triggers verify kind/state/current revision;
+RLS alone does not establish same-task relations within an org.
 
-没有 pause 的 queued/running/waiting_job 取消也将 cancel 回执写在 session；同键重放
-原回执、异参冲突。已经终态后另一 cancel key 返回 terminal_session/exit 2，不新增
-伪暂停。start/cancel/message/resume 的键各按主体和端点隔离，不使用无界 JSON 回执列表。
+Cancelling queued/running/waiting_job without a pause still stores its receipt on
+the session. Same-key replay returns it; changed input conflicts. Another cancel
+key after terminal state returns terminal_session/exit 2 without a fabricated
+pause. Start/cancel/message/resume keys are principal/endpoint scoped; do not use
+unbounded JSON receipt lists.
 
-控制 job 增 kind `agent`，保留 job_document_binding。复合引用 current_job/pause 等
-用可延迟外键完成同一事务初始化；历史 rows 不 cascade delete。step/消息/暂停内容只能
-由符合真实 actor 上下文的写入路径生成，禁止客户端注入 assistant/tool 角色、篡改已完成
-step 或自填 resolved_by。view 采用显式字段白名单，不用 ORM 任意序列化。
+Add controller Job kind `agent`, retaining job_document_binding. Deferrable
+composite current_job/pause references permit same-transaction initialization.
+Do not cascade-delete history. Step/message/pause writes require real actor
+context; clients cannot inject assistant/tool roles, change completed steps or
+supply resolved_by. Public views use explicit field allowlists, not arbitrary ORM
+serialization.
 
-迁移顺序：增加父候选键及六表 → 建立 RLS/复合约束/只追加与状态 trigger/最小列授权 →
-增加 jobs 与审计归属字段及人工门禁 → 回填可证实的历史审计来源 → 同次交付逐表双单位
-和缺上下文测试 → 再启用入口。新增审计关联也使用 org 复合外键，见下节。未知历史来源
-标为 legacy_unknown，不猜成 agent。业务文本复用 `core.security.Secrets` 加密并绑定
-org/session/step；加密列加入 [admin.py](../../server/app/admin.py) 的轮换清单。没有新的
-对象存储文件格式；如后续存附件，仍须 `org/{org_id}/` 和既有签名下载契约。回退关闭入口
-与 worker 分支、保留历史和账本；不靠 downgrade 删除会话、审计或费用。
+Migration order: parent candidate keys/six tables; RLS/composite constraints,
+append-only/state triggers and minimum column grants; job/audit provenance and
+human gates; reliable historical audit backfill; per-table two-org/missing-context
+verification in the same delivery; then enable entry points. New audit references
+also use org-composite FKs. Unknown historical origin is legacy_unknown, never a
+guessed agent. Encrypt business text with `core.security.Secrets`, bound to
+org/session/step; add columns to [admin.py](../../server/app/admin.py)'s rotation
+inventory. No new object-storage format is required. Future attachments still
+use `org/{org_id}/` and signed downloads. Rollback disables entry/worker branches
+while preserving history/ledger, rather than deleting sessions/audit/cost on
+downgrade.
 
-## Worker、状态恢复与取消
+## Worker, recovery and cancellation
 
-循环运行在现有 Procrastinate worker 的 `agent` 控制作业中，API 只做验证、持久化和派发。
-每个控制 job 执行至一个有持久 checkpoint 的边界后退出；等待子 job 或人时不占 worker
-槽位，也不持数据库事务。成功的控制 job 只代表 checkpoint 已保存，完整状态看 session。
-checkpoint 事务在 live run fence 下先发布 session/step，然后将该控制 Job 置 succeeded、
-写 finished_at/AgentJobResult、清 lease_until 和 session.current_job_id/current_run_id。
-非终态会话的 result.completion=null，以 disposition 表示 continue/waiting_job/paused；
-仅会话 completed/partial 时分别为 complete/partial。下一次 wake 创建新的控制 Job，
-不能把已正常结束的片段当作失联 running 重跑。
+The loop runs as an `agent` controller job in the existing Procrastinate worker;
+API requests validate, persist and dispatch. A controller runs to one durable
+checkpoint, then exits. Waiting for a child/human holds neither a worker slot nor
+a DB transaction. Controller success proves checkpoint persistence; the session
+holds overall state. Under a live run fence the checkpoint transaction publishes
+session/step, marks controller Job succeeded, writes finished_at/AgentJobResult
+and clears lease_until plus session.current_job_id/current_run_id. Nonterminal
+result.completion=null; disposition is continue/waiting_job/paused. Completed and
+partial sessions use complete and partial respectively. A wake creates a new
+controller Job; a normally finished segment cannot be rerun as lost running work.
 
-| 会话状态 | 进入/离开条件 |
+| Transition | Conditions |
 | --- | --- |
-| queued → running | 新建或恢复控制 job；行锁读取 session/current_job，`Processor` 取得新 run_id 与 lease |
-| running → waiting_job | 同一提交事务持久 step、子 job、关联、session revision；控制 job 正常结束 |
-| waiting_job → queued | 子 job 终态后回收器唤醒；重读真实 Result，完成 step，再排下一控制片段 |
-| running → paused | 预算、人工动作、授权失效或不确定结果；checkpoint 与暂停原子提交，释放 worker |
-| paused → queued | 同一人类所有者 resume；输入版本/权限/预算/剩余限额重验通过 |
-| running → completed/partial/failed | 完成目标；有已发布的独立有效成果但仍有失败为 partial；无成果失败为 failed |
-| 任一非终态 → cancelled | 持久取消先封闭新准入，再取消本会话拥有的在途 job；不删除已发布提案和费用 |
+| queued → running | New/recovered controller; lock session/current_job; Processor obtains fresh run_id/lease. |
+| running → waiting_job | Persist step/child/link/session revision in one submission transaction; finish controller normally. |
+| waiting_job → queued | Recovery wakes after child terminal state, rereads real Result, completes step and queues next controller. |
+| running → paused | Budget/human/authority/uncertain result; atomically checkpoint/pause and release worker. |
+| paused → queued | Same human owner resumes after input/permission/budget/remaining-limit validation. |
+| running → completed/partial/failed | Goal completed; partial requires independently valid published work plus failure; failure without work is failed. |
+| Any nonterminal → cancelled | Persistently fence admission first, then cancel owned in-flight jobs; retain published proposals/cost. |
 
-每次决定和每次工具执行各占一个 step，失败、dry-run 和重试也占额度；幂等重放不新建
-step。计划输出先验证并加密保存，再执行其中唯一工具；参数包含显式默认值，以排序键的
-UTF-8 JSON（无多余空白）计算 SHA-256，连同原始字节哈希、工具 schema/hash 固定。
-不把模型生成的 UUID 当作可信 invocation ID：ID 由 broker 生成，固定到 step。
+Each decision and tool execution consumes a step, including failures, dry-runs
+and retries; idempotent replay creates no new step. Validate/encrypt the decision
+before executing its single tool. Include explicit defaults and hash sorted-key
+UTF-8 JSON without extra whitespace with SHA-256; fix raw-byte hash and tool
+schema/hash too. The broker creates invocation IDs and binds them to steps;
+model-generated UUIDs are not trusted invocation identities.
 
-现有 `Queue.enqueue` 使用独立连接，不能覆盖提交后入队前的崩溃窗口。A01 须增加
-事务内派发适配：**业务 Job、agent step/link、幂等回执、提交审计和 Procrastinate
-持久 task 记录使用同一 PostgreSQL 事务**，通知随提交可见，失败一起回滚。已安装的
-Procrastinate `Task.configure(connection=...).defer_async` / `JobManager.defer_job_async`
-接受外部连接；适配从 SQLAlchemy 当前事务取得底层 psycopg 连接，只借用、不另开事务、
-不自行 commit/close。接口归于 [queue.py](../../server/app/jobs/queue.py)，锁定依赖见
-[uv.lock](../../uv.lock)；批准后须用真实 PostgreSQL 验证连接与回滚，不以接口存在宣称
-已完成。原有非 agent 命令的队列路径不因此被宣称已自动恢复。
-外部工作不在事务中；命中已有 job 时记录 reuse。
-模型没有执行任意数据库语句的能力。没有原子关联或可查询幂等回执的写命令不得纳入工具。
+Non-agent `Queue.enqueue` uses a separate connection and leaves a crash window
+between commit/enqueue. A01 uses `Queue.enqueue_in_transaction`: **business Job, agent
+step/link, idempotent receipt, submission audit and durable Procrastinate task
+record share one PostgreSQL transaction**. Notifications become visible with
+commit; failures roll back together. Installed Procrastinate
+`Task.configure(connection=...).defer_async` / `JobManager.defer_job_async` accepts
+an external connection. Borrow the current SQLAlchemy transaction's underlying
+psycopg connection without opening a transaction or committing/closing it.
+The adapter is [Queue.transaction_connection/enqueue_in_transaction](../../server/app/jobs/queue.py);
+dependency lock: [uv.lock](../../uv.lock). Verify real PostgreSQL connection/rollback behavior;
+interface availability is not implementation proof. This does not claim automatic
+recovery for all non-agent queue paths. External work is outside transactions;
+existing-job hits record reuse. The model cannot execute SQL. Exclude writes
+without atomic linkage or queryable idempotent receipts from the tool set.
 
-所有 step/session/checkpoint 发布与失败处理都检查 session 未取消、expected revision、
-current_job_id/current_run_id、该 Job 的 live lease，并对 step 的 revision/state 做 CAS，
-再检查当前权限与输入。created_by_job_id/run_id 永远保留最初来源；新控制片段可以在
-自己有效 claim 下推进 waiting_job → completed，更新 step revision/last_transition，
-不能用旧创建 attempt 的 lease 拒绝合法恢复。child job 的 run_id 单独从其 Job 读取。
-终态 step 不可修改，过程转换及来源另写审计。仅检查
-最后一个 session update 不够，子 job 提交前也须 fence。旧 attempt 可按真实用量结算，
-不能继续派发、记录成功 step 或覆盖新状态。沿用
-[后台作业机制](../notes/background-jobs.md)的 heartbeat 与取消，不另造一套租约。
+Every step/session/checkpoint publication and failure transition checks no cancel,
+expected revision, current_job_id/current_run_id, live Job lease and step
+revision/state CAS, then current permission/input. Preserve created_by_job_id/run_id
+forever. A new valid controller claim may advance waiting_job → completed and
+update revision/last_transition; the old creating attempt's lease cannot reject
+valid recovery. Read the child's run_id from its own Job. Terminal steps are
+immutable; transitions/provenance get separate audit. A final session-update fence
+alone is insufficient: fence child submission too. Old attempts may settle real
+usage but cannot dispatch, publish a successful step or overwrite newer state.
+Reuse [background-job](../notes/background-jobs.md) heartbeat/cancellation leases.
 
-新增启动及最长 30 秒周期的业务恢复器，以内部 Procrastinate 的 `bid.agent_wake`
-任务作为持久唤醒链：start 与每个非终态 checkpoint 同事务保存下一条 wake（仅含
-org/session IDs，带有界 scheduled_at）；前一个 wake 只有在后继记录提交后才完成。
-恢复器可扫描这些内部队列元数据的 todo/doing 记录，对失联 wake 重新调度；活动会话
-对应的最后一个 wake 在业务终态前不得被队列清理。崩溃在提交前全部回滚，提交后则
-必有 wake；无需先成功 enqueue 才发现 org，也不引入跨单位业务查询例外。
-获取 IDs 后逐一 `Database.transaction(org_id)` 检查会话、锁定 queued、过期 running、
-waiting_job 与待推进 checkpoint；模型不能写队列。paused wake 仅查到期，不调用模型。
-恢复器本身由 worker 正常生命周期持续调度；DB 不可用时保留记录，恢复后接续，不承诺
-停机时仍在 30 秒内推进。延期投递、派发回滚和重复唤醒均保持幂等。
+Add startup recovery and a cycle of at most 30 seconds, with internal
+Procrastinate `bid.agent_wake` tasks as a durable wake chain. Start and every
+nonterminal checkpoint save the next wake atomically, containing only org/session
+IDs and bounded scheduled_at. Finish the prior wake only after its successor
+commits. Recovery can inspect internal queue todo/doing metadata and reschedule
+lost wakes. Retain an active session's last wake until business terminal state.
+Before-commit crashes roll back; after-commit crashes leave a wake. Discovering
+orgs does not depend on a successful later enqueue and creates no cross-org
+business exception. With IDs, use `Database.transaction(org_id)` individually to
+check/lock queued, expired running, waiting_job and checkpoints. Models cannot
+write the queue. Paused wakes only check expiry, without model calls. Recovery
+runs throughout the worker lifecycle. DB outages retain records for continuation;
+there is no promise of progress within 30 seconds while down. Delays, dispatch
+rollbacks and duplicate wakes remain idempotent.
 
-恢复先读 step 和关联 job：已完成步骤直接复用；已提交子 job 重连其状态；仍持有 live
-lease 的 job 不接管；过期 job 仅在其既有 retry 规则内恢复，累计调用、花费和输入不清零。
-等待 job 期间的控制片段不持锁等候，单 worker 槽也不会因父 job 等子 job 死锁。
-已结算且已保存的模型决定不再生成。若请求已准入但决定未持久保存，或 VendorCall 为
-pending/unknown，标 step=uncertain 并暂停 recovery，保留预约；不能声称跨厂商 HTTP
-exactly-once 或静默再付一次钱。恢复须核实账本和已存结果；无法确认的步骤终止，由人
-另开会话。A01 不新增自动对账或释放未知预约的权限。
+Recovery reads step/linked job first: reuse completed work, reconnect submitted
+children, do not take over a live lease, and recover expired jobs only within
+existing retry rules without clearing cumulative calls/cost/input. Controllers
+do not hold locks while waiting, preventing a parent/child deadlock with one
+worker slot. Persisted settled decisions are never regenerated. If an admitted
+request lacks a persisted decision, or VendorCall is pending/unknown, mark
+step=uncertain, pause for recovery and preserve holds. Do not claim exactly-once
+vendor HTTP or silently pay again. Verify the ledger/stored results; unprovable
+steps terminate and the human opens a new session. A01 grants no automatic
+reconciliation or unknown-hold-release authority.
 
-`services/jobs.status/cancel` 必须对 kind=agent 及关联子 job 追加所属会话/当前身份检查。
-所有取消途径都关闭父会话准入；仅本会话 owned=true 的 job 才可自动取消，复用历史 job
-不得连带取消其他工作。已准入调用可在原供应商 deadline 内结算，随后禁止业务发布；
-取消不是退款，也不能中断记账后假报零费用。
+`services/jobs.status/cancel` adds session/current-identity checks for kind=agent
+and linked children. Every cancellation path fences parent admission. Automatically
+cancel only owned=true jobs; reused historical jobs cannot cancel other work.
+Admitted calls may settle within their original vendor deadline, then cannot
+publish business results. Cancellation is not a refund; do not interrupt
+accounting and report zero cost.
 
-## Provider、上下文和计量
+## Providers, context and metering
 
-`AgentReasoningProvider` 扩展既有 `LLMProvider`，新增
-`decide(AgentDecisionRequest) -> AgentDecisionOutput`；一次返回 `tool/human_action/complete`
-之一，不提供推理链字段、不并行执行多个工具。`AgentToolProvider.definitions/invoke/recover`
-负责工具发现、受权提交和幂等恢复；`AgentRecoveryProvider.wake` 仅是内部调度协议，
-不暴露为工具。协议声明不是实现，也不是允许在业务模块中导入厂商 SDK。
+`AgentReasoningProvider` extends `LLMProvider` with
+`decide(AgentDecisionRequest) -> AgentDecisionOutput`. Return exactly one
+ tool/human_action/complete decision, without chain-of-thought fields or parallel
+tools. `AgentToolProvider.definitions/invoke/recover` discovers tools, submits
+under authorization and recovers idempotently. `AgentRecoveryProvider.wake` is an
+internal scheduling protocol, not a tool. Declaring protocols is not implementation
+and does not authorize vendor SDK imports in business modules.
 
-拟实现放在 providers 下，经 `resolve_llm/with_reasoning` 选择并固定模型/配置/价目修订，
-用 `structured.json_request/json_call`、`HTTPExtractor.post`、`accounted_call`。现有
-json_call 只返回 wire 结果、不返回其已结算 usage；拟在 Provider 内增加返回
-`(validated_decision, trusted_provider_usage)` 的共用 helper，并让原 json_call 保持原返回
-契约。**模型输出 schema 仅为 AgentDecision**；adapter 用 HTTP 返回的可信 usage
-组装 AgentDecisionOutput，绝不让模型填写 ProviderUsage，也不把该 wrapper 作为 wire。
-供应商
-strict schema 必须由选中工具的具体分支展开，不能直接对任意 dict 参数调用
-`strict_schema`：该函数会封闭对象并破坏开放字典含义。工具定义中的 JSON Schema 是
-输入给模型的受信数据，返回值使用 `AgentDecision` 的闭合、带 discriminator 的结构。
-未知命令/额外参数/伪造结果均拒绝；有限网络重试最多沿用三次实际请求，仍逐次计量。
+Implement under providers; `resolve_llm/with_reasoning` selects/fixes model,
+configuration and price revisions. Reuse structured.json_request/json_call,
+HTTPExtractor.post and accounted_call. Preserve json_call's wire-result return
+contract; add a shared Provider helper returning
+`(validated_decision, trusted_provider_usage)`. **Only AgentDecision is the model
+output schema.** Build AgentDecisionOutput from trusted HTTP usage; the model
+cannot fill ProviderUsage and the wrapper is not the wire schema. Expand vendor
+strict schemas using concrete selected-tool branches. Do not call strict_schema
+on arbitrary dict arguments: it closes objects and destroys open-dictionary
+semantics. Tool JSON Schemas are trusted model input; returned AgentDecision is
+closed and discriminated. Reject unknown commands, extra arguments and forged
+results. Bounded network retries permit at most three real requests, all metered.
 
-模型仅收到本会话用户消息、服务端筛选的当前 task/extraction 数据、已验证工具结果
-投影、工具 schema 和剩余限额。每次外发先替换登记值，再执行
-[redaction.py](../../server/app/services/redaction.py) 的遮挡；要求遮挡开启并固定其修订，
-关闭或变化会暂停。原文件、签名 URL、值尾号、凭据、无关材料、整段 job.submission 和
-原始厂商输出不进入上下文。对话保存加密原输入，公共消息只返回脱敏内容；拒绝日志中的
-正文回显。当前消息最长 8,000 字符，单结果投影上限 64 KiB，单次模型请求序列化上限
-128 KiB；超限暂停要求缩小选择，不静默截断引用或假装读完全文。模型最多接收 40 条
-消息；达到边界首片暂停，不调用额外模型做不可审查的自动摘要。不实现记忆检索，
-因此不伪填“已使用记忆”。人类可读概要和工具回执可以保存，隐藏推理过程不保存。
+Model context contains only session human messages, server-selected current
+task/extraction facts, verified result projections, tool schemas and remaining
+limits. Before every outbound call replace registered values, then apply
+[redaction.py](../../server/app/services/redaction.py). Require redaction on and
+fix its revision; disablement/change pauses. Exclude original files, signed URLs,
+value suffixes, credentials, unrelated materials, whole job.submission and raw
+vendor outputs. Store encrypted original messages; public messages are redacted.
+Never echo bodies in refusal logs. A message is at most 8,000 characters, a result
+projection 64 KiB, a serialized model request 128 KiB. Exceeding bounds pauses to
+reduce selection; never silently truncate citations or claim complete reading.
+At most 40 messages enter a request; at the boundary pause rather than pay for an
+unreviewable automatic summary. Memory retrieval is excluded, so do not invent
+“memory used” claims. Human-readable summaries/receipts may persist; hidden
+reasoning does not.
 
-每次模型 HTTP（包括决策、子作业生成、重试、被拒、截断和取消后的响应）走
-`HTTPExtractor.post/accounted_call → JobExecution.admit → VendorCall → HTTP 请求 → complete → UsageRecord`。
-响应先记账再解释；唯一键沿用 `(org_id,job_id,run_id,call_id)`。ProviderUsage 直接导入；
-在 job 执行上下文中已即时结算，AgentDecisionOutput.usage 只描述该次调用，消费者不再
-插入一条 UsageRecord。没有真实供应商调用的读工具/组表不创建空用量记录。
+Every model HTTP call, including decisions, child generation, retries, refusals,
+truncation and post-cancel responses, follows
+`HTTPExtractor.post/accounted_call → JobExecution.admit → VendorCall → HTTP → complete → UsageRecord`.
+Account before interpreting responses; preserve `(org_id,job_id,run_id,call_id)`
+uniqueness. Import ProviderUsage directly. Job execution already settles it;
+AgentDecisionOutput.usage describes this call and consumers insert no duplicate
+UsageRecord. Reads/assembly without real vendor calls create no empty usage rows.
 
-父会话费用是**直属 decision 用量 + 自有工具子 job 用量的 ID 去重汇总**；不复制
-UsageRecord、不额外扣余额。每个控制 job 的 `AgentJobResult.cost` 只含它自身费用，
-会话聚合放 `AgentSessionView.cost`，不能相加重复统计。历史缓存命中 `owned=false` 的
-新增费用为零，原 job 可保留历史费用供查看但不进入本会话消费。仍在运行的别人 job
-首片不接管；它完成后只能引用结果，不能取消或让其账单属于两个会话。
+Session cost is **direct decision usage plus owned tool-child usage, deduplicated
+by usage ID**. Never copy UsageRecord or debit again. Each controller
+AgentJobResult.cost contains only its own cost; session aggregates belong in
+AgentSessionView.cost. Adding both duplicates costs. Historical cache hits with
+owned=false have zero new session cost; their old job cost remains readable but
+excluded. Do not take over another running job; after completion only reference
+its result, without cancellation or assigning its bill to two sessions.
 
-供应商 USD 与平台结算币种分开：Result.cost.usd 是供应商成本；平台 charge、未结
-预约、币种与 unpriced/unresolved 计数在 `AgentCostView`。单位自带模型仍记录
-provider_config_id、token 和成本，平台 charge 为零；不能因零平台 charge 无视外部费用。
-价格未知保留 null，首片不准入无法强制成本上界的付费调用；未知费用不能变成 0。
-准入、结算失败及实际费用突破预约的处理沿用
-[预付账本](../notes/prepaid-billing.md#admission-and-the-spending-bound)，不声称可以强制
-不遵守 token 上限的供应商。超预约仍记真实费并停止后续调用。
+Keep vendor USD separate from platform currency. Result.cost.usd is vendor cost;
+AgentCostView holds platform charge, unresolved holds, currency and
+unpriced/unresolved counts. BYOK retains provider_config_id, tokens and cost with
+zero platform charge; external expense still matters. Unknown price remains null;
+reject paid admission without an enforceable upper bound rather than treating it
+as zero. Admission, settlement failure and bound overruns follow the
+[prepaid ledger](../notes/prepaid-billing.md#admission-and-the-spending-bound).
+Do not promise control over a vendor ignoring token caps. Retain real overrun cost
+and stop subsequent calls.
 
-## 预算暂停与硬限额
+## Budget pauses and hard limits
 
-任务预算只依赖 **contract-budget / `docs/plan/budget.md`**。A01 需要它为固定计划、
-输入/模型/价格修订及已结/未结调用提供预检与逐调用准入，返回需要人处理的引用；
-这些接口名称、额度字段、审批主体、预留规则及锁顺序由该稿定义，不在此另建预算模型。
-`BudgetDependencyRef` 仅持有 question/revision 引用，不是票据、凭据或审批决定。
+[Budget contract](budget.md), [Task budgets](../notes/task-budgets.md) and
+[ADR 0007](../adr/0007-task-budget-reservations.md) own task admission, fixed
+input/model/price revisions, settled/unsettled exposure and human intervention.
+A01 adapts their typed preflight/intervention interfaces; it does not create a
+second budget/approval model. BudgetDependencyRef holds opaque question/revision
+references, never a spending ticket, credential or approval. Budget increases use
+the existing human budget-change entry point; that contract does not imply a
+standalone reusable approval token or generic pause/resume service.
 
-在首个付费决策前也执行预算预检；之后每个工具先调用其原 `--dry-run`，计划变化、
-重试、拆批和子 job 内部请求均通过预算依赖重新准入。收到需人工处理结果时，先持久
-pause 和已知计划摘要，再让 API/CLI 展示问题，不发送超预算请求。若依赖未可用，返回
-`budget_dependency_unavailable`，不能临时用 task.budget_usd 自行计算。现有 dry-run
-只有首轮费用上界，不能当作整个 agent 计划的最终费用承诺。
+Preflight precedes the first paid decision. Each subsequent tool uses its original
+dry-run; plan changes, retries, splitting and internal child calls reenter budget
+admission. Persist pause and known plan summary before showing intervention via
+API/CLI, without sending over-budget calls. An unavailable dependency returns
+budget_dependency_unavailable; never calculate an alternative from task.budget_usd.
+Existing dry-run bounds cover the first pass, not the entire agent plan.
 
-人通过 budget 契约的独立入口调整或批准，resume 仅带其引用并在服务端验证当前状态、
-主体、计划和修订。模型文本、过期批准、价格或输入改变不能续用旧决定；单位余额不足
-仍由已有预付账本拒绝，人的预算回答不能绕过欠费。一次拒绝不会触发自动换模型或拆小
-调用来规避询问。被预算服务永久拒绝时停止，已有独立成果可以作为 partial 返回。
+Humans resolve intervention through budget commands. Resume supplies a reference
+and validates current state, principal, plan and revisions server-side. Model text,
+stale approval or changed price/input cannot reuse an old decision. Prepaid
+insufficiency still rejects; a budget answer cannot bypass debt. Refusal cannot
+trigger automatic model switching or splitting to avoid asking. Permanent budget
+rejection stops work; independent valid outputs may yield partial completion.
 
-`AgentLimits` 是本会话额外的不可扩张安全上限，不替代任务预算。推荐默认 24 steps、
-32 个实际 vendor calls、900 秒活动时间、24 小时总生存期；服务器最多允许 64 steps、
-64 calls、3,600 秒活动时间。成本由人明确填写 max_vendor_usd、max_platform_charge
-及系统币种，建议交互初值 USD 2 的供应商成本；平台金额按本单位结算币种显式输入，
-不做隐含汇率换算。平台付费不能以 charge=0 准入；单位自带模型可为 0。
+AgentLimits are additional immutable session ceilings, never a task-budget
+replacement. Adopt defaults of 24 steps, 32 actual vendor calls, 900 active seconds
+and a 24-hour lifetime; server maxima are 64 steps, 64 calls and 3,600 active
+seconds. Humans explicitly provide max_vendor_usd, max_platform_charge and currency.
+A vendor USD 2 input suggestion is permitted; platform amount is explicit in the
+org currency, without implied exchange conversion. Paid platform work cannot
+admit charge=0; BYOK may use zero platform charge.
 
-这些计数跨控制 job、工具子 job、attempt、恢复与 resume 累计。所有付费后代调用准入
-必须同时检查会话剩余步数/时间/费用/未结预约与 task budget，再执行原 job/余额门禁，
-不能只在工具提交前检查。共用调用准入扩展要与 budget 契约锁顺序对齐后才能启用 A01。
-成本上限同时约束供应商 USD 和平台 charge，未知价格阻止执行。总调用数不沿用单 job
-按批次自动扩大的上界来扩大父会话上界。
+Counters span controllers, children, attempts, recovery and resume. All paid
+descendant admissions check remaining session steps/time/cost/holds and task
+budget, then existing job/balance gates; checking only tool submission is
+insufficient. Shared admission must follow budget lock ordering before A01 is
+enabled. Enforce both vendor USD and platform charge; unknown prices block.
+A job's batch-expanded call ceiling cannot enlarge its parent session ceiling.
 
-活动时间含 queued/running/waiting_job、重试退避和故障停机，paused 人工等待不计，
-但仍受总生存期约束。active_since 在 DB 持久化，checkpoint 按数据库时间累加，重启
-不能把遗失时间当 0。每次真实 HTTP deadline 收紧为 Provider 原期限、剩余活动时间、
-总到期时间中最短者；取消/超时后的结算可以完成但不能再次派发。恢复器终止到期会话。
-达到硬 step/time/cost/call 上限时终止，不通过“批准”在同会话加大上限；另开会话仍受
-同一任务预算与既有未结预约约束。
+Active time includes queued/running/waiting_job, retry backoff and downtime;
+paused human waiting does not count but lifetime still applies. Persist
+active_since and accumulate checkpoints with database time; restart cannot turn
+lost time into zero. Each HTTP deadline is the minimum of Provider deadline,
+remaining active time and lifetime expiry. Post-cancel/timeout settlement may
+complete without redispatch. Recovery terminates expired sessions. Reaching a hard
+step/time/cost/call ceiling terminates; human approval cannot raise it in that
+session. A new session remains subject to the same task budget/outstanding holds.
 
-## 审计与 A02 来源标记
+## Audit and A02 provenance
 
-在已有 `audit_logs` 中拟增可索引的 `actor_kind`、`initiated_by`、`agent_principal_id`、
-`agent_session_id`、`agent_step_id`、`invocation_id`、`job_id`、`run_id`，保留已有
-actor_user_id/actor_token_id。新字段可空以兼容历史；新 agent 事件按 `AgentProvenance`
-验证组合关系，所有 tenant 对象外键带 org。历史回填只能使用可靠记录，不能把空 token
-一律当成人。审计仍仅追加，业务变更及其成功审计同一事务；失败事件另写，不改写历史。
+Add indexable audit_logs actor_kind, initiated_by, agent_principal_id,
+agent_session_id, agent_step_id, invocation_id, job_id and run_id while preserving
+actor_user_id/actor_token_id. Nullable columns preserve history. New agent events
+validate AgentProvenance combinations; all tenant references include org.
+Backfill only reliable history, never classify every null token as human.
+Audit remains append-only; successful business writes/audit share a transaction.
+Failures write separate events, never revise history.
 
-即时执行者与发起来源分开：builtin_agent 带 principal/session/step，代表当前人类
-Membership 的缩减授权；后台发布的 actor_kind 是 worker，initiated_by 仍为
-builtin_agent。A02 外部调用必须从已验证 ApiToken 获得 token ID 与 owner，标记
-external_agent/token，不能从请求 JSON 或自报 User-Agent 接收身份。首片把 API token
-发起的命令统一显示为“令牌自动化”，不声称能识别背后一定是某种模型；具体产品名称
-留给 A02 独立契约。A02 不创建 A01 会话、不使用其恢复或预算回答入口。
+Separate immediate actor from origin. builtin_agent identifies principal/session/
+step under current human Membership's reduced authority. A publishing worker has
+actor_kind=worker and initiated_by=builtin_agent. A02 gets token ID/owner only
+from verified ApiToken authentication and marks external_agent/token; JSON and
+self-reported User-Agent cannot supply identity. Initially display token commands
+as “token automation” (令牌自动化), without asserting that a model is behind them.
+Product-specific names need A02's own contract. A02 creates no A01 session and
+uses neither its recovery nor budget-answer entry points.
 
-事件建议 `agent.session.started/resumed/cancelled/completed/failed`、
-`agent.decision.started/completed/uncertain`、`agent.tool.submitted/completed/failed`、
-`agent.pause.created/resolved`、`agent.recovery.claimed`、`agent.limit_reached`。统一命令层
-为 token 调用增加 `command.invoked/completed/failed`，读取调用也留痕；明确 dry-run
-保持零写入，不为调用审计破坏它。变更事件保留命令、对象/修订 IDs、哈希、拒绝原因和
-费用关联，不保存对话、正文、完整参数、模型输出、凭据、签名链接或保密值。
+Use events agent.session.started/resumed/cancelled/completed/failed,
+agent.decision.started/completed/uncertain, agent.tool.submitted/completed/failed,
+agent.pause.created/resolved, agent.recovery.claimed and agent.limit_reached.
+The shared command layer adds command.invoked/completed/failed for token calls,
+including reads. Explicit dry-run remains zero-write, including invocation audit.
+Events retain commands, object/revision IDs, hashes, refusal reasons and cost
+references; exclude conversation/bodies/full arguments/model output/credentials/
+signed links/confidential values.
 
-卡片/生成 run/draft 的公开 view 拟增加只读 `AgentProvenance | null`；下游人工编辑保留
-历史 agent 来源并记录新的人工作者，不能洗掉来源，也不把人实际确认标为 agent 确认。
-来源从可信 job/step 传递，不靠扫描审计 details 临时猜测。具体数据库记录可通过现有
-model_job_id/生成 run 加 org 关联解析，直接工具写入时必须同事务保存来源引用。UI 据此
-显示内置 agent 或令牌自动化标记；展示边界作为契约交付，首片不实现 Vue 页面。
+Public card/generation-run/draft views expose readonly AgentProvenance | null.
+Human edits retain historical agent origin plus the new human actor; neither
+launder origin nor label actual human confirmation as agent confirmation.
+Provenance flows from trusted job/step links, not guesses from audit details.
+Existing model_job_id/generation-run org relations may resolve records; direct
+tool writes save provenance references atomically. UI consumes this contract for
+built-in-agent/token-automation markers; Vue pages are outside this slice.
 
-## Result、退出码与失败模式
+## Result, exit codes and failure modes
 
-所有新命令外层直接使用 `Result`：**ok、command、data、items、warnings、cost、duration_ms**
-七键，不加 status/version/agent 顶层字段。详情和变更的 items=[]；列表 data 只含分页，
-items 使用上文公共 views。错误 `data=AgentFailureData`，即 `data.error.code/message/retryable`
-加本单位可见的关联 IDs；不泄漏 traceback/输入。模型和工具的内部 Protocol wrapper
-不是 CLI envelope。示例中的 UUID/耗时仅表示格式：
+Every new command uses Result directly: **ok, command, data, items, warnings,
+cost, duration_ms**, without extra status/version/agent top-level fields.
+Detail/mutation items=[]; list data contains pagination and items contain public
+views. Errors use AgentFailureData with data.error.code/message/retryable and
+org-visible linked IDs; never traceback/input. Internal Protocol wrappers are
+not CLI envelopes. UUIDs/timing below illustrate format only:
 
 ```json
 {
@@ -400,7 +517,7 @@ items 使用上文公共 views。错误 `data=AgentFailureData`，即 `data.erro
   "data": {
     "error": {
       "code": "budget_confirmation_required",
-      "message": "预算待办尚未由人处理",
+      "message": "The budget intervention still requires human action",
       "retryable": false
     },
     "session_id": "00000000-0000-0000-0000-000000000001",
@@ -413,83 +530,107 @@ items 使用上文公共 views。错误 `data=AgentFailureData`，即 `data.erro
 }
 ```
 
-| 退出码 | HTTP/会话语义 |
+| Exit | HTTP/session meaning |
 | --- | --- |
-| 0 | 成功预检/受理/读取/合法取消；queued/waiting_job/paused 的正常查询是 0，明确显示未完成。控制 job 成功仅表示 checkpoint。会话完整完成查询为 0 |
-| 2 | 400/422 非法参数，409 revision/幂等键冲突、已终态不能续跑，预算/人工待办尚未处理的 resume；修正输入或先处理待办 |
-| 3 | 429/503 队列或 DB 暂不可用，Provider 有界暂时故障；保留会话及幂等键，可重试但不得越过次数/时限。显式查询可重试 failed 会话也映射 3 |
-| 4 | 401 无认证、403 无动作权限、404 不存在/无权资源，永久拒绝、取消后的运行结果、硬限额、未知用量/记账失败、协议不符或无法安全恢复；不自动绕过 |
-| 5 | 会话或子 job 有已发布独立有效成果，同时存在明确失败/缺口，ok=false；不得把“还在等人”或只有费用无成果当成部分成功 |
+| 0 | Successful preview/admission/read/legal cancel. Normal queued/waiting_job/paused reads explicitly show unfinished state. Controller success means checkpoint only; complete session reads exit 0. |
+| 2 | 400/422 invalid input; 409 revision/key conflict, terminal resume or unresolved budget/human intervention. Correct input or handle intervention first. |
+| 3 | 429/503 temporary queue/DB outage or bounded Provider transient failure. Preserve session/key and respect attempts/deadlines. Explicit reads of retryable failed sessions also map to 3. |
+| 4 | 401 unauthenticated, 403 forbidden action, 404 absent/inaccessible resource; permanent refusal, cancelled run outcome, hard ceiling, unknown usage/accounting failure, invalid protocol or unsafe recovery. No bypass. |
+| 5 | Session/child has independently valid published outputs plus a clear failure/gap, ok=false. Waiting for a human or cost without output is not partial success. |
 
-`agent show` 对 terminal 会话按其结果给出 0/3/4/5，并仍返回 AgentShowData；历史 list、
-messages、steps 的成功读取为 0，内部失败事实不改写。会话聚合 cost 由 session.cost
-提供；show 外层 cost 同该聚合，列表/纯控制请求外层为零。本地与远程保持相同语义，
-隐私读取失败统一 404，不通过错误差异暴露别人的会话存在性。
+Agent show returns terminal outcome 0/3/4/5 while retaining AgentShowData.
+Successful historical list/messages/steps reads exit 0 despite internal failures.
+Session cost is session.cost; show's outer cost equals the aggregate. Lists/pure
+control requests have zero outer cost. Local/remote semantics match. Private
+read failures uniformly return 404 without leaking another session's existence.
 
-| 失败模式 | 处理要求 |
+| Failure | Required behavior |
 | --- | --- |
-| 提示注入、假命令/IDs、敏感读/确认/导出企图 | broker 白名单与父链/actor 双重拒绝；安全动作需求改为人类待办，恶意参数不回显 |
-| 选中卡片/材料/模型/schema/遮挡修订改变 | 暂停并重新预检；不能自动扩大输入或覆盖人确认内容 |
-| 排队投递丢失、worker 重启、重复派发、旧 lease 返回 | 按持久 step/link 恢复、live run_id fence；重放不重做完成步骤、不再扣费 |
-| 未知供应商结果或计量落库失败 | 保留预约、停止并提示 recovery；不自动重发或归零 |
-| budget 依赖缺失、超任务预算、平台余额不足 | 分别阻止准入/暂停问人/沿用账本拒绝；互相不能替代 |
-| 硬限额、取消、Membership/委托到期 | 封闭后续调用；已有调用结算但不发布；授权到期可在剩余额度内由人续权 |
-| Provider 拒绝/非法 JSON/上下文超限 | 固定安全错误，不保存任意输出；有限暂时错误重试不扩大输入/价格/权限 |
-| 生成 partial、受保护卡片或 draft gaps | 保存可核验成果及真实缺口，不能自动确认或吞掉失败后宣称完整 |
+| Prompt injection, forged commands/IDs, sensitive reads/confirmation/export | Allowlist plus parent-chain/actor rejection; safe action needs become human tasks; do not echo malicious input. |
+| Changed card/material/model/schema/redaction revision | Pause/re-preflight; do not expand input or overwrite human confirmation. |
+| Lost dispatch, worker restart, duplicate dispatch, old lease returns | Recover persistent step/link with live run fences; never repeat completed steps/charges. |
+| Unknown vendor outcome or accounting persistence failure | Retain hold, stop for recovery, no automatic resend/zeroing. |
+| Missing budget dependency, task cap, prepaid insufficiency | Block admission/pause for human/existing ledger rejection respectively; these gates cannot substitute for one another. |
+| Hard ceiling, cancellation, Membership/delegation expiry | Fence new calls; settle admitted calls without publication. Same human may renew authority within remaining ceilings. |
+| Provider refusal/invalid JSON/context overflow | Fixed safe error; no arbitrary output persistence. Bounded temporary retries cannot expand input/price/authority. |
+| Partial generation/protected cards/draft gaps | Preserve verifiable work and actual gaps; never auto-confirm or conceal failure as completion. |
 
-## 批准后的测试计划
+## Acceptance requirements
 
-验收从 CLI/API → 真 PostgreSQL/RLS → 真实队列 worker → fake Provider → 人类原入口
-→ draft 的端到端链路进行；以下是拟实施测试，本草案的静态检查不证明运行时行为。
+Acceptance uses CLI/API → real PostgreSQL/RLS → real queue worker → fake Provider
+→ original human entry point → draft. Database-free contract, broker, Provider and
+CLI checks cannot establish RLS, transactional dispatch or concurrent settlement.
+[Workflow scenarios](../../server/tests/test_agent_workflow.py),
+[storage scenarios](../../server/tests/test_agent_storage.py) and
+[API scenarios](../../server/tests/test_agent_api.py) provide executable entry
+points; the requirements below also include crash and concurrency cases beyond
+a successful workflow. Follow [development checks](../guides/development.md#run-the-checks)
+for a disposable PostgreSQL environment. Keep reproducible Results, synthetic
+inputs and JUnit outside `docs/`.
 
-1. **逐表双单位**：对六个新表逐一测试 A 读/插入/修改/删除 B 与无 org 上下文、RLS
-   FORCE、非属主角色、复合 FK 的跨 org/同 org 跨 task/session 混绑。测试新审计关联和
-   job 链接、只追加/终态触发器、真实 actor、scope 缩减与 owner-only，不只测 SELECT。
-2. **逐路由双单位**：对接口表每个 GET/POST（含 messages/steps/list/cursor/start
-   dry-run/resume/cancel、既有 job status/wait/cancel 的 agent 分支）验证 A 访问 B 与
-   不存在均 404；所有者之外的同单位用户也 404，平台运营身份无单位旁路；队列和模型
-   输入不得含 B 的合成 canary。成功/错误/列表/权限撤回均覆盖。
-3. **人工门禁**：API token 请求 evidence:confirm/export/confidential:write/reveal
-   必拒绝；agent principal 直接调用原 human-only API、数据库门禁、工具、子 worker
-   均不能确认、重开/覆盖 confirmed/pending/comply-only、原型处置、导出或揭示值。
-   原 bidder/technical 人类职责仍能正向确认；未确认证据始终不能 draft/export。
-4. **完整链路与可信数据**：合成成功 extraction → req/card 读取 → generation dry-run
-   → fake 结构化决定 → 子 job → 人类确认 → draft → 有引用的最终概要。核对命令 registry、
-   schema/参数/default/hash 与真实 API 一致；模型指令、工具结果、URL/ID 注入不能
-   扩大白名单；遮挡开关变化、原文/值 canary、输出超限、负偏离和卡片冲突均不能被隐藏。
-5. **恢复与并发注入**：每个 checkpoint 前后 SIGKILL、业务/队列同事务提交与回滚、旧
-   run_id 回写、heartbeat 失效、两 worker 同时 resume/cancel、重复幂等键、恢复器重启、
-   单 worker 槽、未知 VendorCall。验证控制 Job 正常终态化、每个非终态 session 都有
-   持久 wake、doing wake 的失联接管、无 pause 的 cancel 幂等回执；已完成步骤/usage
-   不重复；数据服务可用时到期记录在下次巡检处理，旧 attempt 不发布任何 step/业务状态。
-6. **预算与计费**：使用 contract-budget 的测试替身及其集成测试接口，验证首次决定
-   前的预算问题、子 job 内重试/拆批、并发余额与父限额、resume 不清账、过期/变更批准、
-   已结算响应崩溃、缓存历史费用不再计入、新调用精准去重、取消仍结算、单位自带模型
-   未知成本阻止付费、硬时间期限覆盖子调用。预算回答从来不提升业务权限。
-7. **CLI/审计工件**：每个新增命令、每个工具映射的 --json/schema、本地/远程模式和
-   0/2/3/4/5 快照；暂停返回机器可读数据且终端无提问。验证 agent 与 token 来源贯穿
-   步骤、卡片、job、审计，成功写入与审计同事务，dry-run 零写入。保存合成输入、命令、
-   脱敏 Result、usage/余额变化 ID、checkpoint 和 JUnit 到 `artifacts/` 或临时目录，
-   不在 docs 放验证日志或截图，保证同命令可重复核验。
+1. **Every table/two orgs:** A cannot read/insert/update/delete B or operate without
+   org context. Cover FORCE RLS, nonowner roles and composite FK cross-org and
+   same-org cross-task/session binding. Include audit/job links, append-only/terminal
+   triggers, real actors, reduced grants and owner-only access; not SELECT alone.
+2. **Every route/two orgs:** every GET/POST above, messages/steps/list/cursors,
+   start dry-run/resume/cancel and job status/wait/cancel agent branches treat
+   cross-org and missing resources identically as 404. Same-org nonowners also
+   get 404; platform identity has no tenant bypass. Queue/model input excludes
+   B's synthetic canary. Cover success/errors/lists and revoked permissions.
+3. **Human gates:** token requests for evidence:confirm/export/confidential:write/
+   reveal fail. Agent principals cannot confirm, reopen/overwrite confirmed/pending/
+   comply-only cards, decide prototypes, export or reveal through original APIs,
+   database gates, tools or child workers. Original bidder/technical humans retain
+   positive confirmation; unconfirmed evidence never enters draft/export.
+4. **Full workflow/trusted inputs:** synthetic successful extraction → req/card
+   reads → generation preview → fake structured decision → child job → human
+   confirmation → draft → cited summary. Registry/schema/arguments/defaults/hashes
+   match real APIs. Model/result/URL/ID injection cannot expand tools. Redaction
+   changes, original/confidential canaries, overflow, negative deviations and card
+   conflicts cannot disappear.
+5. **Recovery/concurrency:** inject SIGKILL around checkpoints, transactional
+   business/queue commit/rollback, stale run writes, lost heartbeats, concurrent
+   resume/cancel, repeated keys, recovery restart, single worker slot and unknown
+   VendorCall. Verify normal controller termination, durable wakes for every
+   nonterminal session, lost doing-wake takeover and no-pause cancel receipts.
+   Steps/usage never duplicate. Once DB service resumes, expiry is handled at the
+   next sweep; old attempts publish neither step nor business state.
+6. **Budgets/accounting:** integrate implemented budget preflight/admission, with
+   bounded substitutes for injected failures. Cover intervention before first
+   decision, child retries/splitting, concurrent balance/parent ceilings, resume
+   without reset, stale/changed decisions, crash after settlement, historical cache
+   cost exclusion, usage deduplication, cancel settlement, unknown BYOK cost and
+   hard deadlines applying to children. A budget answer never raises authority.
+7. **CLI/audit artifacts:** snapshots for every new command/tool --json/schema,
+   local/remote modes and exits 0/2/3/4/5. Pauses are machine-readable with no
+   terminal questions. Agent/token provenance spans steps/cards/jobs/audit;
+   successful audit is atomic and dry-run writes nothing. Keep synthetic inputs,
+   commands, redacted Results, usage/balance IDs, checkpoints and JUnit in
+   `artifacts/` or an allowed temporary directory, never docs logs/screenshots,
+   so the same commands reproduce verification.
 
-CI 不调用真实厂商，所有外部 Provider 使用假实现/MockTransport；不以假账本证明 RLS
-或并发扣款。获授权的真实模型/网站评测只能在 `evals/`，记录公开输入、固定模型/Schema
-和实际费用，单次运行需满足预算与人工关口。草案核验仅执行 ruff、pyright 和离线导入，
-无需启动 PostgreSQL，不新增运行实现或 changelog 条目。
+CI uses fake Providers/MockTransport, never real vendors. Fake ledgers do not
+prove RLS or concurrent debit safety. Authorized real model/site evaluations live
+in evals with public inputs, fixed model/schema and actual cost, under all budget
+and human gates. Approval alone does not establish that these requirements passed.
 
-## 待决定
+## Decided decisions
 
-| 决定 | 选项 | 推荐默认与理由 |
+All recommended defaults are approved. The alternatives remain here to preserve
+the reviewed choice and reason; they are not open implementation decisions.
+
+| Decision | Adopted choice | Reason and alternative boundary |
 | --- | --- | --- |
-| 首片工具范围 | ① 已抽取任务的七个工具与人工审阅/组表闭环；② 同时加入 parse/extract/搜索/截图/原型 | **①**，已有生成、确认、组表契约可直接复用，先验证付费编排和恢复；其余逐工具立契约接入，不把不存在的 check/score 当工具 |
-| 循环执行位置 | ① worker 的有 checkpoint 控制作业；② API 请求内循环；③ 新 agent SDK 服务 | **①**，复用租约/取消/计量，等待人或子 job 时释放槽位；无需新增大依赖 |
-| 会话可见性 | ① 发起人专有；② 同任务成员共享、管理员可读 | **①**，任务成员权限尚无完整入口，避免把对话隐含开放给全单位；后续共享另立角色契约 |
-| 授权持续时间 | ① 原 session 有效期与 8 小时取较短，过期由同一人续权；② 独立长期委托 | **①**，不存 session 秘密且缩小无人值守窗口；续权不清限额，不能承诺现有 logout 即撤销 |
-| 限额初值 | ① 24 steps / 32 calls / 900 秒活动 / 24 小时生存期，金额显式输入；② 首片更大并允许运行中抬高硬限额 | **①**，使恢复和父子费用上界可测；金额建议 vendor USD 2，平台币种独立填写，任务预算批准不提升硬限额 |
-| 不确定请求恢复 | ① 暂停核实，无法核实则终止另开；② 自动重发并接受可能重复费用 | **①**，现有账本没有厂商自动对账，不能凭 lease 过期释放预约或重复执行 |
-| 外发遮挡与未知价格 | ① 遮挡开启且可计算成本上界才准入；② 允许人给 agent 关闭遮挡或无限额自带模型 | **①**，保持 agent 无保密值能力与硬费用上界；价格/遮挡变化产生暂停，不替人改配置 |
-| A02 标记粒度 | ① API token 统一标为令牌自动化并保留 token ID；② 新增外部 agent 注册身份/产品名称 | **①**，身份来源可由现有认证证明，先共享审计模型；②交 A02 独立契约，不信任客户端自报身份 |
-| 会话内容保留 | ① 首片加密保留且只追加，无自动删除；② 同期增加单位可配保留期与删除 | **①**，先保证恢复与历史账务可追溯；②需明确审计/账本引用和删除恢复边界后另立契约 |
+| First tool set | Seven tools for an extracted task plus human review/assembly | Reuse generation/confirmation/draft contracts and verify paid orchestration/recovery. Parse/extract/search/screenshots/prototypes need individual later contracts; check/score stay excluded. |
+| Loop location | Checkpoint controller jobs in existing worker | Reuse leases/cancellation/metering and release slots for humans/children. No API-request loop or new SDK service/dependency. |
+| Session visibility | Initiating owner only | Task-member permissions have no complete sharing entry point; do not implicitly expose conversations to the org. Shared/admin visibility requires a later role contract. |
+| Authority duration | Earlier of original session expiry and eight hours; same-human renewal | Store no session secrets; reduce unattended authority. Renewal keeps cumulative limits and cannot promise logout revocation. Independent long-lived delegation is excluded. |
+| Default limits | 24 steps / 32 calls / 900 active seconds / 24-hour lifetime; explicit money | Test parent/child and recovery ceilings. Suggest vendor USD 2; platform currency amount is separately explicit. Task budget changes cannot increase session hard limits. |
+| Uncertain recovery | Pause to verify; terminate and open another session if unprovable | Existing ledger has no automatic vendor reconciliation. Lease expiry cannot justify freeing holds or repeating paid work. Automatic uncertain resends are excluded. |
+| Outbound redaction/unknown prices | Redaction enabled and enforceable cost bound required | Agent has no confidential-value access; changes pause without rewriting human config. No redaction-off authorization or unbounded BYOK path. |
+| A02 marker granularity | Token automation with verified token ID | Existing authentication proves the identity. External-agent registration/product names need A02's own contract; client self-identification is untrusted. |
+| Content retention | Encrypted append-only retention, no automatic deletion | Preserve recovery and accounting history. Configurable expiry/deletion requires a later contract for audit/ledger references and recovery. |
 
-上述选项须人工确认后才能实施；任务预算具体规则只在 contract-budget 决定，不在此
-增加第二张预算决定表。批准范围为本页接口与首条链路，其余设计目标仍由路线图维护。
+The approved scope is these interfaces and the first workflow. Budget policy has
+one home in budget.md; do not add a second budget decision table. Other design
+goals remain in the roadmap.

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 from pydantic import ValidationError
 
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
-from app.schemas.contracts import Contract
+from app.schemas.contracts import Contract, ProviderUsage
 
 if TYPE_CHECKING:
     from app.providers.llm import HTTPExtractor
@@ -65,6 +65,14 @@ async def json_call[T: Contract](
     llm: "HTTPExtractor", client, body: dict, wire: type[T], purpose: str
 ) -> T:
     """Send `body` through the accounted HTTP boundary and validate the reply as `wire`."""
+    result, _ = await json_call_with_usage(llm, client, body, wire, purpose)
+    return result
+
+
+async def json_call_with_usage[T: Contract](
+    llm: "HTTPExtractor", client, body: dict, wire: type[T], purpose: str
+) -> tuple[T, ProviderUsage]:
+    """Return the already-settled HTTP receipt; consumers must not meter it again."""
     settings = llm.settings
     headers = {}
     if llm.name == "anthropic":
@@ -112,6 +120,6 @@ async def json_call[T: Contract](
     if not isinstance(content, str):
         raise MalformedOutput([usage])
     try:
-        return wire.model_validate_json(content)
+        return wire.model_validate_json(content), usage
     except ValidationError:
         raise MalformedOutput([usage]) from None

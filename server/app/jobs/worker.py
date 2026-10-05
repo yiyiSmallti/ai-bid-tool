@@ -32,8 +32,10 @@ async def run():
         LocalOCR(settings.ocr_language, settings.ocr_data_dir),
         resolve,
     )
+    queue.processor.queue = queue
     try:
         async with queue.app.open_async():
+            await queue.recover_agent_wakes()
             await queue.app.run_worker_async(queues=["bid"])
     finally:
         from app.core.credential_db import close_connections

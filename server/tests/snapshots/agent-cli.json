@@ -1,0 +1,154 @@
+{
+  "start": {
+    "ok": true,
+    "command": "agent start",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "list": {
+    "ok": true,
+    "command": "agent list",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "show": {
+    "ok": true,
+    "command": "agent show",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "messages": {
+    "ok": true,
+    "command": "agent messages",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "steps": {
+    "ok": true,
+    "command": "agent steps",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "message": {
+    "ok": true,
+    "command": "agent message",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "resume": {
+    "ok": true,
+    "command": "agent resume",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "cancel": {
+    "ok": true,
+    "command": "agent cancel",
+    "data": {},
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  }
+}

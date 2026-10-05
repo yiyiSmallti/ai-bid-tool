@@ -4498,6 +4498,5481 @@
         }
       },
       "commands": {
+        "agent cancel": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "idempotency_key": {
+                "format": "uuid",
+                "title": "Idempotency Key",
+                "type": "string"
+              },
+              "reason": {
+                "default": "user_request",
+                "enum": [
+                  "user_request",
+                  "wrong_input",
+                  "no_longer_needed"
+                ],
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "idempotency_key"
+            ],
+            "title": "AgentCancelRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AgentCostView": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Platform Charge"
+                  },
+                  "reserved_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Platform Charge"
+                  },
+                  "reserved_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Vendor Usd"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "cost",
+                  "platform_charge",
+                  "reserved_platform_charge",
+                  "reserved_vendor_usd",
+                  "billing_currency",
+                  "unpriced_calls",
+                  "unresolved_calls"
+                ],
+                "title": "AgentCostView",
+                "type": "object"
+              },
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentLimits": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "max_active_seconds": {
+                    "default": 900,
+                    "maximum": 3600,
+                    "minimum": 30,
+                    "title": "Max Active Seconds",
+                    "type": "integer"
+                  },
+                  "max_lifetime_seconds": {
+                    "default": 86400,
+                    "maximum": 86400,
+                    "minimum": 60,
+                    "title": "Max Lifetime Seconds",
+                    "type": "integer"
+                  },
+                  "max_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Platform Charge"
+                  },
+                  "max_steps": {
+                    "default": 24,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Steps",
+                    "type": "integer"
+                  },
+                  "max_vendor_calls": {
+                    "default": 32,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Vendor Calls",
+                    "type": "integer"
+                  },
+                  "max_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Vendor Usd"
+                  }
+                },
+                "required": [
+                  "max_vendor_usd",
+                  "max_platform_charge",
+                  "billing_currency"
+                ],
+                "title": "AgentLimits",
+                "type": "object"
+              },
+              "AgentMutationData": {
+                "additionalProperties": false,
+                "properties": {
+                  "deduplicated": {
+                    "default": false,
+                    "title": "Deduplicated",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "message_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Message Id"
+                  },
+                  "pause": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AgentPauseView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "session": {
+                    "$ref": "#/$defs/AgentSessionView"
+                  }
+                },
+                "required": [
+                  "session"
+                ],
+                "title": "AgentMutationData",
+                "type": "object"
+              },
+              "AgentPauseView": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "review_cards",
+                          "export",
+                          "confidential_reveal",
+                          "clarify"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Action"
+                  },
+                  "budget_ref": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetDependencyRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Sha256",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "budget",
+                      "human_action",
+                      "authority",
+                      "recovery"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "question": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Question",
+                    "type": "string"
+                  },
+                  "resolved_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved At"
+                  },
+                  "resolved_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved By"
+                  },
+                  "resource_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Resource Ids",
+                    "type": "array"
+                  },
+                  "session_id": {
+                    "format": "uuid",
+                    "title": "Session Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "resolved",
+                      "cancelled",
+                      "expired"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "step_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Step Id"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "session_id",
+                  "kind",
+                  "status",
+                  "question",
+                  "input_sha256",
+                  "created_at"
+                ],
+                "title": "AgentPauseView",
+                "type": "object"
+              },
+              "AgentSessionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "active_seconds_used": {
+                    "minimum": 0,
+                    "title": "Active Seconds Used",
+                    "type": "integer"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/AgentCostView"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "current_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Job Id"
+                  },
+                  "current_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Run Id"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "title": "Expires At",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "$ref": "#/$defs/AgentLimits"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "pause_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pause Id"
+                  },
+                  "principal_id": {
+                    "format": "uuid",
+                    "title": "Principal Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "waiting_job",
+                      "paused",
+                      "completed",
+                      "partial",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "steps_used": {
+                    "minimum": 0,
+                    "title": "Steps Used",
+                    "type": "integer"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "tool_schema_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Tool Schema Sha256",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "vendor_calls_used": {
+                    "minimum": 0,
+                    "title": "Vendor Calls Used",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "document_id",
+                  "extraction_job_id",
+                  "principal_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "limits",
+                  "steps_used",
+                  "active_seconds_used",
+                  "vendor_calls_used",
+                  "cost",
+                  "tool_schema_sha256",
+                  "created_at",
+                  "expires_at",
+                  "updated_at"
+                ],
+                "title": "AgentSessionView",
+                "type": "object"
+              },
+              "BudgetDependencyRef": {
+                "additionalProperties": false,
+                "description": "Opaque references owned by contract-budget; they never authorize expenditure.",
+                "properties": {
+                  "contract": {
+                    "const": "docs/plan/budget.md",
+                    "default": "docs/plan/budget.md",
+                    "title": "Contract",
+                    "type": "string"
+                  },
+                  "question_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Question Ref",
+                    "type": "string"
+                  },
+                  "revision_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Revision Ref",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question_ref",
+                  "revision_ref"
+                ],
+                "title": "BudgetDependencyRef",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentMutationData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
+        "agent list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cursor"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "AgentListRequest",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "AgentCostView": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Platform Charge"
+                  },
+                  "reserved_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Platform Charge"
+                  },
+                  "reserved_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Vendor Usd"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "cost",
+                  "platform_charge",
+                  "reserved_platform_charge",
+                  "reserved_vendor_usd",
+                  "billing_currency",
+                  "unpriced_calls",
+                  "unresolved_calls"
+                ],
+                "title": "AgentCostView",
+                "type": "object"
+              },
+              "AgentLimits": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "max_active_seconds": {
+                    "default": 900,
+                    "maximum": 3600,
+                    "minimum": 30,
+                    "title": "Max Active Seconds",
+                    "type": "integer"
+                  },
+                  "max_lifetime_seconds": {
+                    "default": 86400,
+                    "maximum": 86400,
+                    "minimum": 60,
+                    "title": "Max Lifetime Seconds",
+                    "type": "integer"
+                  },
+                  "max_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Platform Charge"
+                  },
+                  "max_steps": {
+                    "default": 24,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Steps",
+                    "type": "integer"
+                  },
+                  "max_vendor_calls": {
+                    "default": 32,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Vendor Calls",
+                    "type": "integer"
+                  },
+                  "max_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Vendor Usd"
+                  }
+                },
+                "required": [
+                  "max_vendor_usd",
+                  "max_platform_charge",
+                  "billing_currency"
+                ],
+                "title": "AgentLimits",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "active_seconds_used": {
+                "minimum": 0,
+                "title": "Active Seconds Used",
+                "type": "integer"
+              },
+              "cost": {
+                "$ref": "#/$defs/AgentCostView"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "current_job_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Current Job Id"
+              },
+              "current_run_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Current Run Id"
+              },
+              "document_id": {
+                "format": "uuid",
+                "title": "Document Id",
+                "type": "string"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "title": "Expires At",
+                "type": "string"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "limits": {
+                "$ref": "#/$defs/AgentLimits"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "owner_user_id": {
+                "format": "uuid",
+                "title": "Owner User Id",
+                "type": "string"
+              },
+              "pause_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Pause Id"
+              },
+              "principal_id": {
+                "format": "uuid",
+                "title": "Principal Id",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "state": {
+                "enum": [
+                  "queued",
+                  "running",
+                  "waiting_job",
+                  "paused",
+                  "completed",
+                  "partial",
+                  "failed",
+                  "cancelled"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "steps_used": {
+                "minimum": 0,
+                "title": "Steps Used",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "tool_schema_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Tool Schema Sha256",
+                "type": "string"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              },
+              "vendor_calls_used": {
+                "minimum": 0,
+                "title": "Vendor Calls Used",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "document_id",
+              "extraction_job_id",
+              "principal_id",
+              "owner_user_id",
+              "state",
+              "revision",
+              "limits",
+              "steps_used",
+              "active_seconds_used",
+              "vendor_calls_used",
+              "cost",
+              "tool_schema_sha256",
+              "created_at",
+              "expires_at",
+              "updated_at"
+            ],
+            "title": "AgentSessionView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentPageData": {
+                "additionalProperties": false,
+                "properties": {
+                  "next_cursor": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Next Cursor"
+                  }
+                },
+                "title": "AgentPageData",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentPageData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
+        "agent message": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "idempotency_key": {
+                "format": "uuid",
+                "title": "Idempotency Key",
+                "type": "string"
+              },
+              "message": {
+                "maxLength": 8000,
+                "minLength": 1,
+                "title": "Message",
+                "type": "string"
+              }
+            },
+            "required": [
+              "message",
+              "expected_revision",
+              "idempotency_key"
+            ],
+            "title": "AgentMessageRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AgentCostView": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Platform Charge"
+                  },
+                  "reserved_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Platform Charge"
+                  },
+                  "reserved_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Vendor Usd"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "cost",
+                  "platform_charge",
+                  "reserved_platform_charge",
+                  "reserved_vendor_usd",
+                  "billing_currency",
+                  "unpriced_calls",
+                  "unresolved_calls"
+                ],
+                "title": "AgentCostView",
+                "type": "object"
+              },
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentLimits": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "max_active_seconds": {
+                    "default": 900,
+                    "maximum": 3600,
+                    "minimum": 30,
+                    "title": "Max Active Seconds",
+                    "type": "integer"
+                  },
+                  "max_lifetime_seconds": {
+                    "default": 86400,
+                    "maximum": 86400,
+                    "minimum": 60,
+                    "title": "Max Lifetime Seconds",
+                    "type": "integer"
+                  },
+                  "max_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Platform Charge"
+                  },
+                  "max_steps": {
+                    "default": 24,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Steps",
+                    "type": "integer"
+                  },
+                  "max_vendor_calls": {
+                    "default": 32,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Vendor Calls",
+                    "type": "integer"
+                  },
+                  "max_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Vendor Usd"
+                  }
+                },
+                "required": [
+                  "max_vendor_usd",
+                  "max_platform_charge",
+                  "billing_currency"
+                ],
+                "title": "AgentLimits",
+                "type": "object"
+              },
+              "AgentMutationData": {
+                "additionalProperties": false,
+                "properties": {
+                  "deduplicated": {
+                    "default": false,
+                    "title": "Deduplicated",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "message_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Message Id"
+                  },
+                  "pause": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AgentPauseView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "session": {
+                    "$ref": "#/$defs/AgentSessionView"
+                  }
+                },
+                "required": [
+                  "session"
+                ],
+                "title": "AgentMutationData",
+                "type": "object"
+              },
+              "AgentPauseView": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "review_cards",
+                          "export",
+                          "confidential_reveal",
+                          "clarify"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Action"
+                  },
+                  "budget_ref": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetDependencyRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Sha256",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "budget",
+                      "human_action",
+                      "authority",
+                      "recovery"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "question": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Question",
+                    "type": "string"
+                  },
+                  "resolved_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved At"
+                  },
+                  "resolved_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved By"
+                  },
+                  "resource_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Resource Ids",
+                    "type": "array"
+                  },
+                  "session_id": {
+                    "format": "uuid",
+                    "title": "Session Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "resolved",
+                      "cancelled",
+                      "expired"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "step_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Step Id"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "session_id",
+                  "kind",
+                  "status",
+                  "question",
+                  "input_sha256",
+                  "created_at"
+                ],
+                "title": "AgentPauseView",
+                "type": "object"
+              },
+              "AgentSessionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "active_seconds_used": {
+                    "minimum": 0,
+                    "title": "Active Seconds Used",
+                    "type": "integer"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/AgentCostView"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "current_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Job Id"
+                  },
+                  "current_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Run Id"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "title": "Expires At",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "$ref": "#/$defs/AgentLimits"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "pause_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pause Id"
+                  },
+                  "principal_id": {
+                    "format": "uuid",
+                    "title": "Principal Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "waiting_job",
+                      "paused",
+                      "completed",
+                      "partial",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "steps_used": {
+                    "minimum": 0,
+                    "title": "Steps Used",
+                    "type": "integer"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "tool_schema_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Tool Schema Sha256",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "vendor_calls_used": {
+                    "minimum": 0,
+                    "title": "Vendor Calls Used",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "document_id",
+                  "extraction_job_id",
+                  "principal_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "limits",
+                  "steps_used",
+                  "active_seconds_used",
+                  "vendor_calls_used",
+                  "cost",
+                  "tool_schema_sha256",
+                  "created_at",
+                  "expires_at",
+                  "updated_at"
+                ],
+                "title": "AgentSessionView",
+                "type": "object"
+              },
+              "BudgetDependencyRef": {
+                "additionalProperties": false,
+                "description": "Opaque references owned by contract-budget; they never authorize expenditure.",
+                "properties": {
+                  "contract": {
+                    "const": "docs/plan/budget.md",
+                    "default": "docs/plan/budget.md",
+                    "title": "Contract",
+                    "type": "string"
+                  },
+                  "question_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Question Ref",
+                    "type": "string"
+                  },
+                  "revision_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Revision Ref",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question_ref",
+                  "revision_ref"
+                ],
+                "title": "BudgetDependencyRef",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentMutationData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
+        "agent messages": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cursor"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "AgentListRequest",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "author_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Author User Id"
+              },
+              "content": {
+                "maxLength": 8000,
+                "title": "Content",
+                "type": "string"
+              },
+              "content_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Content Sha256",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "ordinal": {
+                "minimum": 1,
+                "title": "Ordinal",
+                "type": "integer"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "human",
+                  "assistant",
+                  "tool",
+                  "system"
+                ],
+                "title": "Role",
+                "type": "string"
+              },
+              "session_id": {
+                "format": "uuid",
+                "title": "Session Id",
+                "type": "string"
+              },
+              "step_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Step Id"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "session_id",
+              "ordinal",
+              "role",
+              "content",
+              "content_sha256",
+              "created_at"
+            ],
+            "title": "AgentMessageView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentPageData": {
+                "additionalProperties": false,
+                "properties": {
+                  "next_cursor": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Next Cursor"
+                  }
+                },
+                "title": "AgentPageData",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentPageData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
+        "agent resume": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "BudgetDependencyRef": {
+                "additionalProperties": false,
+                "description": "Opaque references owned by contract-budget; they never authorize expenditure.",
+                "properties": {
+                  "contract": {
+                    "const": "docs/plan/budget.md",
+                    "default": "docs/plan/budget.md",
+                    "title": "Contract",
+                    "type": "string"
+                  },
+                  "question_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Question Ref",
+                    "type": "string"
+                  },
+                  "revision_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Revision Ref",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question_ref",
+                  "revision_ref"
+                ],
+                "title": "BudgetDependencyRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "budget_ref": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/BudgetDependencyRef"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "idempotency_key": {
+                "format": "uuid",
+                "title": "Idempotency Key",
+                "type": "string"
+              },
+              "pause_id": {
+                "format": "uuid",
+                "title": "Pause Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "pause_id",
+              "idempotency_key"
+            ],
+            "title": "AgentResumeRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AgentCostView": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Platform Charge"
+                  },
+                  "reserved_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Platform Charge"
+                  },
+                  "reserved_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Vendor Usd"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "cost",
+                  "platform_charge",
+                  "reserved_platform_charge",
+                  "reserved_vendor_usd",
+                  "billing_currency",
+                  "unpriced_calls",
+                  "unresolved_calls"
+                ],
+                "title": "AgentCostView",
+                "type": "object"
+              },
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentLimits": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "max_active_seconds": {
+                    "default": 900,
+                    "maximum": 3600,
+                    "minimum": 30,
+                    "title": "Max Active Seconds",
+                    "type": "integer"
+                  },
+                  "max_lifetime_seconds": {
+                    "default": 86400,
+                    "maximum": 86400,
+                    "minimum": 60,
+                    "title": "Max Lifetime Seconds",
+                    "type": "integer"
+                  },
+                  "max_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Platform Charge"
+                  },
+                  "max_steps": {
+                    "default": 24,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Steps",
+                    "type": "integer"
+                  },
+                  "max_vendor_calls": {
+                    "default": 32,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Vendor Calls",
+                    "type": "integer"
+                  },
+                  "max_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Vendor Usd"
+                  }
+                },
+                "required": [
+                  "max_vendor_usd",
+                  "max_platform_charge",
+                  "billing_currency"
+                ],
+                "title": "AgentLimits",
+                "type": "object"
+              },
+              "AgentMutationData": {
+                "additionalProperties": false,
+                "properties": {
+                  "deduplicated": {
+                    "default": false,
+                    "title": "Deduplicated",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "message_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Message Id"
+                  },
+                  "pause": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AgentPauseView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "session": {
+                    "$ref": "#/$defs/AgentSessionView"
+                  }
+                },
+                "required": [
+                  "session"
+                ],
+                "title": "AgentMutationData",
+                "type": "object"
+              },
+              "AgentPauseView": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "review_cards",
+                          "export",
+                          "confidential_reveal",
+                          "clarify"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Action"
+                  },
+                  "budget_ref": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetDependencyRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Sha256",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "budget",
+                      "human_action",
+                      "authority",
+                      "recovery"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "question": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Question",
+                    "type": "string"
+                  },
+                  "resolved_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved At"
+                  },
+                  "resolved_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved By"
+                  },
+                  "resource_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Resource Ids",
+                    "type": "array"
+                  },
+                  "session_id": {
+                    "format": "uuid",
+                    "title": "Session Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "resolved",
+                      "cancelled",
+                      "expired"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "step_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Step Id"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "session_id",
+                  "kind",
+                  "status",
+                  "question",
+                  "input_sha256",
+                  "created_at"
+                ],
+                "title": "AgentPauseView",
+                "type": "object"
+              },
+              "AgentSessionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "active_seconds_used": {
+                    "minimum": 0,
+                    "title": "Active Seconds Used",
+                    "type": "integer"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/AgentCostView"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "current_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Job Id"
+                  },
+                  "current_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Run Id"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "title": "Expires At",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "$ref": "#/$defs/AgentLimits"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "pause_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pause Id"
+                  },
+                  "principal_id": {
+                    "format": "uuid",
+                    "title": "Principal Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "waiting_job",
+                      "paused",
+                      "completed",
+                      "partial",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "steps_used": {
+                    "minimum": 0,
+                    "title": "Steps Used",
+                    "type": "integer"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "tool_schema_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Tool Schema Sha256",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "vendor_calls_used": {
+                    "minimum": 0,
+                    "title": "Vendor Calls Used",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "document_id",
+                  "extraction_job_id",
+                  "principal_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "limits",
+                  "steps_used",
+                  "active_seconds_used",
+                  "vendor_calls_used",
+                  "cost",
+                  "tool_schema_sha256",
+                  "created_at",
+                  "expires_at",
+                  "updated_at"
+                ],
+                "title": "AgentSessionView",
+                "type": "object"
+              },
+              "BudgetDependencyRef": {
+                "additionalProperties": false,
+                "description": "Opaque references owned by contract-budget; they never authorize expenditure.",
+                "properties": {
+                  "contract": {
+                    "const": "docs/plan/budget.md",
+                    "default": "docs/plan/budget.md",
+                    "title": "Contract",
+                    "type": "string"
+                  },
+                  "question_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Question Ref",
+                    "type": "string"
+                  },
+                  "revision_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Revision Ref",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question_ref",
+                  "revision_ref"
+                ],
+                "title": "BudgetDependencyRef",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentMutationData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
+        "agent show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "AgentCostView": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Platform Charge"
+                  },
+                  "reserved_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Platform Charge"
+                  },
+                  "reserved_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Vendor Usd"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "cost",
+                  "platform_charge",
+                  "reserved_platform_charge",
+                  "reserved_vendor_usd",
+                  "billing_currency",
+                  "unpriced_calls",
+                  "unresolved_calls"
+                ],
+                "title": "AgentCostView",
+                "type": "object"
+              },
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentLimits": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "max_active_seconds": {
+                    "default": 900,
+                    "maximum": 3600,
+                    "minimum": 30,
+                    "title": "Max Active Seconds",
+                    "type": "integer"
+                  },
+                  "max_lifetime_seconds": {
+                    "default": 86400,
+                    "maximum": 86400,
+                    "minimum": 60,
+                    "title": "Max Lifetime Seconds",
+                    "type": "integer"
+                  },
+                  "max_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Platform Charge"
+                  },
+                  "max_steps": {
+                    "default": 24,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Steps",
+                    "type": "integer"
+                  },
+                  "max_vendor_calls": {
+                    "default": 32,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Vendor Calls",
+                    "type": "integer"
+                  },
+                  "max_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Vendor Usd"
+                  }
+                },
+                "required": [
+                  "max_vendor_usd",
+                  "max_platform_charge",
+                  "billing_currency"
+                ],
+                "title": "AgentLimits",
+                "type": "object"
+              },
+              "AgentPauseView": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "review_cards",
+                          "export",
+                          "confidential_reveal",
+                          "clarify"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Action"
+                  },
+                  "budget_ref": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetDependencyRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Sha256",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "budget",
+                      "human_action",
+                      "authority",
+                      "recovery"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "question": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Question",
+                    "type": "string"
+                  },
+                  "resolved_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved At"
+                  },
+                  "resolved_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved By"
+                  },
+                  "resource_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Resource Ids",
+                    "type": "array"
+                  },
+                  "session_id": {
+                    "format": "uuid",
+                    "title": "Session Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "resolved",
+                      "cancelled",
+                      "expired"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "step_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Step Id"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "session_id",
+                  "kind",
+                  "status",
+                  "question",
+                  "input_sha256",
+                  "created_at"
+                ],
+                "title": "AgentPauseView",
+                "type": "object"
+              },
+              "AgentPrincipalView": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "const": "agent",
+                    "default": "agent",
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "authority_expires_at": {
+                    "format": "date-time",
+                    "title": "Authority Expires At",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "membership_id": {
+                    "format": "uuid",
+                    "title": "Membership Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revoked_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Revoked At"
+                  },
+                  "scopes": {
+                    "items": {
+                      "enum": [
+                        "task:read",
+                        "job:read",
+                        "card:read",
+                        "card:generate",
+                        "draft:read",
+                        "draft:run",
+                        "resource:read",
+                        "certificate:read",
+                        "certificate:file:read",
+                        "profile:read",
+                        "evidence:source:read"
+                      ],
+                      "type": "string"
+                    },
+                    "title": "Scopes",
+                    "type": "array"
+                  },
+                  "user_id": {
+                    "format": "uuid",
+                    "title": "User Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "user_id",
+                  "membership_id",
+                  "scopes",
+                  "authority_expires_at",
+                  "created_at"
+                ],
+                "title": "AgentPrincipalView",
+                "type": "object"
+              },
+              "AgentSessionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "active_seconds_used": {
+                    "minimum": 0,
+                    "title": "Active Seconds Used",
+                    "type": "integer"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/AgentCostView"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "current_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Job Id"
+                  },
+                  "current_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Run Id"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "title": "Expires At",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "$ref": "#/$defs/AgentLimits"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "pause_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pause Id"
+                  },
+                  "principal_id": {
+                    "format": "uuid",
+                    "title": "Principal Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "waiting_job",
+                      "paused",
+                      "completed",
+                      "partial",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "steps_used": {
+                    "minimum": 0,
+                    "title": "Steps Used",
+                    "type": "integer"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "tool_schema_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Tool Schema Sha256",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "vendor_calls_used": {
+                    "minimum": 0,
+                    "title": "Vendor Calls Used",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "document_id",
+                  "extraction_job_id",
+                  "principal_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "limits",
+                  "steps_used",
+                  "active_seconds_used",
+                  "vendor_calls_used",
+                  "cost",
+                  "tool_schema_sha256",
+                  "created_at",
+                  "expires_at",
+                  "updated_at"
+                ],
+                "title": "AgentSessionView",
+                "type": "object"
+              },
+              "AgentShowData": {
+                "additionalProperties": false,
+                "properties": {
+                  "pause": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AgentPauseView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "principal": {
+                    "$ref": "#/$defs/AgentPrincipalView"
+                  },
+                  "session": {
+                    "$ref": "#/$defs/AgentSessionView"
+                  }
+                },
+                "required": [
+                  "session",
+                  "principal"
+                ],
+                "title": "AgentShowData",
+                "type": "object"
+              },
+              "BudgetDependencyRef": {
+                "additionalProperties": false,
+                "description": "Opaque references owned by contract-budget; they never authorize expenditure.",
+                "properties": {
+                  "contract": {
+                    "const": "docs/plan/budget.md",
+                    "default": "docs/plan/budget.md",
+                    "title": "Contract",
+                    "type": "string"
+                  },
+                  "question_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Question Ref",
+                    "type": "string"
+                  },
+                  "revision_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Revision Ref",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question_ref",
+                  "revision_ref"
+                ],
+                "title": "BudgetDependencyRef",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentShowData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
+        "agent start": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "AgentLimits": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "max_active_seconds": {
+                    "default": 900,
+                    "maximum": 3600,
+                    "minimum": 30,
+                    "title": "Max Active Seconds",
+                    "type": "integer"
+                  },
+                  "max_lifetime_seconds": {
+                    "default": 86400,
+                    "maximum": 86400,
+                    "minimum": 60,
+                    "title": "Max Lifetime Seconds",
+                    "type": "integer"
+                  },
+                  "max_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Platform Charge"
+                  },
+                  "max_steps": {
+                    "default": 24,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Steps",
+                    "type": "integer"
+                  },
+                  "max_vendor_calls": {
+                    "default": 32,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Vendor Calls",
+                    "type": "integer"
+                  },
+                  "max_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Vendor Usd"
+                  }
+                },
+                "required": [
+                  "max_vendor_usd",
+                  "max_platform_charge",
+                  "billing_currency"
+                ],
+                "title": "AgentLimits",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "idempotency_key": {
+                "format": "uuid",
+                "title": "Idempotency Key",
+                "type": "string"
+              },
+              "limits": {
+                "$ref": "#/$defs/AgentLimits"
+              },
+              "message": {
+                "maxLength": 8000,
+                "minLength": 1,
+                "title": "Message",
+                "type": "string"
+              },
+              "requested_scopes": {
+                "items": {
+                  "enum": [
+                    "task:read",
+                    "job:read",
+                    "card:read",
+                    "card:generate",
+                    "draft:read",
+                    "draft:run",
+                    "resource:read",
+                    "certificate:read",
+                    "certificate:file:read",
+                    "profile:read",
+                    "evidence:source:read"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 12,
+                "minItems": 1,
+                "title": "Requested Scopes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "extraction_job_id",
+              "message",
+              "requested_scopes",
+              "limits",
+              "idempotency_key"
+            ],
+            "title": "AgentStartRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AgentCostView": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Platform Charge"
+                  },
+                  "reserved_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Platform Charge"
+                  },
+                  "reserved_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Vendor Usd"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "cost",
+                  "platform_charge",
+                  "reserved_platform_charge",
+                  "reserved_vendor_usd",
+                  "billing_currency",
+                  "unpriced_calls",
+                  "unresolved_calls"
+                ],
+                "title": "AgentCostView",
+                "type": "object"
+              },
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentLimits": {
+                "additionalProperties": false,
+                "properties": {
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "max_active_seconds": {
+                    "default": 900,
+                    "maximum": 3600,
+                    "minimum": 30,
+                    "title": "Max Active Seconds",
+                    "type": "integer"
+                  },
+                  "max_lifetime_seconds": {
+                    "default": 86400,
+                    "maximum": 86400,
+                    "minimum": 60,
+                    "title": "Max Lifetime Seconds",
+                    "type": "integer"
+                  },
+                  "max_platform_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Platform Charge"
+                  },
+                  "max_steps": {
+                    "default": 24,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Steps",
+                    "type": "integer"
+                  },
+                  "max_vendor_calls": {
+                    "default": 32,
+                    "maximum": 64,
+                    "minimum": 1,
+                    "title": "Max Vendor Calls",
+                    "type": "integer"
+                  },
+                  "max_vendor_usd": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Max Vendor Usd"
+                  }
+                },
+                "required": [
+                  "max_vendor_usd",
+                  "max_platform_charge",
+                  "billing_currency"
+                ],
+                "title": "AgentLimits",
+                "type": "object"
+              },
+              "AgentMutationData": {
+                "additionalProperties": false,
+                "properties": {
+                  "deduplicated": {
+                    "default": false,
+                    "title": "Deduplicated",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "message_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Message Id"
+                  },
+                  "pause": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/AgentPauseView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "session": {
+                    "$ref": "#/$defs/AgentSessionView"
+                  }
+                },
+                "required": [
+                  "session"
+                ],
+                "title": "AgentMutationData",
+                "type": "object"
+              },
+              "AgentPauseView": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "review_cards",
+                          "export",
+                          "confidential_reveal",
+                          "clarify"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Action"
+                  },
+                  "budget_ref": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetDependencyRef"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Sha256",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "budget",
+                      "human_action",
+                      "authority",
+                      "recovery"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "question": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Question",
+                    "type": "string"
+                  },
+                  "resolved_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved At"
+                  },
+                  "resolved_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Resolved By"
+                  },
+                  "resource_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Resource Ids",
+                    "type": "array"
+                  },
+                  "session_id": {
+                    "format": "uuid",
+                    "title": "Session Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "pending",
+                      "resolved",
+                      "cancelled",
+                      "expired"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "step_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Step Id"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "session_id",
+                  "kind",
+                  "status",
+                  "question",
+                  "input_sha256",
+                  "created_at"
+                ],
+                "title": "AgentPauseView",
+                "type": "object"
+              },
+              "AgentPreviewData": {
+                "additionalProperties": false,
+                "properties": {
+                  "blockers": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 20,
+                    "title": "Blockers",
+                    "type": "array"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "effective_scopes": {
+                    "items": {
+                      "enum": [
+                        "task:read",
+                        "job:read",
+                        "card:read",
+                        "card:generate",
+                        "draft:read",
+                        "draft:run",
+                        "resource:read",
+                        "certificate:read",
+                        "certificate:file:read",
+                        "profile:read",
+                        "evidence:source:read"
+                      ],
+                      "type": "string"
+                    },
+                    "title": "Effective Scopes",
+                    "type": "array"
+                  },
+                  "estimate_basis": {
+                    "enum": [
+                      "first_decision_upper_bound",
+                      "unknown"
+                    ],
+                    "title": "Estimate Basis",
+                    "type": "string"
+                  },
+                  "estimated_cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "$ref": "#/$defs/AgentLimits"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "tools": {
+                    "items": {
+                      "$ref": "#/$defs/AgentToolDefinition"
+                    },
+                    "maxItems": 7,
+                    "title": "Tools",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "task_id",
+                  "extraction_job_id",
+                  "effective_scopes",
+                  "tools",
+                  "limits",
+                  "estimated_cost",
+                  "estimate_basis"
+                ],
+                "title": "AgentPreviewData",
+                "type": "object"
+              },
+              "AgentSessionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "active_seconds_used": {
+                    "minimum": 0,
+                    "title": "Active Seconds Used",
+                    "type": "integer"
+                  },
+                  "cost": {
+                    "$ref": "#/$defs/AgentCostView"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "current_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Job Id"
+                  },
+                  "current_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Current Run Id"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "title": "Expires At",
+                    "type": "string"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "limits": {
+                    "$ref": "#/$defs/AgentLimits"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "owner_user_id": {
+                    "format": "uuid",
+                    "title": "Owner User Id",
+                    "type": "string"
+                  },
+                  "pause_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Pause Id"
+                  },
+                  "principal_id": {
+                    "format": "uuid",
+                    "title": "Principal Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "waiting_job",
+                      "paused",
+                      "completed",
+                      "partial",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "steps_used": {
+                    "minimum": 0,
+                    "title": "Steps Used",
+                    "type": "integer"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "tool_schema_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Tool Schema Sha256",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "vendor_calls_used": {
+                    "minimum": 0,
+                    "title": "Vendor Calls Used",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "document_id",
+                  "extraction_job_id",
+                  "principal_id",
+                  "owner_user_id",
+                  "state",
+                  "revision",
+                  "limits",
+                  "steps_used",
+                  "active_seconds_used",
+                  "vendor_calls_used",
+                  "cost",
+                  "tool_schema_sha256",
+                  "created_at",
+                  "expires_at",
+                  "updated_at"
+                ],
+                "title": "AgentSessionView",
+                "type": "object"
+              },
+              "AgentToolDefinition": {
+                "additionalProperties": false,
+                "properties": {
+                  "command": {
+                    "enum": [
+                      "req list",
+                      "card list",
+                      "card show",
+                      "card generate",
+                      "draft",
+                      "draft show",
+                      "job status"
+                    ],
+                    "title": "Command",
+                    "type": "string"
+                  },
+                  "contract_version": {
+                    "maxLength": 30,
+                    "minLength": 1,
+                    "title": "Contract Version",
+                    "type": "string"
+                  },
+                  "effect": {
+                    "enum": [
+                      "read",
+                      "job"
+                    ],
+                    "title": "Effect",
+                    "type": "string"
+                  },
+                  "invocation_input": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "title": "Invocation Input",
+                    "type": "object"
+                  },
+                  "required_scopes": {
+                    "items": {
+                      "enum": [
+                        "task:read",
+                        "job:read",
+                        "card:read",
+                        "card:generate",
+                        "draft:read",
+                        "draft:run",
+                        "resource:read",
+                        "certificate:read",
+                        "certificate:file:read",
+                        "profile:read",
+                        "evidence:source:read"
+                      ],
+                      "type": "string"
+                    },
+                    "title": "Required Scopes",
+                    "type": "array"
+                  },
+                  "result_schema": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "title": "Result Schema",
+                    "type": "object"
+                  },
+                  "schema_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Schema Sha256",
+                    "type": "string"
+                  },
+                  "supports_dry_run": {
+                    "title": "Supports Dry Run",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "command",
+                  "contract_version",
+                  "schema_sha256",
+                  "invocation_input",
+                  "result_schema",
+                  "required_scopes",
+                  "effect",
+                  "supports_dry_run"
+                ],
+                "title": "AgentToolDefinition",
+                "type": "object"
+              },
+              "BudgetDependencyRef": {
+                "additionalProperties": false,
+                "description": "Opaque references owned by contract-budget; they never authorize expenditure.",
+                "properties": {
+                  "contract": {
+                    "const": "docs/plan/budget.md",
+                    "default": "docs/plan/budget.md",
+                    "title": "Contract",
+                    "type": "string"
+                  },
+                  "question_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Question Ref",
+                    "type": "string"
+                  },
+                  "revision_ref": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Revision Ref",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question_ref",
+                  "revision_ref"
+                ],
+                "title": "BudgetDependencyRef",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "JsonValue": {}
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentMutationData"
+              },
+              {
+                "$ref": "#/$defs/AgentPreviewData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
+        "agent steps": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cursor"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "AgentListRequest",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "AgentInputRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "requirement",
+                      "card",
+                      "draft",
+                      "job",
+                      "message"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "revision_ref": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Revision Ref",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "id",
+                  "revision_ref",
+                  "sha256"
+                ],
+                "title": "AgentInputRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "arguments_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Arguments Sha256"
+              },
+              "child_job_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Child Job Id"
+              },
+              "command": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "req list",
+                      "card list",
+                      "card show",
+                      "card generate",
+                      "draft",
+                      "draft show",
+                      "job status"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Command"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by_job_id": {
+                "format": "uuid",
+                "title": "Created By Job Id",
+                "type": "string"
+              },
+              "created_by_run_id": {
+                "format": "uuid",
+                "title": "Created By Run Id",
+                "type": "string"
+              },
+              "error_code": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Error Code"
+              },
+              "exit_code": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      0,
+                      2,
+                      3,
+                      4,
+                      5
+                    ],
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Exit Code"
+              },
+              "finished_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Finished At"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "input_refs": {
+                "items": {
+                  "$ref": "#/$defs/AgentInputRef"
+                },
+                "maxItems": 100,
+                "title": "Input Refs",
+                "type": "array"
+              },
+              "invocation_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Invocation Id"
+              },
+              "kind": {
+                "enum": [
+                  "decision",
+                  "tool"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "last_transition_job_id": {
+                "format": "uuid",
+                "title": "Last Transition Job Id",
+                "type": "string"
+              },
+              "last_transition_run_id": {
+                "format": "uuid",
+                "title": "Last Transition Run Id",
+                "type": "string"
+              },
+              "ordinal": {
+                "minimum": 1,
+                "title": "Ordinal",
+                "type": "integer"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "result_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Result Sha256"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "session_id": {
+                "format": "uuid",
+                "title": "Session Id",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "planned",
+                  "submitted",
+                  "waiting_job",
+                  "completed",
+                  "failed",
+                  "uncertain"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "usage_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 64,
+                "title": "Usage Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "session_id",
+              "ordinal",
+              "kind",
+              "state",
+              "created_by_job_id",
+              "created_by_run_id",
+              "revision",
+              "last_transition_job_id",
+              "last_transition_run_id",
+              "created_at"
+            ],
+            "title": "AgentStepView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AgentErrorData": {
+                "additionalProperties": false,
+                "properties": {
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,79}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "message": {
+                    "maxLength": 500,
+                    "minLength": 1,
+                    "title": "Message",
+                    "type": "string"
+                  },
+                  "retryable": {
+                    "default": false,
+                    "title": "Retryable",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "code",
+                  "message"
+                ],
+                "title": "AgentErrorData",
+                "type": "object"
+              },
+              "AgentFailureData": {
+                "additionalProperties": false,
+                "properties": {
+                  "error": {
+                    "$ref": "#/$defs/AgentErrorData"
+                  },
+                  "job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Job Id"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Session Id"
+                  }
+                },
+                "required": [
+                  "error"
+                ],
+                "title": "AgentFailureData",
+                "type": "object"
+              },
+              "AgentPageData": {
+                "additionalProperties": false,
+                "properties": {
+                  "next_cursor": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Next Cursor"
+                  }
+                },
+                "title": "AgentPageData",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/AgentPageData"
+              },
+              {
+                "$ref": "#/$defs/AgentFailureData"
+              }
+            ]
+          }
+        },
         "auth orgs": {
           "cli_parameters": [
             {
@@ -5826,6 +11301,111 @@
             ],
             "title": "CardGenerateRequest",
             "type": "object"
+          },
+          "invocation_input": {
+            "$defs": {
+              "CardGenerateRequest": {
+                "additionalProperties": false,
+                "properties": {
+                  "dry_run": {
+                    "default": false,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "expected_input_hash": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Input Hash"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "max_charge": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Max Charge"
+                  },
+                  "reasoning": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z0-9_-]{1,20}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reasoning"
+                  },
+                  "requirement_ids": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "format": "uuid",
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Requirement Ids"
+                  },
+                  "retry": {
+                    "default": false,
+                    "title": "Retry",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "extraction_job_id"
+                ],
+                "title": "CardGenerateRequest",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "input": {
+                "$ref": "#/$defs/CardGenerateRequest"
+              },
+              "task": {
+                "format": "uuid",
+                "title": "Task",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task",
+              "input"
+            ],
+            "title": "CardGenerateArguments",
+            "type": "object"
           }
         },
         "card list": {
@@ -5861,7 +11441,28 @@
               "type": "boolean"
             }
           ],
-          "input": null
+          "input": null,
+          "invocation_input": {
+            "additionalProperties": false,
+            "properties": {
+              "job": {
+                "format": "uuid",
+                "title": "Job",
+                "type": "string"
+              },
+              "task": {
+                "format": "uuid",
+                "title": "Task",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task",
+              "job"
+            ],
+            "title": "ExtractionArguments",
+            "type": "object"
+          }
         },
         "card needs-material": {
           "cli_parameters": [
@@ -6205,7 +11806,27 @@
               "type": "boolean"
             }
           ],
-          "input": null
+          "input": null,
+          "invocation_input": {
+            "additionalProperties": false,
+            "properties": {
+              "history": {
+                "default": false,
+                "title": "History",
+                "type": "boolean"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "CardShowArguments",
+            "type": "object"
+          }
         },
         "card submit": {
           "cli_parameters": [
@@ -9600,6 +15221,52 @@
             ],
             "title": "DraftRequest",
             "type": "object"
+          },
+          "invocation_input": {
+            "$defs": {
+              "DraftRequest": {
+                "additionalProperties": false,
+                "properties": {
+                  "dry_run": {
+                    "default": false,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "retry": {
+                    "default": false,
+                    "title": "Retry",
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "extraction_job_id"
+                ],
+                "title": "DraftRequest",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "input": {
+                "$ref": "#/$defs/DraftRequest"
+              },
+              "task": {
+                "format": "uuid",
+                "title": "Task",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task",
+              "input"
+            ],
+            "title": "DraftArguments",
+            "type": "object"
           }
         },
         "draft list": {
@@ -9660,7 +15327,22 @@
               "type": "boolean"
             }
           ],
-          "input": null
+          "input": null,
+          "invocation_input": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "title": "DraftShowArguments",
+            "type": "object"
+          }
         },
         "evidence adopt": {
           "cli_parameters": [
@@ -13194,7 +18876,22 @@
               "type": "boolean"
             }
           ],
-          "input": null
+          "input": null,
+          "invocation_input": {
+            "additionalProperties": false,
+            "properties": {
+              "job_id": {
+                "format": "uuid",
+                "title": "Job Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "job_id"
+            ],
+            "title": "JobStatusArguments",
+            "type": "object"
+          }
         },
         "job wait": {
           "cli_parameters": [
@@ -23711,7 +29408,28 @@
               "type": "boolean"
             }
           ],
-          "input": null
+          "input": null,
+          "invocation_input": {
+            "additionalProperties": false,
+            "properties": {
+              "job": {
+                "format": "uuid",
+                "title": "Job",
+                "type": "string"
+              },
+              "task": {
+                "format": "uuid",
+                "title": "Task",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task",
+              "job"
+            ],
+            "title": "ExtractionArguments",
+            "type": "object"
+          }
         },
         "req repair-citations": {
           "cli_parameters": [

@@ -6,6 +6,15 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05: Built-in agent command orchestration
+
+- Add migration `0041`, persistent owner-only principals/sessions/messages/steps/pauses/job links, encrypted receipts and history, org-composite constraints and database actor/fence gates.
+- Register authenticated API and CLI session start/list/show/messages/steps/message/resume/cancel commands with shared Result, invocation schemas, revision checks and endpoint-scoped idempotency.
+- Connect the structured decision adapter and seven protected command services to checkpoint controller jobs, transactional child/queue dispatch and durable recovery wakes. Safe retries reuse uniquely proved owned jobs; unknown paid outcomes pause without redispatch.
+- Apply immutable cumulative session limits to decisions and descendants through the existing task-budget, prepaid and per-job admission/settlement boundary. Preserve fixed input/model/redaction checks, original human review/confirmation, no-memory A01 generation and confirmed-only draft assembly.
+- Add verified built-in-agent/token-automation invocation provenance to jobs/audit and public card/generation/draft views, retaining origin through human edits and immediate worker identity.
+- Adopt the defaults in the English [agent contract](plan/agent.md); mechanism and source entry points are in [Built-in agent orchestration](notes/builtin-agent.md). PostgreSQL/RLS, queue crash recovery, concurrent budget and full human-review workflow acceptance remain required; Vue agent pages, MCP and later tools are outside this slice.
+
 ## 2026-10-05: Task budget enforcement and cost preflight
 
 - Add migration `0040`, task revision history, human admin/bidder budget changes, tenant constraints, safe audit and admin-controlled low-balance policies/notices.

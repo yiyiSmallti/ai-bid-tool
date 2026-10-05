@@ -11,6 +11,20 @@ from app.core.password_attempts import PasswordAttempts, invalid_login
 from app.core.security import TokenSigner, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
 
+AGENT_SCOPES = {
+    "task:read",
+    "job:read",
+    "card:read",
+    "card:generate",
+    "draft:read",
+    "draft:run",
+    "resource:read",
+    "certificate:read",
+    "certificate:file:read",
+    "profile:read",
+    "evidence:source:read",
+}
+
 SCOPES = {
     "provider:read",
     "sandbox:read",
@@ -144,6 +158,9 @@ SCOPES.update({"score:read", "score:run", "score:rubric:generate"})
 SCOPES.update({"memory:read", "memory:write", "memory:retrieve", "memory:candidate:run"})
 
 for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.add("agent:read")
+    if _role != "viewer":
+        _scopes.update({"agent:run", "agent:cancel"})
     _scopes.update({"memory:read", "memory:retrieve"})
     if _role != "viewer":
         _scopes.update({"memory:write", "memory:candidate:run"})
@@ -182,6 +199,29 @@ for _role, _scopes in ROLE_SCOPES.items():
         )
 
 
+HUMAN_ONLY_SCOPES = {
+    "agent:read",
+    "agent:run",
+    "agent:cancel",
+    "evidence:confirm",
+    "export",
+    "confidential:write",
+    "confidential:reveal",
+    "provider:write",
+    "token:create",
+    "screenshot:ingest",
+    "check:decide",
+    "score:rubric:review",
+    "billing:redeem",
+    "task:budget:write",
+    "billing:alert:write",
+    "memory:approve",
+    "memory:manage",
+    "memory:eval:read",
+    "memory:eval:review",
+}
+
+
 @dataclass
 class Identity:
     user_id: UUID
@@ -190,28 +230,72 @@ class Identity:
     role: str
     token_id: UUID | None = None
     actor_kind: str = "session"
+    principal_id: UUID | None = None
+    session_id: UUID | None = None
+    step_id: UUID | None = None
+    invocation_id: UUID | None = None
+    session_expires_at: datetime | None = None
+    job_id: UUID | None = None
+    run_id: UUID | None = None
 
     def __post_init__(self):
         if self.token_id is not None and self.actor_kind == "session":
             self.actor_kind = "token"
 
     def require(self, scope: str) -> None:
-        if scope not in self.scopes:
+        if scope not in self.scopes or (
+            scope in HUMAN_ONLY_SCOPES
+            and (self.actor_kind != "session" or self.token_id is not None)
+        ):
             raise ServiceError("forbidden", "Permission denied", 403, 4)
 
 
 async def set_actor_context(session: AsyncSession, actor: Identity) -> None:
     """Only authenticated server code supplies transaction-local decision identity."""
+    previous = session.info.get("actor")
+    if (
+        actor.invocation_id is None
+        and previous is not None
+        and (actor.user_id, actor.org_id, actor.token_id)
+        == (previous.user_id, previous.org_id, previous.token_id)
+    ):
+        actor.invocation_id = previous.invocation_id
+    job = session.info.get("execution_job")
+    if (
+        actor.actor_kind == "worker"
+        and job is not None
+        and (job.org_id == actor.org_id and job.actor_user_id == actor.user_id)
+    ):
+        actor.principal_id, actor.session_id = job.agent_principal_id, job.agent_session_id
+        if job.kind != "agent":
+            actor.step_id, actor.invocation_id = job.agent_step_id, job.invocation_id
+        elif actor.invocation_id is None:
+            actor.invocation_id = job.invocation_id
+        actor.job_id, actor.run_id = job.id, job.run_id
     session.info["actor"] = actor
     await session.execute(
         text(
             "SELECT set_config('app.actor_kind', :kind, true), "
             "set_config('app.actor_user_id', :user, true), "
             "set_config('app.actor_token_id', :token, true), "
-            "set_config('app.actor_scopes', :scopes, true)"
+            "set_config('app.actor_scopes', :scopes, true), "
+            "set_config('app.agent_principal_id', :principal, true), "
+            "set_config('app.agent_session_id', :agent_session, true), "
+            "set_config('app.agent_step_id', :step, true), "
+            "set_config('app.execution_job_id', :execution_job, true), "
+            "set_config('app.execution_run_id', :execution_run, true), "
+            "set_config('app.invocation_id', :invocation, true), "
+            "set_config('app.command', :command, true)"
         ),
         {
             "scopes": json.dumps(sorted(actor.scopes)),
+            "principal": str(actor.principal_id) if actor.principal_id else "",
+            "agent_session": str(actor.session_id) if actor.session_id else "",
+            "step": str(actor.step_id) if actor.step_id else "",
+            "execution_job": str(actor.job_id) if actor.job_id else "",
+            "execution_run": str(actor.run_id) if actor.run_id else "",
+            "invocation": str(actor.invocation_id) if actor.invocation_id else "",
+            "command": session.info.get("command", ""),
             "kind": actor.actor_kind,
             "user": str(actor.user_id),
             "token": str(actor.token_id) if actor.token_id else "",
@@ -251,6 +335,7 @@ async def login(
 async def authenticate(
     session: AsyncSession, bearer: str, org_id: UUID, crypto: TokenSigner
 ) -> Identity:
+    session_expires_at = None
     if bearer.startswith("bid_"):
         token = await session.scalar(
             select(ApiToken).where(
@@ -267,6 +352,7 @@ async def authenticate(
         if payload.get("kind") != "session":
             raise ServiceError("invalid_session", "Invalid credentials", 401, 4)
         user_id = UUID(payload["user_id"])
+        session_expires_at = datetime.fromtimestamp(payload["exp"], UTC)
         token_scopes = None
         token_id = None
     user = await session.get(User, user_id)
@@ -275,4 +361,32 @@ async def authenticate(
     member = await membership(session, user_id, org_id)
     role_scopes = ROLE_SCOPES[member.role]
     scopes = role_scopes if token_scopes is None else token_scopes & role_scopes & SCOPES
-    return Identity(user_id, org_id, scopes, member.role, token_id)
+    return Identity(
+        user_id, org_id, set(scopes), member.role, token_id, session_expires_at=session_expires_at
+    )
+
+
+async def agent_identity(session: AsyncSession, principal) -> Identity:
+    """Revalidate every admission; new role grants never enlarge existing delegation."""
+    if principal.revoked_at is not None or principal.authority_expires_at <= datetime.now(UTC):
+        raise ServiceError("agent_authority_expired", "Agent authority has expired", 403, 4)
+    user = await session.get(User, principal.user_id)
+    if user is None or not user.active:
+        raise ServiceError("invalid_session", "Invalid credentials", 401, 4)
+    member = await membership(session, principal.user_id, principal.org_id)
+    if member.id != principal.membership_id:
+        raise not_found()
+    scopes = (
+        set(principal.initial_grants)
+        & set(principal.scopes)
+        & ROLE_SCOPES[member.role]
+        & AGENT_SCOPES
+    )
+    return Identity(
+        principal.user_id,
+        principal.org_id,
+        scopes,
+        member.role,
+        actor_kind="agent",
+        principal_id=principal.id,
+    )

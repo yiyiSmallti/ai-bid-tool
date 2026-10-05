@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
@@ -16,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException
 
 from app.api.account import create_router as create_account_router
+from app.api.agent import create_router as create_agent_router
 from app.api.check import create_router as create_check_router
 from app.api.confidential import create_router as create_confidential_router
 from app.api.exports import create_router as create_export_router
@@ -92,6 +93,7 @@ def create_app(
     queue = queue or Queue(settings)
     processor = Processor(settings, db, storage, llm, ocr, resolve)
     queue.processor = processor
+    processor.queue = queue
 
     @asynccontextmanager
     async def lifespan(_app):
@@ -209,9 +211,12 @@ def create_app(
         budget_route = path in {"/billing/low-balance-policy", "/billing/notices"} or (
             path.startswith("/tasks/") and "/budget" in path
         )
+        agent_route = path.startswith("/agent-sessions/") or (
+            path.startswith("/tasks/") and path.endswith("/agent-sessions")
+        )
         response = (
             error_response(request, ServiceError("not_found", "Resource not found", 404, 4))
-            if version == "3.0" and budget_route
+            if version == "3.0" and (budget_route or agent_route)
             else await call_next(request)
         )
         response.headers["X-Bid-Contract-Version"] = version
@@ -273,11 +278,24 @@ def create_app(
                 }
             },
         )
+        if name.startswith("agent "):
+            from app.schemas.agent_contracts import AgentErrorData, AgentFailureData
+
+            body.data = AgentFailureData(
+                error=AgentErrorData(
+                    code=error.code,
+                    message=error.message,
+                    retryable=error.exit_code == 3,
+                )
+            ).model_dump(mode="json")
         retry = {"auth_busy": "1", "too_many_attempts": "900"}.get(error.code)
         return JSONResponse(
             status_code=error.status,
             content=body.model_dump(mode="json"),
-            headers={"Retry-After": retry} if retry is not None else None,
+            headers={
+                "X-Bid-Exit-Code": str(error.exit_code),
+                **({"Retry-After": retry} if retry is not None else {}),
+            },
         )
 
     @app.exception_handler(ServiceError)
@@ -356,6 +374,7 @@ def create_app(
     bearer = HTTPBearer(auto_error=False)
 
     async def context(
+        request: Request,
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
         x_org_id: UUID = Header(...),
     ):
@@ -363,11 +382,73 @@ def create_app(
             raise ServiceError("invalid_session", "Bearer credentials required", 401, 4)
         # Candidate scope is used only for the membership check; handlers receive a
         # tenant transaction only after identity and active membership are verified.
-        async with db.transaction(x_org_id) as session:
-            identity = await authenticate(session, credentials.credentials, x_org_id, crypto)
-            await set_actor_context(session, identity)
-            session.info["memory_settings"] = settings
-            yield session, identity
+        from app.services.versioned import audit
+
+        identity = None
+        command = request.scope["route"].name.replace("_", " ")
+        dry_run = request.query_params.get("dry_run") == "true"
+        if request.headers.get("content-type", "").startswith("application/json"):
+            try:
+                body = await request.json()
+            except (ValueError, UnicodeDecodeError):
+                body = None
+            dry_run = dry_run or (isinstance(body, dict) and body.get("dry_run") is True)
+        try:
+            async with db.transaction(x_org_id) as session:
+                identity = await authenticate(session, credentials.credentials, x_org_id, crypto)
+                identity.invocation_id = uuid4()
+                session.info["command"] = command
+                await set_actor_context(session, identity)
+                session.info["memory_settings"] = settings
+                session.info["command"] = command
+                if identity.token_id is not None and not dry_run:
+                    audit(
+                        session,
+                        identity,
+                        "command.invoked",
+                        identity.invocation_id,
+                        {"command": command},
+                    )
+                yield session, identity
+                if identity.token_id is not None and not dry_run:
+                    if session.in_transaction():
+                        audit(
+                            session,
+                            identity,
+                            "command.completed",
+                            identity.invocation_id,
+                            {"command": command},
+                        )
+                    else:
+                        # Older submit routes explicitly commit before dispatching.
+                        # Their business audit is already atomic with the mutation.
+                        async with db.transaction(x_org_id) as receipt:
+                            await set_actor_context(receipt, identity)
+                            audit(
+                                receipt,
+                                identity,
+                                "command.completed",
+                                identity.invocation_id,
+                                {"command": command},
+                            )
+        except Exception as exc:
+            if identity is not None and identity.token_id is not None and not dry_run:
+                assert identity.invocation_id is not None
+                async with db.transaction(x_org_id) as receipt:
+                    await set_actor_context(receipt, identity)
+                    audit(
+                        receipt,
+                        identity,
+                        "command.failed",
+                        identity.invocation_id,
+                        {
+                            "command": command,
+                            "reason_code": exc.code
+                            if isinstance(exc, ServiceError)
+                            else "command_failed",
+                        },
+                    )
+            raise
 
     from app.api.budgets import create_router as create_budget_router
 
@@ -398,5 +479,6 @@ def create_app(
     from app.api.memory import create_router as create_memory_router
 
     app.include_router(create_memory_router(context, db, queue, settings, storage))
+    app.include_router(create_agent_router(context, settings, queue, llm, resolve, storage))
     app.include_router(create_job_router(context, storage))
     return app

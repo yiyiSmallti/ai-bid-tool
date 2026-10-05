@@ -58,6 +58,7 @@ class Membership(Tenant, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "id", "user_id", name="agent_membership_owner"),
         UniqueConstraint("org_id", "user_id"),
         CheckConstraint(
             "role IN ('admin', 'bidder', 'technical', 'viewer')", name="membership_role"
@@ -74,6 +75,10 @@ class ApiToken(Tenant, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (
+        CheckConstraint(
+            "NOT (scopes ?| ARRAY['agent:read','agent:run','agent:cancel'])",
+            name="token_forbidden_agent_scopes",
+        ),
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "digest"),
         ForeignKeyConstraint(["org_id", "user_id"], ["memberships.org_id", "memberships.user_id"]),
@@ -149,6 +154,7 @@ class Document(Tenant, Base):
     citation_mode: Mapped[str | None] = mapped_column(String(10))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "task_id", "id", name="agent_document_task"),
         UniqueConstraint("org_id", "id", "task_id", name="sandbox_document_task"),
         UniqueConstraint("org_id", "task_id", "sha256"),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
@@ -320,6 +326,59 @@ class VendorCall(Tenant, Base):
     )
 
 
+def agent_origin_constraints(table: str):
+    """Bind persisted origin to its complete tenant, owner and session chain."""
+    return (
+        ForeignKeyConstraint(
+            ["org_id", "on_behalf_of_user_id"],
+            ["memberships.org_id", "memberships.user_id"],
+            name=f"{table}_agent_origin_owner_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "agent_principal_id", "on_behalf_of_user_id"],
+            ["agent_principals.org_id", "agent_principals.id", "agent_principals.user_id"],
+            name=f"{table}_agent_origin_principal_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "agent_session_id", "agent_principal_id", "on_behalf_of_user_id"],
+            [
+                "agent_sessions.org_id",
+                "agent_sessions.id",
+                "agent_sessions.principal_id",
+                "agent_sessions.owner_user_id",
+            ],
+            name=f"{table}_agent_origin_session_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "agent_session_id", "agent_step_id"],
+            ["agent_steps.org_id", "agent_steps.session_id", "agent_steps.id"],
+            name=f"{table}_agent_origin_step_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        CheckConstraint(
+            "initiated_by IS NULL OR initiated_by IN ('human','legacy_unknown','builtin_agent','external_agent')",
+            name=f"{table}_agent_origin_shape",
+        ),
+        CheckConstraint(
+            "(initiated_by='builtin_agent' AND agent_principal_id IS NOT NULL AND agent_session_id IS NOT NULL "
+            "AND on_behalf_of_user_id IS NOT NULL AND actor_token_id IS NULL) OR "
+            "(initiated_by='external_agent' AND actor_token_id IS NOT NULL AND on_behalf_of_user_id IS NOT NULL "
+            "AND agent_principal_id IS NULL AND agent_session_id IS NULL AND agent_step_id IS NULL) OR "
+            "(COALESCE(initiated_by,'legacy_unknown') IN ('human','legacy_unknown') "
+            "AND agent_principal_id IS NULL AND agent_session_id IS NULL AND agent_step_id IS NULL)",
+            name=f"{table}_agent_origin_binding",
+        ),
+        Index(f"{table}_agent_session", "org_id", "agent_session_id"),
+    )
+
+
 class Job(Tenant, Base):
     __tablename__ = "jobs"
     vendor_cost_history_complete: Mapped[bool] = mapped_column(
@@ -346,7 +405,28 @@ class Job(Tenant, Base):
     actor_scopes: Mapped[list[str]] = mapped_column(
         JSONB, default=list, server_default=text("'[]'::jsonb")
     )
+    initiated_by: Mapped[str | None] = mapped_column(String(30))
+    on_behalf_of_user_id: Mapped[UUID | None] = mapped_column()
+    agent_principal_id: Mapped[UUID | None] = mapped_column()
+    agent_session_id: Mapped[UUID | None] = mapped_column()
+    agent_step_id: Mapped[UUID | None] = mapped_column()
+    invocation_id: Mapped[UUID | None] = mapped_column()
+    command: Mapped[str | None] = mapped_column(String(100))
     __table_args__ = (
+        *agent_origin_constraints("jobs"),
+        UniqueConstraint("org_id", "agent_session_id", "id", name="agent_job_session"),
+        ForeignKeyConstraint(
+            ["org_id", "agent_session_id", "task_id", "document_id"],
+            [
+                "agent_sessions.org_id",
+                "agent_sessions.id",
+                "agent_sessions.task_id",
+                "agent_sessions.document_id",
+            ],
+            name="job_agent_task_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
         ForeignKeyConstraint(
             ["org_id", "actor_user_id"],
             ["memberships.org_id", "memberships.user_id"],
@@ -358,6 +438,7 @@ class Job(Tenant, Base):
             name="budget_job_actor_token_fk",
         ),
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "task_id", "document_id", "id", name="agent_job_document"),
         UniqueConstraint("org_id", "cache_key"),
         ForeignKeyConstraint(
             ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
@@ -448,7 +529,32 @@ class AuditLog(Tenant, Base):
     action: Mapped[str] = mapped_column(String(100))
     object_id: Mapped[UUID] = mapped_column()
     details: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    initiated_by: Mapped[str | None] = mapped_column(String(30))
+    on_behalf_of_user_id: Mapped[UUID | None] = mapped_column()
+    agent_principal_id: Mapped[UUID | None] = mapped_column()
+    agent_session_id: Mapped[UUID | None] = mapped_column()
+    agent_step_id: Mapped[UUID | None] = mapped_column()
+    invocation_id: Mapped[UUID | None] = mapped_column()
+    command: Mapped[str | None] = mapped_column(String(100))
+    actor_kind: Mapped[str | None] = mapped_column(String(20))
+    job_id: Mapped[UUID | None] = mapped_column()
+    run_id: Mapped[UUID | None] = mapped_column()
     __table_args__ = (
+        *agent_origin_constraints("audit_logs"),
+        ForeignKeyConstraint(
+            ["org_id", "agent_session_id", "job_id"],
+            ["jobs.org_id", "jobs.agent_session_id", "jobs.id"],
+            name="audit_agent_job_session_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "job_id"],
+            ["jobs.org_id", "jobs.id"],
+            name="audit_agent_job_fk",
+            deferrable=True,
+            initially="DEFERRED",
+        ),
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
             ["org_id", "actor_user_id"], ["memberships.org_id", "memberships.user_id"]
