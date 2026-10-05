@@ -49,10 +49,13 @@ values and tender quotes remain unchanged.
 
 | Category | Detection boundary |
 | --- | --- |
-| amount | Labelled prices, quoted amounts and budgets; numeric amounts with supported currency symbols/codes or Chinese currency units |
-| contact | Labelled contact names, mobile/telephone values and supported unlabelled phone-number patterns |
-| identity | Labelled identity numbers and unlabelled Chinese identity-number patterns |
-| bank_account | Labelled bank accounts/IBAN and unlabelled long account-number patterns |
+| amount | Price, quote and budget labels followed by a separator and any text, or by a numeric, currency-marked or written-out (壹贰叁…) value; unlabelled numbers with supported currency symbols/codes or Chinese currency units |
+| contact | Contact-name labels followed by a colon or equals sign; phone labels followed by a number of at least seven digits; supported unlabelled phone-number patterns |
+| identity | Identity labels followed by a number of at least six digits, spaces, hyphens, `X` or `*`; unlabelled Chinese identity-number patterns |
+| bank_account | Account labels followed by a number of at least eight digits, spaces, hyphens or `*`; labelled IBANs; unlabelled long account-number patterns |
+
+A label word alone is never a detection, so tender wording such as "刷身份证登录"
+or "管理员账号" is sent unchanged. English labels must be whole words.
 
 Every business-text leaf is processed, including requirement quotes, Word heading
 paths and location labels, resource field values and certificate page text.
@@ -114,10 +117,11 @@ vendor error strings at the HTTP boundary before they can reach job errors.
 
 ## Pitfalls
 
-- Pattern masking can over-mask labelled free text and cannot recognize every
-  unlabelled or unconventional sensitive value. Review the selected source data
-  and counts before submitting; the switch is not an authenticity or secrecy
-  classifier.
+- Pattern masking still masks free text after a labelled separator ("价格：见附件")
+  and cannot recognize every unlabelled or unconventional sensitive value, such
+  as a contact name written after a label without a colon. Review the selected
+  source data and counts before submitting; the switch is not an authenticity or
+  secrecy classifier.
 - Each batch includes the complete selected material text. Batching and halving
   split requirements, never splice/truncate fields or pages. A single requirement
   that still produces malformed/truncated output fails explicitly. Large selected
@@ -131,5 +135,6 @@ vendor error strings at the HTTP boundary before they can reach job errors.
 
 - [card_generation.py](../../server/app/services/card_generation.py): snapshot, submission, access and reference validation.
 - [redaction.py](../../server/app/services/redaction.py): versioned masking and counts.
+- [test_redaction.py](../../server/tests/test_redaction.py): kept wording and masked value cases.
 - [providers/drafting.py](../../server/app/providers/drafting.py): wire schema, prompt, complete batches and partial output.
 - [test_card_generation.py](../../server/tests/test_card_generation.py): synthetic API/worker acceptance scenarios and repeatable external artifacts.

@@ -4,12 +4,37 @@ import re
 import unicodedata
 from collections import Counter
 
-RULE_VERSION = "bid-redaction-v1"
+RULE_VERSION = "bid-redaction-v2"
 KINDS = ("amount", "contact", "identity", "bank_account")
 PLACEHOLDER = re.compile(r"\[REDACTED_[A-Z_]+\]")
 
-# Match on NFKC text, mapping offsets back to the untouched original. Labelled
-# amounts also cover written-out prices; unlabelled numeric currency is explicit.
+# Match on NFKC text, mapping offsets back to the untouched original. A label
+# alone is not a hit: identity, account and phone values must be number-shaped,
+# and contact names need an explicit separator, so tender wording such as
+# "刷身份证登录" or "管理员账号" stays readable. Labelled amounts accept free text
+# after a separator and written-out or numeric values without one.
+SEPARATOR = r"\s*[:：=]\s*"
+OPTIONAL_SEPARATOR = r"\s*[:：=]?\s*"
+CURRENCY = r"(?:[¥￥$€£]|人民币|(?<![A-Za-z])(?:RMB|CNY|USD|EUR|GBP)(?![A-Za-z]))"
+CURRENCY_UNIT = (
+    r"(?:万?元|亿?元|人民币|美元|美金|欧元|(?<![A-Za-z])(?:RMB|CNY|USD|EUR|GBP)(?![A-Za-z]))"
+)
+NUMBER = r"\d[\d,]*(?:\.\d+)?(?:\s*[万亿])?"
+AMOUNT_VALUE = (
+    rf"(?:{CURRENCY}\s*{NUMBER}(?:\s*{CURRENCY_UNIT})?|{NUMBER}\s*{CURRENCY_UNIT}"
+    r"|\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d{3,}(?:\.\d+)?|\d+\.\d+"
+    rf"|{CURRENCY}?\s*[零壹贰叁肆伍陆柒捌玖拾佰仟][零壹贰叁肆伍陆柒捌玖拾佰仟万亿圆元角分整]*)"
+)
+AMOUNT_LABEL = (
+    r"(?:报价|投标价|投标总价|总报价|金额|价格|单价|总价|合同价|预算"
+    r"|(?<![A-Za-z])(?:quote\s*price|quoted?\s*(?:price|amount)|amount|price|budget)(?![A-Za-z]))"
+)
+
+
+def labelled(label: str, separator: str, value: str) -> re.Pattern[str]:
+    return re.compile(rf"{label}{separator}(?P<value>{value})", re.I)
+
+
 RULES = (
     ("identity", re.compile(r"(?<!\d)\d{17}[\dXx](?!\w)|(?<!\d)\d{15}(?!\d)")),
     ("bank_account", re.compile(r"(?<!\d)(?:\d[ -]?){15,18}\d(?!\d)")),
@@ -23,39 +48,49 @@ RULES = (
     ("contact", re.compile(r"(?<!\w)\+?\d{1,3}[- .]?\(?\d{3}\)?[- .]\d{3}[- .]\d{4}(?!\d)")),
     (
         "identity",
-        re.compile(
-            r"(?:身份证(?:号码?|号)?|identity\s*(?:number|no\.?|id))\s*[:：=]?\s*(?P<value>[^\n\r;；,，。]+)",
-            re.I,
+        labelled(
+            r"(?:身份证(?:号码?|号)?|(?<![A-Za-z])identity\s*(?:number|no\.?|id)(?![A-Za-z]))",
+            OPTIONAL_SEPARATOR,
+            r"\d(?:[\dXx*]|[ -](?=[\dXx*])){5,}",
         ),
     ),
     (
         "bank_account",
-        re.compile(
-            r"(?:银行账号|银行账户|银行帐号|银行卡号|收款账号|账号|帐号|bank\s*account(?:\s*(?:number|no\.?))?|IBAN)\s*[:：=]?\s*(?P<value>[^\n\r;；,，。]+)",
-            re.I,
+        labelled(
+            r"(?:银行账号|银行账户|银行帐号|银行卡号|收款账号|账号|帐号"
+            r"|(?<![A-Za-z])bank\s*account(?:\s*(?:number|no\.?))?(?![A-Za-z]))",
+            OPTIONAL_SEPARATOR,
+            r"\d(?:[\d*]|[ -](?=[\d*])){7,}",
+        ),
+    ),
+    (
+        "bank_account",
+        labelled(
+            r"(?<![A-Za-z])IBAN(?![A-Za-z])",
+            OPTIONAL_SEPARATOR,
+            r"[A-Z]{2}\d{2}(?: ?[A-Z\d]){10,30}",
         ),
     ),
     (
         "contact",
-        re.compile(
-            r"(?:联系人|联系人员|联络人|项目联系人|contact(?:\s*(?:person|name))?)\s*[:：=]?\s*(?P<value>[^\n\r;；,，。:：]+)",
-            re.I,
+        labelled(
+            r"(?:联系人|联系人员|联络人|项目联系人"
+            r"|(?<![A-Za-z])contact(?:\s*(?:person|name))?(?![A-Za-z]))",
+            SEPARATOR,
+            r"[^\n\r;；,，。:：]+",
         ),
     ),
     (
         "contact",
-        re.compile(
-            r"(?:联系电话|手机号码?|手机号|电话|手机|telephone|phone|mobile|tel\.?)\s*[:：=]?\s*(?P<value>[+\d(][\d() +.\-转extEXT分机]*)",
-            re.I,
+        labelled(
+            r"(?:联系电话|手机号码?|手机号|电话|手机"
+            r"|(?<![A-Za-z])(?:telephone|phone|mobile|tel\.?)(?![A-Za-z]))",
+            OPTIONAL_SEPARATOR,
+            r"[+(]?\d[\d() .\-]{5,}\d(?:\s*(?:转|分机|ext\.?)\s*\d+)?",
         ),
     ),
-    (
-        "amount",
-        re.compile(
-            r"(?:报价|投标价|投标总价|总报价|金额|价格|单价|总价|合同价|预算|quote\s*price|quoted?\s*(?:price|amount)|amount|price|budget)\s*[:：=]?\s*(?P<value>[^\n\r;；。]+)",
-            re.I,
-        ),
-    ),
+    ("amount", labelled(AMOUNT_LABEL, SEPARATOR, r"[^\n\r;；。]+")),
+    ("amount", labelled(AMOUNT_LABEL, r"\s*(?:为|是)?\s*", AMOUNT_VALUE)),
     (
         "amount",
         re.compile(
