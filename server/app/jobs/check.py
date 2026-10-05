@@ -75,7 +75,7 @@ async def process(execution: JobExecution, storage: Storage) -> None:
     evaluated = await asyncio.to_thread(check_rules.evaluate, secret, str(fixed.draft.id))
     stop_reason = None
     reported_usages = []
-    if fixed.manifest["mode"] == "combined":
+    if fixed.manifest["mode"] == "combined" and secret["outbound"]["requirements"]:
         async with execution.db.transaction(execution.org_id) as session:
             job = await execution.owned_job(session)
             llm = await check_semantic.resolve(session, execution.settings, job)
@@ -125,6 +125,8 @@ async def process(execution: JobExecution, storage: Storage) -> None:
                     row for row in evaluated if row["item"]["requirement_id"] == requirement_id
                 )
                 check_semantic.reject(row, "semantic_provider_failed")
+    elif fixed.manifest["mode"] == "combined":
+        execution.plan(0)
     if execution.stopped is not None and execution.stopped.code not in check_semantic.PARTIAL_STOPS:
         raise execution.stopped
     async with execution.db.transaction(execution.org_id) as session:

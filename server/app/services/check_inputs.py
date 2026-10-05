@@ -33,7 +33,7 @@ from app.services.card_generation import check_input_access as generation_input_
 from app.services.evidence_sources import require_source
 from app.services.extraction import locate_quote
 
-RULE_VERSION = "check-rules-v1"
+RULE_VERSION = "check-rules-v2"
 SCHEMA_VERSION = "check-v1"
 ADAPTER_VERSION = "check-local-v1"
 MAX_REQUIREMENTS = 2000

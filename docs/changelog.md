@@ -6,6 +6,12 @@ kind: changelog
 
 按日期记录已交付的范围。每条范围的机制说明见[机制笔记](README.md#机制笔记)。
 
+## 2026-10-05：语义校验范围与完整评分表请求
+
+- combined check 仅将有已确认投标正文的 response 行送入 CheckProvider；gap、comply_only 保留确定性规则覆盖，语义状态为 `not_requested`，不因缺少投标文本单独成为 partial。预检条目数、费用上界和作业调用规划使用同一选择集，没有响应正文时不调用模型。迁移 `0036` 调整分区对应的语义发布约束；机制见 [Confirmed-draft checks](notes/check.md)。
+- rubric 生成将指定抽取作业的全部 scoring Requirements 放入一个请求，移除按抽取字符预算分批、结构错误拆半和跨批 overall 合并。新增独立的完整请求容量配置；超限预检返回 `rubric_context_limit`，提交在任何调用之前拒绝。逐项验引、结构校验、确认、遮挡和逐调用计费关口保留；机制见 [Human-reviewed score rubrics](notes/score.md)。
+- 补充 API → worker 与 MockTransport 验收，覆盖混合分区、零语义调用、超过旧分批阈值的整表生成和容量拒绝，替换依赖旧分批行为的断言并保留失败与计费关口覆盖。
+
 ## 2026-10-05：已确认响应草案的评分执行
 
 - 新增 `bid score run/list/show`、对应 preview/submit/list/show HTTP 路由和 `score` 持久作业。固定 current DraftRun、confirmed rubric、评估日期、模型/价格/reasoning 与遮挡修订；dry-run 零写入，正式提交绑定预览哈希。

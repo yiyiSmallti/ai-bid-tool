@@ -129,7 +129,7 @@ def adapter(tmp_path, replies: list[dict], sent: list[dict]) -> HTTPRubricProvid
             llm_model="synthetic-rubric",
             llm_api_key="synthetic-key",
             llm_base_url="https://rubric.example.test/v1",
-            llm_batch_chars=100_000,
+            llm_batch_chars=8000,
             llm_max_output_tokens=4096,
         ),
         httpx.MockTransport(transport),
@@ -167,6 +167,42 @@ async def test_http_rubric_provider_sends_only_fixed_refs_and_accounts_call(tmp_
         provider.prompt_version,
         provider.schema_version,
     ) == (RUBRIC_ADAPTER_VERSION, RUBRIC_PROMPT_VERSION, RUBRIC_SCHEMA_VERSION)
+
+
+async def test_long_rubric_table_is_one_accounted_request_even_after_structure_failure(tmp_path):
+    sent: list[dict] = []
+    provider = adapter(tmp_path, [{"sections": []}], sent)
+    whole = request()
+    for entry in whole.context.texts:
+        entry.text += " Synthetic complete table context." * 180
+    assert len(whole.model_dump_json()) > 8000
+    accounting = Accounting()
+    token = current_accounting.set(accounting)
+    try:
+        result = await provider.extract_rubric(whole)
+    finally:
+        current_accounting.reset(token)
+    assert result.failure is not None
+    assert result.batches == []
+    assert len(result.usages) == len(accounting.completed) == len(sent) == 1
+    assert accounting.planned == [1]
+    assert json.loads(sent[0]["messages"][-1]["content"]) == whole.model_dump(mode="json")
+
+
+async def test_complete_rubric_request_limit_accounts_messages_schema_and_options(tmp_path):
+    sent: list[dict] = []
+    provider = adapter(tmp_path, [wire()], sent)
+    provider.llm.settings.rubric_max_request_bytes = 2000
+    assert len(request().model_dump_json().encode()) < 2000
+    accounting = Accounting()
+    token = current_accounting.set(accounting)
+    try:
+        with pytest.raises(ProviderFailure) as blocked:
+            await provider.extract_rubric(request())
+    finally:
+        current_accounting.reset(token)
+    assert blocked.value.code == "rubric_context_limit"
+    assert not sent and not accounting.reservations and not accounting.planned
 
 
 async def test_rubric_provider_requires_accounting_and_supported_adapter(tmp_path):

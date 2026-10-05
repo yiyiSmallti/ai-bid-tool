@@ -39,8 +39,16 @@ from test_check import (
     ASSESSMENT_DATE,  # noqa: F401
     LiveCheckClient,
     invoke_live_cli,
+    publish_draft,
 )
 from test_check import check_case as check_case
+from test_response_cards import (
+    create_card,
+    create_tender,
+    phase_one_client,
+    require_action,
+    set_role,
+)
 
 
 class SemanticVendor:
@@ -310,6 +318,236 @@ async def run_combined(case, receipt: dict) -> dict:
     return response.json()["data"]
 
 
+@pytest.fixture
+async def combined_scope_case(tenants, admin_engine, tmp_path):
+    async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+        header = headers[0]
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, suffix="check-scope"
+        )
+        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+        disposition = await api.post(
+            f"/tasks/{task}/cards/dispositions",
+            headers=header,
+            json={
+                "extraction_job_id": extraction,
+                "items": [
+                    {
+                        "requirement_id": requirements[3]["id"],
+                        "expected_revision": None,
+                        "disposition": "comply_only",
+                        "reason": "The procedure is handled by a human disposition.",
+                    }
+                ],
+            },
+        )
+        assert disposition.status_code == 200, disposition.text
+        yield {
+            "api": api,
+            "app": app,
+            "header": header,
+            "headers": headers,
+            "task": task,
+            "extraction": extraction,
+            "requirements": requirements,
+        }
+
+
+async def scope_draft(case, *, response: bool):
+    if response:
+        card = await create_card(
+            case["api"],
+            case["header"],
+            case["task"],
+            case["extraction"],
+            case["requirements"][2],
+            {
+                "response_kind": "commitment",
+                "response_text": "We deliver within thirty days.",
+                "deviation": "none",
+                "deviation_note": "The delivery commitment meets the required thirty calendar days.",
+                "evidence": [],
+            },
+        )
+        card = await require_action(case["api"], case["header"], card, "submit")
+        await require_action(case["api"], case["header"], card, "confirm", reviewed_evidence_ids=[])
+    result = await publish_draft(
+        case["api"], case["app"], case["header"], case["task"], case["extraction"]
+    )
+    case["draft"] = {"id": result["draft_id"]}
+
+
+@pytest.mark.parametrize("response", [True, False], ids=["mixed", "no-response"])
+async def test_combined_scope_only_sends_confirmed_responses(
+    combined_scope_case, tmp_path, monkeypatch, response
+):
+    case = combined_scope_case
+    await scope_draft(case, response=response)
+    vendor = SemanticVendor()
+    install_resolver(
+        monkeypatch,
+        semantic_llm(tmp_path, vendor)
+        if response
+        else semantic_llm(
+            tmp_path,
+            vendor,
+            org_owned=False,
+            llm_input_usd_per_mtok=None,
+            llm_output_usd_per_mtok=None,
+        ),
+    )
+    plans = []
+    original_plan = JobExecution.plan
+
+    def track_plan(self, calls):
+        plans.append(calls)
+        original_plan(self, calls)
+
+    monkeypatch.setattr(JobExecution, "plan", track_plan)
+    preview_response, preview = await combined_preview(case)
+    assert preview_response.status_code == 200, preview_response.text
+    assert preview["semantic_items"] == int(response)
+    assert preview["selected_item_ids"] == [row["id"] for row in case["requirements"]]
+    assert vendor.requests == []
+    if not response:
+        assert preview["estimated_cost"] == {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0}
+        assert preview["estimated_charge"] == "0"
+        assert preview["cost_basis"] == "known"
+        assert preview["cost_basis_reason"] == "no_model_calls"
+    queued = await submit_combined(case, preview)
+    assert queued.status_code == 200, queued.text
+    terminal = await run_combined(case, queued.json()["data"])
+    assert terminal["status"] == "succeeded", terminal
+    result = terminal["result"]
+    assert result["completion"] == "complete" and result["unassessed_requirements"] == 0
+    shown = await case["api"].get(f"/checks/{result['report_id']}", headers=case["header"])
+    assert shown.status_code == 200, shown.text
+    assert shown.json()["ok"] is True
+    coverage = shown.json()["data"]["coverage"]
+    assert len(coverage) == len(case["requirements"])
+    assert {row["partition"] for row in coverage} == (
+        {"gap", "comply_only", "response"} if response else {"gap", "comply_only"}
+    )
+    for row in coverage:
+        if row["partition"] == "response":
+            assert row["semantic_status"] == "assessed"
+            assert row["semantic_outcome"] == "no_risk_found"
+        else:
+            assert row["semantic_status"] == "not_requested"
+            assert row["semantic_outcome"] is None and row["semantic_reason_code"] is None
+            assert row["semantic_citations"] == []
+    assert any(row["code"] == "mandatory_response_missing" for row in shown.json()["items"])
+    # The job plans the whole first pass; the provider re-plans per call and plan() keeps the maximum.
+    assert plans[0] == max(plans) == int(response)
+    assert len(vendor.requests) == len(result["usage_record_ids"]) == int(response)
+    if response:
+        payload = vendor.requests[0]
+        assert payload["requested_requirement_ids"] == ["r3"]
+        assert {row["ref"].split(".")[0] for row in payload["context"]["texts"]} == {"r3"}
+    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+        job_id = UUID(result["job_id"])
+        for model in (VendorCall, UsageRecord):
+            assert await session.scalar(
+                select(func.count()).select_from(model).where(model.job_id == job_id)
+            ) == int(response)
+        stored = await session.get(CheckRun, UUID(result["report_id"]))
+        assert stored is not None
+        artifact = tmp_path / f"check-scope-{response}.json"
+        artifact.write_text(
+            json.dumps(
+                {
+                    "preview": preview,
+                    "manifest": stored.input_manifest,
+                    "report": shown.json(),
+                    "requests": vendor.requests,
+                    "planned_calls": plans,
+                },
+                indent=2,
+            )
+        )
+        assert json.loads(artifact.read_text())["report"] == shown.json()
+
+
+@pytest.mark.parametrize("partition", ["gap", "comply_only"])
+@pytest.mark.parametrize("mutation", ["assessed", "unassessed", "finding", "citation"])
+async def test_combined_nonresponse_storage_rejects_semantic_content(
+    combined_scope_case, tmp_path, monkeypatch, partition, mutation
+):
+    from app.services import check
+
+    case = combined_scope_case
+    await scope_draft(case, response=True)
+    install_resolver(monkeypatch, semantic_llm(tmp_path, SemanticVendor()))
+    response, preview = await combined_preview(case)
+    assert response.status_code == 200, response.text
+    original_publish = check.publish
+
+    async def forged_publish(session, actor, job, fixed, evaluated, settings, stop_reason):
+        target = next(row for row in evaluated if row["item"]["partition"] == partition)
+        assessed = next(row for row in evaluated if row["item"]["partition"] == "response")
+        if mutation == "assessed":
+            target.update(
+                semantic_status="assessed",
+                semantic_outcome="no_risk_found",
+                semantic_reason_code=None,
+            )
+        elif mutation == "unassessed":
+            target.update(
+                semantic_status="unassessed",
+                semantic_outcome="unknown",
+                semantic_reason_code="semantic_unknown",
+                unassessed=True,
+            )
+        elif mutation == "finding":
+            target["findings"].append(
+                {
+                    "method": "semantic",
+                    "code": "insufficient_support",
+                    "severity": "info",
+                    "reason": "Forged semantic finding.",
+                    "citations": [],
+                }
+            )
+        else:
+            target["semantic_citations"] = copy.deepcopy(assessed["semantic_citations"])
+        return await original_publish(session, actor, job, fixed, evaluated, settings, stop_reason)
+
+    monkeypatch.setattr(check, "publish", forged_publish)
+    queued = await submit_combined(case, preview)
+    assert queued.status_code == 200, queued.text
+    terminal = await run_combined(case, queued.json()["data"])
+    assert terminal["status"] == "failed", terminal
+    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+        assert await session.scalar(select(func.count()).select_from(CheckRun)) == 0
+
+
+async def test_combined_old_pending_scope_requires_new_preview(
+    combined_scope_case, tmp_path, monkeypatch
+):
+    case = combined_scope_case
+    await scope_draft(case, response=True)
+    vendor = SemanticVendor()
+    install_resolver(monkeypatch, semantic_llm(tmp_path, vendor))
+    response, preview = await combined_preview(case)
+    assert response.status_code == 200, response.text
+    queued = await submit_combined(case, preview)
+    assert queued.status_code == 200, queued.text
+    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+        job = await session.get(Job, UUID(queued.json()["data"]["job_id"]))
+        assert job is not None
+        submitted = copy.deepcopy(job.result["submission"])
+        submitted["input_manifest"]["rule_version"] = "check-rules-v1"
+        submitted["input_hash"] = drafts.digest(submitted["input_manifest"])
+        job.result = {"submission": submitted}
+    terminal = await run_combined(case, queued.json()["data"])
+    assert terminal["status"] == "failed", terminal
+    assert terminal["error"]["code"] == "check_input_changed"
+    assert vendor.requests == []
+    async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
+        assert await session.scalar(select(func.count()).select_from(CheckRun)) == 0
+        assert await session.scalar(select(func.count()).select_from(VendorCall)) == 0
+
+
 async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation(
     check_case, tenants, tmp_path, monkeypatch
 ):
@@ -333,7 +571,7 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert before["org_balance"] is None and after_preview["org_balance"] is None
     assert vendor.requests == []
     assert preview["mode"] == "combined"
-    assert preview["semantic_items"] == len(case["requirements"])
+    assert preview["semantic_items"] == 2
     assert preview["admission_blocker"] is None
     assert preview["provider_source"] == "org"
     assert preview["estimated_charge"] == "0"
@@ -359,9 +597,9 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert terminal["status"] == "succeeded", terminal
     result = terminal["result"]
     assert result["completion"] == "partial"
-    # Three semantic gaps plus the mapped certificate with unknown dates.
+    # Only the mapped certificate's unknown dates keep this report partial.
     # A no-risk semantic result cannot complete an unknown deterministic check.
-    assert result["unassessed_requirements"] == 4
+    assert result["unassessed_requirements"] == 1
     assert len(result["usage_record_ids"]) == len(vendor.requests) == 1
     assert Decimal(result["charge"]) == 0
 
@@ -369,10 +607,11 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
     assert shown.status_code == 200, shown.text
     coverage = shown.json()["data"]["coverage"]
     assessed = [row for row in coverage if row["semantic_status"] == "assessed"]
-    unknown = [row for row in coverage if row["semantic_outcome"] == "unknown"]
-    assert len(assessed) == 2 and len(unknown) == 3
-    semantic_unknown_ids = {row["requirement_id"] for row in unknown}
-    assert semantic_unknown_ids == {case["requirements"][index]["id"] for index in (0, 3, 4)}
+    deterministic = [row for row in coverage if row["semantic_status"] == "not_requested"]
+    assert len(assessed) == 2 and len(deterministic) == 3
+    assert {row["requirement_id"] for row in deterministic} == {
+        case["requirements"][index]["id"] for index in (0, 3, 4)
+    }
     rules_unknown_ids = {
         row["requirement_id"]
         for row in coverage
@@ -390,10 +629,10 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
         for rule in commercial["rules"]
     )
     assert (
-        len(rules_unknown_ids | semantic_unknown_ids)
+        len(rules_unknown_ids)
         == result["unassessed_requirements"]
         == shown.json()["data"]["report"]["unassessed_count"]
-        == 4
+        == 1
     )
     assert {row["semantic_outcome"] for row in assessed} == {"no_risk_found"}
     assert all(
@@ -401,10 +640,10 @@ async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation
         for row in assessed
     )
     assert all(
-        row["semantic_status"] == "unassessed"
-        and row["semantic_reason_code"] == "semantic_unknown"
+        row["semantic_outcome"] is None
+        and row["semantic_reason_code"] is None
         and row["semantic_citations"] == []
-        for row in unknown
+        for row in deterministic
     )
     assert (
         await case["api"].get(f"/checks/{result['report_id']}", headers=case["headers"][1])
@@ -589,7 +828,7 @@ async def test_combined_later_batch_failure_keeps_one_bill_and_partial_report(
 ):
     case = check_case
     vendor = SemanticVendor({2: failure})
-    llm = semantic_llm(tmp_path, vendor, llm_batch_chars=1_700)
+    llm = semantic_llm(tmp_path, vendor, llm_batch_chars=1_200)
     install_resolver(monkeypatch, llm)
     response, preview = await combined_preview(case)
     assert response.status_code == 200, response.text
@@ -600,7 +839,10 @@ async def test_combined_later_batch_failure_keeps_one_bill_and_partial_report(
     assert terminal["status"] == "succeeded", terminal
     result = terminal["result"]
     assert result["completion"] == "partial"
-    assert len(vendor.requests) >= 2
+    assert result["stop_reason"] == (
+        "provider_refused" if failure == "refused" else "invalid_provider_output"
+    )
+    assert [request["requested_requirement_ids"] for request in vendor.requests] == [["r2"], ["r3"]]
     async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
         usages = list(
             (

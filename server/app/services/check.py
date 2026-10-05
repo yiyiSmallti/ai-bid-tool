@@ -127,7 +127,11 @@ async def submit_check(
                 "prompt_version": fixed.manifest["prompt_version"],
                 "schema_version": fixed.manifest["schema_version"],
                 "rules_applicable": len(fixed.secret["items"]),
-                "semantic_items": len(fixed.secret["items"]) if body.mode == "combined" else 0,
+                "semantic_items": sum(
+                    check_semantic.eligible(item) for item in fixed.secret["items"]
+                )
+                if body.mode == "combined"
+                else 0,
                 "gap_requirements": sum(
                     item["partition"] == "gap" for item in fixed.secret["items"]
                 ),
