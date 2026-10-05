@@ -1,4 +1,4 @@
-"""Review-only budget proposal; no runtime routes, commands or persistence are registered."""
+"""Approved budget interface snapshot; runtime types are in app.schemas.budget_contracts."""
 
 from collections.abc import Awaitable, Callable
 from decimal import Decimal

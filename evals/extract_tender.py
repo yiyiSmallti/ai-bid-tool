@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "server"))
 from app.core.config import Settings  # noqa: E402
 from app.core.errors import ServiceError  # noqa: E402
 from app.providers.base import ProviderFailure  # noqa: E402
+from app.providers.calls import standalone_evaluation  # noqa: E402
 from app.providers.llm import create_llm  # noqa: E402
 from app.providers.local_ocr import LocalOCR  # noqa: E402
 from app.schemas.contracts import Extraction, SectionText  # noqa: E402
@@ -65,6 +66,11 @@ def star_recall(items, units) -> dict:
 
 
 async def run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict, int]:
+    with standalone_evaluation():
+        return await _run(name, content, batch_chars)
+
+
+async def _run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict, int]:
     config = settings(batch_chars)
     if config.llm_provider == "disabled":
         raise SystemExit(
@@ -107,7 +113,7 @@ async def run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict,
     except ProviderFailure as exc:
         artifact["duration_ms"] = int((time.monotonic() - started) * 1000)
         artifact["error"] = {"code": exc.code, "message": str(exc), "retryable": exc.retryable}
-        artifact["usage"] = [usage.model_dump() for usage in exc.usage]
+        artifact["usage"] = [usage.model_dump(mode="json") for usage in exc.usage]
         print(f"Extraction failed: {exc.code} ({exc})")
         return artifact, 1
     finally:
@@ -126,7 +132,7 @@ async def run(name: str, content: bytes, batch_chars: int | None) -> tuple[dict,
     )
     artifact |= {
         "duration_ms": int((time.monotonic() - started) * 1000),
-        "usage": result.usage.model_dump(),
+        "usage": result.usage.model_dump(mode="json"),
         "model_items": len(items),
         "verified_citations": sum(valid),
         "batch_accepted_by_citation_check": accepted,

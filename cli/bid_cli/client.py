@@ -128,10 +128,11 @@ class State:
 
 
 class Client:
-    def __init__(self, mode: str, server: str, state: State):
+    def __init__(self, mode: str, server: str, state: State, contract_version: str = "4.0"):
         if mode not in {"local", "remote"}:
             raise ServiceError("invalid_mode", "Mode must be local or remote", 400, 2)
         self.mode, self.server, self.state = mode, server.rstrip("/"), state
+        self.contract_version = contract_version
 
     @asynccontextmanager
     async def transport(self):
@@ -181,7 +182,12 @@ class Client:
             }
         try:
             async with self.transport() as client:
-                response = await client.request(method, path, headers=headers, **kwargs)
+                response = await client.request(
+                    method,
+                    "/v4" + path if self.contract_version == "4.0" else path,
+                    headers=headers,
+                    **kwargs,
+                )
         except httpx.TransportError as exc:
             raise ServiceError(
                 "network_unavailable", "Server is unavailable or timed out", 503, 3
@@ -218,6 +224,9 @@ class Client:
             return result
         if not response.is_success:
             data = body.get("data", {})
+            if isinstance(data, dict) and ("budget" in data or "result" in data):
+                # Budget stops preserve the complete paid envelope for CLI exit mapping.
+                return body
             error = data.get("error", {})
             job_id = None
             parts = path.split("?", 1)[0].split("/")

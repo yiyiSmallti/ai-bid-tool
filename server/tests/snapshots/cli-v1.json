@@ -2,8 +2,14 @@
   "auth orgs": {
     "command": "auth orgs",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {},
@@ -22,8 +28,14 @@
   "auth setup-password": {
     "command": "auth setup-password",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -37,8 +49,14 @@
   "billing balance": {
     "command": "billing balance",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -63,8 +81,14 @@
   "billing redeem": {
     "command": "billing redeem",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -81,8 +105,14 @@
   "card classify": {
     "command": "card classify",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -133,8 +163,14 @@
   "card confirm": {
     "command": "card confirm",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -185,8 +221,14 @@
   "card create": {
     "command": "card create",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -237,8 +279,14 @@
   "card disposition": {
     "command": "card disposition",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -294,9 +342,15 @@
   "card generate": {
     "command": "card generate",
     "cost": {
-      "llm_tokens": 1000,
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
       "ocr_pages": 0,
-      "usd": null
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
     },
     "data": {
       "billing_currency": "USD",
@@ -335,15 +389,19 @@
     "duration_ms": 0,
     "items": [],
     "ok": false,
-    "warnings": [
-      "needs_material:00000000-0000-0000-0000-000000000001"
-    ]
+    "warnings": []
   },
   "card list": {
     "command": "card list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -410,8 +468,14 @@
   "card needs-material": {
     "command": "card needs-material",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -462,8 +526,14 @@
   "card reject": {
     "command": "card reject",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -514,8 +584,14 @@
   "card reopen": {
     "command": "card reopen",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -566,8 +642,14 @@
   "card show": {
     "command": "card show",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -659,8 +741,14 @@
   "card submit": {
     "command": "card submit",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -711,8 +799,14 @@
   "card update": {
     "command": "card update",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -763,8 +857,14 @@
   "card withdraw": {
     "command": "card withdraw",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -815,8 +915,14 @@
   "confidential field add": {
     "command": "confidential field add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -838,8 +944,14 @@
   "confidential field list": {
     "command": "confidential field list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -865,8 +977,14 @@
   "confidential field update": {
     "command": "confidential field update",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -888,8 +1006,14 @@
   "confidential history": {
     "command": "confidential history",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -919,8 +1043,14 @@
   "confidential list": {
     "command": "confidential list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -951,8 +1081,14 @@
   "confidential set": {
     "command": "confidential set",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -978,126 +1114,31 @@
   "draft": {
     "command": "draft",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
+      "cached": false,
       "completion": "partial",
-      "comply_only": [
-        {
-          "card_id": "00000000-0000-0000-0000-000000000003",
-          "card_revision_id": "00000000-0000-0000-0000-000000000003",
-          "disposition_at": "2026-10-01T00:00:00+00:00",
-          "disposition_by": "00000000-0000-0000-0000-000000000001",
-          "location_label": "Page 1",
-          "requirement_id": "00000000-0000-0000-0000-000000000003",
-          "tender_clause": {
-            "chunk_id": "00000000-0000-0000-0000-000000000001",
-            "document_id": "00000000-0000-0000-0000-000000000001",
-            "location": null,
-            "page": 1,
-            "quote": "Synthetic source"
-          }
-        }
-      ],
-      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
-      "gaps": [
-        {
-          "card_id": null,
-          "card_revision_id": null,
-          "location_label": "Page 1",
-          "reasons": [
-            "missing_card"
-          ],
-          "requirement_id": "00000000-0000-0000-0000-000000000004",
-          "tender_clause": {
-            "chunk_id": "00000000-0000-0000-0000-000000000001",
-            "document_id": "00000000-0000-0000-0000-000000000001",
-            "location": null,
-            "page": 1,
-            "quote": "Synthetic source"
-          }
-        }
-      ],
-      "generation_job_id": "00000000-0000-0000-0000-000000000001",
-      "id": "00000000-0000-0000-0000-000000000001",
-      "input_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
-      "invalidated_requirements": [],
-      "org_id": "00000000-0000-0000-0000-000000000001",
-      "status": "draft",
-      "tables": {
-        "commercial": [
-          {
-            "card_id": "00000000-0000-0000-0000-000000000001",
-            "card_revision_id": "00000000-0000-0000-0000-000000000001",
-            "category": "qualification",
-            "deviation": "none",
-            "deviation_note": "The offered delivery date is identical.",
-            "evidence": [],
-            "location_label": "Page 1",
-            "requirement_id": "00000000-0000-0000-0000-000000000001",
-            "response_kind": "commitment",
-            "response_text": "We commit to the stated delivery date.",
-            "starred": false,
-            "table": "commercial",
-            "tender_clause": {
-              "chunk_id": "00000000-0000-0000-0000-000000000001",
-              "document_id": "00000000-0000-0000-0000-000000000001",
-              "location": null,
-              "page": 1,
-              "quote": "Synthetic source"
-            }
-          }
-        ],
-        "substantive": [],
-        "technical": [
-          {
-            "card_id": "00000000-0000-0000-0000-000000000002",
-            "card_revision_id": "00000000-0000-0000-0000-000000000002",
-            "category": "technical",
-            "deviation": "negative",
-            "deviation_note": "One optional mode is not offered.",
-            "evidence": [
-              {
-                "active_selection": true,
-                "card_id": "00000000-0000-0000-0000-000000000002",
-                "confirmed_at": "2026-10-01T00:00:00+00:00",
-                "confirmed_by": "00000000-0000-0000-0000-000000000001",
-                "id": "00000000-0000-0000-0000-000000000001",
-                "input": {
-                  "field_path": "name",
-                  "kind": "product",
-                  "quote": "Synthetic product",
-                  "selection_id": "00000000-0000-0000-0000-000000000001"
-                },
-                "material_kind": "declaration",
-                "org_id": "00000000-0000-0000-0000-000000000001",
-                "quote_check": "exact_field_match",
-                "resource_revision_id": "00000000-0000-0000-0000-000000000001",
-                "selection_id": "00000000-0000-0000-0000-000000000001",
-                "source_archive": null,
-                "task_id": "00000000-0000-0000-0000-000000000001"
-              }
-            ],
-            "location_label": "Page 1",
-            "requirement_id": "00000000-0000-0000-0000-000000000002",
-            "response_kind": "evidence",
-            "response_text": "The selected product has the named capability.",
-            "starred": false,
-            "table": "technical",
-            "tender_clause": {
-              "chunk_id": "00000000-0000-0000-0000-000000000001",
-              "document_id": "00000000-0000-0000-0000-000000000001",
-              "location": null,
-              "page": 1,
-              "quote": "Synthetic source"
-            }
-          }
-        ]
+      "cost": {
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "usd": 0.0
       },
-      "task_id": "00000000-0000-0000-0000-000000000001",
-      "validity": "current"
+      "draft_id": "00000000-0000-0000-0000-000000000001",
+      "exit_code": 5,
+      "job_id": "00000000-0000-0000-0000-000000000001",
+      "status": "succeeded",
+      "warnings": [
+        "missing_card:00000000-0000-0000-0000-000000000004"
+      ]
     },
     "duration_ms": 0,
     "items": [],
@@ -1107,8 +1148,14 @@
   "draft list": {
     "command": "draft list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1141,8 +1188,14 @@
   "draft show": {
     "command": "draft show",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1270,8 +1323,14 @@
   "evidence source add": {
     "command": "evidence source add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1321,8 +1380,14 @@
   "evidence source download": {
     "command": "evidence source download",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1347,8 +1412,14 @@
   "evidence source list": {
     "command": "evidence source list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1402,8 +1473,14 @@
   "export binding create": {
     "command": "export binding create",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1515,8 +1592,14 @@
   "export binding list": {
     "command": "export binding list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1632,8 +1715,14 @@
   "export download": {
     "command": "export download",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1658,8 +1747,14 @@
   "export list": {
     "command": "export list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1699,8 +1794,14 @@
   "export prepare": {
     "command": "export prepare",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1724,8 +1825,14 @@
   "export provenance": {
     "command": "export provenance",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1796,8 +1903,14 @@
   "export release": {
     "command": "export release",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1833,8 +1946,14 @@
   "export run show": {
     "command": "export run show",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1858,8 +1977,14 @@
   "export show": {
     "command": "export show",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -1895,8 +2020,14 @@
   "export template-sample": {
     "command": "export template-sample",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2001,8 +2132,14 @@
   "job cancel": {
     "command": "job cancel",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2017,8 +2154,14 @@
   "job status": {
     "command": "job status",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2049,8 +2192,14 @@
   "job wait": {
     "command": "job wait",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2081,8 +2230,14 @@
   "login": {
     "command": "login",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2098,8 +2253,14 @@
   "org use": {
     "command": "org use",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2114,8 +2275,14 @@
   "platform audit": {
     "command": "platform audit",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {},
@@ -2139,8 +2306,14 @@
   "platform card create": {
     "command": "platform card create",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2160,8 +2333,14 @@
   "platform card list": {
     "command": "platform card list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2191,8 +2370,14 @@
   "platform card void": {
     "command": "platform card void",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2218,8 +2403,14 @@
   "platform login": {
     "command": "platform login",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2235,8 +2426,14 @@
   "platform model list": {
     "command": "platform model list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {},
@@ -2267,8 +2464,14 @@
   "platform model set": {
     "command": "platform model set",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2297,8 +2500,14 @@
   "platform model test": {
     "command": "platform model test",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2317,8 +2526,14 @@
   "platform org balance": {
     "command": "platform org balance",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2336,8 +2551,14 @@
   "platform org create": {
     "command": "platform org create",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2356,8 +2577,14 @@
   "platform org list": {
     "command": "platform org list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {},
@@ -2380,8 +2607,14 @@
   "platform org set-active": {
     "command": "platform org set-active",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2396,8 +2629,14 @@
   "platform usage": {
     "command": "platform usage",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2435,8 +2674,14 @@
   "req extract": {
     "command": "req extract",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2453,8 +2698,14 @@
   "req history": {
     "command": "req history",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {},
@@ -2481,8 +2732,14 @@
   "req list": {
     "command": "req list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {},
@@ -2537,8 +2794,14 @@
   "req repair-citations": {
     "command": "req repair-citations",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2575,8 +2838,14 @@
   "req repair-citations execute": {
     "command": "req repair-citations",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2613,8 +2882,14 @@
   "resource certificate add": {
     "command": "resource certificate add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2640,8 +2915,14 @@
   "resource certificate file add": {
     "command": "resource certificate file add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2675,8 +2956,14 @@
   "resource certificate file download": {
     "command": "resource certificate file download",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2700,8 +2987,14 @@
   "resource certificate file list": {
     "command": "resource certificate file list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2742,8 +3035,14 @@
   "resource certificate list": {
     "command": "resource certificate list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2782,8 +3081,14 @@
   "resource certificate update": {
     "command": "resource certificate update",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2809,8 +3114,14 @@
   "resource feature add": {
     "command": "resource feature add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2835,8 +3146,14 @@
   "resource feature list": {
     "command": "resource feature list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2868,8 +3185,14 @@
   "resource feature update": {
     "command": "resource feature update",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2894,8 +3217,14 @@
   "resource product add": {
     "command": "resource product add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2920,8 +3249,14 @@
   "resource product list": {
     "command": "resource product list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2953,8 +3288,14 @@
   "resource product update": {
     "command": "resource product update",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -2979,8 +3320,14 @@
   "resource profile add": {
     "command": "resource profile add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3005,8 +3352,14 @@
   "resource profile list": {
     "command": "resource profile list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3038,8 +3391,14 @@
   "resource profile update": {
     "command": "resource profile update",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3064,8 +3423,14 @@
   "resource template add": {
     "command": "resource template add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3095,8 +3460,14 @@
   "resource template download": {
     "command": "resource template download",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3119,8 +3490,14 @@
   "resource template list": {
     "command": "resource template list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3157,8 +3534,14 @@
   "resource template update": {
     "command": "resource template update",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3188,8 +3571,14 @@
   "sandbox capture": {
     "command": "sandbox capture",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3220,8 +3609,14 @@
   "sandbox download": {
     "command": "sandbox download",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3249,8 +3644,14 @@
   "sandbox list": {
     "command": "sandbox list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3286,8 +3687,14 @@
   "sandbox render": {
     "command": "sandbox render",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3318,8 +3725,14 @@
   "sandbox show": {
     "command": "sandbox show",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -3350,11 +3763,740 @@
   "schema": {
     "command": "schema",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
+      "$defs": {
+        "BudgetCallQuote": {
+          "additionalProperties": false,
+          "properties": {
+            "capability": {
+              "enum": [
+                "llm",
+                "vision",
+                "ocr",
+                "search",
+                "embedding",
+                "browser"
+              ],
+              "title": "Capability",
+              "type": "string"
+            },
+            "currency": {
+              "pattern": "^[A-Z]{3}$",
+              "title": "Currency",
+              "type": "string"
+            },
+            "image_count": {
+              "default": 0,
+              "maximum": 20,
+              "minimum": 0,
+              "title": "Image Count",
+              "type": "integer"
+            },
+            "image_price_revision": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Image Price Revision"
+            },
+            "input_tokens_upper_bound": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Input Tokens Upper Bound",
+              "type": "integer"
+            },
+            "model": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Model",
+              "type": "string"
+            },
+            "ocr_pages_upper_bound": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Ocr Pages Upper Bound",
+              "type": "integer"
+            },
+            "output_tokens_upper_bound": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Output Tokens Upper Bound",
+              "type": "integer"
+            },
+            "payer": {
+              "enum": [
+                "org_platform",
+                "org_direct",
+                "platform_absorbed",
+                "local_free"
+              ],
+              "title": "Payer",
+              "type": "string"
+            },
+            "platform_model_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Platform Model Id"
+            },
+            "price_revision": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Price Revision",
+              "type": "string"
+            },
+            "provider": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Provider",
+              "type": "string"
+            },
+            "provider_config_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Provider Config Id"
+            },
+            "request_sha256": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Request Sha256",
+              "type": "string"
+            },
+            "reserved_charge": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                }
+              ],
+              "title": "Reserved Charge"
+            },
+            "reserved_task_amount": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Reserved Task Amount"
+            },
+            "search_requests": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Search Requests",
+              "type": "integer"
+            },
+            "unknown_reason": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "missing_price",
+                    "currency_conversion_required",
+                    "unbounded"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Unknown Reason"
+            },
+            "vendor_usd_upper_bound": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Vendor Usd Upper Bound"
+            },
+            "version": {
+              "maxLength": 100,
+              "minLength": 1,
+              "title": "Version",
+              "type": "string"
+            }
+          },
+          "required": [
+            "capability",
+            "payer",
+            "provider",
+            "model",
+            "version",
+            "price_revision",
+            "request_sha256",
+            "currency",
+            "reserved_charge",
+            "reserved_task_amount",
+            "vendor_usd_upper_bound"
+          ],
+          "title": "BudgetCallQuote",
+          "type": "object"
+        },
+        "BudgetCost": {
+          "additionalProperties": false,
+          "properties": {
+            "basis": {
+              "enum": [
+                "actual",
+                "first_pass_upper_bound",
+                "unknown",
+                "zero",
+                "cache_hit"
+              ],
+              "title": "Basis",
+              "type": "string"
+            },
+            "billing_currency": {
+              "pattern": "^[A-Z]{3}$",
+              "title": "Billing Currency",
+              "type": "string"
+            },
+            "charge": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Charge"
+            },
+            "llm_tokens": {
+              "default": 0,
+              "title": "Llm Tokens",
+              "type": "integer"
+            },
+            "ocr_pages": {
+              "default": 0,
+              "title": "Ocr Pages",
+              "type": "integer"
+            },
+            "task_amount": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Amount"
+            },
+            "unpriced_calls": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Unpriced Calls",
+              "type": "integer"
+            },
+            "unresolved_calls": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Unresolved Calls",
+              "type": "integer"
+            },
+            "usd": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": 0.0,
+              "title": "Usd"
+            }
+          },
+          "required": [
+            "basis",
+            "charge",
+            "billing_currency",
+            "task_amount"
+          ],
+          "title": "BudgetCost",
+          "type": "object"
+        },
+        "BudgetPreflightData": {
+          "additionalProperties": false,
+          "properties": {
+            "admission_blocker": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "task_budget_exceeded",
+                    "task_budget_unpriced",
+                    "task_budget_currency_review_required",
+                    "insufficient_balance",
+                    "job_charge_limit_exceeded",
+                    "job_call_limit_exceeded",
+                    "spend_cap_reached",
+                    "billing_price_unavailable",
+                    "billing_currency_mismatch",
+                    "provider_unavailable"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Admission Blocker"
+            },
+            "as_of": {
+              "format": "date-time",
+              "title": "As Of",
+              "type": "string"
+            },
+            "cached_job_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Cached Job Id"
+            },
+            "cached_result_cost": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Cost"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null
+            },
+            "command": {
+              "title": "Command",
+              "type": "string"
+            },
+            "dry_run": {
+              "const": true,
+              "default": true,
+              "title": "Dry Run",
+              "type": "boolean"
+            },
+            "duration_basis": {
+              "default": "unknown",
+              "enum": [
+                "unknown",
+                "measured_profile"
+              ],
+              "title": "Duration Basis",
+              "type": "string"
+            },
+            "estimate": {
+              "$ref": "#/$defs/BudgetCost"
+            },
+            "estimated_duration_ms": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Estimated Duration Ms"
+            },
+            "first_pass_fits": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "First Pass Fits"
+            },
+            "full_run_guaranteed": {
+              "const": false,
+              "default": false,
+              "title": "Full Run Guaranteed",
+              "type": "boolean"
+            },
+            "input_hash": {
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "Input Hash",
+              "type": "string"
+            },
+            "maximum_calls": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Maximum Calls"
+            },
+            "next_call": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BudgetCallQuote"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "planned_calls": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Planned Calls"
+            },
+            "task_budget": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/TaskBudgetView"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "task_id": {
+              "anyOf": [
+                {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Id"
+            },
+            "uncertainty": {
+              "items": {
+                "enum": [
+                  "retry_or_split",
+                  "dynamic_search",
+                  "unknown_price",
+                  "currency_conversion",
+                  "history_incomplete",
+                  "concurrent_spending",
+                  "unresolved_usage"
+                ],
+                "type": "string"
+              },
+              "title": "Uncertainty",
+              "type": "array"
+            }
+          },
+          "required": [
+            "command",
+            "task_id",
+            "input_hash",
+            "as_of",
+            "task_budget",
+            "planned_calls",
+            "estimate",
+            "next_call",
+            "admission_blocker",
+            "first_pass_fits"
+          ],
+          "title": "BudgetPreflightData",
+          "type": "object"
+        },
+        "Cost": {
+          "additionalProperties": false,
+          "properties": {
+            "basis": {
+              "default": "zero",
+              "enum": [
+                "actual",
+                "first_pass_upper_bound",
+                "unknown",
+                "zero",
+                "cache_hit"
+              ],
+              "title": "Basis",
+              "type": "string"
+            },
+            "billing_currency": {
+              "default": "USD",
+              "pattern": "^[A-Z]{3}$",
+              "title": "Billing Currency",
+              "type": "string"
+            },
+            "charge": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "0",
+              "title": "Charge"
+            },
+            "llm_tokens": {
+              "default": 0,
+              "title": "Llm Tokens",
+              "type": "integer"
+            },
+            "ocr_pages": {
+              "default": 0,
+              "title": "Ocr Pages",
+              "type": "integer"
+            },
+            "task_amount": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": "0",
+              "title": "Task Amount"
+            },
+            "unpriced_calls": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Unpriced Calls",
+              "type": "integer"
+            },
+            "unresolved_calls": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Unresolved Calls",
+              "type": "integer"
+            },
+            "usd": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": 0.0,
+              "title": "Usd"
+            }
+          },
+          "title": "Cost",
+          "type": "object"
+        },
+        "TaskBudgetView": {
+          "additionalProperties": false,
+          "properties": {
+            "as_of": {
+              "format": "date-time",
+              "title": "As Of",
+              "type": "string"
+            },
+            "available": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Available"
+            },
+            "currency": {
+              "pattern": "^[A-Z]{3}$",
+              "title": "Currency",
+              "type": "string"
+            },
+            "history_complete": {
+              "title": "History Complete",
+              "type": "boolean"
+            },
+            "limit": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Limit"
+            },
+            "org_id": {
+              "format": "uuid",
+              "title": "Org Id",
+              "type": "string"
+            },
+            "reserved": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                }
+              ],
+              "title": "Reserved"
+            },
+            "revision": {
+              "minimum": 1,
+              "title": "Revision",
+              "type": "integer"
+            },
+            "spent": {
+              "anyOf": [
+                {
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                  "type": "string"
+                }
+              ],
+              "title": "Spent"
+            },
+            "state": {
+              "enum": [
+                "active",
+                "currency_review_required"
+              ],
+              "title": "State",
+              "type": "string"
+            },
+            "task_id": {
+              "format": "uuid",
+              "title": "Task Id",
+              "type": "string"
+            },
+            "unpriced_calls": {
+              "minimum": 0,
+              "title": "Unpriced Calls",
+              "type": "integer"
+            },
+            "unresolved_calls": {
+              "minimum": 0,
+              "title": "Unresolved Calls",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "org_id",
+            "task_id",
+            "revision",
+            "limit",
+            "currency",
+            "state",
+            "spent",
+            "reserved",
+            "available",
+            "unpriced_calls",
+            "unresolved_calls",
+            "history_complete",
+            "as_of"
+          ],
+          "title": "TaskBudgetView",
+          "type": "object"
+        }
+      },
       "commands": {
         "auth orgs": {
           "cli_parameters": [
@@ -3440,6 +4582,249 @@
             "type": "object"
           }
         },
+        "billing alert set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "pattern": "^[A-Z]{3}$",
+                "title": "Currency",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "threshold": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Threshold"
+              }
+            },
+            "required": [
+              "threshold",
+              "currency",
+              "expected_revision"
+            ],
+            "title": "LowBalancePolicySet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "LowBalancePolicyView": {
+                "additionalProperties": false,
+                "properties": {
+                  "available_balance": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Available Balance"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "cycle": {
+                    "minimum": 0,
+                    "title": "Cycle",
+                    "type": "integer"
+                  },
+                  "low": {
+                    "title": "Low",
+                    "type": "boolean"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "threshold": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Threshold"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "threshold",
+                  "currency",
+                  "revision",
+                  "available_balance",
+                  "low",
+                  "cycle"
+                ],
+                "title": "LowBalancePolicyView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "policy": {
+                "$ref": "#/$defs/LowBalancePolicyView"
+              }
+            },
+            "required": [
+              "policy"
+            ],
+            "title": "LowBalancePolicyData",
+            "type": "object"
+          }
+        },
+        "billing alert show": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "LowBalancePolicyView": {
+                "additionalProperties": false,
+                "properties": {
+                  "available_balance": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Available Balance"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "cycle": {
+                    "minimum": 0,
+                    "title": "Cycle",
+                    "type": "integer"
+                  },
+                  "low": {
+                    "title": "Low",
+                    "type": "boolean"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "threshold": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Threshold"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "threshold",
+                  "currency",
+                  "revision",
+                  "available_balance",
+                  "low",
+                  "cycle"
+                ],
+                "title": "LowBalancePolicyView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "policy": {
+                "$ref": "#/$defs/LowBalancePolicyView"
+              }
+            },
+            "required": [
+              "policy"
+            ],
+            "title": "LowBalancePolicyData",
+            "type": "object"
+          }
+        },
         "billing balance": {
           "cli_parameters": [
             {
@@ -3454,6 +4839,139 @@
             }
           ],
           "input": null
+        },
+        "billing notices": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "before",
+              "options": [
+                "--before"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "100",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "available_balance": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ],
+                "title": "Available Balance"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "currency": {
+                "pattern": "^[A-Z]{3}$",
+                "title": "Currency",
+                "type": "string"
+              },
+              "cycle": {
+                "minimum": 1,
+                "title": "Cycle",
+                "type": "integer"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "kind": {
+                "const": "billing.low_balance",
+                "default": "billing.low_balance",
+                "title": "Kind",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "policy_revision": {
+                "minimum": 1,
+                "title": "Policy Revision",
+                "type": "integer"
+              },
+              "threshold": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ],
+                "title": "Threshold"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "policy_revision",
+              "cycle",
+              "threshold",
+              "currency",
+              "available_balance",
+              "created_at"
+            ],
+            "title": "LowBalanceNoticeView",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_before": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Before"
+              }
+            },
+            "title": "LowBalanceNoticesData",
+            "type": "object"
+          }
         },
         "billing redeem": {
           "cli_parameters": [
@@ -4110,6 +5628,9 @@
           }
         },
         "card generate": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -6049,6 +7570,9 @@
           }
         },
         "check run": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -6697,6 +8221,41 @@
               "Cost": {
                 "additionalProperties": false,
                 "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
                   "llm_tokens": {
                     "default": 0,
                     "title": "Llm Tokens",
@@ -6705,6 +8264,35 @@
                   "ocr_pages": {
                     "default": 0,
                     "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
                     "type": "integer"
                   },
                   "usd": {
@@ -7913,6 +9501,9 @@
           }
         },
         "draft": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -8155,6 +9746,9 @@
           "input": null
         },
         "evidence search": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -9652,6 +11246,9 @@
           }
         },
         "export prepare": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -9796,6 +11393,41 @@
               "Cost": {
                 "additionalProperties": false,
                 "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
                   "llm_tokens": {
                     "default": 0,
                     "title": "Llm Tokens",
@@ -9804,6 +11436,35 @@
                   "ocr_pages": {
                     "default": 0,
                     "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
                     "type": "integer"
                   },
                   "usd": {
@@ -12901,6 +14562,41 @@
               "Cost": {
                 "additionalProperties": false,
                 "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
                   "llm_tokens": {
                     "default": 0,
                     "title": "Llm Tokens",
@@ -12909,6 +14605,35 @@
                   "ocr_pages": {
                     "default": 0,
                     "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
                     "type": "integer"
                   },
                   "usd": {
@@ -21030,6 +22755,9 @@
           }
         },
         "platform model test": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -21042,6 +22770,26 @@
               "type": "text"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "test_org",
+              "options": [
+                "--test-org"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "json_output",
@@ -21052,7 +22800,31 @@
               "type": "boolean"
             }
           ],
-          "input": null
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "test_org_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Test Org Id"
+              }
+            },
+            "title": "BudgetPlatformModelTest",
+            "type": "object"
+          }
         },
         "platform org balance": {
           "cli_parameters": [
@@ -21292,6 +23064,131 @@
             }
           ],
           "input": null
+        },
+        "product simulate": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_input_hash",
+              "options": [
+                "--expected-input-hash"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Input Hash"
+              },
+              "extraction_job_id": {
+                "format": "uuid",
+                "title": "Extraction Job Id",
+                "type": "string"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "extraction_job_id"
+            ],
+            "title": "ProductSimulationInput",
+            "type": "object"
+          }
         },
         "provider history": {
           "cli_parameters": [
@@ -21562,6 +23459,9 @@
           }
         },
         "provider test": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": "llm_extract",
@@ -21586,6 +23486,16 @@
             {
               "default": "False",
               "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
               "name": "json_output",
               "options": [
                 "--json"
@@ -21603,6 +23513,11 @@
                 "title": "Capability",
                 "type": "string"
               },
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
               "reasoning": {
                 "anyOf": [
                   {
@@ -21617,11 +23532,14 @@
                 "title": "Reasoning"
               }
             },
-            "title": "ProviderTest",
+            "title": "BudgetProviderTest",
             "type": "object"
           }
         },
         "req extract": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -23422,6 +25340,9 @@
           }
         },
         "sandbox capture": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -23689,6 +25610,9 @@
           "input": null
         },
         "sandbox render": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -24812,6 +26736,9 @@
           }
         },
         "score rubric generate": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -25023,6 +26950,41 @@
               "Cost": {
                 "additionalProperties": false,
                 "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
                   "llm_tokens": {
                     "default": 0,
                     "title": "Llm Tokens",
@@ -25031,6 +26993,35 @@
                   "ocr_pages": {
                     "default": 0,
                     "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
                     "type": "integer"
                   },
                   "usd": {
@@ -28459,6 +30450,9 @@
           }
         },
         "score run": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -28761,6 +30755,41 @@
               "Cost": {
                 "additionalProperties": false,
                 "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
                   "llm_tokens": {
                     "default": 0,
                     "title": "Llm Tokens",
@@ -28769,6 +30798,35 @@
                   "ocr_pages": {
                     "default": 0,
                     "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
                     "type": "integer"
                   },
                   "usd": {
@@ -30692,6 +32750,9 @@
           }
         },
         "screenshot analyze": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -30875,6 +32936,9 @@
           }
         },
         "screenshot annotate": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -31930,6 +33994,572 @@
             "type": "object"
           }
         },
+        "task budget history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "before_revision",
+              "options": [
+                "--before-revision"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "100",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "actor_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Actor User Id"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "currency": {
+                "pattern": "^[A-Z]{3}$",
+                "title": "Currency",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "limit": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Limit"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "origin": {
+                "enum": [
+                  "migration",
+                  "create",
+                  "human_update"
+                ],
+                "title": "Origin",
+                "type": "string"
+              },
+              "reason_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Reason Sha256"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "state": {
+                "enum": [
+                  "active",
+                  "currency_review_required"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "revision",
+              "limit",
+              "currency",
+              "state",
+              "actor_user_id",
+              "origin",
+              "reason_sha256",
+              "created_at"
+            ],
+            "title": "TaskBudgetRevisionView",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_before_revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Before Revision"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_id"
+            ],
+            "title": "BudgetHistoryData",
+            "type": "object"
+          }
+        },
+        "task budget set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "currency": {
+                "pattern": "^[A-Z]{3}$",
+                "title": "Currency",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "limit": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Limit"
+              },
+              "reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "limit",
+              "currency",
+              "expected_revision",
+              "reason"
+            ],
+            "title": "TaskBudgetSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "TaskBudgetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "available": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Available"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "history_complete": {
+                    "title": "History Complete",
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reserved": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "spent": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Spent"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "currency_review_required"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "limit",
+                  "currency",
+                  "state",
+                  "spent",
+                  "reserved",
+                  "available",
+                  "unpriced_calls",
+                  "unresolved_calls",
+                  "history_complete",
+                  "as_of"
+                ],
+                "title": "TaskBudgetView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "budget": {
+                "$ref": "#/$defs/TaskBudgetView"
+              }
+            },
+            "required": [
+              "budget"
+            ],
+            "title": "TaskBudgetData",
+            "type": "object"
+          }
+        },
+        "task budget show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "TaskBudgetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "available": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Available"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "history_complete": {
+                    "title": "History Complete",
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reserved": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "spent": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Spent"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "currency_review_required"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "limit",
+                  "currency",
+                  "state",
+                  "spent",
+                  "reserved",
+                  "available",
+                  "unpriced_calls",
+                  "unresolved_calls",
+                  "history_complete",
+                  "as_of"
+                ],
+                "title": "TaskBudgetView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "budget": {
+                "$ref": "#/$defs/TaskBudgetView"
+              }
+            },
+            "required": [
+              "budget"
+            ],
+            "title": "TaskBudgetData",
+            "type": "object"
+          }
+        },
         "task certificate add": {
           "cli_parameters": [
             {
@@ -32138,6 +34768,26 @@
               "type": "float"
             },
             {
+              "default": null,
+              "multiple": false,
+              "name": "budget",
+              "options": [
+                "--budget"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "budget_currency",
+              "options": [
+                "--budget-currency"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
               "default": "False",
               "multiple": false,
               "name": "json_output",
@@ -32149,8 +34799,53 @@
             }
           ],
           "input": {
+            "$defs": {
+              "TaskBudgetInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  }
+                },
+                "required": [
+                  "limit",
+                  "currency"
+                ],
+                "title": "TaskBudgetInput",
+                "type": "object"
+              }
+            },
             "additionalProperties": false,
             "properties": {
+              "budget": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TaskBudgetInput"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
               "budget_usd": {
                 "anyOf": [
                   {
@@ -32200,7 +34895,7 @@
             "required": [
               "name"
             ],
-            "title": "TaskCreate",
+            "title": "BudgetTaskCreate",
             "type": "object"
           }
         },
@@ -32714,6 +35409,9 @@
           "input": null
         },
         "tender parse": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -32928,6 +35626,9 @@
           }
         },
         "ui mock": {
+          "budget_preflight": {
+            "$ref": "#/$defs/BudgetPreflightData"
+          },
           "cli_parameters": [
             {
               "default": null,
@@ -33097,6 +35798,14 @@
           "type": "path"
         },
         {
+          "name": "contract_version",
+          "options": [
+            "--contract-version"
+          ],
+          "required": false,
+          "type": "text"
+        },
+        {
           "name": "install_completion",
           "options": [
             "--install-completion"
@@ -33118,6 +35827,41 @@
           "Cost": {
             "additionalProperties": false,
             "properties": {
+              "basis": {
+                "default": "zero",
+                "enum": [
+                  "actual",
+                  "first_pass_upper_bound",
+                  "unknown",
+                  "zero",
+                  "cache_hit"
+                ],
+                "title": "Basis",
+                "type": "string"
+              },
+              "billing_currency": {
+                "default": "USD",
+                "pattern": "^[A-Z]{3}$",
+                "title": "Billing Currency",
+                "type": "string"
+              },
+              "charge": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": "0",
+                "title": "Charge"
+              },
               "llm_tokens": {
                 "default": 0,
                 "title": "Llm Tokens",
@@ -33126,6 +35870,35 @@
               "ocr_pages": {
                 "default": 0,
                 "title": "Ocr Pages",
+                "type": "integer"
+              },
+              "task_amount": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": "0",
+                "title": "Task Amount"
+              },
+              "unpriced_calls": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Unpriced Calls",
+                "type": "integer"
+              },
+              "unresolved_calls": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Unresolved Calls",
                 "type": "integer"
               },
               "usd": {
@@ -33191,7 +35964,7 @@
         "title": "Result",
         "type": "object"
       },
-      "version": "3.0"
+      "version": "4.0"
     },
     "duration_ms": 0,
     "items": [],
@@ -33201,8 +35974,14 @@
   "task certificate add": {
     "command": "task certificate add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33232,8 +36011,14 @@
   "task certificate file list": {
     "command": "task certificate file list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33276,8 +36061,14 @@
   "task certificate list": {
     "command": "task certificate list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33318,8 +36109,14 @@
   "task create": {
     "command": "task create",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33335,8 +36132,14 @@
   "task feature add": {
     "command": "task feature add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33365,8 +36168,14 @@
   "task feature list": {
     "command": "task feature list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33400,8 +36209,14 @@
   "task list": {
     "command": "task list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {},
@@ -33419,8 +36234,14 @@
   "task profile add": {
     "command": "task profile add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33449,8 +36270,14 @@
   "task profile list": {
     "command": "task profile list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33484,8 +36311,14 @@
   "task redaction set": {
     "command": "task redaction set",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33502,8 +36335,14 @@
   "task resource add": {
     "command": "task resource add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33532,8 +36371,14 @@
   "task resource list": {
     "command": "task resource list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33567,8 +36412,14 @@
   "task template add": {
     "command": "task template add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33602,8 +36453,14 @@
   "task template list": {
     "command": "task template list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33642,8 +36499,14 @@
   "tender parse": {
     "command": "tender parse",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33659,8 +36522,14 @@
   "tender upload": {
     "command": "tender upload",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -33678,8 +36547,14 @@
   "token create": {
     "command": "token create",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {

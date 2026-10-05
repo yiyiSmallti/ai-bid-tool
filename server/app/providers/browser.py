@@ -3,10 +3,13 @@
 import asyncio
 import hashlib
 import ssl
+import time
 from contextlib import suppress
 from dataclasses import asdict
 from typing import Any, Protocol
 
+from app.providers.calls import accounted_call
+from app.providers.quotes import serialized_request, zero_quote
 from app.providers.sandbox_fetch import RUN_FATAL_FETCH_CODES, FetchBroker, FetchDenied
 from app.providers.sandbox_runtime import (
     CONTROL_LIMIT,
@@ -22,6 +25,8 @@ from app.providers.sandbox_runtime import (
     send_frame,
     validate_artifact,
 )
+from app.schemas.budget_contracts import BudgetCallQuote
+from app.schemas.contracts import ProviderUsage
 
 ERROR_CODES = frozenset(
     {
@@ -156,6 +161,10 @@ class BrowserProvider(Protocol):
 
 
 class SocketBrowserProvider:
+    name = "sandbox-browser"
+    version = "sandbox-browser-v1"
+    records_calls = True
+
     def __init__(self, config: RuntimeConfig):
         self.config = config
 
@@ -346,6 +355,43 @@ class SocketBrowserProvider:
             fetcher.close()
 
     async def _execute(
+        self, descriptor: RunDescriptor, data: bytes, fetcher: FetchBroker | None
+    ) -> ExecutionResult:
+        async def operation():
+            started = time.monotonic()
+            try:
+                result = await self._execute_unaccounted(descriptor, data, fetcher)
+            except Exception as exc:
+                result = exc
+            return result, ProviderUsage(
+                provider=self.name,
+                model="playwright",
+                version=self.version,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                usd=0,
+            )
+
+        result, _ = await accounted_call(self.quote(descriptor, data), operation)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    def quote(self, descriptor: RunDescriptor, data: bytes) -> BudgetCallQuote:
+        request = (
+            serialized_request(
+                {
+                    "type": "run",
+                    "protocol": PROTOCOL_VERSION,
+                    "descriptor": asdict(descriptor),
+                    "profile_digest": self.profile_digest,
+                }
+            )
+            + b"\x00"
+            + data
+        )
+        return zero_quote("browser", "local_free", self.name, "playwright", self.version, request)
+
+    async def _execute_unaccounted(
         self, descriptor: RunDescriptor, data: bytes, fetcher: FetchBroker | None
     ) -> ExecutionResult:
         self.check_ready()

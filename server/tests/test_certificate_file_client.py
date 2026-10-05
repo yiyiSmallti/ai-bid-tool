@@ -13,6 +13,12 @@ from bid_cli.main import main
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 
 
+@pytest.fixture(params=("3.0", "4.0"))
+def contract_version(request):
+    """Version metadata endpoints while preserving signed raw download paths."""
+    return request.param
+
+
 class SyntheticState(State):
     def load(self):
         return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
@@ -27,10 +33,15 @@ def download_client(
     redirect=False,
     wrong_scope=False,
     transport_error=None,
+    contract_version="3.0",
 ):
     client = Client(
-        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+        "remote",
+        "https://synthetic.example.test",
+        SyntheticState(tmp_path / "unused.enc"),
+        contract_version=contract_version,
     )
+    prefix = "/v4" if contract_version == "4.0" else ""
     path = f"/resources/certificates/revisions/{IDENTIFIER}/file/download"
     descriptor = {
         "name": "synthetic.pdf",
@@ -45,7 +56,7 @@ def download_client(
         calls.append(request.url)
         assert request.headers["Authorization"] == "Bearer synthetic-only-session"
         assert request.headers["X-Org-Id"] == IDENTIFIER
-        if request.url.path == "/resources/certificates/files":
+        if request.url.path == prefix + "/resources/certificates/files":
             return httpx.Response(
                 200,
                 json=Result(
@@ -60,7 +71,7 @@ def download_client(
                     ],
                 ).model_dump(mode="json"),
             )
-        if request.url.path == path + "-link":
+        if request.url.path == prefix + path + "-link":
             return httpx.Response(
                 200,
                 json=Result(
@@ -88,10 +99,10 @@ def download_client(
 
 
 async def test_certificate_file_download_verified_atomic_private_file_and_no_overwrite(
-    tmp_path, pdf_bytes
+    contract_version, tmp_path, pdf_bytes
 ):
     output = tmp_path.resolve() / "new.pdf"
-    client, calls = download_client(tmp_path, pdf_bytes)
+    client, calls = download_client(tmp_path, pdf_bytes, contract_version=contract_version)
     result = await client.download_certificate_file(UUID(IDENTIFIER), output)
     assert (
         result["ok"] and result["data"]["file"]["sha256"] == hashlib.sha256(pdf_bytes).hexdigest()
@@ -115,9 +126,11 @@ async def test_certificate_file_download_verified_atomic_private_file_and_no_ove
     ],
 )
 async def test_certificate_file_download_rejects_external_or_malformed_links(
-    tmp_path, pdf_bytes, link
+    contract_version, tmp_path, pdf_bytes, link
 ):
-    client, calls = download_client(tmp_path, pdf_bytes, link=link)
+    client, calls = download_client(
+        tmp_path, pdf_bytes, link=link, contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.pdf"
     with pytest.raises(ServiceError) as error:
         await client.download_certificate_file(UUID(IDENTIFIER), output)
@@ -125,7 +138,9 @@ async def test_certificate_file_download_rejects_external_or_malformed_links(
 
 
 @pytest.mark.parametrize("failure", ["hash", "short", "long", "redirect", "foreign"])
-async def test_certificate_file_download_never_writes_bad_response(tmp_path, pdf_bytes, failure):
+async def test_certificate_file_download_never_writes_bad_response(
+    contract_version, tmp_path, pdf_bytes, failure
+):
     served = {
         "hash": b"x" * len(pdf_bytes),
         "short": pdf_bytes[:-1],
@@ -137,6 +152,7 @@ async def test_certificate_file_download_never_writes_bad_response(tmp_path, pdf
         served=served,
         redirect=failure == "redirect",
         wrong_scope=failure == "foreign",
+        contract_version=contract_version,
     )
     output = tmp_path.resolve() / "new.pdf"
     with pytest.raises(ServiceError) as error:
@@ -149,9 +165,11 @@ async def test_certificate_file_download_never_writes_bad_response(tmp_path, pdf
     "transport_error", [httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError]
 )
 async def test_certificate_file_download_network_and_partial_connection_errors_are_retryable(
-    tmp_path, pdf_bytes, transport_error
+    contract_version, tmp_path, pdf_bytes, transport_error
 ):
-    client, _ = download_client(tmp_path, pdf_bytes, transport_error=transport_error)
+    client, _ = download_client(
+        tmp_path, pdf_bytes, transport_error=transport_error, contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.pdf"
     with pytest.raises(ServiceError) as error:
         await client.download_certificate_file(UUID(IDENTIFIER), output)
@@ -163,10 +181,13 @@ async def test_certificate_file_download_network_and_partial_connection_errors_a
     "transport_error", [httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError]
 )
 async def test_certificate_file_metadata_transport_errors_share_cli_contract(
-    tmp_path, transport_error
+    contract_version, tmp_path, transport_error
 ):
     client = Client(
-        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+        "remote",
+        "https://synthetic.example.test",
+        SyntheticState(tmp_path / "unused.enc"),
+        contract_version=contract_version,
     )
 
     def failure(request):

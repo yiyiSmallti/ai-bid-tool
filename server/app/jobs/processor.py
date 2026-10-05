@@ -11,13 +11,12 @@ from sqlalchemy.dialects.postgresql import insert
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, log_unexpected
-from app.jobs.execution import JobExecution, job_cost
-from app.models.entities import Chunk, Document, Job, Requirement, UsageRecord
+from app.jobs.execution import JobExecution, authorized_job, job_cost, locked_job
+from app.models.entities import Chunk, Document, Job, Requirement
 from app.providers.base import LLMProvider, OCRProvider, ProviderFailure
 from app.providers.llm import uncovered_parameters, with_reasoning
 from app.providers.storage import Storage
-from app.schemas.contracts import Extraction, ProviderUsage, SectionText
-from app.services import billing
+from app.schemas.contracts import Extraction, SectionText
 from app.services.extraction import fingerprint, merge_starred, split_cited, validate_extraction
 from app.services.parsing import parse_document
 
@@ -44,32 +43,6 @@ class Processor:
         self.search_transport = None
         self.converter_transport = None
 
-    async def record_usage(
-        self,
-        org_id: UUID,
-        task_id: UUID | None,
-        usages: list[ProviderUsage],
-        job_id: UUID,
-        run_id: UUID,
-    ):
-        async with self.db.transaction(org_id) as session:
-            job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
-            assert job is not None
-            for usage in usages:
-                record = UsageRecord(
-                    id=uuid4(),
-                    org_id=org_id,
-                    task_id=task_id,
-                    job_id=job_id,
-                    run_id=run_id,
-                    **usage.model_dump(),
-                )
-                session.add(record)
-                await session.flush()
-                # The charge leaves the prepaid balance in the same transaction as the record.
-                await billing.charge_usage(session, org_id, record, self.settings.billing_currency)
-            job.result = {**job.result, "cost": await job_cost(session, job_id)}
-
     async def __call__(self, org: str, job: str):
         org_id, job_id = UUID(org), UUID(job)
         from app.jobs.sandbox import process_if_sandbox
@@ -77,7 +50,7 @@ class Processor:
         if await process_if_sandbox(self, org_id, job_id):
             return
         async with self.db.transaction(org_id) as session:
-            current = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
+            current = await locked_job(session, job_id)
             if current is None or current.status in {"cancelled", "succeeded", "failed"}:
                 return
             if (
@@ -96,7 +69,10 @@ class Processor:
             current.attempts += 1
             run_id = uuid4()
             current.run_id = run_id
-            current.result = {**current.result, "cost": await job_cost(session, job_id)}
+            current.result = {
+                **current.result,
+                "cost": await job_cost(session, job_id, self.settings.billing_currency),
+            }
             current.lease_until = datetime.now(UTC) + timedelta(
                 seconds=self.settings.job_lease_seconds
             )
@@ -156,19 +132,13 @@ class Processor:
 
         execution = JobExecution(self.settings, self.db, org_id, job_id, run_id)
         async with execution.activate():
-            usages: list[ProviderUsage] = []
-            incremental = False
             rejected: list[dict[str, str]] = []
 
-            class RecordingOCR:
-                name, version = self.ocr.name, self.ocr.version
-
-                async def recognize(_self, image: bytes, page: int):
-                    recognized = await self.ocr.recognize(image, page)
-                    await self.record_usage(org_id, task_id, [recognized.usage], job_id, run_id)
-                    return recognized
-
             try:
+                if kind in {"parse", "extract"}:
+                    async with self.db.transaction(org_id) as session:
+                        authorized = await execution.owned_job(session)
+                        await authorized_job(session, authorized)
                 llm = self.llm
                 if self.resolve and kind in {
                     "extract",
@@ -188,7 +158,6 @@ class Processor:
                 if kind == "provider_test":
                     from app.services.provider_configs import execute_test
 
-                    incremental = True
                     await execute_test(execution, llm)
                     return
                 if kind == "export_render":
@@ -205,7 +174,6 @@ class Processor:
                 if kind == "product_simulation":
                     from app.services.product_simulation import process as simulate
 
-                    incremental = True
                     await simulate(execution, self, llm)
                     return
                 if kind == "export_preview":
@@ -218,7 +186,6 @@ class Processor:
                 if kind in {"screenshot_render", "screenshot_analyze"}:
                     from app.services.screenshot_jobs import process_analysis, process_render
 
-                    incremental = True
                     if kind == "screenshot_render":
                         await process_render(execution, self.storage)
                     else:
@@ -237,26 +204,22 @@ class Processor:
                     from app.services.prototype_generation import process as generate_prototype
                     from app.services.sandbox import browser_for
 
-                    incremental = True
                     await generate_prototype(execution, self.storage, llm, browser_for(self))
                     return
                 assert task_id is not None and document_id is not None
                 if kind == "score":
                     from app.jobs.score import process as process_score
 
-                    incremental = True
                     await process_score(execution, self.storage)
                     return
                 if kind == "score_rubric":
                     from app.jobs.score_rubric import process as process_score_rubric
 
-                    incremental = True
                     await process_score_rubric(execution)
                     return
                 if kind == "check":
                     from app.jobs.check import process as process_check
 
-                    incremental = True
                     await process_check(execution, self.storage)
                     return
                 if kind == "card_generate":
@@ -264,7 +227,6 @@ class Processor:
 
                     # Drafting uses only its encrypted submission snapshot, and every
                     # HTTP call settles through this active JobExecution context.
-                    incremental = True
                     await generate(execution, llm, self.storage)
                     return
                 if kind == "draft":
@@ -293,8 +255,13 @@ class Processor:
                         raise ServiceError(
                             "content_mismatch", "Stored document hash does not match", 409, 4
                         )
+                    if not getattr(self.ocr, "records_calls", False):
+                        raise ProviderFailure(
+                            "OCR provider does not support call accounting",
+                            code="provider_accounting_required",
+                        )
                     pages, _, warnings = await parse_document(
-                        content, suffix, RecordingOCR(), self.settings.max_pages, self.settings
+                        content, suffix, self.ocr, self.settings.max_pages, self.settings
                     )
                     requirements = None
                 elif kind == "extract":
@@ -307,13 +274,12 @@ class Processor:
                         )
                     # The level was fixed when the job was created; a removed level fails here.
                     llm, reasoning, _ = with_reasoning(llm, reasoning)
-                    incremental = getattr(llm, "records_calls", False)
+                    if not getattr(llm, "records_calls", False):
+                        raise ProviderFailure(
+                            "LLM provider does not support call accounting",
+                            code="provider_accounting_required",
+                        )
                     output = await llm.extract(chunks, Extraction.model_json_schema())
-                    usages = output.usages if output.usages is not None else [output.usage]
-                    # Usage is recorded even when output is invalid or the job is cancelled.
-                    if not incremental:
-                        await self.record_usage(org_id, task_id, usages, job_id, run_id)
-                    usages = []
                     kept, rejected = split_cited(output.extraction, chunks)
                     rejected = [*output.rejected, *rejected]
                     if rejected and not kept.items:
@@ -340,12 +306,9 @@ class Processor:
                 else:
                     raise ServiceError("invalid_job", "Unsupported job kind", 400, 2)
 
-                if usages:
-                    await self.record_usage(org_id, task_id, usages, job_id, run_id)
                 async with self.db.transaction(org_id) as session:
-                    current = await session.scalar(
-                        select(Job).where(Job.id == job_id).with_for_update()
-                    )
+                    current = await execution.owned_job(session)
+                    await authorized_job(session, current)
                     if current is None or current.status == "cancelled" or current.run_id != run_id:
                         return
                     document = await session.get(Document, document_id)
@@ -463,7 +426,7 @@ class Processor:
                                 "remaining": uncovered_parameters(chunks, requirements.items)[1],
                             },
                         }
-                    result["cost"] = await job_cost(session, job_id)
+                    result["cost"] = await job_cost(session, job_id, self.settings.billing_currency)
                     current.status, current.result, current.error = "succeeded", result, None
                     current.finished_at = datetime.now(UTC)
             except Exception as exc:
@@ -489,8 +452,6 @@ class Processor:
                         "exit_code": 3 if exc.retryable else 4,
                     }
                     retryable = exc.retryable
-                    if exc.usage and not incremental:
-                        await self.record_usage(org_id, task_id, exc.usage, job_id, run_id)
                 else:
                     log_unexpected(logger, f"Job {job_id}", exc)
                     error = {
@@ -500,15 +461,16 @@ class Processor:
                     }
                     retryable = False
                 async with self.db.transaction(org_id) as session:
-                    current = await session.scalar(
-                        select(Job).where(Job.id == job_id).with_for_update()
-                    )
+                    current = await locked_job(session, job_id)
                     if current is None or current.status == "cancelled" or current.run_id != run_id:
                         return
                     should_retry = retryable and current.attempts < 3 and kind != "provider_test"
                     current.status = "queued" if should_retry else "failed"
                     current.error = error
-                    current.result = {**current.result, "cost": await job_cost(session, job_id)}
+                    current.result = {
+                        **current.result,
+                        "cost": await job_cost(session, job_id, self.settings.billing_currency),
+                    }
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}
                     current.finished_at = None if should_retry else datetime.now(UTC)

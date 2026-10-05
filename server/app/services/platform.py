@@ -17,7 +17,6 @@ from app.core.password_attempts import PasswordAttempts, invalid_login
 from app.core.security import TokenSigner, hash_password
 from app.core.totp import matching_counter
 from app.models.entities import PlatformAuditLog, PlatformCard, PlatformModel, User
-from app.providers.base import ProviderFailure
 from app.providers.llm import HTTPExtractor, platform_llm
 from app.schemas.platform_contracts import (
     PlatformBalanceAdjust,
@@ -289,78 +288,106 @@ TEST_SECONDS = 60
 
 
 async def test_model(
-    db: Database, settings: Settings, actor: PlatformIdentity, model_id: str, transport=None
+    db: Database,
+    settings: Settings,
+    actor: PlatformIdentity,
+    model_id: str,
+    transport=None,
+    *,
+    body=None,
+    processor=None,
 ) -> dict:
-    """Call the model once per official reasoning level (once if it has none)."""
+    """Probe a fixed catalog identity through a tenant's taskless accounted job."""
+    from app.models.entities import Job
+    from app.providers.configured import model_identity
+    from app.schemas.budget_contracts import BudgetPlatformModelTest, BudgetProviderTest
+    from app.services import budget_preflight, provider_configs
+    from app.services.auth import ROLE_SCOPES, Identity, membership, set_actor_context
+    from app.services.drafts import digest
+
+    body = body or BudgetPlatformModelTest.model_validate({})
     async with db.transaction() as session:
         row = await session.get(PlatformModel, model_id)
+        user = await session.scalar(
+            select(User).where(User.email == actor.email, User.active.is_(True))
+        )
     if row is None:
         raise not_found()
-    # The vendor calls run outside any transaction and with a short deadline.
     quick = settings.model_copy(update={"llm_timeout_seconds": TEST_SECONDS})
     llm = platform_llm(quick, row, transport)
-    chunk = {
-        "id": uuid4(),
-        "document_id": uuid4(),
-        "page": 1,
-        "text": TEST_PAGE,
-        "citation_verified": True,
-    }
-    # Levels come from the catalog row, so a model without its key still reports each one.
     names = [level["name"] for level in row.reasoning or []] or [None]
-
-    async def attempt(name: str | None) -> dict:
-        level = llm.at_reasoning(name) if name and isinstance(llm, HTTPExtractor) else llm
-        try:
-            output = await level.extract([chunk], {})
-        except ProviderFailure as exc:
-            return {
-                "reasoning": name,
-                "passed": False,
-                "error": {"code": exc.code, "message": str(exc)},
-                "usage": exc.usage[-1].model_dump() if exc.usage else None,
-            }
-        return {
-            "reasoning": name,
-            "passed": True,
-            "items": len(output.extraction.items),
-            "usage": output.usage.model_dump(),
+    probe = [
+        {
+            "id": UUID(int=1),
+            "document_id": UUID(int=2),
+            "page": 1,
+            "text": "Connectivity test only. The delivery package must include a user guide.",
         }
-
-    levels = await asyncio.gather(*(attempt(name) for name in names))
-    passed = all(level["passed"] for level in levels)
-    failed = next((level for level in levels if not level["passed"]), None)
+    ]
+    quotes = []
+    if isinstance(llm, HTTPExtractor):
+        for name in names:
+            level = llm.at_reasoning(name) if name else llm
+            quotes.append(lambda level=level: level.quote(level.extraction_request(probe)))
+    async with db.transaction(body.test_org_id) as session:
+        identity = None
+        if body.test_org_id is not None:
+            if user is None:
+                raise not_found()
+            member = await membership(session, user.id, body.test_org_id)
+            identity = Identity(user.id, body.test_org_id, ROLE_SCOPES[member.role], member.role)
+            await provider_configs.require_access(session, identity, write=True)
+        if body.dry_run:
+            data = await budget_preflight.attach(
+                session,
+                {
+                    "dry_run": True,
+                    "model_id": model_id,
+                    "test_org_id": str(body.test_org_id) if body.test_org_id else None,
+                },
+                command="platform model test",
+                task_id=None,
+                input_hash=digest({"model": model_identity(llm), "levels": names}),
+                currency=settings.billing_currency,
+                settings=settings,
+                quote_sources=quotes,
+                planned_calls=len(names),
+                check_balance=body.test_org_id is not None,
+            )
+            return data
+        assert identity is not None
+        if processor is None:
+            raise ServiceError(
+                "provider_unavailable", "Accounted test processor is unavailable", 503, 4
+            )
+        await set_actor_context(session, identity)
+        job = await provider_configs.submit_test(
+            session, identity, BudgetProviderTest(), llm, quick, probe_levels=names
+        )
+        await session.commit()
+    await processor(str(identity.org_id), str(job.id))
+    async with db.transaction(identity.org_id) as session:
+        saved = await session.get(Job, job.id)
+        assert saved is not None
+        public = {key: value for key, value in saved.result.items() if key != "submission"}
+        view = {
+            "model_id": model_id,
+            "job_id": str(saved.id),
+            "status": saved.status,
+            "passed": saved.status == "succeeded",
+            **public,
+        }
+        if saved.error:
+            view["error"] = saved.error
     async with db.transaction() as session:
         audit(
             session,
             actor.email,
             "platform.model.test",
-            "success" if passed else "failed",
+            "success" if view["passed"] else "failed",
             model_id,
-            {
-                "levels": [
-                    {
-                        "reasoning": level["reasoning"],
-                        "passed": level["passed"],
-                        "code": (level.get("error") or {}).get("code"),
-                        "usage": level["usage"],
-                    }
-                    for level in levels
-                ]
-            },
+            {"job_id": str(job.id), "test_org_id": str(identity.org_id)},
         )
-    # Top-level fields describe the default level, or the first failure.
-    shown = failed or next(
-        (level for level in levels if level["reasoning"] == row.default_reasoning),
-        levels[0],
-    )
-    view = {"model_id": model_id, "passed": passed, "usage": shown["usage"]}
-    if failed:
-        view["error"] = failed["error"]
-    else:
-        view["items"] = shown["items"]
-    if names != [None]:
-        view["levels"] = levels
     return view
 
 

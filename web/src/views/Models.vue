@@ -32,6 +32,7 @@ const matchingCredentials = computed(() => form.value ? credentials.value.filter
 watch(() => [form.value?.provider, form.value?.base_url], () => { if (form.value?.credential && !matchingCredentials.value.some((credential) => credential.name === form.value.credential)) form.value.credential = ""; });
 const error = ref("");
 const tests = ref({});
+const testOrgId = ref("");
 
 async function load() {
   try {
@@ -168,9 +169,15 @@ async function disableModel(model) {
 }
 
 async function test(model) {
+  error.value = "";
+  const test_org_id = testOrgId.value.trim();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(test_org_id)) {
+    error.value = "Enter a valid internal test organization UUID.";
+    return;
+  }
   tests.value[model.id] = { running: true };
   try {
-    tests.value[model.id] = (await request("POST", `/platform/models/${model.id}/test`)).data;
+    tests.value[model.id] = (await request("POST", `/platform/models/${model.id}/test`, { test_org_id })).data;
   } catch (exc) {
     tests.value[model.id] = { passed: false, error: { code: exc.code, message: exc.message } };
   }
@@ -185,6 +192,9 @@ onMounted(load);
     <el-button type="primary" :icon="Plus" @click="edit(null)">添加模型</el-button>
   </div>
   <p class="notice">服务商密钥通过服务凭据页面维护。模型选择用途、服务商和端点匹配的已启用凭据。</p>
+  <el-form-item label="Internal test organization UUID" for="model-test-org-id">
+    <el-input v-model="testOrgId" id="model-test-org-id" name="test-org-id" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+  </el-form-item>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
   <el-card v-if="form" shadow="never" class="section">
     <template #header><h3 class="card-title">{{ form.expected_revision !== null ? `编辑模型 ${form.id}` : "添加模型" }}</h3></template>

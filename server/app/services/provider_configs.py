@@ -230,7 +230,7 @@ async def list_configs(session, actor, settings, *, history=False):
     )
 
 
-async def submit_test(session, actor, body: ProviderTest, llm, settings):
+async def submit_test(session, actor, body: ProviderTest, llm, settings, *, probe_levels=None):
     await require_access(session, actor, write=True)
     await set_actor_context(session, actor)
     llm, reasoning, warnings = with_reasoning(llm, body.reasoning)
@@ -244,7 +244,13 @@ async def submit_test(session, actor, body: ProviderTest, llm, settings):
         provider_config_id=getattr(llm, "provider_config_id", None),
         provider_identity=model_identity(llm),
         reasoning=reasoning,
-        result={"submission": {"actor_user_id": str(actor.user_id)}, "warnings": warnings},
+        result={
+            "submission": {
+                "actor_user_id": str(actor.user_id),
+                **({"probe_levels": probe_levels} if probe_levels is not None else {}),
+            },
+            "warnings": warnings,
+        },
     )
     session.add(job)
     await session.flush()
@@ -282,8 +288,8 @@ async def execute_test(execution: JobExecution, llm):
     # This is the contract's synthetic connectivity page, never a tenant tender record.
     probe = [
         {
-            "id": uuid4(),
-            "document_id": uuid4(),
+            "id": UUID(int=1),
+            "document_id": UUID(int=2),
             "page": 1,
             "text": "Connectivity test only. The delivery package must include a user guide.",
         }
@@ -293,16 +299,55 @@ async def execute_test(execution: JobExecution, llm):
         raise ServiceError(
             "provider_unavailable", "Provider cannot run an accounted connection test", 503, 4
         )
-    execution.plan(1)
+    levels = job.result["submission"].get("probe_levels", [job.reasoning])
+    execution.plan(len(levels))
+    reports = []
     async with httpx.AsyncClient(
         transport=llm.transport, timeout=llm.settings.llm_timeout_seconds, follow_redirects=False
     ) as client:
-        _, usage = await llm.call(client, probe)
+        for name in levels:
+            adapter = llm.at_reasoning(name) if name else llm
+            _, usage = await adapter.call(client, probe)
+            reports.append(
+                {"reasoning": name, "passed": True, "usage": usage.model_dump(mode="json")}
+            )
     async with execution.db.transaction(execution.org_id) as session:
         job = await execution.owned_job(session)
         job.status, job.error, job.finished_at = "succeeded", None, datetime.now(UTC)
         job.result = {
             **job.result,
             "usage": usage.model_dump(mode="json"),
+            "levels": reports,
             "cost": await job_cost(session, job.id),
         }
+
+
+async def preview_test(session, actor, body, llm, settings):
+    from app.services import budget_preflight
+    from app.services.drafts import digest
+
+    await require_access(session, actor, write=True)
+    llm, reasoning, warnings = with_reasoning(llm, body.reasoning)
+    probe = [
+        {
+            "id": UUID(int=1),
+            "document_id": UUID(int=2),
+            "page": 1,
+            "text": "Connectivity test only. The delivery package must include a user guide.",
+        }
+    ]
+    quotes = (
+        [lambda: llm.quote(llm.extraction_request(probe))] if isinstance(llm, HTTPExtractor) else []
+    )
+    data = await budget_preflight.attach(
+        session,
+        {"dry_run": True, "reasoning": reasoning},
+        command="provider test",
+        task_id=None,
+        input_hash=digest({"model": model_identity(llm), "reasoning": reasoning}),
+        currency=settings.billing_currency,
+        settings=settings,
+        quote_sources=quotes,
+        planned_calls=1,
+    )
+    return data, warnings

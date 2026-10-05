@@ -205,7 +205,7 @@ async def submit_draft(
         for item in items:
             for reason in item.get("gap_reasons", []):
                 reasons[reason] = reasons.get(reason, 0) + 1
-        return DraftPreview.model_validate(
+        data = DraftPreview.model_validate(
             {
                 "task_id": task_id,
                 "extraction_job_id": body.extraction_job_id,
@@ -220,7 +220,20 @@ async def submit_draft(
                 "negative_deviations": negatives,
                 "estimated_cost": Cost(),
             }
-        ).model_dump(mode="json"), None
+        ).model_dump(mode="json")
+        from app.services import budget_preflight
+
+        return await budget_preflight.attach(
+            session,
+            data,
+            command="draft",
+            task_id=task_id,
+            input_hash=input_hash,
+            currency=session.info["memory_settings"].billing_currency
+            if session.info.get("memory_settings")
+            else "USD",
+            planned_calls=0,
+        ), None
     cache_key = digest({"kind": "draft", "input_hash": input_hash})
     job = await session.scalar(select(Job).where(Job.cache_key == cache_key).with_for_update())
     cached = job is not None
@@ -363,7 +376,7 @@ async def complete_draft(session: AsyncSession, job: Job, storage: Storage):
         "draft_id": str(run.id),
         "completion": completion,
         "warnings": warnings,
-        "cost": Cost().model_dump(),
+        "cost": Cost().model_dump(mode="json"),
         "exit_code": 5 if completion == "partial" else 0,
     }
 

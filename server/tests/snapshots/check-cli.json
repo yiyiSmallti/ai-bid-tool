@@ -3,8 +3,14 @@
     "check decide": {
       "command": "check decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -56,8 +62,14 @@
     "check history": {
       "command": "check history",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -88,8 +100,14 @@
     "check list": {
       "command": "check list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -140,8 +158,14 @@
     "check run": {
       "command": "check run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -201,8 +225,14 @@
     "check run combined": {
       "command": "check run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -258,8 +288,14 @@
     "check show": {
       "command": "check show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -312,8 +348,14 @@
     "check decide": {
       "command": "check decide",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -365,8 +407,14 @@
     "check history": {
       "command": "check history",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -397,8 +445,14 @@
     "check list": {
       "command": "check list",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -449,8 +503,14 @@
     "check run": {
       "command": "check run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -510,8 +570,14 @@
     "check run combined": {
       "command": "check run",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {
@@ -567,8 +633,14 @@
     "check show": {
       "command": "check show",
       "cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
         "llm_tokens": 0,
         "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
         "usd": 0.0
       },
       "data": {

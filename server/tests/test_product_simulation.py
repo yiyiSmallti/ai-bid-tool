@@ -409,9 +409,9 @@ async def test_simulation_records_only_verbatim_marked_parameters(
             assert (printer["vendor"], printer["source"]) == ("BadVendor", "search_extract")
             assert tried == [("https://bad.example/terminal", "search_extract", "quoted")]
             assert printer["tried"][0]["fetch"] == "http_status_denied"
-            assert [
+            assert sorted(
                 (row["query"], row.get("search_domain_filter")) for row in PERPLEXITY_REQUESTS
-            ] == [
+            ) == [
                 ("BadVendor 打印终端", ["bad.example"]),
                 ("SynNet 交换机", ["net.example"]),
             ]

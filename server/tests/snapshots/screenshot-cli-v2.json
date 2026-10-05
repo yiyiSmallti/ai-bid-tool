@@ -2,8 +2,14 @@
   "evidence adopt": {
     "command": "evidence adopt",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -18,8 +24,14 @@
   "evidence candidates": {
     "command": "evidence candidates",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -34,8 +46,14 @@
   "evidence search": {
     "command": "evidence search",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -50,8 +68,14 @@
   "screenshot add": {
     "command": "screenshot add",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -66,8 +90,14 @@
   "screenshot analyze": {
     "command": "screenshot analyze",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -82,8 +112,14 @@
   "screenshot annotate": {
     "command": "screenshot annotate",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -98,8 +134,14 @@
   "screenshot list": {
     "command": "screenshot list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -114,8 +156,14 @@
   "screenshot prepare": {
     "command": "screenshot prepare",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -173,8 +221,14 @@
   "screenshot preview": {
     "command": "screenshot preview",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -189,8 +243,14 @@
   "screenshot prototype-decisions apply": {
     "command": "screenshot prototype-decisions apply",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -205,8 +265,14 @@
   "screenshot prototype-decisions list": {
     "command": "screenshot prototype-decisions list",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -221,8 +287,14 @@
   "screenshot prototype-decisions preview": {
     "command": "screenshot prototype-decisions preview",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -237,8 +309,14 @@
   "screenshot show": {
     "command": "screenshot show",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -253,8 +331,14 @@
   "screenshot suggestions": {
     "command": "screenshot suggestions",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -269,8 +353,14 @@
   "screenshot withdraw": {
     "command": "screenshot withdraw",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {
@@ -285,8 +375,14 @@
   "ui mock": {
     "command": "ui mock",
     "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
       "llm_tokens": 0,
       "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
       "usd": 0.0
     },
     "data": {

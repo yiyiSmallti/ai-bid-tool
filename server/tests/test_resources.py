@@ -55,7 +55,9 @@ async def test_version_snapshot_replacement_and_history(api, headers, applicatio
     assert [row["revision"] for row in products] == [1, 2]
     async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
         events = (await session.scalars(select(AuditLog).order_by(AuditLog.created_at))).all()
-        assert len(events) == 4
+        assert len(events) == 5
+        created_budget = [event for event in events if event.action == "task.budget.created"]
+        assert len(created_budget) == 1 and str(created_budget[0].object_id) == task_id
         assert events[-1].details["old_revision_id"] == product["id"]
         assert "model" not in str(events[-1].details)
     # URLs are metadata; the fixture's unreachable host has not been fetched.
@@ -125,7 +127,17 @@ async def test_concurrent_revision_conflict_and_duplicate_selection(api, headers
     async with application.state.db.transaction(UUID(headers[0]["X-Org-Id"])) as session:
         assert await session.scalar(select(func.count()).select_from(ProductRevision)) == 2
         assert await session.scalar(select(func.count()).select_from(TaskResource)) == 1
-        assert await session.scalar(select(func.count()).select_from(AuditLog)) == 3
+        assert await session.scalar(select(func.count()).select_from(AuditLog)) == 4
+        assert (
+            await session.scalar(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(
+                    AuditLog.action == "task.budget.created", AuditLog.object_id == UUID(task_id)
+                )
+            )
+            == 1
+        )
 
 
 @pytest.mark.parametrize(

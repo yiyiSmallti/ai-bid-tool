@@ -24,6 +24,12 @@ IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
 SHA = "a" * 64
 
 
+@pytest.fixture(params=("3.0", "4.0"))
+def contract_version(request):
+    """Version metadata endpoints while preserving signed raw download paths."""
+    return request.param
+
+
 class SyntheticState(State):
     def load(self):
         return {"session": "synthetic-only-session", "org_id": IDENTIFIER}
@@ -71,10 +77,15 @@ def download_client(
     transport_error=None,
     on_download=None,
     download_error=None,
+    contract_version="3.0",
 ):
     client = Client(
-        "remote", "https://synthetic.example.test", SyntheticState(tmp_path / "unused.enc")
+        "remote",
+        "https://synthetic.example.test",
+        SyntheticState(tmp_path / "unused.enc"),
+        contract_version=contract_version,
     )
+    prefix = "/v4" if contract_version == "4.0" else ""
     path = f"/exports/{IDENTIFIER}/download"
     view = export_view(content, mode=mode, validity=validity, org_id=org_id)
     calls = []
@@ -83,12 +94,12 @@ def download_client(
         calls.append(request.url)
         assert request.headers["Authorization"] == "Bearer synthetic-only-session"
         assert request.headers["X-Org-Id"] == IDENTIFIER
-        if request.url.path == f"/exports/{IDENTIFIER}":
+        if request.url.path == prefix + f"/exports/{IDENTIFIER}":
             return httpx.Response(
                 200,
                 json=Result(ok=True, command="fixture", data=view).model_dump(mode="json"),
             )
-        if request.url.path == path + "-link":
+        if request.url.path == prefix + path + "-link":
             descriptor = deepcopy(view["file"])
             return httpx.Response(
                 200,
@@ -137,10 +148,12 @@ def download_client(
     [("final_section", True, "complete"), ("review_copy", False, "partial")],
 )
 async def test_export_download_verifies_and_atomically_saves_real_docx(
-    tmp_path, docx_bytes, mode, ok, completion
+    contract_version, tmp_path, docx_bytes, mode, ok, completion
 ):
     output = tmp_path.resolve() / f"{mode}.docx"
-    client, calls = download_client(tmp_path, docx_bytes, mode=mode)
+    client, calls = download_client(
+        tmp_path, docx_bytes, mode=mode, contract_version=contract_version
+    )
     result = await download_export(client, UUID(IDENTIFIER), output)
     assert result["ok"] is ok and result["data"]["completion"] == completion
     assert result["data"]["file"]["sha256"] == hashlib.sha256(docx_bytes).hexdigest()
@@ -162,8 +175,12 @@ async def test_export_download_verifies_and_atomically_saves_real_docx(
         f"/exports/{IDENTIFIER}/download?signature=synthetic-only#fragment",
     ],
 )
-async def test_export_download_rejects_external_or_malformed_links(tmp_path, docx_bytes, link):
-    client, calls = download_client(tmp_path, docx_bytes, link=link)
+async def test_export_download_rejects_external_or_malformed_links(
+    contract_version, tmp_path, docx_bytes, link
+):
+    client, calls = download_client(
+        tmp_path, docx_bytes, link=link, contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
         await download_export(client, UUID(IDENTIFIER), output)
@@ -176,7 +193,7 @@ async def test_export_download_rejects_external_or_malformed_links(tmp_path, doc
     ["hash", "short", "long", "redirect", "media_type", "corrupt", "foreign", "stale"],
 )
 async def test_export_download_never_writes_untrusted_or_stale_content(
-    tmp_path, docx_bytes, failure
+    contract_version, tmp_path, docx_bytes, failure
 ):
     served = {
         "hash": b"x" * len(docx_bytes),
@@ -197,6 +214,7 @@ async def test_export_download_never_writes_untrusted_or_stale_content(
         media_type="application/octet-stream" if failure == "media_type" else DOCX_MEDIA_TYPE,
         org_id=IDENTIFIER_2 if failure == "foreign" else IDENTIFIER,
         validity="stale" if failure == "stale" else "current",
+        contract_version=contract_version,
     )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
@@ -210,9 +228,11 @@ async def test_export_download_never_writes_untrusted_or_stale_content(
     "transport_error", [httpx.ReadError, httpx.ReadTimeout, httpx.RemoteProtocolError]
 )
 async def test_export_download_interrupted_transfer_is_retryable(
-    tmp_path, docx_bytes, transport_error
+    contract_version, tmp_path, docx_bytes, transport_error
 ):
-    client, _ = download_client(tmp_path, docx_bytes, transport_error=transport_error)
+    client, _ = download_client(
+        tmp_path, docx_bytes, transport_error=transport_error, contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
         await download_export(client, UUID(IDENTIFIER), output)
@@ -220,7 +240,9 @@ async def test_export_download_interrupted_transfer_is_retryable(
     assert not output.exists() and not list(tmp_path.glob(".bid-download-*"))
 
 
-async def test_export_download_preserves_bounded_server_error_result(tmp_path, docx_bytes):
+async def test_export_download_preserves_bounded_server_error_result(
+    contract_version, tmp_path, docx_bytes
+):
     failure = Result(
         ok=False,
         command="export download",
@@ -232,7 +254,9 @@ async def test_export_download_preserves_bounded_server_error_result(tmp_path, d
             }
         },
     ).model_dump(mode="json")
-    client, _ = download_client(tmp_path, docx_bytes, download_error=(409, failure))
+    client, _ = download_client(
+        tmp_path, docx_bytes, download_error=(409, failure), contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
         await download_export(client, UUID(IDENTIFIER), output)
@@ -249,8 +273,12 @@ async def test_export_download_preserves_bounded_server_error_result(tmp_path, d
     "body",
     [b"not-json", b"{}", b"x" * (64 * 1024 + 1)],
 )
-async def test_export_download_invalid_error_protocol_is_fatal(tmp_path, docx_bytes, body):
-    client, _ = download_client(tmp_path, docx_bytes, download_error=(502, body))
+async def test_export_download_invalid_error_protocol_is_fatal(
+    contract_version, tmp_path, docx_bytes, body
+):
+    client, _ = download_client(
+        tmp_path, docx_bytes, download_error=(502, body), contract_version=contract_version
+    )
     output = tmp_path.resolve() / "new.docx"
     with pytest.raises(ServiceError) as error:
         await download_export(client, UUID(IDENTIFIER), output)
@@ -258,7 +286,9 @@ async def test_export_download_invalid_error_protocol_is_fatal(tmp_path, docx_by
     assert not output.exists() and not list(tmp_path.glob(".bid-download-*"))
 
 
-async def test_export_download_rejects_parent_directory_replacement(tmp_path, docx_bytes):
+async def test_export_download_rejects_parent_directory_replacement(
+    contract_version, tmp_path, docx_bytes
+):
     original = tmp_path / "target"
     moved = tmp_path / "moved-target"
     original.mkdir()
@@ -267,7 +297,9 @@ async def test_export_download_rejects_parent_directory_replacement(tmp_path, do
         original.rename(moved)
         original.mkdir()
 
-    client, _ = download_client(tmp_path, docx_bytes, on_download=replace_parent)
+    client, _ = download_client(
+        tmp_path, docx_bytes, on_download=replace_parent, contract_version=contract_version
+    )
     output = original / "new.docx"
     with pytest.raises(ServiceError) as error:
         await download_export(client, UUID(IDENTIFIER), output)

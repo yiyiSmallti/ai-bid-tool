@@ -365,80 +365,6 @@ async def submit_generation(
         for item in manifest["unavailable_pages"]
     )
     warnings.extend(await cards.scope_warnings(session, extraction.id))
-    if body.dry_run:
-        blocker = None
-        if selected and billable(llm):
-            try:
-                await billing.require_funds(session, settings.billing_currency)
-            except ServiceError as exc:
-                if exc.code != "insufficient_balance":
-                    raise
-                blocker = exc.code
-                warnings.append(blocker)
-            if blocker is None and isinstance(llm, HTTPExtractor):
-                first = groups(
-                    secret["requirements"],
-                    secret["materials"],
-                    batch_budget(llm.settings),
-                    memory=MemoryPromptContext.model_validate(secret["memory"]),
-                )[0]
-                reserved = llm.reservation(
-                    request_body(
-                        llm,
-                        first,
-                        secret["materials"],
-                        secret["fields"],
-                        memory=MemoryPromptContext.model_validate(secret["memory"]),
-                    )
-                )
-                held = await session.scalar(
-                    select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
-                        VendorCall.state != "completed"
-                    )
-                )
-                assert held is not None
-                if await billing.current(session, settings.billing_currency) - held < reserved:
-                    blocker = "insufficient_balance"
-                elif reserved > settings.job_max_charge:
-                    blocker = "job_charge_limit_exceeded"
-                elif body.max_charge is not None and reserved > body.max_charge:
-                    blocker = "spend_cap_below_first_call"
-                if blocker:
-                    warnings.append(blocker)
-        return (
-            CardGeneratePreview.model_validate(
-                {
-                    "task_id": task_id,
-                    "extraction_job_id": extraction.id,
-                    "selected_requirements": selected,
-                    "skipped": skipped,
-                    "input_hash": input_hash,
-                    **{
-                        key: manifest["model"][key]
-                        for key in ("model", "platform_model_id", "model_revision")
-                    },
-                    "reasoning": reasoning,
-                    "model_redaction_enabled": task.model_redaction_enabled,
-                    "input_refs": [entry["ref"] for entry in manifest["materials"]],
-                    "input_manifest": manifest,
-                    "redaction_rule_version": redaction.RULE_VERSION,
-                    "redacted_counts": manifest["redacted_counts"],
-                    "billing_currency": settings.billing_currency,
-                    "admission_blocker": blocker,
-                    "max_charge": body.max_charge,
-                    **estimate(llm, secret),
-                }
-            ).model_dump(mode="json"),
-            None,
-            warnings,
-        )
-    if body.expected_input_hash is not None and body.expected_input_hash != input_hash:
-        raise ServiceError(
-            "generation_input_changed",
-            "Inputs, model or price changed since the preview; preview again",
-            409,
-            3,
-        )
     # Repeating a successful generation without a human edit reuses its paid result.
     # A manual edit or a different model/input still makes a new cache key.
     cache_targets = dict(targets)
@@ -457,6 +383,124 @@ async def submit_generation(
     cache_key = digest(
         {"kind": "card_generate", "input_hash": input_hash, "targets": cache_targets}
     )
+    if body.dry_run:
+        blocker = None
+        if selected and billable(llm):
+            try:
+                await billing.require_funds(session, settings.billing_currency)
+            except ServiceError as exc:
+                if exc.code != "insufficient_balance":
+                    raise
+                blocker = exc.code
+                warnings.append(blocker)
+            if blocker is None and isinstance(llm, HTTPExtractor):
+                first = groups(
+                    secret["requirements"],
+                    secret["materials"],
+                    batch_budget(llm.settings),
+                    memory=MemoryPromptContext.model_validate(secret["memory"]),
+                )[0]
+                try:
+                    reserved = llm.reservation(
+                        request_body(
+                            llm,
+                            first,
+                            secret["materials"],
+                            secret["fields"],
+                            memory=MemoryPromptContext.model_validate(secret["memory"]),
+                        )
+                    )
+                except ProviderFailure as error:
+                    if error.code not in {"billing_price_unavailable", "billing_bound_unavailable"}:
+                        raise
+                    reserved = None
+                    blocker = "billing_price_unavailable"
+                held = await session.scalar(
+                    select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
+                        VendorCall.state != "completed"
+                    )
+                )
+                assert held is not None
+                if (
+                    reserved is not None
+                    and await billing.current(session, settings.billing_currency) - held < reserved
+                ):
+                    blocker = "insufficient_balance"
+                elif reserved is not None and reserved > settings.job_max_charge:
+                    blocker = "job_charge_limit_exceeded"
+                elif (
+                    reserved is not None
+                    and body.max_charge is not None
+                    and reserved > body.max_charge
+                ):
+                    blocker = "spend_cap_below_first_call"
+                if blocker:
+                    warnings.append(blocker)
+        data = CardGeneratePreview.model_validate(
+            {
+                "task_id": task_id,
+                "extraction_job_id": extraction.id,
+                "selected_requirements": selected,
+                "skipped": skipped,
+                "input_hash": input_hash,
+                **{
+                    key: manifest["model"][key]
+                    for key in ("model", "platform_model_id", "model_revision")
+                },
+                "reasoning": reasoning,
+                "model_redaction_enabled": task.model_redaction_enabled,
+                "input_refs": [entry["ref"] for entry in manifest["materials"]],
+                "input_manifest": manifest,
+                "redaction_rule_version": redaction.RULE_VERSION,
+                "redacted_counts": manifest["redacted_counts"],
+                "billing_currency": settings.billing_currency,
+                "admission_blocker": blocker,
+                "max_charge": body.max_charge,
+                **estimate(llm, secret),
+            }
+        ).model_dump(mode="json")
+        from app.services import budget_preflight
+
+        calls = (
+            [
+                request_body(
+                    llm,
+                    batch,
+                    secret["materials"],
+                    secret["fields"],
+                    memory=MemoryPromptContext.model_validate(secret["memory"]),
+                )
+                for batch in groups(
+                    secret["requirements"],
+                    secret["materials"],
+                    batch_budget(llm.settings),
+                    memory=MemoryPromptContext.model_validate(secret["memory"]),
+                )
+            ]
+            if selected and isinstance(llm, HTTPExtractor)
+            else []
+        )
+        data = await budget_preflight.attach(
+            session,
+            data,
+            command="card generate",
+            task_id=task_id,
+            input_hash=input_hash,
+            currency=settings.billing_currency,
+            settings=settings,
+            quote_sources=[lambda request=request: llm.quote(request) for request in calls],
+            planned_calls=len(calls) if calls or not selected else None,
+            max_charge=body.max_charge,
+            cached_job=await session.scalar(select(Job).where(Job.cache_key == cache_key)),
+        )
+        return data, None, warnings
+    if body.expected_input_hash is not None and body.expected_input_hash != input_hash:
+        raise ServiceError(
+            "generation_input_changed",
+            "Inputs, model or price changed since the preview; preview again",
+            409,
+            3,
+        )
     job = await session.scalar(select(Job).where(Job.cache_key == cache_key).with_for_update())
     cached = job is not None
     if job is not None:
@@ -894,6 +938,11 @@ async def publish(session, actor, job, output, secret, storage, settings):
                 warnings.append(f"negative_deviation:{key}")
     for key in selected - seen - set(skipped):
         skipped[key] = "generation_stopped" if output.failure else "missing_proposal"
+    from app.jobs.execution import ADMISSION_STOPS
+
+    if output.failure and output.failure.code in ADMISSION_STOPS and not created:
+        # Paid calls or rejected candidates alone do not make a partial publication.
+        raise output.failure
     partial = bool(
         rejected
         or needs_material

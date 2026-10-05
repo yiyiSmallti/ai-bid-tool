@@ -96,7 +96,36 @@ async def submit(session, actor, task_id, body, llm, settings, browser):
     extraction, manifest, spec = await inputs(session, actor, task_id, body, llm)
     input_hash = images.digest(manifest)
     request = prototyping.request_body(llm, spec)
-    reserved = llm.reservation(request)
+    try:
+        reserved = llm.reservation(request)
+    except ProviderFailure as error:
+        if not body.dry_run or error.code not in {
+            "billing_price_unavailable",
+            "billing_bound_unavailable",
+        }:
+            raise
+        from app.services import budget_preflight
+
+        return await budget_preflight.attach(
+            session,
+            {
+                "dry_run": True,
+                "input_hash": input_hash,
+                "outbound_image_hashes": [],
+                "outbound_text_hashes": [manifest["spec_sha256"]],
+                "admission_blocker": "billing_price_unavailable",
+                "estimated_charge": None,
+                "estimated_cost": {"usd": None},
+                "cost_basis": "unknown",
+            },
+            command="ui mock",
+            task_id=task_id,
+            input_hash=input_hash,
+            currency=settings.billing_currency,
+            settings=settings,
+            quotes=[],
+            planned_calls=2,
+        ), None
     tokens = (
         len(json.dumps(request, ensure_ascii=False).encode())
         + 4096
@@ -116,21 +145,33 @@ async def submit(session, actor, task_id, body, llm, settings, browser):
     if blocker is None and not browser.available:
         blocker = "sandbox_runtime_unavailable"
     if body.dry_run:
-        return {
-            "dry_run": True,
-            "input_hash": input_hash,
-            "outbound_image_hashes": [],
-            "outbound_text_hashes": [manifest["spec_sha256"]],
-            "catalog_identity": images.digest(manifest["model"]),
-            "price_revision": str(manifest["model"]["model_revision"]),
-            "input_image_count": 0,
-            "planned_calls": 1,
-            "estimated_cost": {"llm_tokens": tokens, "ocr_pages": 0, "usd": None},
-            "estimated_charge": str(reserved),
-            "billing_currency": settings.billing_currency,
-            "cost_basis": "first_pass_upper_bound",
-            "admission_blocker": blocker,
-        }, None
+        from app.services import budget_preflight
+
+        return await budget_preflight.attach(
+            session,
+            {
+                "dry_run": True,
+                "input_hash": input_hash,
+                "outbound_image_hashes": [],
+                "outbound_text_hashes": [manifest["spec_sha256"]],
+                "catalog_identity": images.digest(manifest["model"]),
+                "price_revision": str(manifest["model"]["model_revision"]),
+                "input_image_count": 0,
+                "planned_calls": 1,
+                "estimated_cost": {"llm_tokens": tokens, "ocr_pages": 0, "usd": None},
+                "estimated_charge": str(reserved),
+                "billing_currency": settings.billing_currency,
+                "cost_basis": "first_pass_upper_bound",
+                "admission_blocker": blocker,
+            },
+            command="ui mock",
+            task_id=task_id,
+            input_hash=input_hash,
+            quotes=[llm.quote(request)],
+            planned_calls=2,
+            settings=settings,
+            currency=settings.billing_currency,
+        ), None
     if body.expected_input_hash != input_hash:
         images.fail("prototype_input_changed", "Inputs changed since the preview", 409, 3)
     if blocker:
@@ -226,7 +267,7 @@ async def process(execution, storage, llm, browser):
             ) from None
 
     execution.before_admit = before_admit
-    execution.plan(1)
+    execution.plan(2)
     html, usage = await prototyping.generate(llm, spec)
 
     prototype_id = uuid4()

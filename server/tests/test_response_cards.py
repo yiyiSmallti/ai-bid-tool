@@ -51,7 +51,6 @@ import pytest
 from app.api.main import create_app
 from app.core.config import Settings
 from app.models.entities import Membership
-from app.providers.base import LLMProvider
 from app.schemas.contracts import (
     Category,
     ExtractedRequirement,
@@ -60,7 +59,7 @@ from app.schemas.contracts import (
     ProviderUsage,
 )
 from conftest import PASSWORD, FakeQueue
-from fakes import source_for
+from fakes import FakeLLM, source_for
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -106,7 +105,7 @@ def sanitized_artifact(value):
     return value
 
 
-class PhaseOneExtraction(LLMProvider):
+class PhaseOneExtraction(FakeLLM):
     """A labelled fake extraction provider; response drafting never calls a model in phase 1."""
 
     name = "test-fake"
@@ -117,7 +116,7 @@ class PhaseOneExtraction(LLMProvider):
     def __init__(self) -> None:
         self.calls = 0
 
-    async def extract(self, chunks, schema):
+    async def _extract(self, chunks, schema):
         self.calls += 1
         items = []
         for chunk in chunks:

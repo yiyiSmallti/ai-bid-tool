@@ -547,8 +547,16 @@ async def test_combined_old_pending_scope_requires_new_preview(
     assert response.status_code == 200, response.text
     queued = await submit_combined(case, preview)
     assert queued.status_code == 200, queued.text
+    job_id = UUID(queued.json()["data"]["job_id"])
+    before = await combined_counts(case)
     async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
-        job = await session.get(Job, UUID(queued.json()["data"]["job_id"]))
+        # The prerequisite extraction is already metered. Rejecting this check
+        # must neither erase that call nor add any new admission or usage.
+        prerequisite_calls = (await session.scalars(select(VendorCall))).all()
+        assert len(prerequisite_calls) == 1
+        assert prerequisite_calls[0].job_id == UUID(case["extraction"])
+        assert prerequisite_calls[0].state == "completed"
+        job = await session.get(Job, job_id)
         assert job is not None
         submitted = copy.deepcopy(job.result["submission"])
         submitted["input_manifest"]["rule_version"] = "check-rules-v1"
@@ -558,9 +566,42 @@ async def test_combined_old_pending_scope_requires_new_preview(
     assert terminal["status"] == "failed", terminal
     assert terminal["error"]["code"] == "check_input_changed"
     assert vendor.requests == []
+    after = await combined_counts(case)
+    for key in ("vendor_calls", "usage_records", "balance_entries", "org_balance"):
+        assert after[key] == before[key], key
     async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
         assert await session.scalar(select(func.count()).select_from(CheckRun)) == 0
-        assert await session.scalar(select(func.count()).select_from(VendorCall)) == 0
+        for model in (VendorCall, UsageRecord):
+            assert (
+                await session.scalar(
+                    select(func.count()).select_from(model).where(model.job_id == job_id)
+                )
+                == 0
+            )
+        retained = (await session.scalars(select(VendorCall))).all()
+        assert [call.id for call in retained] == [call.id for call in prerequisite_calls]
+        assert retained[0].state == "completed"
+    artifact = tmp_path / "rejected-check-accounting.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "job_id": str(job_id),
+                "prerequisite_call_ids": [str(call.id) for call in prerequisite_calls],
+                "error_code": terminal["error"]["code"],
+                "vendor_requests": vendor.requests,
+                "before": {
+                    key: str(before[key])
+                    for key in ("vendor_calls", "usage_records", "balance_entries", "org_balance")
+                },
+                "after": {
+                    key: str(after[key])
+                    for key in ("vendor_calls", "usage_records", "balance_entries", "org_balance")
+                },
+            },
+            indent=2,
+        )
+        + "\n"
+    )
 
 
 async def test_combined_dry_run_worker_verified_outcomes_usage_and_org_isolation(
@@ -983,7 +1024,7 @@ async def test_combined_hard_stop_overrides_budget_stop_and_blocks_publication(
     assert queued.status_code == 200, queued.text
     job_id = UUID(queued.json()["data"]["job_id"])
 
-    async def hard_after_budget(self, reserved_charge, platform_billed):
+    async def hard_after_budget(self, quote):
         self.stop("spend_cap_reached", "Synthetic budget stop")
         raise self.stop("job_heartbeat_failed", "Synthetic heartbeat failure")
 

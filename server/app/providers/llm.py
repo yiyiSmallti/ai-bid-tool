@@ -1,13 +1,14 @@
 """Requirement extraction through vendor HTTP APIs, called with httpx only."""
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
 import ssl
 import time
 from collections.abc import Sequence
-from decimal import ROUND_CEILING, Decimal
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -22,6 +23,8 @@ from app.models.entities import Job, PlatformModel
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import accounted_call, plan_calls
 from app.providers.disabled import DisabledLLM
+from app.providers.quotes import serialized_request, token_cost
+from app.schemas.budget_contracts import BudgetCallQuote, Capability
 from app.schemas.contracts import (
     Category,
     ExtractedRequirement,
@@ -571,20 +574,19 @@ class HTTPExtractor:
             else None
             if self.sale is None
             else sum(u.charge or 0 for u in usages),
+            capability=usages[0].capability if usages else "llm",
+            payer="org_platform" if self.platform_model_id is not None else "org_direct",
+            billing_currency=self.settings.billing_currency,
+            price_revision=f"{self.version}:price:{self.model_revision or 0}",
+            task_amount=None
+            if any(u.task_amount is None for u in usages)
+            else sum((u.task_amount or Decimal(0) for u in usages), Decimal(0)),
         )
 
     def usage(self, started: float, model: str, input_tokens: int, output_tokens: int):
         prices = (self.settings.llm_input_usd_per_mtok, self.settings.llm_output_usd_per_mtok)
-        usd = (
-            None
-            if prices[0] is None or prices[1] is None
-            else (input_tokens * prices[0] + output_tokens * prices[1]) / 1_000_000
-        )
-        charge = (
-            None
-            if self.sale is None
-            else (input_tokens * self.sale[0] + output_tokens * self.sale[1]) / 1_000_000
-        )
+        usd = token_cost(input_tokens, output_tokens, prices, reservation=False)
+        charge = token_cost(input_tokens, output_tokens, self.sale, reservation=False)
         return ProviderUsage(
             provider=self.name,
             model=model,
@@ -593,10 +595,15 @@ class HTTPExtractor:
             tokens=input_tokens + output_tokens,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            usd=usd,
+            usd=float(usd) if usd is not None else None,
             platform_model_id=self.platform_model_id,
             provider_config_id=self.provider_config_id,
-            charge=0 if self.org_owned else charge,
+            charge=0 if self.org_owned else float(charge) if charge is not None else None,
+            task_amount=charge
+            if self.platform_model_id is not None
+            else usd
+            if self.settings.billing_currency == "USD"
+            else None,
         )
 
     def build_request(self, body: dict) -> dict:
@@ -627,21 +634,66 @@ class HTTPExtractor:
         # A compatible endpoint may ignore any smaller alias that is present.
         return max(limits) * copies
 
-    def reservation(self, body: dict) -> Decimal:
-        if self.platform_model_id is None:
-            return Decimal(0)
-        if self.sale is None or any(not Decimal(str(p)).is_finite() or p < 0 for p in self.sale):
+    serialized_request = staticmethod(serialized_request)
+
+    def quote(
+        self,
+        body: dict,
+        *,
+        capability: Capability = "llm",
+        input_tokens: int | None = None,
+        output_tokens: int | None = None,
+        image_count: int = 0,
+        image_price_revision: str | None = None,
+    ) -> BudgetCallQuote:
+        wire = self.serialized_request(body)
+        inputs = len(wire) + 4096 if input_tokens is None else input_tokens
+        outputs = self.output_token_bound(body) if output_tokens is None else output_tokens
+        vendor = token_cost(
+            inputs,
+            outputs,
+            (self.settings.llm_input_usd_per_mtok, self.settings.llm_output_usd_per_mtok),
+            reservation=True,
+        )
+        platform = self.platform_model_id is not None
+        charge = (
+            token_cost(inputs, outputs, self.sale, reservation=True) if platform else Decimal(0)
+        )
+        if charge is None:
             raise ProviderFailure(
                 "Platform model prices are unavailable", code="billing_price_unavailable"
             )
-        # Byte-level tokenizers cannot emit more content tokens than UTF-8 bytes.
-        # Count the entire request (including schema) plus conservative framing space.
-        input_bound = len(json.dumps(body, ensure_ascii=False).encode("utf-8")) + 4096
-        output_bound = self.output_token_bound(body)
-        return (
-            (input_bound * Decimal(str(self.sale[0])) + output_bound * Decimal(str(self.sale[1])))
-            / 1_000_000
-        ).quantize(Decimal("0.00000001"), rounding=ROUND_CEILING)
+        currency = self.settings.billing_currency
+        task_amount = charge if platform else vendor if currency == "USD" else None
+        return BudgetCallQuote(
+            capability=capability,
+            payer="org_platform" if platform else "org_direct",
+            provider=self.name,
+            model=self.model,
+            version=self.version,
+            provider_config_id=self.provider_config_id,
+            platform_model_id=self.platform_model_id,
+            price_revision=f"{self.version}:price:{self.model_revision or 0}",
+            request_sha256=hashlib.sha256(wire).hexdigest(),
+            currency=currency,
+            reserved_charge=charge,
+            reserved_task_amount=task_amount,
+            vendor_usd_upper_bound=vendor,
+            input_tokens_upper_bound=inputs,
+            output_tokens_upper_bound=outputs,
+            image_count=image_count,
+            image_price_revision=image_price_revision,
+            unknown_reason=(
+                None
+                if task_amount is not None
+                else "currency_conversion_required"
+                if currency != "USD"
+                else "missing_price"
+            ),
+        )
+
+    def reservation(self, body: dict) -> Decimal:
+        return self.quote(body).reserved_charge
 
     def response_usage(self, payload: dict, started: float) -> ProviderUsage:
         tokens = payload.get("usage")
@@ -677,9 +729,20 @@ class HTTPExtractor:
         safe_metadata: bool = False,
         reserved_charge: Decimal | None = None,
         image_usage: tuple[int, str, str] | None = None,
+        quote: BudgetCallQuote | None = None,
     ) -> tuple[dict, ProviderUsage]:
         key = self.settings.llm_api_key
         request_headers = dict(headers)
+        fixed_quote = quote or self.quote(body)
+        wire = self.serialized_request(body)
+        if fixed_quote.request_sha256 != hashlib.sha256(wire).hexdigest():
+            raise ProviderFailure(
+                "Provider request differs from its quote", code="invalid_provider_quote"
+            )
+        if reserved_charge is not None and reserved_charge != fixed_quote.reserved_charge:
+            raise ProviderFailure(
+                "Provider reservation differs from its quote", code="invalid_provider_quote"
+            )
 
         async def prepare():
             nonlocal key, request_headers
@@ -780,8 +843,7 @@ class HTTPExtractor:
 
         try:
             (response, payload, trusted_model, echoed_key), usage = await accounted_call(
-                self.reservation(body) if reserved_charge is None else reserved_charge,
-                self.platform_model_id is not None,
+                fixed_quote,
                 request,
                 before_send=prepare,
             )
@@ -819,7 +881,11 @@ class HTTPExtractor:
             # httpx timeouts restart on every received byte; vendors under load keep the
             # connection alive with blank lines, so a total deadline is enforced here.
             async with asyncio.timeout(self.settings.llm_timeout_seconds):
-                response = await client.post(url, headers=headers, json=body)
+                response = await client.post(
+                    url,
+                    headers={"Content-Type": "application/json", **headers},
+                    content=self.serialized_request(body),
+                )
         except (TimeoutError, httpx.TimeoutException, httpx.TransportError, ssl.SSLError):
             # httpx leaves a TLS connection dropped mid-response as a raw ssl.SSLError.
             raise ProviderFailure(
@@ -887,15 +953,15 @@ class HTTPExtractor:
     ) -> tuple[WireOutput, ProviderUsage]:
         raise NotImplementedError
 
+    def extraction_request(self, batch: list[dict]) -> dict:
+        raise NotImplementedError
+
 
 class AnthropicExtractor(HTTPExtractor):
     name = "anthropic"
 
-    async def call(self, client, batch):
+    def extraction_request(self, batch: list[dict]) -> dict:
         settings = self.settings
-        headers = {"anthropic-version": "2023-06-01"}
-        if settings.llm_api_key is not None:
-            headers["x-api-key"] = settings.llm_api_key.get_secret_value()
         body: dict[str, Any] = {
             "model": self.model,
             "max_tokens": settings.llm_max_output_tokens,
@@ -906,11 +972,18 @@ class AnthropicExtractor(HTTPExtractor):
         if settings.llm_effort:
             body["output_config"]["effort"] = settings.llm_effort
         if settings.llm_anthropic_fallback:
-            # A safety decline is retried server-side on the model Anthropic recommends.
-            headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
             body["fallbacks"] = "default"
+        return self.build_request(body)
+
+    async def call(self, client, batch):
+        settings = self.settings
+        headers = {"anthropic-version": "2023-06-01"}
+        if settings.llm_api_key is not None:
+            headers["x-api-key"] = settings.llm_api_key.get_secret_value()
+        if settings.llm_anthropic_fallback:
+            headers["anthropic-beta"] = "server-side-fallback-2026-07-01"
         base = (settings.llm_base_url or "https://api.anthropic.com").rstrip("/")
-        body = self.build_request(body)
+        body = self.extraction_request(batch)
         payload, usage = await self.post(client, f"{base}/v1/messages", headers, body)
         stop = payload.get("stop_reason")
         if stop == "refusal":
@@ -930,11 +1003,8 @@ class AnthropicExtractor(HTTPExtractor):
 class OpenAICompatibleExtractor(HTTPExtractor):
     name = "openai-compatible"
 
-    async def call(self, client, batch):
+    def extraction_request(self, batch: list[dict]) -> dict:
         settings = self.settings
-        headers = {}
-        if settings.llm_api_key is not None:
-            headers["Authorization"] = f"Bearer {settings.llm_api_key.get_secret_value()}"
         system = SYSTEM_PROMPT
         if settings.llm_json_mode == "json_schema":
             response_format: dict[str, Any] = {
@@ -956,8 +1026,15 @@ class OpenAICompatibleExtractor(HTTPExtractor):
             ],
             "response_format": response_format,
         }
+        return self.build_request(body)
+
+    async def call(self, client, batch):
+        settings = self.settings
+        headers = {}
+        if settings.llm_api_key is not None:
+            headers["Authorization"] = f"Bearer {settings.llm_api_key.get_secret_value()}"
         base = (settings.llm_base_url or "https://api.openai.com/v1").rstrip("/")
-        body = self.build_request(body)
+        body = self.extraction_request(batch)
         payload, usage = await self.post(client, f"{base}/chat/completions", headers, body)
         choices = payload.get("choices") or []
         if not choices:
