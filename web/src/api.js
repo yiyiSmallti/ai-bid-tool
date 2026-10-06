@@ -30,13 +30,15 @@ const ASSESSMENT_PATH = /^\/(?:tasks\/[^/?]+\/(?:assessment-inputs|assessment-ci
 const REQUIREMENT_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/(?:extractions\/[^/?]+\/(?:requirement-reviews|rejected-items|requirement-confirmations)|requirements\/(?:manual-preview|manual|repair))|requirements\/[^/?]+\/(?:review|review-history|review-decisions))$/;
 const COSIGN_PATH = /^\/(?:tasks\/[^/?]+\/(?:review-rule|requirements\/[^/?]+\/review-policy)|cards\/[^/?]+\/(?:review-rounds|signoffs))$/;
 const COLLABORATION_PATH = /^\/(?:tasks\/[^/?]+\/requirements\/[^/?]+\/assignment|cards\/[^/?]+\/threads(?:\/[^/?]+\/comments)?)$/;
+const FEATURE_MANAGEMENT_PATH = /^\/management\/resources\/features(?:\/query|\/[^/?]+(?:\/history\/query|\/lifecycle(?:\/history\/query)?)?)$/;
+const FEATURE_WRITE_PATH = /^\/resources\/features(?:\/[^/?]+\/revisions)?$/;
 const PRODUCT_MANAGEMENT_PATH = /^\/management\/resources\/products(?:\/query|\/[^/?]+(?:\/history\/query|\/lifecycle(?:\/history\/query)?)?)$/;
 const PRODUCT_WRITE_PATH = /^\/resources\/products(?:\/[^/?]+\/revisions)?$/;
 const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:workflow|progress|members(?:\/[^/?]+(?:\/remove)?)?|member-candidates|handover|archive|unarchive|board|activity|events(?:\/poll)?|documents|jobs|extractions|requirements|products|features|certificates|profiles|certificate-files|evidence-sources|cards(?:\/(?:dispositions|generations))?|drafts|exports|product-simulations|simulated-resources|model-redaction))?)?|documents\/[^/?]+(?:\/(?:chunks|parse|extract|download-link|download|pages\/\d+\/preview))?|exports\/[^/?]+(?:\/(?:download-link|download|preview(?:\/pages\/\d+)?))?|jobs\/[^/?]+(?:\/cancel)?|cards\/[^/?]+(?:\/(?:actions|classification))?|drafts\/[^/?]+|resources\/(?:products|features|certificates|profiles)(?:\/revisions\/[^/?]+\/file\/(?:download-link|download|pages\/\d+\/preview))?|evidence-sources\/[^/?]+\/preview\/(?:download-link|download)|resources\/profiles\/[^/?]+\/revisions|resources\/certificates\/(?:files|[^/?]+\/(?:revisions|file-revisions))|billing(?:\/redeem)?|confidential-fields(?:\/[^/?]+\/(?:revisions|values))?|confidential-values(?:\/[^/?]+\/reveal)?)$/;
 function checkedPath(path, org) {
   if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   const url = new URL(path, window.location.origin);
-  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ORG_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
+  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ORG_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || FEATURE_MANAGEMENT_PATH.test(url.pathname) || FEATURE_WRITE_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   return url.pathname;
 }
 function retryDelay(value) {
@@ -79,7 +81,7 @@ export async function request(method, path, body, { org = false, signal, binary 
   // The unversioned API deliberately projects legacy v3 costs. Assessment pages
   // and job receipts require enforced budget preflight and actual Result 4 costs.
   const assessmentJobs = /^\/tasks\/[^/]+\/jobs$/.test(pathname) && ["check", "score_rubric", "score"].includes(new URL(path, window.location.origin).searchParams.get("kind"));
-  const apiPath = org && (PRODUCT_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
+  const apiPath = org && (PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
   const headers = {};
   const epoch = orgEpoch;
   const controller = new AbortController();

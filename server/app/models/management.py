@@ -1,8 +1,16 @@
-"""Product lifecycle history; future resource arms require their own migration."""
+"""Retained product and feature lifecycle history with exclusive root arms."""
 
 from uuid import UUID
 
-from sqlalchemy import CheckConstraint, ForeignKeyConstraint, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    CheckConstraint,
+    ForeignKeyConstraint,
+    Index,
+    Integer,
+    String,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.entities import Base, Tenant
@@ -10,7 +18,8 @@ from app.models.entities import Base, Tenant
 
 class ResourceLifecycleEvent(Tenant, Base):
     __tablename__ = "resource_lifecycle_events"
-    product_id: Mapped[UUID] = mapped_column()
+    product_id: Mapped[UUID | None] = mapped_column()
+    feature_id: Mapped[UUID | None] = mapped_column()
     revision: Mapped[int] = mapped_column(Integer)
     resource_revision: Mapped[int] = mapped_column(Integer)
     before_state: Mapped[str] = mapped_column(String(8))
@@ -20,7 +29,32 @@ class ResourceLifecycleEvent(Tenant, Base):
     actor_kind: Mapped[str] = mapped_column(String(8), default="session", server_default="session")
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "product_id", "revision"),
+        Index(
+            "lifecycle_product_sequence",
+            "org_id",
+            "product_id",
+            "revision",
+            unique=True,
+            postgresql_where=text("product_id IS NOT NULL"),
+        ),
+        Index(
+            "lifecycle_feature_sequence",
+            "org_id",
+            "feature_id",
+            "revision",
+            unique=True,
+            postgresql_where=text("feature_id IS NOT NULL"),
+        ),
+        CheckConstraint("num_nonnulls(product_id,feature_id)=1", name="lifecycle_one_root"),
+        ForeignKeyConstraint(["org_id", "feature_id"], ["features.org_id", "features.id"]),
+        ForeignKeyConstraint(
+            ["org_id", "feature_id", "resource_revision"],
+            [
+                "feature_revisions.org_id",
+                "feature_revisions.feature_id",
+                "feature_revisions.revision",
+            ],
+        ),
         ForeignKeyConstraint(["org_id", "product_id"], ["products.org_id", "products.id"]),
         ForeignKeyConstraint(
             ["org_id", "product_id", "resource_revision"],

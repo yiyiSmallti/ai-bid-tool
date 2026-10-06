@@ -6,6 +6,47 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Bounded product and feature revision authors
+
+- Resolve product and feature authors with explicit page-revision filters on a
+  stored audit revision ID, with separate action indexes on org, revision ID and
+  resource root in migration `0050`. Replace the product expression index there
+  without changing merged migrations `0048` or `0049`.
+- Preserve exact root/content revision association, ambiguous-author handling,
+  one query per page and the existing fixed-scale acceptance bounds. Add the
+  feature suite's history-row visit bound to the product suite, including rows
+  discarded by filters and index rechecks. See
+  [author lookup](notes/management-pages.md#how-it-works).
+
+## 2026-10-06: Token scope and feature acceptance fixes
+
+- Added database rejection of `token:create` in migration `0051`, preserving the
+  existing human-only scope checks. This closes a gap that predates the feature
+  library slice; the API already rejected that scope for tokens.
+- Corrected feature storage acceptance to distinguish forbidden historical-pin
+  reactivation from an inactive resource's new-pin rejection, without changing
+  either production guard. See [selection guards](notes/management-pages.md#how-it-works).
+- Bound fixed-scale fixture suffixes as data so SQLAlchemy does not interpret
+  quoted `:parent` text as a missing parameter. Scale bounds and assertions remain
+  unchanged.
+
+## 2026-10-06: Feature library management slice
+
+- Added feature prefix browse/search, same-org product and implementation-state
+  filters, exact revision detail and separate content/lifecycle histories through
+  additive v4 API and CLI commands. Legacy all-row outputs remain unchanged.
+- Extended lifecycle storage with the feature arm, exactly-one-root constraints,
+  org composite revision bindings, human lifecycle CAS and database guards in
+  migration `0050`. RLS and composite keys precede business authority rejection.
+- Added feature creation/revision, bounded product choices and explicit task pins.
+  Inactive parent products block new associations and selections; existing pins
+  and exact active-pin replays are preserved. Declarations do not confirm material
+  or replace screenshots.
+- Added API/service, role/isolation, storage, CLI snapshot, fixed-scale and mocked
+  browser scenarios. PostgreSQL, Chromium and measured scale acceptance require
+  the main integration environment; see the [contract](plan/management-pages.md)
+  and [mechanism](notes/management-pages.md).
+
 ## 2026-10-06: Product library guard and browser regressions
 
 - Restore RLS-first rejection of foreign product writes and composite-FK-first

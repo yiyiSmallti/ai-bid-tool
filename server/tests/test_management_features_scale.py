@@ -22,19 +22,45 @@ from sqlalchemy import event, text
 ROOTS = 10_000
 REVISIONS = 10
 SAMPLES = 20
-OUTPUT = Path(__file__).resolve().parents[2] / "data/work/management-pages-validation/scale"
+OUTPUT = (
+    Path(__file__).resolve().parents[2] / "data/work/management-pages-validation/features-scale"
+)
 
 
 def seed_scale(admin_engine, tenants):
-    """Synthetic owner-side bulk setup; runtime measurements still use bid_app RLS."""
+    """Owner-side fixtures; measurements retain restricted role and tenant RLS."""
     with admin_engine.begin() as connection:
         for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
-            values = {"org": str(org), "actor": user, "roots": ROOTS, "revisions": REVISIONS}
+            values = {
+                "org": str(org),
+                "actor": user,
+                "roots": ROOTS,
+                "revisions": REVISIONS,
+                # Colons inside quoted SQL literals are still parsed by text() as binds.
+                "parent_suffix": ":parent",
+                "parent_revision_suffix": ":parent-revision",
+            }
             connection.execute(text("SELECT set_config('app.current_org', :org, true)"), values)
             connection.execute(
                 text(
-                    "INSERT INTO products(id,org_id,created_by,current_revision,created_at) "
-                    "SELECT md5(:org||':product:'||n)::uuid,CAST(:org AS uuid),:actor,:revisions,"
+                    "INSERT INTO products(id,org_id,created_by,current_revision) "
+                    "VALUES(md5(:org||:parent_suffix)::uuid,CAST(:org AS uuid),:actor,1)"
+                ),
+                values,
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO product_revisions(id,org_id,product_id,revision,data) "
+                    "VALUES(md5(:org||:parent_revision_suffix)::uuid,CAST(:org AS uuid),"
+                    "md5(:org||:parent_suffix)::uuid,1,"
+                    "jsonb_build_object('name','Scale parent','vendor','Scale vendor','model','Scale model'))"
+                ),
+                values,
+            )
+            connection.execute(
+                text(
+                    "INSERT INTO features(id,org_id,created_by,current_revision,created_at) "
+                    "SELECT md5(:org||':feature:'||n)::uuid,CAST(:org AS uuid),:actor,:revisions,"
                     "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' "
                     "FROM generate_series(1,:roots) n"
                 ),
@@ -42,12 +68,12 @@ def seed_scale(admin_engine, tenants):
             )
             connection.execute(
                 text(
-                    "INSERT INTO product_revisions(id,org_id,product_id,revision,data,created_at) "
+                    "INSERT INTO feature_revisions(id,org_id,feature_id,product_id,revision,data,created_at) "
                     "SELECT md5(:org||':revision:'||n||':'||v)::uuid,CAST(:org AS uuid),"
-                    "md5(:org||':product:'||n)::uuid,v,"
-                    "jsonb_build_object('name','Scale product '||lpad(n::text,5,'0'),"
-                    "'vendor','Scale vendor','model','ZX'||lpad(n::text,5,'0'),"
-                    "'model_version',v::text,'official_url',NULL,'whitepaper_url',NULL),"
+                    "md5(:org||':feature:'||n)::uuid,md5(:org||:parent_suffix)::uuid,v,"
+                    "jsonb_build_object('name','Scale feature '||lpad(n::text,5,'0'),"
+                    "'product_id',md5(:org||:parent_suffix)::uuid,'description','Scale declaration',"
+                    "'status',CASE WHEN n%3=0 THEN 'implemented' WHEN n%3=1 THEN 'planned' ELSE 'developing' END),"
                     "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+v*interval '1 microsecond' "
                     "FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
                 ),
@@ -57,15 +83,22 @@ def seed_scale(admin_engine, tenants):
                 text(
                     "INSERT INTO audit_logs(id,org_id,actor_user_id,action,object_id,details,created_at) "
                     "SELECT md5(:org||':audit:'||n||':'||v)::uuid,CAST(:org AS uuid),:actor,"
-                    "CASE WHEN v=1 THEN 'resource.product.create' ELSE 'resource.product.update' END,"
-                    "md5(:org||':product:'||n)::uuid,"
+                    "CASE WHEN v=1 THEN 'resource.feature.create' ELSE 'resource.feature.update' END,"
+                    "md5(:org||':feature:'||n)::uuid,"
                     "jsonb_build_object('new_revision_id',md5(:org||':revision:'||n||':'||v)::uuid,"
                     "'revision',v),TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' "
                     "FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"
                 ),
                 values,
             )
-        for table in ("products", "product_revisions", "audit_logs", "memberships"):
+        for table in (
+            "products",
+            "product_revisions",
+            "features",
+            "feature_revisions",
+            "audit_logs",
+            "memberships",
+        ):
             connection.execute(text(f"ANALYZE {table}"))
 
 
@@ -86,13 +119,13 @@ def plan_work(node):
 
 
 @pytest.mark.latency
-async def test_fixed_scale_product_reads(api, headers, application, tenants, admin_engine):
+async def test_fixed_scale_feature_reads(api, headers, application, tenants, admin_engine):
     seed_scale(admin_engine, tenants)
     root = OUTPUT.resolve()
     root.mkdir(parents=True, exist_ok=True)
     receipt = {
         "mode": "real_api",
-        "scenario": "u01-product-fixed-scale-v1",
+        "scenario": "u01-feature-fixed-scale-v1",
         "status": "running",
         "schema": "4.0",
         "fixture": {"orgs": 2, "roots_per_org": ROOTS, "revisions_per_org": ROOTS * REVISIONS},
@@ -102,7 +135,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
             "python": platform.python_version(),
             "logical_cpus": os.cpu_count(),
         },
-        "rerun": ".venv/bin/pytest -q server/tests/test_management_products_scale.py -m latency --basetemp=data/work/management-pages-validation/scale/tmp",
+        "rerun": ".venv/bin/pytest -q server/tests/test_management_features_scale.py -m latency --basetemp=data/work/management-pages-validation/features-scale/tmp",
         "measurements": [],
     }
     captured = []
@@ -116,15 +149,53 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
     try:
         with admin_engine.connect() as connection:
             receipt["postgresql"] = connection.scalar(text("SELECT version()"))
-        query_path = "/v4/management/resources/products/query"
+        query_path = "/v4/management/resources/features/query"
         first = await api.post(query_path, headers=headers[0], json={"limit": 25})
         assert first.status_code == 200, first.text
-        product = first.json()["items"][0]["ref"]["resource_id"]
+        feature = first.json()["items"][0]["ref"]["resource_id"]
+        detail = await api.get(f"/v4/management/resources/features/{feature}", headers=headers[0])
+        parent = detail.json()["data"]["detail"]["revision"]["data"]["product_id"]
         cases = [
             ("list", "POST", query_path, {"limit": 25}, 500, 6, 256 * 1024),
-            ("prefix", "POST", query_path, {"limit": 25, "q": "ZX099"}, 500, 6, 256 * 1024),
+            ("prefix", "POST", query_path, {"limit": 25, "q": "099"}, 500, 6, 256 * 1024),
             ("broad_prefix", "POST", query_path, {"limit": 100, "q": "scale"}, 500, 6, 256 * 1024),
             ("empty_prefix", "POST", query_path, {"q": "absentprefix"}, 500, 6, 256 * 1024),
+            (
+                "product_filter",
+                "POST",
+                query_path,
+                {"product_id": parent, "limit": 25},
+                500,
+                6,
+                256 * 1024,
+            ),
+            (
+                "status_filter",
+                "POST",
+                query_path,
+                {"implementation_status": "implemented", "limit": 25},
+                500,
+                6,
+                256 * 1024,
+            ),
+            (
+                "combined_filter",
+                "POST",
+                query_path,
+                {"product_id": parent, "implementation_status": "planned", "q": "099", "limit": 25},
+                500,
+                6,
+                256 * 1024,
+            ),
+            (
+                "empty_product_filter",
+                "POST",
+                query_path,
+                {"product_id": parent, "q": "absentprefix"},
+                500,
+                6,
+                256 * 1024,
+            ),
             (
                 "next_page",
                 "POST",
@@ -137,7 +208,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
             (
                 "detail",
                 "GET",
-                f"/v4/management/resources/products/{product}",
+                f"/v4/management/resources/features/{feature}",
                 None,
                 750,
                 8,
@@ -146,7 +217,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
             (
                 "historical_detail",
                 "GET",
-                f"/v4/management/resources/products/{product}?revision=1",
+                f"/v4/management/resources/features/{feature}?revision=1",
                 None,
                 750,
                 8,
@@ -155,7 +226,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
             (
                 "history",
                 "POST",
-                f"/v4/management/resources/products/{product}/history/query",
+                f"/v4/management/resources/features/{feature}/history/query",
                 {"limit": 5},
                 750,
                 6,
@@ -200,7 +271,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
                     assert all(row["org_id"] == headers[0]["X-Org-Id"] for row in result["items"])
                     if name == "prefix":
                         assert all(
-                            row["name"].startswith("Scale product 099") for row in result["items"]
+                            row["name"].startswith("Scale feature 099") for row in result["items"]
                         )
                 else:
                     assert result["data"]["org_id"] == headers[0]["X-Org-Id"]
@@ -210,7 +281,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
                 for statement, parameters in last_queries:
                     if not any(
                         table in statement
-                        for table in ("products", "product_revisions", "audit_logs")
+                        for table in ("features", "feature_revisions", "audit_logs")
                     ):
                         continue
                     explained = await connection.exec_driver_sql(
@@ -225,13 +296,14 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
                     visits = {}
                     for row in work:
                         relation = row["relation"]
-                        if relation in {"product_revisions", "audit_logs"}:
+                        if relation in {"feature_revisions", "audit_logs"}:
                             visits[relation] = (
                                 visits.get(relation, 0)
                                 + (row["rows"] + row["rows_removed"]) * row["loops"]
                             )
-                    # Prefix scans may touch all current roots, but immutable history
-                    # relations must not scale with the 100,000-row revision fixture.
+                    # Broad prefix scans may touch all 10,000 current roots. The
+                    # immutable revision/audit lookups must still avoid scanning
+                    # the 100,000-row history, even under those broad filters.
                     for relation, visited in visits.items():
                         if visited > ROOTS * 2:
                             failures.append(f"{name}: {relation} visited {visited} history rows")
@@ -292,12 +364,17 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
             return response.json()["data"]
 
         created_task = await write("create_task", "/v4/tasks", {"name": "Scale pin acceptance"})
-        pin_path = f"/v4/tasks/{created_task['id']}/products"
-        selected = await write("pin", pin_path, {"product_id": product, "revision": REVISIONS})
-        data = {"name": "Scale maintained product", "vendor": "Scale vendor", "model": "ZX-new"}
+        pin_path = f"/v4/tasks/{created_task['id']}/features"
+        selected = await write("pin", pin_path, {"feature_id": feature, "revision": REVISIONS})
+        data = {
+            "name": "Scale maintained feature",
+            "product_id": parent,
+            "description": "Scale maintained declaration",
+            "status": "implemented",
+        }
         await write(
             "revise",
-            f"/v4/resources/products/{product}/revisions",
+            f"/v4/resources/features/{feature}/revisions",
             {"expected_revision": REVISIONS, "data": data},
         )
         for lifecycle_revision, state, reason in (
@@ -306,7 +383,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
         ):
             await write(
                 state,
-                f"/v4/management/resources/products/{product}/lifecycle",
+                f"/v4/management/resources/features/{feature}/lifecycle",
                 {
                     "expected_revision": REVISIONS + 1,
                     "expected_lifecycle_revision": lifecycle_revision,
@@ -318,7 +395,7 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
         assert pins.status_code == 200
         assert pins.json()["items"][0]["id"] == selected["id"]
         assert pins.json()["items"][0]["revision"] == REVISIONS
-        await write("create_product", "/v4/resources/products", {"data": data})
+        await write("create_feature", "/v4/resources/features", {"data": data})
         receipt["failures"] = failures
         receipt["status"] = "failed" if failures else "passed"
         assert not failures, "; ".join(failures)

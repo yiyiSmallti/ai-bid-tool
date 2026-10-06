@@ -19,12 +19,12 @@ from bid_cli.client import Client
 
 ID = "00000000-0000-4000-8000-000000000001"
 WHEN = "2026-10-06T00:00:00Z"
-PREFIX = "/v4/management/resources/products"
-REF = {"kind": "products", "resource_id": ID}
+PREFIX = "/v4/management/resources/features"
+REF = {"kind": "features", "resource_id": ID}
 ROW = {
     "org_id": ID,
     "ref": REF,
-    "name": "Synthetic product",
+    "name": "Synthetic feature",
     "revision_id": ID,
     "revision": 1,
     "lifecycle": {"state": "active", "revision": 0},
@@ -75,16 +75,17 @@ def projection(command, empty=False):
             "provenance": "declared",
             "actions": ROW["actions"],
             "detail": {
-                "kind": "products",
+                "kind": "features",
                 "revision": {
                     "id": ID,
                     "org_id": ID,
-                    "product_id": ID,
+                    "feature_id": ID,
                     "revision": 1,
                     "data": {
-                        "name": "Synthetic product",
-                        "vendor": "Synthetic vendor",
-                        "model": "Exact model",
+                        "name": "Synthetic feature",
+                        "product_id": ID,
+                        "description": "Synthetic declaration",
+                        "status": "implemented",
                     },
                 },
             },
@@ -100,7 +101,7 @@ def projection(command, empty=False):
                     "ref": REF,
                     "revision_id": ID,
                     "revision": 1,
-                    "name": "Synthetic product",
+                    "name": "Synthetic feature",
                     "created_at": WHEN,
                     "created_by": ID,
                     "current": True,
@@ -118,7 +119,7 @@ def projection(command, empty=False):
     elif command == "lifecycle history":
         items = [] if empty else [EVENT]
     return Result(
-        ok=True, command="resource product " + command, data=data, items=items
+        ok=True, command="resource feature " + command, data=data, items=items
     ).model_dump(mode="json")
 
 
@@ -136,7 +137,7 @@ def invoke(capsys, flags, exit_code=0):
     return body
 
 
-def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
+def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("BID_SESSION", "synthetic-only")
     monkeypatch.setenv("BID_ORG", ID)
     calls, snapshots = [], {}
@@ -161,7 +162,7 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
                 status,
                 json=Result(
                     ok=False,
-                    command="resource product " + command,
+                    command="resource feature " + command,
                     data={
                         "error": {
                             "code": code,
@@ -183,7 +184,16 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
     monkeypatch.setattr(Client, "transport", transport)
     query_file, state_file = tmp_path / "query.json", tmp_path / "state.json"
     query_file.write_text(
-        json.dumps({"q": "Synthetic", "state": "all", "cursor": "opaque-query", "limit": 2})
+        json.dumps(
+            {
+                "q": "Synthetic",
+                "state": "all",
+                "cursor": "opaque-query",
+                "limit": 2,
+                "product_id": ID,
+                "implementation_status": "implemented",
+            }
+        )
     )
     state_file.write_text(json.dumps(STATE))
     cases = [
@@ -198,8 +208,8 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
                 "state": "all",
                 "cursor": "opaque-query",
                 "limit": 2,
-                "product_id": None,
-                "implementation_status": None,
+                "product_id": ID,
+                "implementation_status": "implemented",
             },
         ),
         ("show", ["show", "--id", ID, "--revision", "1"], "GET", "/" + ID, {"revision": "1"}, None),
@@ -231,7 +241,7 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
     for mode in ("remote", "local"):
         for command, flags, method, path, params, content in cases:
             snapshots[mode + ":" + command] = invoke(
-                capsys, ["--mode", mode, "resource", "product", *flags]
+                capsys, ["--mode", mode, "resource", "feature", *flags]
             )
             assert calls[-1] == (method, PREFIX + path, params, content)
         empty = True
@@ -239,7 +249,7 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
             if command not in {"browse", "history", "lifecycle history"}:
                 continue
             snapshots[mode + ":empty:" + command] = invoke(
-                capsys, ["--mode", mode, "resource", "product", *flags]
+                capsys, ["--mode", mode, "resource", "feature", *flags]
             )
             assert snapshots[mode + ":empty:" + command]["items"] == []
         empty = False
@@ -258,7 +268,7 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
                     "--mode",
                     mode,
                     "resource",
-                    "product",
+                    "feature",
                     "lifecycle",
                     "set",
                     "--id",
@@ -270,7 +280,7 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
             )
             assert len(calls) == before + 1
         failure = None
-    snapshot = Path(__file__).with_name("snapshots") / "management-products-cli.json"
+    snapshot = Path(__file__).with_name("snapshots") / "management-features-cli.json"
     if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
         snapshot.write_text(
             json.dumps(snapshots, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
@@ -278,7 +288,7 @@ def test_management_products_transport_snapshots(monkeypatch, capsys, tmp_path):
     assert snapshots == json.loads(snapshot.read_text())
 
 
-def test_management_products_invalid_and_legacy_no_request(monkeypatch, capsys, tmp_path):
+def test_management_features_invalid_and_legacy_no_request(monkeypatch, capsys, tmp_path):
     calls = []
     monkeypatch.setattr(cli, "call", lambda *a, **kw: calls.append(a))
     invalid = tmp_path / "invalid.json"
@@ -294,12 +304,12 @@ def test_management_products_invalid_and_legacy_no_request(monkeypatch, capsys, 
         ["lifecycle", "history"],
         ["browse", "--input", str(tmp_path / "missing.json")],
     ):
-        body = invoke(capsys, ["resource", "product", *flags], 2)
+        body = invoke(capsys, ["resource", "feature", *flags], 2)
         assert body["data"]["error"]["code"] == "invalid_input"
     for command in ("browse", "show", "history", "lifecycle set", "lifecycle history"):
         with pytest.raises(SystemExit) as error:
             cli.main(
-                ["--contract-version", "3.0", "resource", "product", *command.split(), "--json"]
+                ["--contract-version", "3.0", "resource", "feature", *command.split(), "--json"]
             )
         assert error.value.code == 2
         assert (
@@ -309,28 +319,84 @@ def test_management_products_invalid_and_legacy_no_request(monkeypatch, capsys, 
     assert calls == []
 
 
-def test_management_products_schema_and_legacy_list(monkeypatch, capsys):
+def test_management_features_schema_and_legacy_list(monkeypatch, capsys):
     body = invoke(capsys, ["schema"])
     commands = body["data"]["commands"]
     for command in ("browse", "show", "history", "lifecycle set", "lifecycle history"):
-        entry = commands["resource product " + command]
+        entry = commands["resource feature " + command]
         assert entry["input"] is not None and entry["output"] is not None
         for kind in ("certificate", "profile", "template"):
             assert "resource " + kind + " " + command not in commands
-    assert "ResourceQuery" in json.dumps(commands["resource product browse"])
+    assert "ResourceQuery" in json.dumps(commands["resource feature browse"])
     cli.main(["--contract-version", "3.0", "schema", "--json"])
     legacy = json.loads(capsys.readouterr().out)["data"]["commands"]
-    assert "resource product list" in legacy
-    assert "resource product browse" not in legacy
+    assert "resource feature list" in legacy
+    assert "resource feature browse" not in legacy
     calls = []
 
     def call(method, path, **kwargs):
         calls.append((method, path, kwargs))
         return Result(
-            ok=True, command="resource product list", data={"current_revisions": {}}, items=[]
+            ok=True, command="resource feature list", data={"current_revisions": {}}, items=[]
         ).model_dump(mode="json")
 
     monkeypatch.setattr(cli, "call", call)
-    result = invoke(capsys, ["resource", "product", "list", "--history"])
-    assert calls == [("GET", "/resources/products", {"params": {"history": "true"}})]
+    result = invoke(capsys, ["resource", "feature", "list", "--history"])
+    assert calls == [("GET", "/resources/features", {"params": {"history": "true"}})]
     assert result["data"] == {"current_revisions": {}}
+
+
+@pytest.mark.parametrize(
+    "command,defect",
+    [
+        ("browse", "foreign_org"),
+        ("browse", "wrong_kind"),
+        ("browse", "broken_cursor"),
+        ("show", "foreign_org"),
+        ("show", "wrong_kind"),
+        ("show", "future_revision"),
+        ("lifecycle set", "wrong_kind"),
+        ("lifecycle set", "mismatched_event"),
+    ],
+)
+def test_feature_cli_rejects_malformed_server_receipt(
+    command, defect, monkeypatch, capsys, tmp_path
+):
+    response = projection(command)
+    if defect == "foreign_org":
+        if command == "browse":
+            response["items"] = [{**ROW, "org_id": "00000000-0000-4000-8000-000000000002"}]
+        else:
+            response["data"]["detail"]["revision"]["org_id"] = (
+                "00000000-0000-4000-8000-000000000002"
+            )
+    elif defect == "wrong_kind":
+        if command == "browse":
+            response["items"] = [{**ROW, "ref": {"kind": "products", "resource_id": ID}}]
+        elif command == "show":
+            response["data"]["ref"] = {"kind": "products", "resource_id": ID}
+        else:
+            response["data"]["event"] = {**EVENT, "ref": {"kind": "products", "resource_id": ID}}
+    elif defect == "broken_cursor":
+        response["data"]["has_more"] = True
+    elif defect == "future_revision":
+        response["data"]["detail"]["revision"]["revision"] = 2
+    elif defect == "mismatched_event":
+        response["data"]["lifecycle"]["revision"] = 2
+    calls = []
+
+    def call(*args, **kwargs):
+        calls.append((args, kwargs))
+        return response
+
+    monkeypatch.setattr(cli, "call", call)
+    query = tmp_path / "input.json"
+    query.write_text(json.dumps(STATE if command == "lifecycle set" else {}))
+    flags = command.split()
+    if command != "browse":
+        flags += ["--id", ID]
+    if command != "show":
+        flags += ["--input", str(query)]
+    result = invoke(capsys, ["resource", "feature", *flags], 4)
+    assert result["data"]["error"]["code"] == "invalid_server_response"
+    assert len(calls) == 1

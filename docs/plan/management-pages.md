@@ -4,13 +4,14 @@ kind: plan
 
 # Contract: U01 org management pages
 
-Status: **approved; first slice implemented**. This contract covers the remaining
+Status: **approved; first and second slices implemented**. This contract covers the remaining
 management-page scope of [roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
-The product slice supplies bounded browse/search, creation, exact revision detail,
-revision history, human deactivate/restore with independent lifecycle events, and
-explicit task pinning. Other resource kinds and settings remain later slices.
+The product and feature slices supply bounded browse/search, creation, exact
+revision detail, revision history, human deactivate/restore with independent
+lifecycle events, and explicit task pinning. Features add same-org product and
+implementation-state filters. Other resource kinds and settings remain later slices.
 The [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
-remain approval artifacts; [runtime product contracts](../../server/app/schemas/management_pages.py)
+remain approval artifacts; [runtime product and feature contracts](../../server/app/schemas/management_pages.py)
 and the [mechanism note](../notes/management-pages.md) define the implemented path.
 Database, real-browser and fixed-scale acceptance require execution in the main
 integration environment; static checks and mocked fixtures do not establish that acceptance.
@@ -93,9 +94,9 @@ Resolve authors for only the page's revision IDs through one indexed audit query
 Do not invent an assigned person or derive ownership from the last editor. Task
 owners/assignees remain in team workflow.
 
-The implemented product detail projection adds `revised_at` and nullable
+The implemented product and feature detail projections add `revised_at` and nullable
 `revised_by` for the exact viewed revision. This avoids walking content-history
-pages to find a historical author; the existing `ProductRevision` write receipts
+pages to find a historical author; the existing `ProductRevision` and `FeatureRevision` write receipts
 and legacy list outputs remain unchanged.
 
 | Page | Flows and next-step cues | Deactivation/history behavior |
@@ -149,13 +150,28 @@ each step. Test with human technical/admin writers, bidder/viewer readers, a tas
 observer, an archived task and another org.
 
 This slice includes bounded read indexes and product lifecycle storage. Existing
-products start at `active/revision=0` without fabricated events. The event table's
-non-null product composite foreign key implements only the product arm; later
-resource slices must extend it with the exactly-one-root constraints described
-below. No provider calls or new UI framework are introduced. Features, existing
-certificate/profile page integration, templates/bindings, providers, memory and
-confidential-page changes remain later slices. Each slice must complete its
-API/CLI/browser and isolation acceptance before release.
+products start at `active/revision=0` without fabricated events. No provider calls
+or new UI framework are introduced. Each slice must complete its API/CLI/browser
+and isolation acceptance before release.
+
+### Second vertical slice
+
+The feature slice implements `/app/org/features` and `/app/org/features/:id`,
+including bounded name-prefix search, same-org product and implementation-state
+filters, creation, full-description revision, exact revision detail, content and
+lifecycle history, and explicit task pinning. Implemented declarations still need
+material; feature maintenance never replaces screenshots or confirms evidence.
+
+Migration [0050](../../server/migrations/versions/0050_feature_library.py) adds the
+feature lifecycle baseline and extends lifecycle events with nullable product and
+feature arms, exactly one root per event, composite root/revision foreign keys and
+per-arm unique sequence indexes. Other resource arms remain deferred. An inactive
+parent product blocks new feature associations and new/replacement feature pins;
+existing exact active pins remain idempotent and historical pins stay intact.
+
+Certificate/profile page integration, templates/bindings, providers, memory and
+confidential-page changes remain later slices. Database, real-browser and measured
+fixed-scale acceptance for both implemented slices remain integration checks.
 
 ## Permission and task boundaries
 
@@ -434,8 +450,8 @@ root remains active; check both roots in stable ID order after task locks.
 
 ## HTTP and Pydantic interfaces
 
-Product query, detail, history and lifecycle paths below are implemented under
-`/v4`; paths for other kinds and areas remain proposed and have no placeholder
+Product and feature query, detail, history and lifecycle paths below are implemented
+under `/v4`; paths for other kinds and areas remain proposed and have no placeholder
 handlers. Paths in existing tables omit `/v4` for readability; new pages request
 version 4 explicitly through `orgRequest`/`api.request(contractVersion:4)`. Existing
 unprefixed routes retain compatibility projections. Register fixed query/history
@@ -668,8 +684,8 @@ and fixed error code without request/response capture.
 
 ## Test plan and repeatable artifacts
 
-The product slice has API/PostgreSQL, CLI, fixed-scale and mocked-browser acceptance
-tests. The following remain implementation acceptance requirements for their
+The product and feature slices have API/PostgreSQL, CLI, fixed-scale and
+mocked-browser acceptance tests. The following remain implementation acceptance requirements for their
 respective slices; neither code inspection nor mocked
 Playwright proves database authorization. Use the project's fake Providers and
 synthetic files; no real external services or secrets. The main integration
@@ -710,13 +726,14 @@ Use a canary input only in memory and assert its absence from outputs/logs/artif
 
 ### Playwright mocked-API and real integration
 
-Add proposed `web/e2e/management-pages.spec.js` following
+Use [product scenarios](../../web/e2e/management-pages.spec.js) and
+[feature scenarios](../../web/e2e/feature-management.spec.js), following
 [console-assessments.spec.js](../../web/e2e/console-assessments.spec.js) and
 [team-workflow.spec.js](../../web/e2e/team-workflow.spec.js), using the built app and
 stateful intercepted `/v4` API calls. Fixtures are test-only; production pages
 must have no mock/sample/fixture fallback.
 
-Cover product first slice and old task pins; filters/cursors/cancelled responses;
+Cover product and feature slices and old task pins; filters/cursors/cancelled responses;
 empty/error/oversize pages; two org switch with late response; all role/task matrices;
 conflict with unsaved edits; revision/file/history distinction; inactive selection;
 binding preview and static-hash mismatch; provider key submission once and absence
@@ -739,10 +756,10 @@ built app is:
 
 ```sh
 cd web
-E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js
+E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js e2e/feature-management.spec.js
 ```
 
-The proposed spec must validate that its resolved output directory is inside the
+Each spec must validate that its resolved output directory is inside the
 worktree's `data/work`, like existing console specs. It does not start services.
 Separate real-API/browser acceptance uses disposable two-org fixtures and produces
 an independent receipt proving actual API/DB gates. Run serial latency acceptance

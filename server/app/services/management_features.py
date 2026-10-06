@@ -1,4 +1,4 @@
-"""Live, bounded product projections and atomic human lifecycle transitions."""
+"""Live, bounded feature projections and atomic human lifecycle transitions."""
 
 import json
 import re
@@ -10,49 +10,62 @@ from uuid import UUID
 
 from cryptography.fernet import InvalidToken
 from pydantic import ValidationError
-from sqlalchemy import String, cast, func, select, text, tuple_
+from sqlalchemy import String, cast, func, select, text, true, tuple_
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
 from app.core.security import TokenSigner
-from app.models.entities import AuditLog, Product, ProductRevision, SimulatedResource
+from app.models.entities import AuditLog, Feature, FeatureRevision, Product, SimulatedResource
 from app.models.management import ResourceLifecycleEvent as Event
 from app.schemas.contracts import Contract, Cost, Result
+from app.schemas.feature_contracts import FeatureRevision as RevisionView
 from app.schemas.management_pages import (
     DETAIL_BYTE_LIMIT,
     PAGE_BYTE_LIMIT,
     ActionHint,
+    FeatureDetail,
     LifecycleView,
     Page,
     PageData,
     PageQuery,
-    ProductDetail,
-    ResourceDetailData,
     ResourceDetailQuery,
-    ResourceHistoryRow,
-    ResourceLifecycleData,
-    ResourceLifecycleEvent,
     ResourceLifecycleSet,
     ResourceQuery,
-    ResourceRef,
-    ResourceRow,
 )
-from app.schemas.resource_contracts import ProductRevision as RevisionView
+from app.schemas.management_pages import (
+    FeatureDetailData as ResourceDetailData,
+)
+from app.schemas.management_pages import (
+    FeatureHistoryRow as ResourceHistoryRow,
+)
+from app.schemas.management_pages import (
+    FeatureLifecycleData as ResourceLifecycleData,
+)
+from app.schemas.management_pages import (
+    FeatureLifecycleEvent as ResourceLifecycleEvent,
+)
+from app.schemas.management_pages import (
+    FeatureRef as ResourceRef,
+)
+from app.schemas.management_pages import (
+    FeatureRow as ResourceRow,
+)
 from app.services.auth import Identity, set_actor_context
 from app.services.task_workflow import live_actor
 from app.services.versioned import audit
 
-WARNINGS = ["Product metadata is a declaration; it is not evidence of parameter compliance"]
+WARNINGS = ["Implementation status is a declaration; evidence has not been verified"]
 CURSOR_SECONDS = 15 * 60
 INPUT_BYTE_LIMIT = 16 * 1024
 COMMANDS = {
-    "browse": "resource product browse",
-    "detail": "resource product show",
-    "history": "resource product history",
-    "lifecycle": "resource product lifecycle set",
-    "lifecycle_history": "resource product lifecycle history",
+    "browse": "resource feature browse",
+    "detail": "resource feature show",
+    "history": "resource feature history",
+    "lifecycle": "resource feature lifecycle set",
+    "lifecycle_history": "resource feature lifecycle history",
 }
 
 
@@ -114,14 +127,17 @@ def search_tokens(value: str | None) -> list[str]:
 
 
 def filters(body: ResourceQuery) -> dict:
-    if body.product_id is not None or body.implementation_status is not None:
-        fail("invalid_input", "Feature-only filters are unavailable for products", 422)
-    return {"tokens": search_tokens(body.q), "state": body.state}
+    return {
+        "tokens": search_tokens(body.q),
+        "state": body.state,
+        "product_id": str(body.product_id) if body.product_id is not None else None,
+        "implementation_status": body.implementation_status,
+    }
 
 
 def cursor_binding(actor: Identity, purpose: str, parent: UUID | None, normalized: dict) -> dict:
     return {
-        "kind": "management_product_cursor",
+        "kind": "management_feature_cursor",
         "org": str(actor.org_id),
         "authority": authority(actor),
         "purpose": purpose,
@@ -180,16 +196,18 @@ def issue_cursor(session, actor, purpose, parent, normalized, anchor):
 
 
 def ref(root_id: UUID) -> ResourceRef:
-    return ResourceRef(kind="products", resource_id=root_id)
+    return ResourceRef(kind="features", resource_id=root_id)
 
 
-def lifecycle_view(root: Product) -> LifecycleView:
+def lifecycle_view(root: Feature) -> LifecycleView:
     return LifecycleView.model_validate(
         {"state": root.lifecycle_state, "revision": root.lifecycle_revision}
     )
 
 
-def actions(actor: Identity, root: Product) -> list[ActionHint]:
+def actions(
+    actor: Identity, root: Feature, parent_state: str, selected_parent_state: str | None = None
+) -> list[ActionHint]:
     write = "resource:write" in actor.scopes
     human = actor.actor_kind == "session" and actor.token_id is None
     return [
@@ -205,19 +223,21 @@ def actions(actor: Identity, root: Product) -> list[ActionHint]:
             allowed=False,
             reason="resource_inactive"
             if root.lifecycle_state == "inactive"
+            or parent_state == "inactive"
+            or selected_parent_state == "inactive"
             else "task_access_required",
         ),
     ]
 
 
-def check_revision(actor: Identity, root: Product, revision: ProductRevision):
+def check_revision(actor: Identity, root: Feature, revision: FeatureRevision):
     if (
         root.org_id != actor.org_id
         or revision.org_id != actor.org_id
-        or revision.product_id != root.id
+        or revision.feature_id != root.id
         or revision.revision > root.current_revision
     ):
-        fail("management_integrity_error", "Product revision identity is invalid", 409, 4)
+        fail("management_integrity_error", "Feature revision identity is invalid", 409, 4)
 
 
 async def authors(session: AsyncSession, actor: Identity, revisions) -> dict[UUID, UUID | None]:
@@ -227,29 +247,30 @@ async def authors(session: AsyncSession, actor: Identity, revisions) -> dict[UUI
     rows = (
         await session.execute(
             select(
-                ProductRevision.id,
+                FeatureRevision.id,
                 func.count(AuditLog.id),
                 func.min(cast(AuditLog.actor_user_id, String)),
             )
             .join(
                 AuditLog,
-                (AuditLog.org_id == ProductRevision.org_id)
-                & (AuditLog.object_id == ProductRevision.product_id)
-                & (AuditLog.resource_revision_id_text == cast(ProductRevision.id, String))
-                & (AuditLog.details["revision"] == func.to_jsonb(ProductRevision.revision)),
+                (AuditLog.org_id == FeatureRevision.org_id)
+                & (AuditLog.object_id == FeatureRevision.feature_id)
+                & (AuditLog.resource_revision_id_text == cast(FeatureRevision.id, String))
+                & (AuditLog.details["revision"] == func.to_jsonb(FeatureRevision.revision)),
             )
             .where(
-                ProductRevision.org_id == actor.org_id,
-                ProductRevision.id.in_(ids),
+                FeatureRevision.org_id == actor.org_id,
+                FeatureRevision.id.in_(ids),
                 # Constrain the audit relation itself to this authorized page.
-                # Stored base columns can use the composite index under RLS.
+                # JSON extraction on protected rows was only a residual filter;
+                # stored base columns can use the composite index under RLS.
                 AuditLog.org_id == actor.org_id,
                 AuditLog.resource_revision_id_text.in_([str(identifier) for identifier in ids]),
-                # Fixed literals preserve partial-index eligibility for generic
-                # prepared plans as well as custom plans.
-                text("audit_logs.action IN ('resource.product.create','resource.product.update')"),
+                # Fixed literals keep the partial-index predicate provable even
+                # when PostgreSQL reuses a generic prepared query plan.
+                text("audit_logs.action IN ('resource.feature.create','resource.feature.update')"),
             )
-            .group_by(ProductRevision.id)
+            .group_by(FeatureRevision.id)
         )
     ).all()
     result: dict[UUID, UUID | None] = {row.id: None for row in revisions}
@@ -329,27 +350,42 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
 def browse_statement(actor: Identity, body: ResourceQuery, anchor=None):
     normalized = filters(body)
     statement = (
-        select(Product, ProductRevision, SimulatedResource.id)
+        select(
+            Feature,
+            FeatureRevision,
+            SimulatedResource.id.label("simulated_id"),
+            Product.lifecycle_state.label("parent_state"),
+        )
         .join(
-            ProductRevision,
-            (ProductRevision.org_id == Product.org_id)
-            & (ProductRevision.product_id == Product.id)
-            & (ProductRevision.revision == Product.current_revision),
+            FeatureRevision,
+            (FeatureRevision.org_id == Feature.org_id)
+            & (FeatureRevision.feature_id == Feature.id)
+            & (FeatureRevision.revision == Feature.current_revision),
+        )
+        .join(
+            Product,
+            (Product.org_id == FeatureRevision.org_id) & (Product.id == FeatureRevision.product_id),
         )
         .outerjoin(
             SimulatedResource,
-            (SimulatedResource.org_id == Product.org_id)
-            & (SimulatedResource.product_id == Product.id),
+            (SimulatedResource.org_id == Feature.org_id)
+            & (SimulatedResource.feature_id == Feature.id),
         )
-        .where(Product.org_id == actor.org_id)
+        .where(Feature.org_id == actor.org_id)
     )
+    if body.product_id is not None:
+        statement = statement.where(FeatureRevision.product_id == body.product_id)
+    if body.implementation_status is not None:
+        statement = statement.where(
+            FeatureRevision.data["status"].astext == body.implementation_status
+        )
     if body.state != "all":
-        statement = statement.where(Product.lifecycle_state == body.state)
+        statement = statement.where(Feature.lifecycle_state == body.state)
     if body.q is not None:
         tokens = normalized["tokens"]
         statement = (
             statement.where(
-                Product.search_vector.op("@@")(
+                Feature.search_vector.op("@@")(
                     func.to_tsquery("simple", " & ".join(token + ":*" for token in tokens))
                 )
             )
@@ -357,8 +393,8 @@ def browse_statement(actor: Identity, body: ResourceQuery, anchor=None):
             else statement.where(text("false"))
         )
     if anchor:
-        statement = statement.where(tuple_(Product.created_at, Product.id) < tuple_(*anchor))
-    return statement.order_by(Product.created_at.desc(), Product.id.desc()).limit(body.limit + 1)
+        statement = statement.where(tuple_(Feature.created_at, Feature.id) < tuple_(*anchor))
+    return statement.order_by(Feature.created_at.desc(), Feature.id.desc()).limit(body.limit + 1)
 
 
 async def query(session: AsyncSession, actor: Identity, body: ResourceQuery) -> Page[ResourceRow]:
@@ -366,11 +402,38 @@ async def query(session: AsyncSession, actor: Identity, body: ResourceQuery) -> 
         actor = await reader(session, actor)
         normalized = filters(body)
         anchor = open_cursor(session, actor, body, "browse", None, normalized)
-        rows = (await session.execute(browse_statement(actor, body, anchor))).all()
+        statement = browse_statement(actor, body, anchor)
+        if body.product_id is not None:
+            # A same-org parent drives an outer join to the bounded page. Its
+            # empty sentinel distinguishes a valid empty filter from a hidden
+            # product without an extra SQL round trip or an all-library scan.
+            bounded = statement.subquery()
+            projected_root = aliased(Feature, bounded)
+            projected_revision = aliased(FeatureRevision, bounded)
+            parent = (
+                select(Product.id)
+                .where(Product.org_id == actor.org_id, Product.id == body.product_id)
+                .subquery()
+            )
+            statement = (
+                select(
+                    projected_root,
+                    projected_revision,
+                    bounded.c.simulated_id,
+                    bounded.c.parent_state,
+                )
+                .select_from(parent.outerjoin(bounded, true()))
+                .order_by(projected_root.created_at.desc(), projected_root.id.desc())
+            )
+        rows = (await session.execute(statement)).all()
+        if body.product_id is not None:
+            if not rows:
+                raise not_found()
+            rows = [row for row in rows if row[0] is not None]
         retained = rows[: body.limit]
         revision_authors = await authors(session, actor, [row[1] for row in retained])
         items, anchors = [], []
-        for root, revision, simulated in retained:
+        for root, revision, simulated, parent_state in retained:
             check_revision(actor, root, revision)
             items.append(
                 ResourceRow(
@@ -384,7 +447,7 @@ async def query(session: AsyncSession, actor: Identity, body: ResourceQuery) -> 
                     created_at=root.created_at,
                     revised_at=revision.created_at,
                     revised_by=revision_authors[revision.id],
-                    actions=actions(actor, root),
+                    actions=actions(actor, root, parent_state),
                 )
             )
             anchors.append([root.created_at.isoformat(), str(root.id)])
@@ -401,10 +464,10 @@ async def query(session: AsyncSession, actor: Identity, body: ResourceQuery) -> 
         )
 
 
-async def root_for(session: AsyncSession, actor: Identity, root_id: UUID, *, lock=False) -> Product:
+async def root_for(session: AsyncSession, actor: Identity, root_id: UUID, *, lock=False) -> Feature:
     statement = (
-        select(Product)
-        .where(Product.org_id == actor.org_id, Product.id == root_id)
+        select(Feature)
+        .where(Feature.org_id == actor.org_id, Feature.id == root_id)
         .execution_options(populate_existing=True)
     )
     root = await session.scalar(statement.with_for_update() if lock else statement)
@@ -418,28 +481,51 @@ async def detail(
 ) -> ResourceDetailData:
     async with read_budget(session, body):
         actor = await reader(session, actor)
-        selected_revision = body.revision if body.revision is not None else Product.current_revision
+        selected_revision = body.revision if body.revision is not None else Feature.current_revision
+        current = aliased(FeatureRevision)
+        selected_parent = aliased(Product)
         row = (
             await session.execute(
-                select(Product, ProductRevision, SimulatedResource.id)
+                select(
+                    Feature,
+                    FeatureRevision,
+                    SimulatedResource.id,
+                    Product.lifecycle_state,
+                    selected_parent.lifecycle_state,
+                )
                 .join(
-                    ProductRevision,
-                    (ProductRevision.org_id == Product.org_id)
-                    & (ProductRevision.product_id == Product.id)
-                    & (ProductRevision.revision == selected_revision),
+                    FeatureRevision,
+                    (FeatureRevision.org_id == Feature.org_id)
+                    & (FeatureRevision.feature_id == Feature.id)
+                    & (FeatureRevision.revision == selected_revision),
+                )
+                .join(
+                    current,
+                    (current.org_id == Feature.org_id)
+                    & (current.feature_id == Feature.id)
+                    & (current.revision == Feature.current_revision),
+                )
+                .join(
+                    Product,
+                    (Product.org_id == current.org_id) & (Product.id == current.product_id),
+                )
+                .join(
+                    selected_parent,
+                    (selected_parent.org_id == FeatureRevision.org_id)
+                    & (selected_parent.id == FeatureRevision.product_id),
                 )
                 .outerjoin(
                     SimulatedResource,
-                    (SimulatedResource.org_id == Product.org_id)
-                    & (SimulatedResource.product_id == Product.id),
+                    (SimulatedResource.org_id == Feature.org_id)
+                    & (SimulatedResource.feature_id == Feature.id),
                 )
-                .where(Product.org_id == actor.org_id, Product.id == root_id)
+                .where(Feature.org_id == actor.org_id, Feature.id == root_id)
                 .execution_options(populate_existing=True)
             )
         ).first()
         if row is None:
             raise not_found()
-        root, revision, simulated = row
+        root, revision, simulated, parent_state, selected_parent_state = row
         check_revision(actor, root, revision)
         revision_authors = await authors(session, actor, [revision])
         try:
@@ -449,15 +535,15 @@ async def detail(
                 current_revision=root.current_revision,
                 lifecycle=lifecycle_view(root),
                 provenance="simulated" if simulated is not None else "declared",
-                detail=ProductDetail(revision=RevisionView.model_validate(revision)),
+                detail=FeatureDetail(revision=RevisionView.model_validate(revision)),
                 revised_at=revision.created_at,
                 revised_by=revision_authors[revision.id],
-                actions=actions(actor, root),
+                actions=actions(actor, root, parent_state, selected_parent_state),
             )
         except ValidationError as error:
             if "byte budget" in str(error):
                 too_large()
-            fail("management_integrity_error", "Product detail is invalid", 409, 4)
+            fail("management_integrity_error", "Feature detail is invalid", 409, 4)
         detail_result(
             COMMANDS["detail"], value, settings_for(session).billing_currency, 9223372036854775807
         )
@@ -470,19 +556,19 @@ async def history(
     async with read_budget(session, body):
         actor = await reader(session, actor)
         anchor = open_cursor(session, actor, body, "history", root_id, {})
-        relation = (ProductRevision.org_id == Product.org_id) & (
-            ProductRevision.product_id == Product.id
+        relation = (FeatureRevision.org_id == Feature.org_id) & (
+            FeatureRevision.feature_id == Feature.id
         )
         if anchor:
-            relation &= tuple_(ProductRevision.revision, ProductRevision.id) < tuple_(*anchor)
+            relation &= tuple_(FeatureRevision.revision, FeatureRevision.id) < tuple_(*anchor)
         # A left join retains an authorized root even beyond the last revision, so
         # empty history pages need no extra root-existence query.
         records = (
             await session.execute(
-                select(Product, ProductRevision)
-                .outerjoin(ProductRevision, relation)
-                .where(Product.org_id == actor.org_id, Product.id == root_id)
-                .order_by(ProductRevision.revision.desc(), ProductRevision.id.desc())
+                select(Feature, FeatureRevision)
+                .outerjoin(FeatureRevision, relation)
+                .where(Feature.org_id == actor.org_id, Feature.id == root_id)
+                .order_by(FeatureRevision.revision.desc(), FeatureRevision.id.desc())
                 .limit(body.limit + 1)
                 .execution_options(populate_existing=True)
             )
@@ -523,8 +609,8 @@ async def history(
 
 
 def event_view(row: Event, actor: Identity, root_id: UUID) -> ResourceLifecycleEvent:
-    if row.org_id != actor.org_id or row.product_id != root_id or row.feature_id is not None:
-        fail("management_integrity_error", "Product lifecycle identity is invalid", 409, 4)
+    if row.org_id != actor.org_id or row.feature_id != root_id or row.product_id is not None:
+        fail("management_integrity_error", "Feature lifecycle identity is invalid", 409, 4)
     return ResourceLifecycleEvent.model_validate(
         {
             "id": row.id,
@@ -549,7 +635,7 @@ async def lifecycle_history(
         actor = await reader(session, actor)
         await root_for(session, actor, root_id)
         anchor = open_cursor(session, actor, body, "lifecycle_history", root_id, {})
-        statement = select(Event).where(Event.org_id == actor.org_id, Event.product_id == root_id)
+        statement = select(Event).where(Event.org_id == actor.org_id, Event.feature_id == root_id)
         if anchor:
             statement = statement.where(tuple_(Event.revision, Event.id) < tuple_(*anchor))
         rows = (
@@ -584,15 +670,15 @@ async def set_state(
     actor.require("resource:write")
     await set_actor_context(session, actor)
     if root.current_revision != body.expected_revision:
-        fail("revision_conflict", "Product revision changed", 409)
+        fail("revision_conflict", "Feature revision changed", 409)
     if (
         root.lifecycle_revision != body.expected_lifecycle_revision
         or root.lifecycle_state == body.state
     ):
-        fail("lifecycle_conflict", "Product lifecycle changed or transition is not applicable", 409)
+        fail("lifecycle_conflict", "Feature lifecycle changed or transition is not applicable", 409)
     event = Event(
         org_id=actor.org_id,
-        product_id=root.id,
+        feature_id=root.id,
         revision=root.lifecycle_revision + 1,
         resource_revision=root.current_revision,
         before_state=root.lifecycle_state,
@@ -605,7 +691,7 @@ async def set_state(
     audit(
         session,
         actor,
-        "resource.product.deactivate" if body.state == "inactive" else "resource.product.restore",
+        "resource.feature.deactivate" if body.state == "inactive" else "resource.feature.restore",
         root.id,
         {
             "event_id": str(event.id),
