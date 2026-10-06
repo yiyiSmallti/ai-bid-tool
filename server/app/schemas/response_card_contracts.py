@@ -28,6 +28,7 @@ type GapReason = Literal[
     "invalid_citation",
     # The card was confirmed against a quote that citation repair later changed.
     "needs_reconfirmation",
+    "cosign_required",
 ]
 
 RESOURCE_FIELD_PATHS = {

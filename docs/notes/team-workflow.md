@@ -2,7 +2,7 @@
 kind: reference
 ---
 
-# Task membership, assignment, discussion and durable progress
+# Task membership, discussion, co-sign and durable progress
 
 ## Problem
 
@@ -12,6 +12,8 @@ project committed requirements and current validity without becoming a second
 source of approval. Disconnects must not lose changes or expose private job data.
 Requirement ownership and card discussion must remain separate from response
 approval, and comments must not become evidence (证据) or model input.
+Where a requirement needs both professional domains, approval must bind distinct
+humans to the same current inputs and remain valid at every consumption boundary.
 The approved boundaries are in [Team workflow](../plan/team-workflow.md).
 
 ## Usage
@@ -47,6 +49,25 @@ escaped text. Read pages use an opaque `--cursor` and default 50/max 100 entries
 Retry an uncertain comment result only with the same UUID and unchanged input;
 changed content requires a new request UUID. An explicit revision conflict requires
 refreshing and reviewing the current state.
+
+Inspect the task rule with `bid task review-rule show --task T`; an owner or human
+org administrator previews a change with `bid task review-rule set --task T --input
+FILE --dry-run` and submits the same reviewed input. Inspect or change an explicit
+requirement policy through `bid card policy show/set --task T --requirement R --job
+J`. Rule and policy changes require their expected revision and an encrypted reason.
+The board and card panel show required, signed and pending domains separately.
+
+Normal card submission opens response review. Use `bid card signoff list --card C`
+to inspect its round and signature history, and `bid card signoff add --card C
+--input FILE` to sign the exact card revision and round for the current human's
+selected domain. Every response signer explicitly reviews all Evidence IDs and
+warnings. For disposition, use `bid card review-round open --card C --input FILE`,
+then sign with purpose `disposition`, no Evidence IDs and a reason. The authorized
+round view exposes its decrypted intended disposition reason for review. Signatures
+have independent encrypted handling reasons and bind the immutable round reason.
+History pages are newest first; encrypted cursors bind the card, task and reader.
+A lost reply can be retried with the identical request UUID and input; a 409 requires
+refresh and a new human review, never automatic resubmission.
 
 For an existing deployment, drain old workers and stop admissions before enabling
 task ACL. The migration does not infer members from historical activity. Run
@@ -99,6 +120,42 @@ cursors bound to org/task/card/thread and current reader authority. Audit record
 contain IDs and hashes; durable events contain bounded IDs only, so discussion text
 and member labels stay out of live frames and activity summaries.
 
+The requirement's explicit flag and the starred-task rule determine required domains;
+an explicit false cannot defeat a matching rule, and the primary domain remains
+required. `card_review_rounds` freezes the card revision, requirement/citation,
+material/content hashes, policy revisions, intended disposition and required domains.
+`card_review_signatures` binds one distinct human per domain to the round. The DB
+computes snapshots and signature ordinals under locks rather than trusting submitted
+hashes or actor fields. Policy and rule change times prevent an old legacy approval
+from becoming eligible again merely because a stricter policy was later disabled.
+
+Partial response signatures keep the card pending and do not confirm Evidence or
+append a content revision. The last authorized human request revalidates every
+signer, material and warning, appends its signature, confirms Evidence and appends
+the established confirmation revision atomically. The actual finalizing human stays
+in `confirmed_by`; the complete signature set governs co-sign approval. Disposition
+rounds apply the intended disposition only on completion and never confirm Evidence.
+Mixed legacy disposition batches preflight every requirement and reject atomically
+when any needs multiple domains. Existing single-domain confirmation commands use a
+real one-domain round for newly submitted cards, retaining their Result shape.
+
+Revisions, policy changes, citation/material changes and loss of an actual signer's
+grants append `card_review_invalidations`. Re-adding a signer never restores a
+retired round; unrelated assignment, discussion or member edits do not retire it.
+Reads recalculate dependency and signer validity even without a materialized
+invalidation. Complete-round checks apply to direct SQL revision/Evidence/response
+item writes as well as service actions. All review history uses org/task composite
+keys, FORCE RLS and immutable records, with metadata-only audit and durable events.
+
+Drafts turn incomplete or invalidated approval into explicit `cosign_required` gaps
+and bind policy, round, signature IDs and hashes in their input manifest. Untouched
+legacy single-domain inputs keep their original manifest shape. Draft freshness,
+check and score input assembly, export preview/admission/publication/release/download
+revalidate current approval. An old draft read omits revoked response text and
+Evidence from its current table projection. Export keeps its original Evidence,
+negative-deviation, review-copy and final prototype keep/replace gates; co-sign
+completion never supplies a prototype decision or an export authorization.
+
 Archive takes the task/workflow lock and refuses queued/running jobs or
 pending/unknown vendor calls, including calls on terminal jobs. Archived tasks
 remain readable under current grants; existing downloads retain their freshness
@@ -144,9 +201,10 @@ A task owner is escalation responsibility, not the assignee of every requirement
 An assignment or comment does not confirm a response, and mention text alone does
 not identify a person: only the validated mention ID list does. Discussion has no
 external notification, edit/delete operation, automatic memory or model ingestion.
-Approval of the [co-sign ADR amendment](../adr/0005-human-confirmed-responses.md)
-does not activate co-sign handlers or weaken existing single-domain confirmation
-gates; its implementation status is in the [team-workflow plan](../plan/team-workflow.md).
+The [co-sign ADR amendment](../adr/0005-human-confirmed-responses.md) requires
+complete current rounds at consumption; a stored confirmed state, old Evidence
+flags or historical signatures alone do not authorize reuse. Archived tasks permit
+review-history reads but no policy, round or signature mutations.
 
 An active stored task-member row cannot revive a disabled org member. Ownership
 recovery is an explicit admin operation. Reconnection never resubmits paid work.
@@ -168,6 +226,16 @@ must fail above the approved fan-out bound rather than lose invalidations.
   org tables, owner constraints, human-only scope exclusions and lifecycle gates.
 - [0043_team_workflow_assignment.py](../../server/migrations/versions/0043_team_workflow_assignment.py):
   assignment/discussion RLS tables, immutable messages and membership-change guards.
+- [task_cosign.py](../../server/app/services/task_cosign.py): policies, current approval,
+  encrypted disposition reasons, signature receipts and atomic human completion.
+- [0044_team_workflow_cosign.py](../../server/migrations/versions/0044_team_workflow_cosign.py):
+  co-sign history, direct SQL gates, retirement and transactional producers.
+- [drafts.py](../../server/app/services/drafts.py),
+  [exports.py](../../server/app/services/exports.py) and
+  [score_run_inputs.py](../../server/app/services/score_run_inputs.py): bound consumer manifests.
+- [Co-sign database acceptance](../../server/tests/test_team_cosign_database.py),
+  [consumer acceptance](../../server/tests/test_team_cosign_acceptance.py) and
+  [console scenarios](../../web/e2e/cosign.spec.js): review and consumption boundaries.
 - [task_board.py](../../server/app/services/task_board.py): bounded read projections.
 - [task_events.py](../../server/app/services/task_events.py) and
   [task_event_sql.py](../../server/app/services/task_event_sql.py): encrypted replay

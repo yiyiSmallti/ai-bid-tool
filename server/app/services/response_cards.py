@@ -591,6 +591,10 @@ async def card_view(
         image_warnings,
         memory_lineage,
     )
+    from app.services import task_cosign
+
+    projection = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
+    task_cosign.apply_eligibility(view, projection)
     from app.services.agent_tools import provenance
 
     origin_job = revision.model_job_id
@@ -815,6 +819,7 @@ class CardReadBatch:
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
     _views: dict[UUID, dict] = field(default_factory=dict)
     memory_epoch: int = 0
+    cosign: dict[UUID, dict] = field(default_factory=dict)
 
     @classmethod
     async def load(
@@ -933,7 +938,11 @@ class CardReadBatch:
 
             actor.require("memory:read")
             memory_epoch = await epoch(session, actor.org_id)
+        from app.services import task_cosign
+
+        cosign = await task_cosign.projections(session, actor.org_id, list(loaded_cards))
         return cls(
+            cosign=cosign,
             memory_epoch=memory_epoch,
             actor=actor,
             requirements=required,
@@ -1053,7 +1062,9 @@ class CardReadBatch:
                 | ({warning} if warning else set()),
                 memory_lineage_for(manifest, requirement.id),
             )
-        return self._views[revision.id]
+        from app.services import task_cosign
+
+        return task_cosign.apply_eligibility(self._views[revision.id], self.cosign[card.id])
 
 
 async def append_revision(
@@ -1323,6 +1334,55 @@ async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, b
     return await card_view(session, actor, card, revision, requirement)
 
 
+async def validate_confirmation(session, actor, card, previous, requirement, body, storage):
+    """Validate every legacy human gate without writing Evidence or revisions."""
+    view = await card_view(session, actor, card, previous, requirement, storage)
+    materials = await linked_evidence(session, previous.id)
+    if "memory_input_stale" in view["warning_codes"]:
+        fail("memory_input_stale", "Memory changed; edit or regenerate before review", 409, 4)
+    if view["eligibility"] in {"stale_material", "invalid_citation", "needs_reconfirmation"}:
+        fail(view["eligibility"], "Card inputs are no longer valid", 409)
+    if not all(getattr(previous, name) for name in CONTENT_FIELDS):
+        fail("incomplete_response", "Response kind, text, deviation and explanation are required")
+    if previous.deviation_note == "满足":
+        fail("incomplete_response", "Explain the correspondence or concrete difference")
+    texts = (previous.response_text, previous.deviation_note)
+    if any(redaction.PLACEHOLDER.search(text or "") for text in texts):
+        fail(
+            "redacted_placeholder_in_response",
+            "Replace masked text with a confidential field or the actual wording",
+        )
+    await confidential.check_references(session, texts)
+    if previous.response_kind == "evidence" and not materials:
+        fail("missing_evidence", "Evidence responses require at least one material")
+    if previous.response_kind == "commitment" and materials:
+        fail("unexpected_evidence", "Commitments cannot contain evidence")
+    if set(body.reviewed_evidence_ids) != {row.id for row in materials}:
+        fail("review_mismatch", "Review every linked evidence item explicitly")
+    warning_codes = set(view["warning_codes"])
+    if set(body.reviewed_warning_codes) != warning_codes or (warning_codes and not body.reason):
+        fail("warning_review_required", "Review every warning and record a handling reason")
+    for row, evidence in zip(materials, view["evidence"], strict=True):
+        if row.kind == "image_region":
+            from app.services.screenshots import validate_image_evidence
+
+            await validate_image_evidence(session, actor, row, storage=storage)
+        else:
+            from pydantic import TypeAdapter
+
+            from app.schemas.response_card_contracts import EvidenceInput
+
+            item = TypeAdapter(EvidenceInput).validate_python(evidence["input"])
+            await resolve_material(
+                session,
+                actor,
+                card.task_id,
+                item,
+                storage,
+                extraction_job_id=card.extraction_job_id,
+            )
+
+
 @task_authorized(
     lambda values: (
         "evidence:confirm"
@@ -1333,13 +1393,17 @@ async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, b
     write=True,
 )
 async def card_action(
-    session: AsyncSession, actor: Identity, card_id: UUID, body: CardAction, storage: Storage
+    session: AsyncSession,
+    actor: Identity,
+    card_id: UUID,
+    body: CardAction,
+    storage: Storage,
+    settings=None,
 ):
     decision = body.action in {"confirm", "reject", "needs_material", "reopen"}
     actor = await access(session, actor, "evidence:confirm" if decision else "card:write")
     card, previous, requirement = await require_card(session, card_id, lock=True)
     expected(card, body.expected_revision)
-    view = await card_view(session, actor, card, previous, requirement)
     if decision:
         from app.services.task_workflow import access as task_access
 
@@ -1363,73 +1427,19 @@ async def card_action(
     before, after = transitions[body.action]
     if previous.state != before or previous.disposition == "comply_only":
         fail("invalid_transition", "Action is unavailable in the current state", 409)
+    from app.services import task_cosign
+
+    if body.action == "confirm":
+        if settings is None:
+            from app.core.config import Settings
+
+            settings = Settings.load()
+        return await task_cosign.legacy_confirm(
+            session, actor, card, previous, requirement, body, storage, settings
+        )
     materials = await linked_evidence(session, previous.id)
     values = {"state": after, "reason": body.reason}
     correlation_id = uuid4()
-    if body.action == "confirm":
-        if "memory_input_stale" in view["warning_codes"]:
-            fail("memory_input_stale", "Memory changed; edit or regenerate before review", 409, 4)
-        if view["eligibility"] in {"stale_material", "invalid_citation", "needs_reconfirmation"}:
-            fail(view["eligibility"], "Card inputs are no longer valid", 409)
-        if not all(getattr(previous, name) for name in CONTENT_FIELDS):
-            fail(
-                "incomplete_response", "Response kind, text, deviation and explanation are required"
-            )
-        if previous.deviation_note == "满足":
-            fail("incomplete_response", "Explain the correspondence or concrete difference")
-        texts = (previous.response_text, previous.deviation_note)
-        if any(redaction.PLACEHOLDER.search(text or "") for text in texts):
-            fail(
-                "redacted_placeholder_in_response",
-                "Replace masked text with a confidential field or the actual wording",
-            )
-        await confidential.check_references(session, texts)
-        if previous.response_kind == "evidence" and not materials:
-            fail("missing_evidence", "Evidence responses require at least one material")
-        if previous.response_kind == "commitment" and materials:
-            fail("unexpected_evidence", "Commitments cannot contain evidence")
-        if set(body.reviewed_evidence_ids) != {row.id for row in materials}:
-            fail("review_mismatch", "Review every linked evidence item explicitly")
-        warning_codes = set(view["warning_codes"])
-        if set(body.reviewed_warning_codes) != warning_codes or (warning_codes and not body.reason):
-            fail("warning_review_required", "Review every warning and record a handling reason")
-        now = datetime.now(UTC)
-        for row, evidence in zip(materials, view["evidence"], strict=True):
-            if row.kind == "image_region":
-                from app.services.screenshots import validate_image_evidence
-
-                await validate_image_evidence(session, actor, row, storage=storage)
-            else:
-                from pydantic import TypeAdapter
-
-                from app.schemas.response_card_contracts import EvidenceInput
-
-                item = TypeAdapter(EvidenceInput).validate_python(evidence["input"])
-                await resolve_material(
-                    session,
-                    actor,
-                    card.task_id,
-                    item,
-                    storage,
-                    extraction_job_id=card.extraction_job_id,
-                )
-            if row.confirmed_by is None:
-                row.confirmed_by, row.confirmed_at = actor.user_id, now
-                if row.kind == "certificate_pdf_page":
-                    row.quote_check = "human_page_review"
-                elif row.kind == "image_region":
-                    row.quote_check = "human_image_review"
-        values |= {
-            "confirmed_by": actor.user_id,
-            "confirmed_at": now,
-            "reviewed_warning_codes": body.reviewed_warning_codes,
-        }
-        if previous.disposition is None:
-            values |= {
-                "disposition": "respond",
-                "disposition_by": actor.user_id,
-                "disposition_at": now,
-            }
     revision = await append_revision(
         session,
         actor,
@@ -1440,7 +1450,9 @@ async def card_action(
         values=values,
         correlation_id=correlation_id,
     )
-    if body.action in {"reject", "confirm"}:
+    if body.action == "submit":
+        await task_cosign.create_round(session, actor, card, revision)
+    if body.action == "reject":
         from app.memory.feedback import record_feedback
 
         await record_feedback(
@@ -1449,23 +1461,8 @@ async def card_action(
             card,
             previous,
             revision,
-            "card_rejected" if body.action == "reject" else "card_confirmed",
+            "card_rejected",
             body.reason,
-        )
-    if body.action == "confirm" and previous.disposition is None:
-        audit(
-            session,
-            actor,
-            "card.disposition",
-            card.id,
-            {
-                "old_disposition": None,
-                "new_disposition": "respond",
-                "action": "confirm",
-                "revision_id": str(revision.id),
-                "actor_kind": actor.actor_kind,
-                "correlation_id": str(correlation_id),
-            },
         )
     return await card_view(session, actor, card, revision, requirement)
 
@@ -1492,6 +1489,25 @@ async def dispose_cards(
             )
         ).all()
     }
+    from app.models.team_workflow import RequirementWorkflow, TaskWorkflow
+
+    workflow = await session.scalar(select(TaskWorkflow).where(TaskWorkflow.task_id == task_id))
+    required_flags = set(
+        await session.scalars(
+            select(RequirementWorkflow.requirement_id).where(
+                RequirementWorkflow.task_id == task_id,
+                RequirementWorkflow.co_sign_required.is_(True),
+            )
+        )
+    )
+    for item in body.items:
+        requirement = by_id.get(item.requirement_id)
+        if requirement is None:
+            raise not_found()
+        if item.requirement_id in required_flags or (
+            workflow is not None and workflow.co_sign_starred and requirement.starred
+        ):
+            fail("cosign_required", "Use a disposition review round for every required domain", 409)
     correlation = uuid4()
     output = {}
     for item in sorted(body.items, key=lambda value: str(value.requirement_id)):

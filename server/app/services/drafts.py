@@ -15,6 +15,7 @@ from app.providers.storage import Storage
 from app.schemas.contracts import Cost
 from app.schemas.response_card_contracts import DraftPreview, DraftRequest, DraftView
 from app.services import response_cards as cards
+from app.services import task_cosign
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
@@ -64,6 +65,17 @@ async def assemble(
 ):
     job, requirements = await cards.extraction_scope(session, task_id, job_id)
     items, manifest, negatives = [], [], 0
+    cosign = await task_cosign.projections(
+        session,
+        actor.org_id,
+        list(
+            await session.scalars(
+                select(ResponseCard.id).where(
+                    ResponseCard.task_id == task_id, ResponseCard.extraction_job_id == job_id
+                )
+            )
+        ),
+    )
     for requirement in requirements:
         card = await session.scalar(
             select(ResponseCard).where(ResponseCard.requirement_id == requirement.id)
@@ -122,15 +134,29 @@ async def assemble(
                     or any(not material["active_selection"] for material in view["evidence"])
                 ):
                     reasons.append("stale_material")
-                if eligibility == "needs_reconfirmation":
+                if valid_citation and cards.revision_quote_hash(
+                    revision, requirement
+                ) != cards.quote_hash(requirement.quote):
                     reasons.append("needs_reconfirmation")
             if not valid_citation:
                 reasons.append("invalid_citation")
+            if (
+                card is not None
+                and not cosign[card.id]["approved"]
+                and (
+                    cosign[card.id]["summary"]["round_revision"] > 0
+                    or len(cosign[card.id]["summary"]["required_domains"]) > 1
+                    or view
+                    and (view["state"] == "confirmed" or view["disposition"] == "comply_only")
+                )
+            ):
+                reasons.append("cosign_required")
             entry |= {"kind": "gap", "gap_reasons": reasons}
         items.append(entry)
         manifest.append(
             {
                 "requirement_id": str(requirement.id),
+                **(task_cosign.manifest_fields(cosign[card.id]) if card else {}),
                 "card_revision_id": view["revision_id"] if view else None,
                 "source_hash": digest(entry["source"]),
                 "category": requirement.category,
@@ -408,6 +434,7 @@ def current_draft_inputs(requirements: list[Requirement], batch: cards.CardReadB
         kind = {"eligible": "row", "comply_only": "comply_only"}.get(eligibility, "gap")
         current[str(requirement.id)] = {
             "requirement_id": str(requirement.id),
+            **(task_cosign.manifest_fields(batch.cosign[card.id]) if card else {}),
             "card_revision_id": view["revision_id"] if view else None,
             "source_hash": digest(cards.source(requirement)),
             "category": requirement.category,
@@ -503,6 +530,10 @@ def draft_view(
             "tender_clause": item.source,
             "location_label": item.location_label,
         }
+        if card is not None and item.kind != "gap" and not batch.cosign[card.id]["approved"]:
+            entry["reasons"] = ["cosign_required"]
+            gaps.append(entry)
+            continue
         if item.kind == "row":
             if item.card_revision_id is None or item.table is None:
                 cards.fail("invalid_draft", "Draft row is incomplete", 500, 4)
@@ -541,7 +572,7 @@ def draft_view(
             "task_id": run.task_id,
             "extraction_job_id": run.extraction_job_id,
             "generation_job_id": run.generation_job_id,
-            "completion": run.completion,
+            "completion": "partial" if gaps else "complete",
             "validity": "stale" if invalidated else "current",
             "input_hash": run.input_hash,
             "tables": tables,

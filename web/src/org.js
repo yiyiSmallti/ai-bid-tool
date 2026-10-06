@@ -8,7 +8,7 @@ export const orgRequest = (method, path, body, options = {}) => request(method, 
 export const display = (value) => value === null || value === undefined ? "未知" : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
 // Server messages are English for the CLI; the console shows Chinese for the codes a member can hit.
 const errorMessages = {
-  task_archived: "任务已归档，请先恢复任务", task_busy: "仍有作业或未确定费用，无法归档", member_has_assignments: "该成员仍有未交接的工作", event_cursor_expired: "进度游标已过期，需要重新读取", invalid_event_cursor: "进度游标无效，需要重新读取", board_cursor_expired: "看板分页已过期，需要重新读取", forbidden: "当前角色无权执行此操作", invalid_transition: "当前状态下不能执行此操作，请重新核对当前修订",
+  cosign_required: "本项需要会签，请在详情中逐个职责签署", stale_round: "会签轮次已变化，请重新核对", stale_policy: "会签策略已变化，请重新核对", policy_conflict: "会签策略修订已变化，请重新核对", review_round_conflict: "会签轮次已变化，请重新核对", cosign_invalidated: "会签已失效，需要重新审阅", task_archived: "任务已归档，请先恢复任务", task_busy: "仍有作业或未确定费用，无法归档", member_has_assignments: "该成员仍有未交接的工作", event_cursor_expired: "进度游标已过期，需要重新读取", invalid_event_cursor: "进度游标无效，需要重新读取", board_cursor_expired: "看板分页已过期，需要重新读取", forbidden: "当前角色无权执行此操作", invalid_transition: "当前状态下不能执行此操作，请重新核对当前修订",
   incomplete_response: "响应种类、正文、偏离和说明都需要填写，说明不能只写“满足”", missing_evidence: "证据响应至少需要关联一项材料才能确认",
   unexpected_evidence: "承诺不能关联证据材料", review_mismatch: "请逐项勾选本修订关联的全部材料", warning_review_required: "请勾选全部警示并填写处理理由",
   revision_conflict: "修订已被他人更新，请重新读取", stale_material: "所选材料已变化，需要重新核对", invalid_citation: "招标原文引用无效",

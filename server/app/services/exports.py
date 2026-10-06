@@ -519,6 +519,11 @@ async def build_manifest(
         for n, entry in enumerate(draft.input_manifest["requirements"])
     }
     rows.sort(key=lambda row: positions[row.requirement_id])
+    from app.services import task_cosign
+
+    cosign = await task_cosign.projections(
+        session, actor.org_id, [row.card_id for row in rows if row.card_id]
+    )
     adapter = TypeAdapter(EvidenceInput)
     items, attachments = [], []
     pages = {}
@@ -547,6 +552,23 @@ async def build_manifest(
             "starred": row.starred,
             "evidence": [],
         }
+        if row.card_id is not None:
+            projection = cosign[row.card_id]
+            entry.update(task_cosign.manifest_fields(projection))
+            if row.kind != "gap" and not projection["approved"]:
+                # Admission, publication, release and download all rebuild this
+                # manifest. Never copy revoked prose or Evidence even in previews.
+                issues.append(
+                    issue(
+                        "export_cosign_required",
+                        "block",
+                        requirements=[row.requirement_id],
+                        revision=str(row.card_revision_id),
+                    )
+                )
+                entry.update(kind="gap", gap_reasons=["cosign_required"])
+                items.append(entry)
+                continue
         for code in cards.warnings_for(requirement):
             issues.append(
                 issue(

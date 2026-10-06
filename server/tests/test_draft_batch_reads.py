@@ -44,7 +44,7 @@ from app.services.agent_tools import provenance
 from app.services.auth import ROLE_SCOPES, Identity
 from conftest import FakeQueue
 from docx import Document
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from test_response_cards import (
     PRODUCT_DATA,
@@ -118,6 +118,18 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             "tender_clause": item.source,
             "location_label": item.location_label,
         }
+        # Retain the independent slow reference while enforcing the newly
+        # approved complete-round requirement on its current table projection.
+        if (
+            card is not None
+            and item.kind != "gap"
+            and not await session.scalar(
+                select(func.team_cosign_card_approved(actor.org_id, card.id))
+            )
+        ):
+            entry["reasons"] = ["cosign_required"]
+            gaps.append(entry)
+            continue
         if item.kind == "row":
             if item.card_revision_id is None or item.table is None:
                 cards.fail("invalid_draft", "Draft row is incomplete", 500, 4)
@@ -161,7 +173,7 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             "task_id": run.task_id,
             "extraction_job_id": run.extraction_job_id,
             "generation_job_id": run.generation_job_id,
-            "completion": run.completion,
+            "completion": "partial" if gaps else "complete",
             "validity": "stale" if invalidated else "current",
             "input_hash": run.input_hash,
             "tables": tables,

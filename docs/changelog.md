@@ -6,6 +6,23 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Team workflow co-sign review and consumption gates
+
+- Implemented requirement co-sign policy and the starred-task rule, immutable
+  input-bound response/disposition rounds, distinct professional domain signatures,
+  replay receipts and permanent retirement after input or actual signer-authority
+  changes. Completed the approved [ADR 0005 amendment](adr/0005-human-confirmed-responses.md).
+- Added FORCE RLS review history and complete-round database/service gates. Only
+  the final authorized human request confirms Evidence and appends a confirmed
+  response; tokens, workers and agents cannot sign. Legacy single-domain records
+  retain their real human decisions without fabricated signatures.
+- Bound draft/export/check/score consumption and freshness to policy, round and
+  signatures. Incomplete approvals remain gaps; existing Evidence confirmation,
+  negative-deviation and prototype/final-export gates remain enforced.
+- Added co-sign board projections, Chinese console controls, API/CLI commands,
+  schema discovery and intended Result snapshots. See
+  [Team workflow](notes/team-workflow.md) for the mechanism and recovery boundaries.
+
 ## 2026-10-05: Task stream snapshot recovery
 
 - Require a successful authorized snapshot and its cursor before opening or

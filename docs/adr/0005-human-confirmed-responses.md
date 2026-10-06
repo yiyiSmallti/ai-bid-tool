@@ -22,6 +22,18 @@ Extracted requirements, material declarations, model responses (响应), and hum
 - Model drafting reuses platform-default models, official reasoning levels, and prepaid admission. Caches bind model catalog, input, and rule versions. Charge each call immediately; cancellation or refusal cannot erase incurred charges. Org BYOK remains defined by the [provider configuration contract](../plan/provider-config.md) and is not a prerequisite.
 - Drafts perform table assembly (组表) only and copy valid human-confirmed text verbatim without model rewriting. Each requirement enters exactly one main-table row, comply-only record, or gap. Substantive clauses (实质性条款) take precedence; others enter commercial or technical tables by review domain. Negative deviations cannot be hidden. Older drafts retain snapshots and recalculate invalidation when read; a draft is not export authorization.
 
+## Implementation of the co-sign amendment
+
+The approved amendment is implemented by the input-bound rounds and complete-round
+gates described in [Team workflow](../notes/team-workflow.md#how-it-works).
+[Migration 0044](../../server/migrations/versions/0044_team_workflow_cosign.py)
+extends the revision, signature, Evidence and response-item gates together with
+service, draft, export and assessment consumption checks. Existing historical
+single-domain decisions keep their actual human records; they receive no synthetic
+signatures. Tokens, agents, workers and administrators gain no professional signing
+authority. The original decision and its approval history above remain the basis
+for this implementation.
+
 ## Tradeoffs and scope
 
 Automatic redaction uses versioned text rules with false negatives and over-redaction. Enabling it does not replace source selection and human review. Even uncited material read by the model may affect a response, so all input material conservatively becomes a dependency. This can require more re-review but prevents changes to uncited inputs from being ignored.
