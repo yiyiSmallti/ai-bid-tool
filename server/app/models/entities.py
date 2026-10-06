@@ -601,6 +601,11 @@ class Feature(Tenant, Base):
     __tablename__ = "features"
     created_by: Mapped[UUID] = mapped_column()
     current_revision: Mapped[int] = mapped_column(Integer, default=1)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(8), default="active", server_default="active"
+    )
+    lifecycle_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    search_vector: Mapped[str] = mapped_column(TSVECTOR, server_default=text("''::tsvector"))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
@@ -619,6 +624,11 @@ class Feature(Tenant, Base):
             initially="DEFERRED",
         ),
         CheckConstraint("current_revision > 0", name="feature_revision_positive"),
+        CheckConstraint(
+            "lifecycle_state IN ('active','inactive') AND lifecycle_revision >= 0 "
+            "AND (lifecycle_revision > 0 OR lifecycle_state = 'active')",
+            name="feature_lifecycle_valid",
+        ),
     )
 
 

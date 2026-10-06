@@ -2,9 +2,10 @@
 
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.errors import not_found
+from app.core.errors import ServiceError, not_found
 from app.models.entities import Feature, FeatureRevision, Product, TaskFeature
 from app.schemas.feature_contracts import (
     FeatureCreate,
@@ -56,8 +57,21 @@ FEATURES = VersionedKind(
 
 def product_exists(session: AsyncSession, product_id: UUID):
     async def check():
-        if await session.get(Product, product_id) is None:
+        product = await session.scalar(
+            select(Product)
+            .where(Product.id == product_id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        )
+        if product is None:
             raise not_found()
+        if product.lifecycle_state != "active":
+            raise ServiceError(
+                "resource_inactive",
+                "Parent product is inactive; restore it before association",
+                409,
+                2,
+            )
 
     return check
 

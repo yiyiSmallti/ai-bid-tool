@@ -6,6 +6,23 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Feature library management slice
+
+- Added feature prefix browse/search, same-org product and implementation-state
+  filters, exact revision detail and separate content/lifecycle histories through
+  additive v4 API and CLI commands. Legacy all-row outputs remain unchanged.
+- Extended lifecycle storage with the feature arm, exactly-one-root constraints,
+  org composite revision bindings, human lifecycle CAS and database guards in
+  migration `0050`. RLS and composite keys precede business authority rejection.
+- Added feature creation/revision, bounded product choices and explicit task pins.
+  Inactive parent products block new associations and selections; existing pins
+  and exact active-pin replays are preserved. Declarations do not confirm material
+  or replace screenshots.
+- Added API/service, role/isolation, storage, CLI snapshot, fixed-scale and mocked
+  browser scenarios. PostgreSQL, Chromium and measured scale acceptance require
+  the main integration environment; see the [contract](plan/management-pages.md)
+  and [mechanism](notes/management-pages.md).
+
 ## 2026-10-06: Product library guard and browser regressions
 
 - Restore RLS-first rejection of foreign product writes and composite-FK-first

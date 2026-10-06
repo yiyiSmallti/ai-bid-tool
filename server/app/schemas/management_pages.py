@@ -1,4 +1,4 @@
-"""Runtime contracts for the implemented product management slice only."""
+"""Runtime contracts for the implemented product and feature management slices."""
 
 from typing import Annotated, Literal, Self
 from uuid import UUID
@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import AwareDatetime, Field, StringConstraints, model_validator
 
 from app.schemas.contracts import Contract
+from app.schemas.feature_contracts import FeatureRevision
 from app.schemas.resource_contracts import ProductRevision
 
 PAGE_BYTE_LIMIT = 256 * 1024
@@ -163,6 +164,11 @@ class ProductDetail(Contract):
     revision: ProductRevision
 
 
+class FeatureDetail(Contract):
+    kind: Literal["features"] = "features"
+    revision: FeatureRevision
+
+
 class ResourceDetailData(Contract):
     org_id: UUID
     ref: ResourceRef
@@ -177,7 +183,7 @@ class ResourceDetailData(Contract):
     @model_validator(mode="after")
     def identity_binding(self) -> Self:
         revision = self.detail.revision
-        resource_id = self.detail.revision.product_id
+        resource_id = revision.product_id
         if (
             self.ref.kind != self.detail.kind
             or self.ref.resource_id != resource_id
@@ -227,6 +233,102 @@ class ResourceLifecycleEvent(Contract):
 
 class ResourceLifecycleData(Contract):
     event: ResourceLifecycleEvent
+    lifecycle: LifecycleView
+    existing_selections: Literal["preserved"] = "preserved"
+
+    @model_validator(mode="after")
+    def current_event(self) -> Self:
+        if (self.event.revision, self.event.after) != (
+            self.lifecycle.revision,
+            self.lifecycle.state,
+        ):
+            raise ValueError("event must describe the returned lifecycle")
+        return self
+
+
+class FeatureRef(Contract):
+    kind: Literal["features"]
+    resource_id: UUID
+
+
+class FeatureRow(Contract):
+    org_id: UUID
+    ref: FeatureRef
+    name: str = Field(min_length=1, max_length=200)
+    revision_id: UUID
+    revision: Revision
+    lifecycle: LifecycleView
+    # A root-level simulated-resource marker applies to all its revisions.
+    provenance: Literal["declared", "simulated"]
+    created_at: AwareDatetime
+    revised_at: AwareDatetime
+    revised_by: UUID | None
+    actions: list[ActionHint] = Field(max_length=16)
+
+
+class FeatureHistoryRow(Contract):
+    org_id: UUID
+    ref: FeatureRef
+    revision_id: UUID
+    revision: Revision
+    name: str = Field(min_length=1, max_length=200)
+    created_at: AwareDatetime
+    created_by: UUID | None
+    current: bool
+    has_file: bool
+
+
+class FeatureDetailData(Contract):
+    org_id: UUID
+    ref: FeatureRef
+    current_revision: Revision
+    lifecycle: LifecycleView
+    provenance: Literal["declared", "simulated"]
+    detail: FeatureDetail
+    revised_at: AwareDatetime
+    revised_by: UUID | None
+    actions: list[ActionHint] = Field(max_length=16)
+
+    @model_validator(mode="after")
+    def identity_binding(self) -> Self:
+        revision = self.detail.revision
+        resource_id = revision.feature_id
+        if (
+            self.ref.kind != self.detail.kind
+            or self.ref.resource_id != resource_id
+            or self.org_id != revision.org_id
+            or revision.revision > self.current_revision
+        ):
+            raise ValueError("resource, org and revision must match")
+        if len(self.model_dump_json().encode("utf-8")) > DETAIL_BYTE_LIMIT:
+            raise ValueError("detail exceeds its byte budget")
+        return self
+
+
+class FeatureLifecycleEvent(Contract):
+    id: UUID
+    org_id: UUID
+    ref: FeatureRef
+    revision: Revision
+    resource_revision: Revision
+    before: LifecycleState
+    after: LifecycleState
+    reason_code: ReasonCode
+    actor_user_id: UUID
+    actor_kind: Literal["session"] = "session"
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def actual_transition(self) -> Self:
+        if self.before == self.after:
+            raise ValueError("a lifecycle event records a change")
+        if (self.after == "active") != (self.reason_code == "restored"):
+            raise ValueError("restored is the required reason for activation only")
+        return self
+
+
+class FeatureLifecycleData(Contract):
+    event: FeatureLifecycleEvent
     lifecycle: LifecycleView
     existing_selections: Literal["preserved"] = "preserved"
 

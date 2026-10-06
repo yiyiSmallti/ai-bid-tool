@@ -15,7 +15,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
-from app.models.entities import AuditLog, Product, Task
+from app.models.entities import AuditLog, Feature, FeatureRevision, Product, Task
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
 
@@ -156,6 +156,65 @@ async def list_revisions(
     return {"history": history, "current_revisions": current}, rows
 
 
+async def lock_feature_roots(
+    session: AsyncSession,
+    org_id: UUID,
+    feature_id: UUID,
+    *,
+    product_ids: Sequence[UUID] = (),
+    write: bool = False,
+    expected_revision: int | None = None,
+) -> Feature:
+    """Lock feature and associated parents after tasks, with a head race fence.
+
+    Taking an additional parent lock after discovering a changed head would
+    violate UUID ordering. Report a conflict instead so a fresh request can
+    resolve the new association before taking any library locks.
+    """
+    observed = (
+        await session.execute(
+            select(Feature.current_revision, FeatureRevision.product_id)
+            .join(
+                FeatureRevision,
+                (FeatureRevision.org_id == Feature.org_id)
+                & (FeatureRevision.feature_id == Feature.id)
+                & (FeatureRevision.revision == Feature.current_revision),
+            )
+            .where(Feature.org_id == org_id, Feature.id == feature_id)
+        )
+    ).one_or_none()
+    if observed is None:
+        raise not_found()
+    roots = {(feature_id, "feature"), (observed.product_id, "product")}
+    roots.update((identifier, "product") for identifier in product_ids)
+    feature = None
+    for identifier, root_kind in sorted(roots):
+        model = Feature if root_kind == "feature" else Product
+        query = select(model).where(model.org_id == org_id, model.id == identifier)
+        query = (
+            query.with_for_update(key_share=True)
+            if write and model is Feature
+            else query.with_for_update(read=True)
+        )
+        row = await session.scalar(query.execution_options(populate_existing=True))
+        if row is None:
+            raise not_found()
+        if isinstance(row, Feature):
+            feature = row
+    if feature is None:
+        raise not_found()
+    if feature.current_revision != observed.current_revision or (
+        expected_revision is not None and feature.current_revision != expected_revision
+    ):
+        raise ServiceError(
+            "revision_conflict",
+            "Feature revision changed; read the current revision before updating",
+            409,
+            2,
+        )
+    return feature
+
+
 async def update(
     session: AsyncSession,
     actor: Identity,
@@ -193,7 +252,19 @@ async def update(
             .order_by(Task.id)
             .with_for_update()
         )
-    root = await session.scalar(select(kind.root).where(kind.root.id == root_id).with_for_update())
+    if kind.root is Feature:
+        root = await lock_feature_roots(
+            session,
+            actor.org_id,
+            root_id,
+            product_ids=[columns["product_id"]] if columns else [],
+            write=True,
+            expected_revision=expected_revision,
+        )
+    else:
+        root = await session.scalar(
+            select(kind.root).where(kind.root.id == root_id).with_for_update()
+        )
     if root is None:
         raise not_found()
     if root.current_revision != expected_revision:
@@ -254,12 +325,31 @@ async def select_revision(
     task = await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
     if task is None:
         raise not_found()
-    root = await session.scalar(
-        select(kind.root)
-        .where(kind.root.id == root_id)
-        .with_for_update(read=True)
-        .execution_options(populate_existing=True)
-    )
+    if kind.root is Feature:
+        selected_parent = None
+        if revision_number is not None:
+            selected_parent = await session.scalar(
+                select(FeatureRevision.product_id).where(
+                    FeatureRevision.org_id == actor.org_id,
+                    FeatureRevision.feature_id == root_id,
+                    FeatureRevision.revision == revision_number,
+                )
+            )
+            if selected_parent is None:
+                raise not_found()
+        root = await lock_feature_roots(
+            session,
+            actor.org_id,
+            root_id,
+            product_ids=[selected_parent] if selected_parent is not None else [],
+        )
+    else:
+        root = await session.scalar(
+            select(kind.root)
+            .where(kind.root.id == root_id)
+            .with_for_update(read=True)
+            .execution_options(populate_existing=True)
+        )
     if root is None:
         raise not_found()
     revision = await session.scalar(
@@ -290,10 +380,39 @@ async def select_revision(
     # any new pin (including an old revision or a different normalized lot). Keep
     # this check before retiring the previous selection; both share the root lock
     # with lifecycle transitions after the task/workflow authorization locks.
-    if kind.root is Product and root.lifecycle_state != "active":
+    if kind.root in (Product, Feature) and root.lifecycle_state != "active":
         raise ServiceError(
-            "resource_inactive", "Product is inactive; existing selections are preserved", 409, 2
+            "resource_inactive",
+            f"{kind.label} is inactive; existing selections are preserved",
+            409,
+            2,
         )
+    if kind.root is Feature:
+        current_parent = (
+            select(FeatureRevision.product_id)
+            .where(
+                FeatureRevision.org_id == actor.org_id,
+                FeatureRevision.feature_id == root.id,
+                FeatureRevision.revision == root.current_revision,
+            )
+            .scalar_subquery()
+        )
+        inactive_parent = await session.scalar(
+            select(Product.id)
+            .where(
+                Product.org_id == actor.org_id,
+                (Product.id == revision.product_id) | (Product.id == current_parent),
+                Product.lifecycle_state != "active",
+            )
+            .limit(1)
+        )
+        if inactive_parent is not None:
+            raise ServiceError(
+                "resource_inactive",
+                "Parent product is inactive; existing selections are preserved",
+                409,
+                2,
+            )
     if previous is not None:
         previous.active = False
         await session.flush()

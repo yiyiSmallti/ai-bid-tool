@@ -58,11 +58,15 @@ CONSOLE_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 
-PRODUCT_MANAGEMENT_READS = {
+RESOURCE_MANAGEMENT_READS = {
     "resource_product_browse",
     "resource_product_show",
     "resource_product_history",
     "resource_product_lifecycle_history",
+    "resource_feature_browse",
+    "resource_feature_show",
+    "resource_feature_history",
+    "resource_feature_lifecycle_history",
 }
 
 
@@ -148,8 +152,8 @@ def create_app(
             and parts[4] in {"manual", "manual-preview"}
         )
         credential_route = request.url.path.startswith("/platform/credentials")
-        product_management_route = request.method == "POST" and request.url.path.startswith(
-            "/management/resources/products"
+        resource_management_route = request.method == "POST" and request.url.path.startswith(
+            ("/management/resources/products", "/management/resources/features")
         )
         if credential_route:
             from app.services.platform import identify
@@ -189,7 +193,7 @@ def create_app(
                 )
         if (
             credential_route
-            or product_management_route
+            or resource_management_route
             or manual_requirement_route
             or (
                 request.method == "POST"
@@ -203,7 +207,7 @@ def create_app(
                 content.extend(chunk)
                 if len(content) > (
                     16 * 1024
-                    if product_management_route
+                    if resource_management_route
                     else 512 * 1024
                     if credential_route
                     else 256 * 1024
@@ -231,7 +235,7 @@ def create_app(
                         else ServiceError(
                             "invalid_input", "Management input exceeds JSON limit", 413, 2
                         )
-                        if product_management_route
+                        if resource_management_route
                         else ServiceError(
                             "input_too_large",
                             "Source input exceeds JSON limit",
@@ -462,7 +466,7 @@ def create_app(
 
         identity = None
         command = request.scope["route"].name.replace("_", " ")
-        product_management_read = request.scope["route"].name in PRODUCT_MANAGEMENT_READS
+        resource_management_read = request.scope["route"].name in RESOURCE_MANAGEMENT_READS
         dry_run = request.query_params.get("dry_run") == "true"
         if request.headers.get("content-type", "").startswith("application/json"):
             try:
@@ -477,13 +481,13 @@ def create_app(
                     credentials.credentials,
                     x_org_id,
                     crypto,
-                    joined_membership=product_management_read,
+                    joined_membership=resource_management_read,
                 )
                 identity.invocation_id = uuid4()
                 session.info["command"] = command
                 await set_actor_context(session, identity)
-                if product_management_read:
-                    # Consumed only by the first product read in this request.
+                if resource_management_read:
+                    # Consumed only by the first management resource read in this request.
                     session.info["management_authenticated_actor"] = identity
                 session.info["memory_settings"] = settings
                 session.info["command"] = command
@@ -571,6 +575,9 @@ def create_app(
     from app.api.management_products import create_router as create_management_product_router
 
     app.include_router(create_management_product_router(context, settings))
+    from app.api.management_features import create_router as create_management_feature_router
+
+    app.include_router(create_management_feature_router(context, settings))
     app.include_router(create_confidential_router(context, settings))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))
