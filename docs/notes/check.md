@@ -111,6 +111,13 @@ RLS and organization-bound composite references.
 
 ## Pitfalls
 
+- Sent-side tender verification uses the redacted source segment retained as
+  `sent_source`, through [`locate_sent_source_quote`](../../server/app/services/extraction.py).
+  Location labels and other metadata have separate refs and cannot supply tender
+  quotations. A repeated phrase in metadata does not make a source citation
+  ambiguous; a phrase present only in metadata fails with `quote_not_at_position`.
+  Repetitions within the source segment retain `ambiguous_quote`; original-quote
+  and pinned-span verification still apply.
 - A tender citation may repeat elsewhere on its PDF page or Word block. Resolve
   the complete pinned `Source.quote` with extraction's boundary preference, then
   require citation uniqueness inside that span. Missing or ambiguous Sources and

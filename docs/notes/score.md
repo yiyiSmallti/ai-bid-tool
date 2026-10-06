@@ -36,8 +36,8 @@ item is unassessable, a provider batch is incomplete, or a complete total cannot
 ## How it works
 
 The rubric input fixes one organization, task, successful extraction job, document, and the complete
-set of scoring requirements from that extraction. The generation provider receives only the verified
-source text for those requirements after configured redaction. It creates candidates and cannot
+set of scoring requirements from that extraction. The generation provider receives the verified
+source text with requirement summaries and position metadata after configured redaction. It creates candidates and cannot
 confirm, classify, revise, or exclude anything.
 
 Rubric sets, sections, items, requirement coverage, normalized coverage links, and append-only review
@@ -137,6 +137,15 @@ only inside that original span and maps its offsets back to the page/block. A re
 outside the Source does not invalidate the citation. An absent or ambiguous Source, an out-of-span
 citation, or a citation repeated within the Source still fails with the existing location reason.
 Rubric generation and score execution share this check; sent-text verification remains required.
+
+Sent-side tender verification must use the redacted `source_quote` segment retained as
+`sent_source`, through [`locate_sent_source_quote`](../../server/app/services/extraction.py).
+A rubric ref also carries the requirement summary and source-position labels; those fields can
+repeat a valid quotation or contain words absent from the tender. Searching the assembled ref can
+therefore reject a valid citation as ambiguous. A quote found only in the summary or position text
+fails with `quote_not_at_position`; repetitions within the sent source segment fail with
+`ambiguous_quote`. Score execution keeps normalized rules and metadata in separate refs and uses
+the same tender-segment matcher. Original-quote and pinned-span checks remain independent gates.
 
 Provider JSON shape validation must not enforce confirmed-rule semantics. A formula section with
 `cap: 35`, or a `capped_sum` section with an explicit null cap, is a reviewable candidate with

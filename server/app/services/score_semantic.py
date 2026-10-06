@@ -17,7 +17,11 @@ from app.schemas.score_contracts import (
     ScoreRange,
 )
 from app.services import check_semantic, redaction
-from app.services.extraction import locate_quote, locate_source_citation_span
+from app.services.extraction import (
+    locate_quote,
+    locate_sent_source_quote,
+    locate_source_citation_span,
+)
 
 SCORING_RULE_VERSION = "score-rules-v1"
 SCORE_QUANTUM = Decimal("0.00000001")
@@ -184,6 +188,7 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
             source["quote"],
             "tender",
             sent_text=safe_source["quote"],
+            sent_source=safe_source["quote"],
             rubric_item_id=item_id,
             requirement_id=str(item["requirement_id"]),
             source=safe_source,
@@ -399,7 +404,9 @@ def _verify_citation(citation, item_id: str, batch, outbound: dict, draft_id: UU
         citation.quote
     ):
         return None, "redacted_input_unassessable"
-    sent_quote, reason = locate_quote(binding["sent"], citation.quote)
+    sent_text = binding["sent_source"] if kind == "tender" else binding["sent"]
+    locate_sent = locate_sent_source_quote if kind == "tender" else locate_quote
+    sent_quote, reason = locate_sent(sent_text, citation.quote)
     if sent_quote is None:
         return None, reason
     original_quote, reason = locate_quote(binding["original"], citation.quote)
@@ -411,7 +418,7 @@ def _verify_citation(citation, item_id: str, batch, outbound: dict, draft_id: UU
     if span is None:
         return None, reason
     for text, quote in (
-        (binding["sent"], sent_quote),
+        (sent_text, sent_quote),
         (binding["original"], original_quote),
     ):
         first = text.find(quote)
