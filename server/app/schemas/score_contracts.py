@@ -122,6 +122,19 @@ class RubricGenerateResult(Contract):
     stop_reason: str | None = None
 
 
+class RubricSectionSourceSelection(Contract):
+    """Select a previously verified quote without accepting a replacement Source."""
+
+    requirement_id: UUID
+    quote: VerbatimRule
+
+
+class RubricSectionSource(RubricSectionSourceSelection):
+    """One independently verified citation and its immutable Requirement Source."""
+
+    source: Source
+
+
 class RubricSectionView(Contract):
     id: UUID
     org_id: UUID
@@ -139,7 +152,7 @@ class RubricSectionView(Contract):
     included_in_overall_total: bool
     ambiguity_reason: NonBlank | None = None
     review_domain: ReviewDomain | None = None
-    source: Source
+    sources: list[RubricSectionSource] = Field(min_length=1)
     state: RubricItemState
     revision: int = Field(ge=1)
     confirmed_by: UUID | None = None
@@ -342,7 +355,7 @@ class RubricReportData(Contract):
 
 class RubricSectionRevisionInput(Contract):
     source_section_id: UUID | None = None
-    requirement_id: UUID
+    sources: list[RubricSectionSourceSelection] = Field(min_length=1)
     key: NonBlank
     title: NonBlank
     order: int = Field(ge=1)

@@ -27,7 +27,7 @@ Generation uses two ordered stages. Stage 1 receives the whole fixed scoring tab
 
 Stage 2 generates item details in Requirement batches using `llm_batch_chars`; batch sizing and concurrency are implemented in the Provider. Every batch receives the entire fixed stage-1 section list as immutable context, with its structure hash bound into the call/input manifest. Stage 2 may produce item detail but cannot revise that structure. Unknown sections, cross-batch references, or unresolved Requirements are rejected and remain unresolved. A failed stage-2 batch can leave other valid sections/items retained as a partial result (exit 5), including validated sections even when no item is accepted.
 
-The write-free preview upper bound covers both stages, including the entire fixed section list repeated in each stage-2 batch. Stage-specific prompt and schema versions participate in the preview cache/input identity. Old queued jobs with incompatible versions fail explicitly and require resubmission. The published rubric `input_hash` derives from the manifest containing stage-1 output and its structure hash; the queued job `cache_key` remains the preview input, and submission stores `preview_input_hash` as provenance. No migration is required. Provider input remains limited to pinned scoring text, source location and local refs, never arbitrary `condition`, complete tender documents, other requirement categories or resource-library content.
+The write-free preview upper bound covers both stages, including the entire fixed section list repeated in each stage-2 batch. Stage-specific prompt and schema versions participate in the preview cache/input identity. Old queued jobs with incompatible versions fail explicitly and require resubmission. The published rubric `input_hash` derives from the manifest containing stage-1 output and its structure hash; the queued job `cache_key` remains the preview input, and submission stores `preview_input_hash` as provenance. The section-source storage amendment is described in [Tables and migration outline](#tables-and-migration-outline). Provider input remains limited to pinned scoring text, source location and local refs, never arbitrary `condition`, complete tender documents, other requirement categories or resource-library content.
 
 ### Scoring input
 
@@ -44,7 +44,17 @@ The first version reads no released/review DOCX, export runs, Gotenberg PDF, tem
 
 ## Rubric versions, coverage, and human confirmation (人工确认)
 
-Providers create candidates only. Candidate sections/items pin original Requirement/Source; citations must uniquely and contiguously match both actual sent text and pinned sources. Unknown, ambiguous, joined, or redacted citations are not repaired; affected candidates remain unresolved and cannot enter confirmed sets.
+Providers create candidates only. Under the owner-approved option A amendment, each candidate
+section carries one or more independently verified citations, just like the overall rule. Different
+citations may bind different scoring Requirements; each retains its own pinned Requirement, original
+Source and verified quotation. Every section citation is retained and shown in human review. Items
+still bind exactly one Requirement/Source, even when several quotations support that item.
+
+Each citation must uniquely and contiguously match the actual sent source segment, pinned original
+and pinned Source span. “Joined” means one citation combining text from two Requirements; it remains
+invalid. A list of separate valid citations is not joined text. Unknown, ambiguous, joined or redacted
+citations are never repaired. Any invalid section citation fails stage 1 before item calls; invalid
+item citations retain their existing unresolved behavior.
 
 Each scoring Requirement needs one `RubricRequirementCoverageView`:
 
@@ -53,14 +63,19 @@ Each scoring Requirement needs one `RubricRequirementCoverageView`:
 - `excluded`: a human explains why the Requirement is not scoreable; source and decision remain.
 - `pending`: undecided; blocks set confirmation.
 
-Rubric items save normalized rule text, section, order, assessment mode, score bounds, optional weight, review domain (职责), source, and content fingerprint. Sections save their own bounds, weight, cap, overall inclusion, review domain, and aggregation method: `sum`, `weighted_sum`, `capped_sum`, `formula`, or `non_additive`. Before set confirmation the service checks deterministically:
+Rubric items save normalized rule text, section, order, assessment mode, score bounds, optional weight, review domain (职责), source, and content fingerprint. Sections save their ordered verified `sources` list, their own bounds, weight, cap, overall inclusion, review domain, and aggregation method: `sum`, `weighted_sum`, `capped_sum`, `formula`, or `non_additive`. Before set confirmation the service checks deterministically:
 
-- All scoring Requirements have non-pending coverage decisions; item/section keys, order, and fingerprints have no unresolved duplicates; citations still bind the same pinned sources.
+- All scoring Requirements have non-pending coverage decisions; item/section keys, order, and fingerprints have no unresolved duplicates; every section citation and item citation still binds the same pinned Requirement and Source, with its verified quotation inside the pinned span.
 - Each section/item has `review_domain` and confirmation from that domain's reviewer; rejected items cannot remain in the set. bidder handles commercial items; technical handles technical items. Classification does not reuse existing Card-only endpoints: this contract adds section/item classify requests, executable only by admin human sessions, with nonempty reason and expected revision/hash. Classification grants no cross-domain confirmation authority to admins. Confirmation requests accept no `review_domain`; authorization uses stored classification, never caller-supplied replacement domains.
 - Every declared bound satisfies `0 <= minimum <= maximum`; weights are valid; item→section and section→overall inclusion has no cycles, duplicates, or dangling references.
 - Section totals/caps/weights and section→overall aggregation are explicit, with mechanically verifiable bounds/totals consistent. Genuine tender ambiguity can be explicitly confirmed as `ambiguous`, without inventing numeric rules; such items are always unassessable during scoring.
 
-If candidate titles, rules, bounds, weights, caps, aggregation, or review domains are wrong, a human submits a complete replacement snapshot through `RubricReviseRequest`, with expected revision/input hash. It can reference only Requirements in the pinned input and prior-version sections/items, never rewrite Source. The service creates a new candidate version/new IDs, retaining `prior_rubric_id` and revision reason; old versions/decisions remain intact. New versions repeat classification, coverage, item, and set confirmation. Revision input accepts no `review_domain`; all new section/item domains reset to null and require admin reclassification, preventing inherited/self-assigned domains from bypassing gates. Decision, classification, coverage, and revision history are append-only and paginated through history GET.
+If candidate titles, rules, bounds, weights, caps, aggregation, or review domains are wrong, a human submits a complete replacement snapshot through `RubricReviseRequest`, with expected revision/input hash. It can reference only Requirements in the pinned input and prior-version sections/items, never
+rewrite Source. Section revision `sources` contains only `{requirement_id, quote}` selectors for
+previously verified section citations or full original Sources in pinned coverage. Humans may keep,
+remove or select these verified citations, retaining at least one; the service resolves and copies
+Source rather than accepting Source JSON from the caller. Removing the first citation does not
+rebind or rewrite the remaining citations. Item revisions retain their single `requirement_id`. The service creates a new candidate version/new IDs, retaining `prior_rubric_id` and revision reason; old versions/decisions remain intact. New versions repeat classification, coverage, item, and set confirmation. Revision input accepts no `review_domain`; all new section/item domains reset to null and require admin reclassification, preventing inherited/self-assigned domains from bypassing gates. Decision, classification, coverage, and revision history are append-only and paginated through history GET.
 
 A set becomes confirmed only when `completeness.complete=true`, no normalization errors exist, and all item gates are complete; score accepts only confirmed sets. `formula`/`non_additive` can enter a complete rubric as fully recorded, human-confirmed rules, but have `aggregation_assessable=false`; they are neither executed nor blockers to rubric completeness. Their section/overall scores always remain `unavailable`.
 
@@ -189,7 +204,12 @@ Stage B registers these scoring entry points:
 
 Actual path prefixes follow existing API routers; this fixes relative resource structure. Pagination limit defaults to 50, range 1–200; cursors bind org, task, resource kind, and ordering. Path `task_id` must match extraction/draft/rubric/report task or uniformly return 404. Long-running submissions return Jobs immediately by default; `--wait` reuses existing wait/status queries.
 
-All success/failure/`--json` output uses the seven-key Result from `contracts.CONTRACT_VERSION`: `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`. `cost` is provable actual usage for that response; preview `estimated_cost/estimated_charge` in data cannot masquerade as incurred fees. Schema adds these commands without changing existing commands; `bid schema` publishes implemented rubric/scoring commands.
+All success/failure/`--json` output uses the seven-key Result from `contracts.CONTRACT_VERSION`: `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`. `cost` is provable actual usage for that response; preview `estimated_cost/estimated_charge` in data cannot masquerade as incurred fees. `bid schema` publishes implemented rubric/scoring commands and their updated models. Rubric report
+sections expose `sources: [{requirement_id, source, quote}, ...]` instead of one `source`; console
+section reads use the same list. Section revision inputs use the selector list described above.
+Existing single-source storage is projected as one list element. The rubric wire schema and prompt
+identities advance for this incompatible contract; old queued jobs fail explicitly and require a new
+preview. The seven-key Result envelope and item-source contract stay unchanged.
 
 | Exit code | Explicit score semantics |
 | --- | --- |
@@ -219,7 +239,7 @@ Business tables also land by stage. Names may be adjusted during implementation 
 | Table | Purpose and pinned fields |
 | --- | --- |
 | `score_rubric_sets` | task/extraction job/document, version, input hash, rule/prompt/schema versions, overall rules, status, confirmer/time |
-| `score_rubric_sections` | rubric/source/key/order, aggregation, bounds, weight, overall inclusion, status/revision |
+| `score_rubric_sections` | rubric/key/order, ordered verified sources (each Requirement, original Source, quote), aggregation, bounds, weight, overall inclusion, status/revision |
 | `score_rubric_items` | rubric/section/requirement/source, fingerprint, rules, mode, bounds, weight, domain, status/revision |
 | `score_rubric_coverage` | mapped/duplicate/excluded/pending per scoring Requirement, canonical binding/revision |
 | `score_rubric_coverage_items` | Normalized composite FK relations from mapped coverage to one or more rubric items, never pretending JSON item IDs enforce constraints |
@@ -227,6 +247,16 @@ Business tables also land by stage. Names may be adjusted during implementation 
 | `score_rubric_coverage_decisions` | Append-only human coverage mapped/duplicate/excluded/reopen decisions |
 | `score_rubric_classifications` | Append-only admin human section/item review-domain classifications |
 | `score_rubric_revision_events` | Append-only link between new candidate/prior rubric, reason, and human actor |
+
+The option A amendment stores the section list in `score_rubric_sections.sources` JSONB.
+Legacy NULL lists expand from the existing `requirement_id`/`source` pair on reads; no historical
+row is rewritten. New sections write a nonempty list, with the legacy columns mirroring its first
+entry. The existing table's FORCE RLS, org/task composite keys, runtime grants and append-only
+trigger apply to the new column. Database insertion/publication and confirmation gates independently
+resolve every list entry against the same rubric's pinned scoring Requirements and original Sources;
+JSON IDs alone are not treated as relational constraints. Migration
+[`0045_score_section_sources.py`](../../server/migrations/versions/0045_score_section_sources.py)
+retains history on downgrade and requires forward repair.
 
 These rubric tables belong to stage A. Report tables belong to stage B:
 
@@ -276,6 +306,7 @@ These adopt the originally recommended defaults.
 
 | Topic | Decision | Rationale |
 | --- | --- | --- |
+| Section citation cardinality | Owner-approved option A: a section carries one or more separately verified citations across pinned scoring Requirements; items remain single-Requirement; one joined quote stays invalid | A section aggregation can depend on several scoring items. The dev `price` section cited the benchmark-price rule and price formula separately and failed `invalid_section_citation`; see the [failure and amendment record](../changelog.md#2026-10-05-multiple-verified-sources-per-rubric-section) |
 | Platform default scoring Provider | Follow [B09 decisions](check.md#decisions); no independent B10 selection | check/score share Chinese long-document, structured output, citation, price, and data-policy evaluation, avoiding contradictory defaults for one capability |
 | Rubric generation structure | Replace single-request section/item generation with two stages: validate sections and overall rule from the full table, then generate item details in bounded batches against the fixed section list | The real-model run exceeded reliable structured-output capacity for a whole-table response; earlier independent batches lacked the table-wide aggregation context. The [changelog](../changelog.md#2026-10-05-two-stage-score-rubric-generation) records the run evidence. A small global structure response followed by bounded item responses addresses both failures |
 | Persistent failure-audit extension | Persist only the fixed authenticated business-failure events here; pre-auth/cross-org 404 remain security logs | Prevent enumeration and excessive audit noise |

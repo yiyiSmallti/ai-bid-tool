@@ -118,6 +118,20 @@ aggregates are stored on the immutable report; item support and citations use se
 
 ## Pitfalls
 
+Section aggregation can depend on several scoring Requirements. Each section therefore exposes an
+ordered `sources` list containing each verified Requirement, immutable Source and exact original
+quotation, under the [owner-approved option A rule](../plan/score.md#rubric-versions-coverage-and-human-confirmation-人工确认).
+Every citation is checked against the sent source segment, original text and pinned span before
+stage 2. A bad citation fails the whole structure; a single quotation joining two Requirements is
+still invalid. Item citations must all bind the same single Requirement.
+
+Migration [`0045_score_section_sources.py`](../../server/migrations/versions/0045_score_section_sources.py)
+adds the list to the existing immutable, FORCE-RLS section table. Old NULL lists read as one legacy
+source without rewriting history. Confirmation and report reads resolve every source again. Human
+replacement selects verified `{requirement_id, quote}` pairs, keeps at least one, and never supplies
+Source JSON. The console displays all entries and opens each saved citation by index. The wire and
+preview identity change requires old queued jobs to be resubmitted; no stale preview is reused.
+
 A complete rubric means that it covers the scoring requirements saved by the specified extraction.
 It does not prove that extraction found every scoring rule in the tender. Generation never scans the
 document or adjacent chunks to discover missing requirements.

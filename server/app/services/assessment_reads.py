@@ -962,6 +962,24 @@ async def citation(
         )
         if child is None:
             raise not_found()
+        if query.part == "rubric_section":
+            sources = score.section_sources(child)
+            if query.citation_index >= len(sources):
+                raise not_found()
+            selected = sources[query.citation_index]
+            requirement_id = UUID(str(selected["requirement_id"]))
+            requirement = await session.get(Requirement, requirement_id)
+            if (
+                requirement is None
+                or requirement.task_id != task_id
+                or requirement.job_id != row.extraction_job_id
+                or selected["source"] != cards.source(requirement)
+            ):
+                raise not_found()
+            payload = {"kind": "tender", "source": selected["source"], "quote": selected["quote"]}
+        else:
+            requirement_id = child.requirement_id
+            payload = {"kind": "tender", "source": child.source}
         return await resolve_citation(
             session,
             actor,
@@ -969,10 +987,10 @@ async def citation(
             row.extraction_job_id,
             row.document_id,
             None,
-            child.requirement_id,
+            requirement_id,
             None,
             query,
-            {"kind": "tender", "source": child.source},
+            payload,
             storage,
             row.input_manifest,
         )
@@ -1163,7 +1181,7 @@ async def resolve_citation(
             raise ServiceError(
                 "invalid_input_citation", "Saved source location cannot be verified", 409, 4
             )
-        quote = source.quote
+        quote = source.quote if quote is None else quote
         metadata = {
             "document_id": source.document_id,
             "page": source.page,

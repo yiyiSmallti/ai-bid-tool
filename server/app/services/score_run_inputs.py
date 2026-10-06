@@ -19,7 +19,7 @@ from app.models.response_cards import (
     ResponseCardRevision,
     ResponseItem,
 )
-from app.models.score import ScoreRubricSet
+from app.models.score import ScoreRubricSection, ScoreRubricSet
 from app.services import check_inputs, drafts, score, score_inputs
 from app.services import response_cards as cards
 from app.services.auth import Identity
@@ -361,6 +361,9 @@ async def require_dependencies(session, actor, task_id, manifest):
         or draft is None
         or rubric is None
         or manifest["org_id"] != str(actor.org_id)
+        or any(
+            parent.org_id != actor.org_id for parent in (task, extraction, document, draft, rubric)
+        )
         or any(parent.task_id != task_id for parent in (extraction, document, draft, rubric))
         or extraction.document_id != document.id
         or rubric.document_id != document.id
@@ -371,17 +374,45 @@ async def require_dependencies(session, actor, task_id, manifest):
     if manifest.get("confidential"):
         actor.require("confidential:read")
     entries = manifest["items"]
+    # Historical reads authorize every saved section source independently of the
+    # freshness snapshot, which may stop before visiting the rubric's citations.
+    sections = await session.scalars(
+        select(ScoreRubricSection)
+        .options(
+            load_only(
+                ScoreRubricSection.id,
+                ScoreRubricSection.requirement_id,
+                ScoreRubricSection.source,
+                ScoreRubricSection.sources,
+            )
+        )
+        .where(
+            ScoreRubricSection.org_id == actor.org_id,
+            ScoreRubricSection.task_id == task_id,
+            ScoreRubricSection.rubric_id == rubric.id,
+        )
+    )
+    section_sources = [
+        citation for section in sections for citation in score.section_sources(section)
+    ]
+    requirement_ids = {UUID(entry["requirement_id"]) for entry in entries} | {
+        UUID(citation["requirement_id"]) for citation in section_sources
+    }
+    chunk_ids = {UUID(entry["chunk_id"]) for entry in entries} | {
+        UUID(citation["source"]["chunk_id"]) for citation in section_sources
+    }
     requirements = {
         row.id: row
         for row in (
             await session.execute(
                 select(
                     Requirement.id,
+                    Requirement.org_id,
                     Requirement.task_id,
                     Requirement.document_id,
                     Requirement.chunk_id,
                     Requirement.job_id,
-                ).where(Requirement.id.in_([UUID(entry["requirement_id"]) for entry in entries]))
+                ).where(Requirement.id.in_(requirement_ids))
             )
         ).all()
     }
@@ -389,12 +420,36 @@ async def require_dependencies(session, actor, task_id, manifest):
         row.id: row
         for row in (
             await session.execute(
-                select(Chunk.id, Chunk.task_id, Chunk.document_id).where(
-                    Chunk.id.in_([UUID(entry["chunk_id"]) for entry in entries])
+                select(Chunk.id, Chunk.org_id, Chunk.task_id, Chunk.document_id).where(
+                    Chunk.id.in_(chunk_ids)
                 )
             )
         ).all()
     }
+    pinned_sources = {
+        entry["requirement_id"]: entry for entry in rubric.input_manifest["requirements"]
+    }
+    for citation in section_sources:
+        requirement = requirements.get(UUID(citation["requirement_id"]))
+        saved_source = citation["source"]
+        chunk = chunks.get(UUID(saved_source["chunk_id"]))
+        pinned = pinned_sources.get(citation["requirement_id"])
+        if (
+            requirement is None
+            or chunk is None
+            or pinned is None
+            or requirement.org_id != actor.org_id
+            or chunk.org_id != actor.org_id
+            or requirement.task_id != task_id
+            or chunk.task_id != task_id
+            or requirement.document_id != document.id
+            or chunk.document_id != document.id
+            or requirement.job_id != extraction.id
+            or requirement.chunk_id != chunk.id
+            or saved_source["document_id"] != str(document.id)
+            or pinned["chunk_id"] != str(chunk.id)
+        ):
+            raise not_found()
     responses = {
         row.id: row
         for row in (

@@ -319,8 +319,8 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     assert preview["scoring_requirement_ids"] == [case["requirements"][0]["id"]]
     assert preview["estimate_kind"] == "first_pass_upper_bound"
     assert preview["estimated_charge"] == "0"
-    assert preview["prompt_version"] == "score-rubric-v3"
-    assert preview["schema_version"] == "score-rubric-wire-v3"
+    assert preview["prompt_version"] == "score-rubric-v4"
+    assert preview["schema_version"] == "score-rubric-wire-v4"
     assert preview["estimated_cost"]["llm_tokens"] >= 2 * case["llm"].settings.llm_max_output_tokens
 
     stale = await submit_rubric(case, preview, expected_input_hash="0" * 64)
@@ -454,10 +454,12 @@ async def test_rubric_short_citation_repeated_outside_pinned_source_completes(
     report = shown.json()["data"]
     RubricReportData.model_validate(report)
     assert report["rubric"]["state"] == "candidate"
-    for kind in ("sections", "items", "coverage"):
+    assert report["sections"][0]["sources"] == [
+        {"requirement_id": requirement_id, "source": source, "quote": quote}
+    ]
+    for kind in ("items", "coverage"):
         assert len(report[kind]) == 1
         assert report[kind][0]["source"] == source
-    # Sections carry only their Source; items and coverage also bind the Requirement.
     for kind in ("items", "coverage"):
         assert report[kind][0]["requirement_id"] == requirement_id
     # Generation binds every item, but only a human can map its coverage.
@@ -985,7 +987,10 @@ async def test_rubric_item_batches_run_concurrently_after_structure_verification
     [
         ("prompt_version", "score-rubric-v2"),
         ("schema_version", "score-rubric-wire-v1"),
+        ("schema_version", "score-rubric-wire-v3"),
+        ("structure_prompt_version", "score-rubric-structure-v1"),
         ("items_prompt_version", "score-rubric-items-v1"),
+        ("items_prompt_version", "score-rubric-items-v2"),
     ],
 )
 async def test_rubric_old_queued_versions_fail_before_resolution_or_vendor_calls(

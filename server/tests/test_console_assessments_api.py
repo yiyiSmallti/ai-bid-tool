@@ -205,3 +205,23 @@ async def test_new_assessment_reads_require_v4_before_authentication(path, monke
         assert response.status_code == 404, response.text
         assert response.json()["data"]["error"]["code"] == "not_found"
         assert response.headers["X-Bid-Contract-Version"] == "3.0"
+
+
+async def test_rubric_section_context_accepts_indexed_sources_only(assessment_interface):
+    app, calls = assessment_interface
+    task, parent, entry = uuid4(), uuid4(), uuid4()
+    path = f"/tasks/{task}/assessment-citation?parent_kind=rubric&parent_id={parent}&part=rubric_section&entry_id={entry}"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        indexed = await client.get(path + "&origin=sources&citation_index=1")
+        assert indexed.status_code == 200, indexed.text
+        assert calls[-1][1]["origin"] == "sources"
+        assert calls[-1][1]["citation_index"] == 1
+        for suffix in ("&origin=source", "&origin=citations", "&origin=sources&citation_index=-1"):
+            assert (await client.get(path + suffix)).status_code == 422
+        item = await client.get(
+            path.replace("part=rubric_section", "part=rubric_item") + "&origin=sources"
+        )
+        assert item.status_code == 422
+    assert len(calls) == 1

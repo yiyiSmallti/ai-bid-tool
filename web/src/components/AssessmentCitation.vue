@@ -21,6 +21,7 @@ async function load(offset = 0) {
 }
 function clear() { serial++; controller?.abort(); opened.value = false; context.value = null; error.value = ""; }
 watch(opened, (value) => { if (value) load(); else { serial++; controller?.abort(); context.value = null; } });
+watch(() => [props.taskId, props.parentKind, props.parentId, props.part, props.entryId, props.origin, props.citationIndex], clear);
 window.addEventListener("bid:org-reset", clear);
 onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", clear); });
 </script>

@@ -6,6 +6,22 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Multiple verified sources per rubric section
+
+- Apply owner-approved option A after the dev real-model rubric run reached `invalid_section_citation`
+  following #20: the `price` section separately cited the benchmark-price rule and price formula,
+  but the single-Requirement section gate rejected them as `cross_requirement_citation`. Sections
+  now preserve and independently verify every citation across pinned scoring Requirements; items
+  retain their single-Requirement contract, and joined or unverifiable citations still fail.
+- Add migration `0045` for ordered section sources, retaining legacy single-source reads, existing
+  FORCE RLS and immutable history, with database and application checks over every binding. Complete
+  human replacement may select/remove only verified pinned citations and cannot rewrite Source.
+- Update bounded console/assessment reads, indexed source context, rubric review/replacement UI,
+  CLI discovery and intentional snapshots. Advance rubric wire/prompt/cache identities so old queued
+  jobs require a fresh preview. See the [scoring contract](plan/score.md) and [mechanism](notes/score.md).
+- Add synthetic two-stage Provider, persisted review/confirmation, tenant-isolation and mocked browser
+  regressions for multiple sources, invalid second citations, joined text and source removal.
+
 ## 2026-10-05: Model citations within the sent tender-source segment
 
 - Verify rubric citations against the redacted tender-source segment retained for each ref,
