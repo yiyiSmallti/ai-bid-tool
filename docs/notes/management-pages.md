@@ -61,6 +61,15 @@ Every other inactive selection is rejected before retiring the prior pin. New
 content revisions never post task selections. Restoring a product enables future
 explicit selections without changing old pins.
 
+For direct SQL, tenant `WITH CHECK` rejects foreign or missing org context before
+product-state validation. The selection guard runs as a nondeferred AFTER trigger,
+after the existing immediate composite foreign keys. Invalid parent pointers
+therefore retain their FK rejection; every row that passes those keys still runs
+task authority and lifecycle checks before the statement completes. The existing
+BEFORE archive guard retains the task-first lock order. Missing-parent lookup
+shortcuts must not skip these checks, because FK visibility can differ from an
+earlier ordinary lookup during concurrent or same-statement writes.
+
 ## Pitfalls
 
 - Library read/write scopes grant no task role. Observers, reviewers and admin
@@ -89,7 +98,8 @@ explicit selections without changing old pins.
   [existing product writes](../../server/app/services/resources.py) and
   [selection service](../../server/app/services/versioned.py).
 - [Lifecycle migration](../../server/migrations/versions/0048_product_library.py)
-  and [event model](../../server/app/models/management.py).
+  and [guard ordering](../../server/migrations/versions/0049_product_guard_order.py),
+  with the [event model](../../server/app/models/management.py).
 - [Product list](../../web/src/views/OrgProducts.vue),
   [detail](../../web/src/views/OrgProduct.vue) and
   [task authority](../../web/src/task-authority.js).

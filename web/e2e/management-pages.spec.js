@@ -59,7 +59,7 @@ async function fixture(page,options={}){
     if(path===`/tasks/${T}/members`){const items=state.taskRole?[{org_id:O,task_id:T,user_id:U,role:state.taskRole,active:true,review_domains:[],revision:1}]:[];return route.fulfill({json:result("task member list",{...meta(items),task_id:T},items)});}
     if(path==="/management/resources/products/query"){
       expect(url.pathname.startsWith("/v4/")).toBe(true);expect(req.method()).toBe("POST");expect(url.search).toBe("");const body=req.postDataJSON();queries.push(body);expect(body.limit).toBeLessThanOrEqual(100);queriesInFlight++;maxQueries=Math.max(maxQueries,queriesInFlight);
-      if(state.delaySearch&&body.q==="旧查询")await new Promise(resolve=>{delayedRelease=resolve;});
+      if(state.delaySearch&&body.q==="旧查询"||state.delayEmptySearch&&body.q==="空结果")await new Promise(resolve=>{delayedRelease=resolve;});
       queriesInFlight--;if(state.queryError)return route.fulfill({status:413,json:result("resource query",{error:{code:"management_result_too_large",message:"Result too large",exit_code:2}},[],false)});
       const items=state.empty||body.q==="空结果"?[]:[row(body.cursor?Q:P),...(!body.cursor&&state.created?[{...row(Q),revision:1,revision_id:rid(20)}]:[])];if(state.foreign)items[0].org_id=Q;if(state.oversize)while(items.length<=100)items.push(row());
       return route.fulfill({json:result("resource query",meta(items,state.paginated&&!body.cursor?"opaque-next":null),items)});
@@ -79,7 +79,25 @@ async function fixture(page,options={}){
     throw new Error(`Unexpected product request: ${req.method()} ${path}`);
   });return {state,writes,queries,requests,pins,release:()=>delayedRelease?.(),maxQueries:()=>maxQueries};
 }
-test("bounded browse search paging and empty state",async({page})=>{const f=await fixture(page,{paginated:true});await page.goto("/app/org/products");await expect(page.getByRole("heading",{name:"产品库",exact:true})).toBeVisible();await expect(page).toHaveTitle(/产品库.*单位后台/);await page.getByRole("button",{name:"下一页产品",exact:true}).click();await expect(page.getByText("后页产品",{exact:true})).toBeVisible();await page.getByLabel("搜索产品").fill("空结果");await expect(page.getByText("没有符合条件的产品")).toBeVisible();expect(f.queries.at(-1)).toMatchObject({q:"空结果",cursor:null,limit:25});expect(f.requests.some(r=>r.path==="/resources/products"&&r.method==="GET")).toBe(false);expect(await page.evaluate(()=>JSON.stringify({...sessionStorage,...localStorage}))).not.toContain("空结果");expect(page.url()).not.toContain("空结果");});
+test("bounded browse search paging and empty state",async({page})=>{
+  const f=await fixture(page,{paginated:true,delayEmptySearch:true});
+  await page.goto("/app/org/products");
+  await expect(page.getByRole("heading",{name:"产品库",exact:true})).toBeVisible();
+  await expect(page).toHaveTitle(/产品库.*单位后台/);
+  await page.getByRole("button",{name:"下一页产品",exact:true}).click();
+  await expect(page.getByText("后页产品",{exact:true})).toBeVisible();
+  await page.getByLabel("搜索产品").fill("空结果");
+  await expect.poll(()=>f.queries.at(-1)).toMatchObject({q:"空结果",cursor:null,limit:25});
+  await expect(page.getByRole("status").filter({hasText:"正在读取产品"})).toBeVisible();
+  await expect(page.getByText("没有符合条件的产品")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"上一页产品",exact:true})).toBeDisabled();
+  f.release();
+  await expect(page.getByText("没有符合条件的产品")).toBeVisible();
+  expect(f.queries.at(-1)).toMatchObject({q:"空结果",cursor:null,limit:25});
+  expect(f.requests.some(r=>r.path==="/resources/products"&&r.method==="GET")).toBe(false);
+  expect(await page.evaluate(()=>JSON.stringify({...sessionStorage,...localStorage}))).not.toContain("空结果");
+  expect(page.url()).not.toContain("空结果");
+});
 test("create full declared product and server receipt",async({page})=>{const f=await fixture(page);await page.goto("/app/org/products");await page.getByRole("button",{name:"新增产品",exact:true}).click();await page.getByLabel("产品名称",{exact:true}).fill("新产品");await page.getByLabel("厂家",{exact:true}).fill("新厂家");await page.getByLabel("精确型号",{exact:true}).fill("M-3");await page.getByRole("button",{name:"保存产品",exact:true}).click();await expect(page.getByRole("status").filter({hasText:"已创建产品"})).toBeVisible();expect(f.writes[0].body.data).toMatchObject({name:"新产品",vendor:"新厂家",model:"M-3",official_url:null});});
 test("exact historical revision provenance and separate histories",async({page})=>{await fixture(page,{simulated:true});await page.goto(`/app/org/products/${P}?revision=1`);await expect(page.getByRole("heading",{name:"产品旧版",exact:true})).toBeVisible();await expect(page.getByText("模拟拟投声明")).toBeVisible();await expect(page.getByText("内容修订 1 · 当前修订 2")).toBeVisible();await expect(page.getByRole("button",{name:"修订产品",exact:true})).toHaveCount(0);await page.getByRole("button",{name:"生命周期记录",exact:true}).click();await expect(page.getByText("暂无停用或恢复记录")).toBeVisible();});
 test("revision conflict retains in-memory draft and deliberate retry",async({page})=>{const f=await fixture(page,{conflict:true});await page.goto(`/app/org/products/${P}`);await page.getByRole("button",{name:"修订产品",exact:true}).click();await page.getByLabel("产品名称",{exact:true}).fill("仅内存修订草稿");await page.getByRole("button",{name:"保存产品",exact:true}).click();await expect(page.getByRole("alert").filter({hasText:/草稿已保留/}).first()).toBeVisible();await expect(page.getByLabel("产品名称",{exact:true})).toHaveValue("仅内存修订草稿");expect(f.writes).toHaveLength(1);await page.getByRole("button",{name:"保存产品",exact:true}).click();await expect.poll(()=>f.writes.length).toBe(2);expect(f.writes[1].body.expected_revision).toBe(3);expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain("仅内存修订草稿");});
@@ -94,7 +112,18 @@ test("obsolete search cancelled and org reset clears content",async({page})=>{co
 test("narrow screen keyboard and unsaved discard guard",async({page})=>{const f=await fixture(page);await page.setViewportSize({width:390,height:844});const errors=[];page.on("pageerror",error=>errors.push(error.message));await page.goto(`/app/org/products/${P}`);await page.getByRole("button",{name:"修订产品",exact:true}).click();await page.getByLabel("产品名称",{exact:true}).fill("尚未保存");await page.getByRole("button",{name:"取消编辑",exact:true}).click();await expect(page.getByRole("dialog").filter({hasText:"放弃未保存"})).toBeVisible();await page.getByRole("button",{name:"取消",exact:true}).last().click();await expect(page.getByLabel("产品名称",{exact:true})).toHaveValue("尚未保存");await page.getByLabel("产品名称",{exact:true}).press("Tab");expect(errors).toEqual([]);expect(f.writes).toHaveLength(0);});
 test("oversized server projection is rejected rather than truncated",async({page})=>{await fixture(page,{oversize:true});await page.goto("/app/org/products");await expect(page.getByRole("alert").filter({hasText:/范围|边界/})).toBeVisible();await expect(page.getByText("合成产品",{exact:true})).toHaveCount(0);});
 test("foreign or missing detail clears cached product identity",async({page})=>{await fixture(page,{missing:true});await page.goto(`/app/org/products/${P}`);await expect(page.getByRole("alert").filter({hasText:"不可访问"})).toBeVisible();await expect(page.getByRole("heading",{name:"合成产品",exact:true})).toHaveCount(0);await expect(page.getByRole("button",{name:"修订产品",exact:true})).toHaveCount(0);});
-test("live membership downgrade blocks an open pin dialog",async({page})=>{const f=await fixture(page);await page.goto(`/app/org/products/${P}?task=${T}`);await page.getByRole("button",{name:"选择到任务",exact:true}).click();f.state.taskRole="observer";await page.getByRole("button",{name:"确认选择修订 2",exact:true}).click();await expect(page.getByRole("dialog")).toHaveCount(0);await expect(page.getByText(/需要任务负责人或协作者/)).toBeVisible();expect(f.writes).toHaveLength(0);});
+test("live membership downgrade blocks an open pin dialog",async({page})=>{
+  const f=await fixture(page);
+  await page.goto(`/app/org/products/${P}?task=${T}`);
+  await page.getByRole("button",{name:"选择到任务",exact:true}).click();
+  const dialog=page.getByRole("dialog",{name:"固定精确产品修订",exact:true});
+  await expect(dialog).toBeVisible();
+  f.state.taskRole="observer";
+  await dialog.getByRole("button",{name:"确认选择修订 2",exact:true}).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText(/需要任务负责人或协作者/)).toBeVisible();
+  expect(f.writes).toHaveLength(0);
+});
 test("logout aborts a delayed query and discards old org text",async({page})=>{const f=await fixture(page,{delaySearch:true});await page.goto("/app/org/products");await page.getByLabel("搜索产品").fill("旧查询");await expect.poll(()=>f.queries.some(q=>q.q==="旧查询")).toBe(true);await page.getByRole("button",{name:"退出 / 切换单位",exact:true}).click();await expect(page).toHaveURL(/\/app\/org\/login/);f.release();await expect(page.getByText("合成产品",{exact:true})).toHaveCount(0);expect(await page.evaluate(()=>sessionStorage.getItem("bid.org.session"))).toBeNull();});
 test("same product query navigation reloads exact revision and protects draft",async({page})=>{await fixture(page);await page.goto(`/app/org/products/${P}?revision=2`);await page.getByRole("button",{name:"修订产品",exact:true}).click();await page.getByLabel("产品名称",{exact:true}).fill("查询导航草稿");await page.getByRole("link",{name:"修订 1",exact:true}).click();await expect(page.getByRole("dialog").filter({hasText:"放弃未保存"})).toBeVisible();await page.getByRole("button",{name:"取消",exact:true}).last().click();await expect(page.getByLabel("产品名称",{exact:true})).toHaveValue("查询导航草稿");await page.getByRole("link",{name:"修订 1",exact:true}).click();await page.getByRole("button",{name:"放弃编辑",exact:true}).click();await expect(page).toHaveURL(/revision=1/);await expect(page.getByRole("heading",{name:"产品旧版",exact:true})).toBeVisible();await expect(page.getByText("内容修订 1 · 当前修订 2")).toBeVisible();});
 test("authority denial during revision clears cached content and draft",async({page})=>{const f=await fixture(page);await page.goto(`/app/org/products/${P}`);await page.getByRole("button",{name:"修订产品",exact:true}).click();await page.getByLabel("产品名称",{exact:true}).fill("撤权草稿");f.state.mutationDenied=true;await page.getByRole("button",{name:"保存产品",exact:true}).click();await expect(page.getByRole("alert").filter({hasText:/无权/})).toBeVisible();await expect(page.getByLabel("产品名称",{exact:true})).toHaveCount(0);await expect(page.getByRole("heading",{name:"合成产品",exact:true})).toHaveCount(0);expect(f.writes).toHaveLength(1);});

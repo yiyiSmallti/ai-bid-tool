@@ -15,7 +15,7 @@ async function load(next=null){if(stopped)return;const run=++generation;reader.c
   catch(exc){if(run===generation&&exc.name!=="AbortError"){error.value=errorText(exc);if(["management_cursor_invalid","management_cursor_expired"].includes(exc.code)){cursor.value=null;previous.value=[];}}}finally{if(run===generation)loading.value=false;}
 }
 function resetList(){previous.value=[];load();}
-watch([search,state],()=>{if(stopped)return;generation++;reader.cancel("list");rows.value=[];meta.value=null;clearTimeout(timer);timer=setTimeout(resetList,300);});
+watch([search,state],()=>{if(stopped)return;generation++;reader.cancel("list");loading.value=true;error.value="";rows.value=[];meta.value=null;clearTimeout(timer);timer=setTimeout(resetList,300);});
 function next(){if(!meta.value?.has_more)return;rememberProductCursor(previous.value,cursor.value);load(meta.value.next_cursor);}
 function back(){if(previous.value.length)load(previous.value.pop());}
 async function cancel(){if(dirty.value&&!await confirmAction("放弃未保存的产品内容？","放弃未保存编辑","放弃编辑"))return;editing.value=false;form.value=blankProduct();}
@@ -37,7 +37,7 @@ onUnmounted(()=>{stopped=true;clearTimeout(timer);reader.stop();window.removeEve
     <div class="actions"><div class="product-search"><label for="product-search">搜索产品</label><el-input id="product-search" v-model="search" maxlength="200" aria-label="搜索产品" placeholder="名称、厂家、型号的前缀词" clearable /></div><div><label for="product-state">生命周期</label><el-select id="product-state" v-model="state" aria-label="生命周期" style="width:140px"><el-option label="可用" value="active"/><el-option label="已停用" value="inactive"/><el-option label="全部" value="all"/></el-select></div><el-button :disabled="loading" @click="resetList">重新读取产品</el-button></div>
     <p v-if="loading" role="status">正在读取产品…</p>
     <el-table v-else-if="rows.length" :data="rows" row-key="revision_id" aria-label="产品列表"><el-table-column label="产品 / 修订" min-width="200"><template #default="{row}"><RouterLink :to="link(row)">{{row.name}}</RouterLink><p class="hint">内容修订 {{row.revision}} · {{row.provenance==='simulated'?'模拟拟投声明':'产品声明'}}</p></template></el-table-column><el-table-column label="生命周期" width="110"><template #default="{row}"><el-tag :type="row.lifecycle.state==='active'?'success':'info'">{{row.lifecycle.state==='active'?'可用':'已停用'}}</el-tag></template></el-table-column><el-table-column label="最近修订" min-width="210"><template #default="{row}">{{formatTime(row.revised_at)}}<p class="hint">修订者：{{row.revised_by??'未知'}}</p></template></el-table-column><el-table-column label="下一步" width="110"><template #default="{row}"><RouterLink :to="link(row)">查看修订</RouterLink></template></el-table-column></el-table>
-    <el-empty v-else-if="!error" description="没有符合条件的产品" />
+    <el-empty v-else-if="meta&&!error" description="没有符合条件的产品" />
     <div class="actions"><el-button :disabled="loading||!previous.length" @click="back">上一页产品</el-button><el-button :disabled="loading||!meta?.has_more" @click="next">下一页产品</el-button><span v-if="meta" class="hint">本页 {{meta.returned}} 项 · 读取时间 {{formatTime(meta.as_of)}}；分页反映各页读取时的当前状态。</span></div>
   </el-card>
 </template>

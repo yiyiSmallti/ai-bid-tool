@@ -6,6 +6,20 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Product library guard and browser regressions
+
+- Restore RLS-first rejection of foreign product writes and composite-FK-first
+  rejection of forged task/product revision pointers in migration `0049`.
+  Valid parent relationships still require task authority and active product
+  lifecycle before the statement completes; existing isolation assertions remain
+  unchanged. See [guard ordering](notes/management-pages.md#how-it-works).
+- Bind the synthetic simulation provenance job to an uploaded document and its
+  real task, preserving the existing job document constraint.
+- Keep product search in a loading state throughout debounce and pending reads;
+  show an empty state only after a successful empty response. Synchronize the
+  membership-downgrade browser scenario with the open selection dialog before
+  revoking its task role.
+
 ## 2026-10-06: Product library management slice
 
 - Added bounded product browse/search, exact revision detail and content/lifecycle

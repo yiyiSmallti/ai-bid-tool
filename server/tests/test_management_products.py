@@ -436,12 +436,30 @@ async def test_direct_inactive_pin_insert_and_reactivation_refused(
 
 
 async def test_root_simulated_provenance_applies_to_old_revisions(
-    api, headers, tenants, admin_engine
+    api, headers, tenants, admin_engine, pdf_bytes
 ):
     product = await create(api, headers[0])
+    task = await api.post("/tasks", headers=headers[0], json={"name": "Synthetic provenance task"})
+    assert task.status_code == 200, task.text
+    task_id = task.json()["data"]["id"]
+    document = await api.post(
+        f"/tasks/{task_id}/documents",
+        headers=headers[0],
+        files={"file": ("synthetic-provenance.pdf", pdf_bytes, "application/pdf")},
+    )
+    assert document.status_code == 200, document.text
     org, user = tenants["orgs"][0], tenants["users"][0]
     with Session(admin_engine) as session, session.begin():
-        job = Job(org_id=org, kind="product_simulate", cache_key="a" * 64, actor_user_id=user)
+        # Product simulation is task/document-bound even when this fixture only
+        # needs its retained provenance marker and does not execute the job.
+        job = Job(
+            org_id=org,
+            task_id=UUID(task_id),
+            document_id=UUID(document.json()["data"]["id"]),
+            kind="product_simulate",
+            cache_key="a" * 64,
+            actor_user_id=user,
+        )
         session.add(job)
         session.flush()
         session.add(
@@ -459,6 +477,71 @@ async def test_root_simulated_provenance_applies_to_old_revisions(
         await api.get(f"{BASE}/{product['product_id']}", headers=headers[0], params={"revision": 1})
     ).json()["data"]
     assert detail["provenance"] == "simulated"
+
+
+@pytest.mark.parametrize("new_parents", [False, True])
+async def test_valid_pin_relations_still_require_actor_after_fk_checks(
+    new_parents, api, headers, tenants, application
+):
+    """FK-first rejection must never turn missing-parent lookups into an ACL bypass.
+
+    Valid parents, including those inserted by the same SQL statement, must reach
+    the selection authority gate. Its failure rolls back the entire statement.
+    """
+    product = await create(api, headers[0])
+    task = await api.post("/tasks", headers=headers[0], json={"name": "Synthetic SQL guard task"})
+    assert task.status_code == 200, task.text
+    params = {
+        "org": tenants["orgs"][0],
+        "user": tenants["users"][0],
+        "task": UUID(task.json()["data"]["id"]),
+        "root": uuid4() if new_parents else UUID(product["product_id"]),
+        "revision": uuid4() if new_parents else UUID(product["id"]),
+        "pin": uuid4(),
+    }
+    statement = (
+        "WITH new_product AS ("
+        " INSERT INTO products(id,org_id,created_by,current_revision)"
+        " VALUES(:root,:org,:user,1) RETURNING id"
+        "), new_revision AS ("
+        " INSERT INTO product_revisions(id,org_id,product_id,revision,data)"
+        " SELECT :revision,:org,new_product.id,1,'{}'::jsonb FROM new_product"
+        " RETURNING id,product_id"
+        ") INSERT INTO task_resources(id,org_id,task_id,product_id,product_revision_id,lot,active)"
+        " SELECT :pin,:org,:task,new_revision.product_id,new_revision.id,'guard-check',true"
+        " FROM new_revision"
+        if new_parents
+        else "INSERT INTO task_resources(id,org_id,task_id,product_id,product_revision_id,lot,active)"
+        " VALUES(:pin,:org,:task,:root,:revision,'guard-check',true)"
+    )
+    with pytest.raises(DBAPIError) as failure:
+        async with application.state.db.transaction(params["org"]) as session:
+            await session.execute(text(statement), params)
+    assert failure.value.orig.sqlstate == "42501"
+    async with application.state.db.transaction(params["org"]) as session:
+        assert (
+            await session.scalar(text("SELECT id FROM task_resources WHERE id=:pin"), params)
+            is None
+        )
+        if new_parents:
+            assert (
+                await session.scalar(text("SELECT id FROM products WHERE id=:root"), params) is None
+            )
+
+
+def test_privileged_product_insert_without_org_context_keeps_baseline_guard(tenants, admin_engine):
+    """RLS deferral applies only when RLS will actually reject the row."""
+    with pytest.raises(DBAPIError) as failure, admin_engine.begin() as connection:
+        connection.execute(text("SELECT set_config('app.current_org','',true)"))
+        assert not connection.scalar(text("SELECT row_security_active('products'::regclass)"))
+        connection.execute(
+            text(
+                "INSERT INTO products(id,org_id,created_by,current_revision,lifecycle_state,lifecycle_revision)"
+                " VALUES(:id,:org,:user,1,'inactive',1)"
+            ),
+            {"id": uuid4(), "org": tenants["orgs"][0], "user": tenants["users"][0]},
+        )
+    assert failure.value.orig.sqlstate == "23514"
 
 
 @pytest.mark.parametrize("disabled,expected", [("user", 401), ("membership", 404), ("org", 403)])
