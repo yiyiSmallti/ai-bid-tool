@@ -146,7 +146,7 @@ async def test_later_refused_batch_publishes_partial_report(score_case, monkeypa
     llm = semantic_llm(
         case["tmp_path"],
         vendor,
-        llm_batch_chars=budget,
+        score_batch_chars=budget,
         llm_concurrency=1,
     )
     install_score_resolver(monkeypatch, llm)
@@ -307,7 +307,7 @@ async def test_score_context_limit_is_a_read_only_preview_blocker(score_case, mo
         semantic_llm(
             case["tmp_path"],
             vendor,
-            llm_batch_chars=1000,
+            score_batch_chars=1000,
             llm_concurrency=1,
         ),
     )

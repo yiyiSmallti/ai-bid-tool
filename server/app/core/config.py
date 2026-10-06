@@ -66,6 +66,8 @@ class Settings(PDFSettings):
     llm_max_output_tokens: int = 32000
     llm_timeout_seconds: float = 600
     llm_batch_chars: int = 8000
+    # Serialized score request characters; independent of extraction/reasoning batches.
+    score_batch_chars: int = Field(default=64000, ge=1000)
     # Complete serialized rubric request, including prompts, schema and vendor options.
     rubric_max_request_bytes: int = Field(default=192 * 1024, ge=1000)
     llm_concurrency: int = 4

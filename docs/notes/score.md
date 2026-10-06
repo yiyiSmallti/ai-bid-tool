@@ -124,6 +124,22 @@ aggregates are stored on the immutable report; item support and citations use se
 
 ## Pitfalls
 
+Do not broadcast every DraftRun gap into every score request. The snapshot retains all
+partitions for integrity, but per-item Provider context follows the
+[scoring input scope](../plan/score.md#scoring-input): every confirmed response remains
+candidate bid-side support; gap and comply-only metadata/tender text is limited to the
+item's own Requirement. Confirmed coverage does not extend that scope. Context-only refs cannot earn
+points or become citations. Batch splitting and acceptance use the same per-item ref
+union, preserving cross-requirement support and strict verbatim verification.
+
+Scoring uses its own bounded request budget, configured through
+[Configure score requests](../guides/development.md#configure-score-requests). Reusing
+the extraction batch budget can block even one otherwise valid item before a call.
+Preview and execution must size the same request groups; raising the budget never
+permits dropping confirmed response candidates or truncating evidence. The dev preview
+failure that motivated this boundary is recorded in the
+[request-scope changelog](../changelog.md#2026-10-06-score-request-evidence-scope).
+
 Section aggregation can depend on several scoring Requirements. Each section therefore exposes an
 ordered `sources` list containing each verified Requirement, immutable Source and exact original
 quotation, under the [owner-approved option A rule](../plan/score.md#rubric-versions-coverage-and-human-confirmation-人工确认).
