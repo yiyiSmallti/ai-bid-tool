@@ -766,6 +766,9 @@ async def legacy_confirm(session, actor, card, revision, requirement, body, stor
     required = await session.scalar(select(func.team_cosign_domains(actor.org_id, card.id)))
     if len(required or []) > 1:
         cards.fail("cosign_required", "Use card signoff add for every required domain", 409)
+    # Preserve the existing action's actionable input errors before the generic
+    # round fence. Explicit sign-offs still reject stale rounds before signing.
+    await cards.confirmation_inputs(session, actor, card, revision, requirement, storage)
     row = await current_round(session, card, lock=True)
     if row is None:
         # Pending cards created before cutover open a real round on first review;

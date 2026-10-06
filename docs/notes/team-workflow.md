@@ -129,6 +129,13 @@ computes snapshots and signature ordinals under locks rather than trusting submi
 hashes or actor fields. Policy and rule change times prevent an old legacy approval
 from becoming eligible again merely because a stricter policy was later disabled.
 
+The round-opening database gate validates the actual citation. Subsequent round
+checks compare the complete immutable requirement and source-chunk snapshots,
+which cover every input to that validator, instead of locating the quote again.
+Check and score publication retain their shared batch citation checks. A changed
+quote, source, location, verification flag or requirement still invalidates the
+round immediately, even before an invalidation record has been materialized.
+
 Partial response signatures keep the card pending and do not confirm Evidence or
 append a content revision. The last authorized human request revalidates every
 signer, material and warning, appends its signature, confirms Evidence and appends
@@ -138,6 +145,14 @@ rounds apply the intended disposition only on completion and never confirm Evide
 Mixed legacy disposition batches preflight every requirement and reject atomically
 when any needs multiple domains. Existing single-domain confirmation commands use a
 real one-domain round for newly submitted cards, retaining their Result shape.
+
+The existing single-domain confirmation action reports specific material, citation
+and memory input errors before a generic round conflict. An already confirmed
+single-domain response retains the [memory-after-review rule](../plan/memory.md#drafting-consumption-usage-audit-and-c02-cache-invalidation):
+a later memory-only change produces a notice without revoking that human decision.
+The exception does not apply to pending or multi-domain rounds, and never excuses
+changed requirement/citation/material inputs, other warnings, policy or signer
+permissions. Consumption still uses the authoritative complete-round predicate.
 
 The round summary describes valid signature coverage, independently of the final
 card decision. During the last signing transaction, an empty pending-domain set

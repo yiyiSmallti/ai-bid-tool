@@ -437,6 +437,8 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
 
 
 async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_path, admin_engine):
+    from task_fixtures import reviewer_header
+
     reason = "Synthetic operator reason that must not enter the audit log."
     async with repair_client(tenants, tmp_path, vendor_replies=2) as (api, app, headers, _):
         header, foreign_header = headers
@@ -468,22 +470,24 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         hash_bound = await create_commitment_card(
             api, header, task_id, job_id, requirements[7], "preview hash"
         )
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        normalized = await require_card_action(api, header, normalized, "submit")
+        _, reviewer = await reviewer_header(
+            api, admin_engine, tenants["orgs"][0], UUID(task_id), "technical"
+        )
+        normalized = await require_card_action(api, reviewer, normalized, "submit")
         normalized = await require_card_action(
-            api, header, normalized, "confirm", reviewed_evidence_ids=[]
+            api, reviewer, normalized, "confirm", reviewed_evidence_ids=[]
         )
         assert normalized["source"]["quote"] == SOURCE_QUOTES[1]
         assert normalized["state"] == "confirmed" and normalized["eligibility"] == "eligible"
-        confirmed = await require_card_action(api, header, confirmed, "submit")
+        confirmed = await require_card_action(api, reviewer, confirmed, "submit")
         confirmed = await require_card_action(
-            api, header, confirmed, "confirm", reviewed_evidence_ids=[]
+            api, reviewer, confirmed, "confirm", reviewed_evidence_ids=[]
         )
-        pending = await require_card_action(api, header, pending, "submit")
-        unlocatable = await require_card_action(api, header, unlocatable, "submit")
+        pending = await require_card_action(api, reviewer, pending, "submit")
+        unlocatable = await require_card_action(api, reviewer, unlocatable, "submit")
         disposition = await api.post(
             f"/tasks/{task_id}/cards/dispositions",
-            headers=header,
+            headers=reviewer,
             json={
                 "extraction_job_id": job_id,
                 "items": [
@@ -856,18 +860,18 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
             "data"
         ]
         assert normalized_after["state"] == "confirmed"
-        assert normalized_after["eligibility"] == "eligible"
+        # The quote stayed exact, but this reviewed round also pinned the full
+        # requirement before its provenance and protected text were changed.
+        assert normalized_after["eligibility"] == "needs_reconfirmation"
         assert normalized_after["revision_id"] == normalized["revision_id"]
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-        strict_gate = await card_action(api, header, invalid, "confirm", reviewed_evidence_ids=[])
+        strict_gate = await card_action(api, reviewer, invalid, "confirm", reviewed_evidence_ids=[])
         assert strict_gate.status_code == 409
         assert strict_gate.json()["data"]["error"]["code"] == "invalid_citation"
         pending_stale_confirm = await card_action(
-            api, header, changed_cards[3], "confirm", reviewed_evidence_ids=[]
+            api, reviewer, changed_cards[3], "confirm", reviewed_evidence_ids=[]
         )
         assert pending_stale_confirm.status_code == 409
         assert pending_stale_confirm.json()["data"]["error"]["code"] == "needs_reconfirmation"
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
 
         first_draft = await api.post(
             f"/tasks/{task_id}/drafts",
@@ -888,25 +892,38 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
 
         # The recovery flow remains explicitly human: leave the protected state,
         # append an edited draft revision, then submit and confirm it again.
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+        normalized_reopened = await require_card_action(
+            api,
+            reviewer,
+            normalized_after,
+            "reopen",
+            reason="Review the changed requirement text and provenance with the same exact quote.",
+        )
+        normalized_reopened = await require_card_action(
+            api, reviewer, normalized_reopened, "submit"
+        )
+        normalized_reconfirmed = await require_card_action(
+            api, reviewer, normalized_reopened, "confirm", reviewed_evidence_ids=[]
+        )
+        assert normalized_reconfirmed["eligibility"] == "eligible"
         reopened = await require_card_action(
             api,
-            header,
+            reviewer,
             changed_cards[2],
             "reopen",
             reason="The tender citation was repaired and must be reviewed again.",
         )
         assert reopened["eligibility"] == "unconfirmed"
-        reopened = await update_card_without_changing_business_text(api, header, reopened)
-        reopened = await require_card_action(api, header, reopened, "submit")
+        reopened = await update_card_without_changing_business_text(api, reviewer, reopened)
+        reopened = await require_card_action(api, reviewer, reopened, "submit")
         reconfirmed = await require_card_action(
-            api, header, reopened, "confirm", reviewed_evidence_ids=[]
+            api, reviewer, reopened, "confirm", reviewed_evidence_ids=[]
         )
         assert reconfirmed["state"] == "confirmed" and reconfirmed["eligibility"] == "eligible"
 
         protected_pending_edit = await api.put(
             f"/cards/{changed_cards[3]['id']}",
-            headers=header,
+            headers=reviewer,
             json={
                 "expected_revision": changed_cards[3]["revision"],
                 "content": changed_cards[3]["content"],
@@ -915,22 +932,22 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         assert protected_pending_edit.status_code == 409
         withdrawn = await require_card_action(
             api,
-            header,
+            reviewer,
             changed_cards[3],
             "withdraw",
             reason="The repaired citation requires a fresh edit and review.",
         )
         assert withdrawn["eligibility"] == "unconfirmed"
-        withdrawn = await update_card_without_changing_business_text(api, header, withdrawn)
-        withdrawn = await require_card_action(api, header, withdrawn, "submit")
+        withdrawn = await update_card_without_changing_business_text(api, reviewer, withdrawn)
+        withdrawn = await require_card_action(api, reviewer, withdrawn, "submit")
         reconfirmed_pending = await require_card_action(
-            api, header, withdrawn, "confirm", reviewed_evidence_ids=[]
+            api, reviewer, withdrawn, "confirm", reviewed_evidence_ids=[]
         )
         assert reconfirmed_pending["eligibility"] == "eligible"
 
         redisposition = await api.post(
             f"/tasks/{task_id}/cards/dispositions",
-            headers=header,
+            headers=reviewer,
             json={
                 "extraction_job_id": job_id,
                 "items": [

@@ -6,6 +6,19 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Co-sign consumer and citation batching compatibility
+
+- Reuse a review round's immutable, already-validated citation inputs during
+  approval checks, retaining the check/score shared citation batch and strict
+  changed-source gates without repeated per-card location work.
+- Preserve specific legacy confirmation input errors and the completed
+  single-domain memory-after-review behavior. Pending and multi-domain review,
+  material, citation and signer invalidation remain strict.
+- Use independent professional reviewers in generated-card, simulation and agent
+  acceptance flows; require real renewed review after changing a pinned
+  requirement. Align stale-export acceptance with the existing blocked-preflight
+  response. See [Team workflow](notes/team-workflow.md).
+
 ## 2026-10-05: Co-sign final-signature state and domain gates
 
 - Derive completed round summaries from the valid required-domain signature set,

@@ -137,6 +137,14 @@ CREATE FUNCTION public.team_cosign_hash(p_value jsonb) RETURNS text
 LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog AS $$
  SELECT encode(sha256(convert_to(p_value::text,'UTF8')),'hex')
 $$;
+CREATE FUNCTION public.team_cosign_snapshot_matches(p_saved jsonb,p_current jsonb,p_reviewed_memory boolean) RETURNS boolean
+LANGUAGE sql IMMUTABLE STRICT SET search_path=pg_catalog AS $$
+ -- A completed single-domain human decision retains its memory provenance.
+ -- Only the new stale-memory notice is exempt; every other frozen input and
+ -- warning still matches exactly. Callers derive the exception from live rows.
+ SELECT p_saved=p_current OR (p_reviewed_memory AND p_saved-'warnings'=p_current-'warnings'
+  AND p_saved->'warnings'=(p_current->'warnings')-'memory_input_stale')
+$$;
 CREATE FUNCTION public.team_cosign_domains(p_org uuid,p_card uuid) RETURNS jsonb
 LANGUAGE sql VOLATILE SET search_path=pg_catalog AS $$
  SELECT CASE WHEN v.review_domain IS NULL THEN '[]'::jsonb
@@ -209,11 +217,18 @@ LANGUAGE sql VOLATILE SET search_path=pg_catalog AS $$
   AND rw.current_round_id=rr.id AND rw.policy_revision=rr.policy_revision
   AND (NOT q.starred OR tw.rule_revision=rr.task_rule_revision)
   AND rr.required_domains=public.team_cosign_domains(p_org,rr.card_id)
-  AND rr.snapshot=public.team_cosign_snapshot(p_org,rr.card_id,rr.card_revision_id)
-  AND public.response_citation_valid(p_org,rr.requirement_id) IS TRUE
+  -- The opening guard verifies the citation before storing this immutable
+  -- snapshot of the entire requirement and source chunk. Matching those exact
+  -- inputs preserves that proof without locating the same quote per consumer;
+  -- check/score publication still performs its shared source-pair batch once.
+  AND public.team_cosign_snapshot_matches(rr.snapshot,public.team_cosign_snapshot(p_org,rr.card_id,rr.card_revision_id),
+    rr.purpose='response' AND jsonb_array_length(rr.required_domains)=1
+    AND cv.state='confirmed' AND cv.revision=rr.card_revision+1 AND cv.actor_kind='session')
   AND public.response_quote_current(p_org,rr.card_revision_id) IS TRUE
   AND (rr.purpose='disposition' OR (public.response_generation_materials_active(p_org,pinned.model_job_id) IS TRUE
-  AND public.memory_generation_current(p_org,pinned.model_job_id) IS TRUE
+  AND (public.memory_generation_current(p_org,pinned.model_job_id) IS TRUE
+    OR (jsonb_array_length(rr.required_domains)=1 AND cv.state='confirmed'
+      AND cv.revision=rr.card_revision+1 AND cv.actor_kind='session'))
   AND NOT EXISTS(SELECT 1 FROM public.card_evidence_links l WHERE l.org_id=p_org AND l.revision_id=rr.card_revision_id
     AND public.response_evidence_active(p_org,l.evidence_id) IS DISTINCT FROM true)))
   AND NOT EXISTS(SELECT 1 FROM public.card_review_signatures sig WHERE sig.org_id=p_org AND sig.round_id=rr.id
@@ -223,7 +238,8 @@ LANGUAGE sql VOLATILE SET search_path=pg_catalog AS $$
   AND (c.current_revision_id=rr.card_revision_id OR
    (cv.revision=rr.card_revision+1 AND cv.actor_kind='session'
     AND ((rr.purpose='response' AND cv.state='confirmed') OR (rr.purpose='disposition' AND cv.disposition=rr.intended_disposition AND cv.state=rr.prior_card_state))
-    AND public.team_cosign_snapshot(p_org,rr.card_id,cv.id)=rr.snapshot
+    AND public.team_cosign_snapshot_matches(rr.snapshot,public.team_cosign_snapshot(p_org,rr.card_id,cv.id),
+      rr.purpose='response' AND jsonb_array_length(rr.required_domains)=1)
     AND EXISTS(SELECT 1 FROM public.card_review_signatures sig WHERE sig.org_id=p_org AND sig.round_id=rr.id AND sig.signer_user_id=cv.actor_user_id)))
  FROM public.card_review_rounds rr
  JOIN public.response_cards c ON (c.org_id,c.id)=(rr.org_id,rr.card_id)
@@ -721,7 +737,7 @@ CREATE TRIGGER team_cosign_dependency AFTER INSERT ON public.screenshot_withdraw
 -- retirement materialization; every read/consumption gate still checks live inputs.
 CREATE CONSTRAINT TRIGGER team_cosign_dependency AFTER UPDATE ON public.response_cards
  DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.team_cosign_invalidate_dependencies();
-REVOKE ALL ON FUNCTION public.team_cosign_hash(jsonb),public.team_cosign_domains(uuid,uuid),
+REVOKE ALL ON FUNCTION public.team_cosign_hash(jsonb),public.team_cosign_snapshot_matches(jsonb,jsonb,boolean),public.team_cosign_domains(uuid,uuid),
  public.team_cosign_signer_authorized(uuid,uuid,uuid,text),public.team_cosign_warnings(uuid,uuid),
  public.team_cosign_snapshot(uuid,uuid,uuid),public.team_cosign_round_valid(uuid,uuid),
  public.team_cosign_complete(uuid,uuid),public.team_cosign_card_approved(uuid,uuid),
@@ -729,7 +745,7 @@ REVOKE ALL ON FUNCTION public.team_cosign_hash(jsonb),public.team_cosign_domains
  public.team_cosign_round_pointer(),public.team_cosign_finalizer(uuid,text,uuid),public.team_cosign_revision_gate(),
  public.team_cosign_submission_complete(),public.team_cosign_signature_complete(),public.team_cosign_disposition_human(uuid,text,uuid),
  public.team_cosign_invalidate_dependencies(),public.team_cosign_event() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.team_cosign_hash(jsonb),public.team_cosign_domains(uuid,uuid),
+GRANT EXECUTE ON FUNCTION public.team_cosign_hash(jsonb),public.team_cosign_snapshot_matches(jsonb,jsonb,boolean),public.team_cosign_domains(uuid,uuid),
  public.team_cosign_signer_authorized(uuid,uuid,uuid,text),public.team_cosign_warnings(uuid,uuid),
  public.team_cosign_snapshot(uuid,uuid,uuid),public.team_cosign_round_valid(uuid,uuid),
  public.team_cosign_complete(uuid,uuid),public.team_cosign_card_approved(uuid,uuid),

@@ -1334,14 +1334,20 @@ async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, b
     return await card_view(session, actor, card, revision, requirement)
 
 
-async def validate_confirmation(session, actor, card, previous, requirement, body, storage):
-    """Validate every legacy human gate without writing Evidence or revisions."""
+async def confirmation_inputs(session, actor, card, previous, requirement, storage):
+    """Expose actionable stale-input failures before a legacy round conflict."""
     view = await card_view(session, actor, card, previous, requirement, storage)
-    materials = await linked_evidence(session, previous.id)
     if "memory_input_stale" in view["warning_codes"]:
         fail("memory_input_stale", "Memory changed; edit or regenerate before review", 409, 4)
     if view["eligibility"] in {"stale_material", "invalid_citation", "needs_reconfirmation"}:
         fail(view["eligibility"], "Card inputs are no longer valid", 409)
+    return view
+
+
+async def validate_confirmation(session, actor, card, previous, requirement, body, storage):
+    """Validate every legacy human gate without writing Evidence or revisions."""
+    view = await confirmation_inputs(session, actor, card, previous, requirement, storage)
+    materials = await linked_evidence(session, previous.id)
     if not all(getattr(previous, name) for name in CONTENT_FIELDS):
         fail("incomplete_response", "Response kind, text, deviation and explanation are required")
     if previous.deviation_note == "满足":

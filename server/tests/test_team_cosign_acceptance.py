@@ -428,11 +428,19 @@ async def test_check_export_reject_old_draft_after_review_invalidation(
     refused_export = await api.post(
         f"/tasks/{scope['task_id']}/export-runs", headers=bidder, json=export_body
     )
-    assert refused_export.status_code == 200, refused_export.text
-    assert any(
-        issue["code"] == "export_stale_draft" and issue["severity"] == "block"
-        for issue in refused_export.json()["data"]["issues"]
-    )
+    # Export preflight has always returned 400 with its full blocker report.
+    # Co-sign invalidation must use that existing refusal contract, not success.
+    assert refused_export.status_code == 400, refused_export.text
+    refused_preview = refused_export.json()
+    assert refused_preview["ok"] is False
+    assert refused_preview["data"]["error"]["code"] == "export_blocked"
+    assert refused_preview["data"]["ready"] is False
+    assert refused_preview["data"]["gap_count"] == 1
+    assert sum(refused_preview["data"]["table_rows"].values()) == 0
+    blockers = {
+        issue["code"] for issue in refused_preview["data"]["issues"] if issue["severity"] == "block"
+    }
+    assert {"export_stale_draft", "export_cosign_required"} <= blockers
     blocked = await api.post(
         f"/tasks/{scope['task_id']}/export-runs",
         headers=bidder,
