@@ -36,7 +36,7 @@ The write-free preview upper bound covers both stages, including the entire fixe
 - The specified current `DraftRun`'s `org_id`, `task_id`, `draft_id`, `extraction_job_id`, `document_id`, and `draft_input_hash`. DraftRun and confirmed rubric must pin the same extraction job/document.
 - Partition metadata for every `ResponseItem`: `response`, `comply_only`, or `gap`, plus requirement, source, gap (缺口) reason, disposition, and pinned revision bindings. The scoring item's own row is `anchor_response_item`; its partition is `anchor_partition`.
 - Every `response` row in the same DraftRun as candidate support, sending only its pinned, confirmed `response_text` and `deviation_note`. Never read current Card pointers, unconfirmed/pending/rejected Card text, or substitute later Card changes. This lets a scoring item cite real support from other confirmed technical/commercial responses (响应), rather than assuming support has the scoring Requirement's ID.
-- Only necessary metadata and tender-side text for `comply_only`/`gap`, without generating or borrowing card text. A gap anchor does not prove the entire draft lacks materials; assessment is possible only when verbatim text in other confirmed responses genuinely supports it. `comply_only` has no bid-side text and cannot independently earn points; without any confirmed bid-side citation, it is always unassessable.
+- Only necessary metadata and tender-side text for `comply_only`/`gap`, without generating or borrowing card text. Per-item context includes these partitions only for the item's own Requirement. Confirmed `mapped` coverage binds items with that same `requirement_id`, as enforced by [`score_normalization.completeness`](../../server/app/services/score_normalization.py); it does not expand the scope to other Requirements. `duplicate`/`excluded` coverage does not add gap context. A gap anchor does not prove the entire draft lacks materials; assessment is possible only when verbatim text in other confirmed responses genuinely supports it. `comply_only` has no bid-side text and cannot independently earn points; without any confirmed bid-side citation, it is always unassessable.
 - Confirmed rubric set/section/item versions, coverage decisions, bounds, weights, and aggregation rules.
 - `assessment_date`, Provider/platform model catalog revisions, reasoning, prompt/schema/scoring rule versions, and redaction setting/rule revisions.
 
@@ -145,6 +145,14 @@ Models return only `ModelEvidenceRef`. The service resolves refs against the cur
 
 The rubric Provider receives only redacted tender-text refs. Each score Provider item must explicitly receive `tender_ref`, confirmed `rule_ref`, and candidate `draft_refs` from all confirmed responses in that DraftRun. `rule_ref` is human-normalized reasoning text and cannot generate `TenderCitation`; real tender quotations come only from `tender_ref`. Before publishing assessed results, services separately validate tender/rule/draft refs and require nonempty model tender and draft citations. Rubric/historical-report reads re-resolve every Source, DraftRun, ResponseItem, and Card revision parent under current org/task scope. Unauthorized/missing objects uniformly return 404; invalid dependencies make reports stale and block new scoring. Saved Source JSON cannot bypass current read permissions. Original-source verification reads only the referenced chunk/block, never scanning the full document or producing new Requirements.
 
+`ScoreProviderItem.context_only_refs` binds the non-citable context needed by that item:
+metadata and tender-side text for the confirmed response candidates, plus the scoped
+`comply_only`/`gap` partitions defined in [Scoring input](#scoring-input). These refs
+remain separate from `draft_refs`, which contain only bid-side text. The request-level
+`context_only_refs` is exactly the union for its included items. Batching, retry splitting
+and local batch acceptance must use that same union; unrelated gap metadata cannot be
+copied into every batch. All snapshot partitions remain pinned for integrity and freshness.
+
 Rubric reads and confirmation use the saved-input identity check in
 [`score_inputs.require_dependencies`](../../server/app/services/score_inputs.py).
 If a pinned Requirement, Source or chunk fingerprint has changed, that immutable
@@ -163,6 +171,18 @@ The [runtime contract](../../server/app/schemas/score_contracts.py) defines thes
 - `RubricProvider.extract_structure`: complete pinned scoring Requirements → candidate sections and overall rule.
 - `RubricProvider.extract_items`: bounded Requirement batches plus the complete fixed section list → candidate items.
 - `ScoreProvider.score`: confirmed rubric items, corresponding DraftRun partitions, and outbound context → item-level assessed/unassessable results, scores, reasons, strengthening actions, and refs.
+
+Score batching uses `BID_SCORE_BATCH_CHARS`, independent of extraction and rubric-item
+`llm_batch_chars`. The limit counts characters in serialized `ScoreProviderRequest`
+JSON, including its items, selected context and confidential-field hints. It does not
+count the HTTP prompt/schema envelope and is not a token limit. Keep complete items and
+all confirmed bid-side candidates; never truncate text to make an item fit. If one item
+still exceeds the limit, preview returns `admission_blocker=score_context_limit` and
+`cost_basis_reason=context_limit`, and submission stops before a Provider call. Preview
+costs and first-pass call quotes use the same groups and request bodies as execution.
+The budget and score adapter/prompt/schema identities participate in the pinned input;
+changes require a fresh preview. Configure the limit with output and envelope headroom
+using [the development guide](../guides/development.md#configure-score-requests).
 
 Only implementations in `server/app/providers/` call vendor SDKs/HTTP, using strict JSON Schema; business services depend on Protocols only. `RubricProvider.extract_structure` sends the complete Requirement table once for structure; `RubricProvider.extract_items` performs bounded Requirement batching and concurrency, with the complete fixed section list in every batch. Stage-1 structure must validate before stage 2 begins; stage-2 items cannot change its keys, ordering, or aggregation. Prompt/schema versions bind preview cache identity; the structure hash binds the published input manifest. The preview accounts for both stages and the entire repeated section context. Invalid/truncated stage 1 fails without stage-2 calls; stage-2 structural errors or batch failures leave unresolved Requirements and may retain independent valid batches, including sections without accepted items. Score adapters retain completed batches and per-call `ProviderUsage`; the first nonrecoverable failure stops unstarted batches, while in-flight calls may finish and be charged. Default scores, empty citations, or broad retries cannot conceal failures.
 

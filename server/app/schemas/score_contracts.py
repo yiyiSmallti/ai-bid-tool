@@ -884,6 +884,7 @@ class ScoreProviderItem(Contract):
     tender_ref: NonBlank
     rule_ref: NonBlank
     draft_refs: list[NonBlank] = Field(min_length=1)
+    context_only_refs: list[NonBlank] = Field(default_factory=list)
     anchor_response_item_id: UUID
     anchor_partition: ScorePartition
     anchor_gap_reason_codes: list[NonBlank]
@@ -898,6 +899,10 @@ class ScoreProviderItem(Contract):
             raise ValueError("tender, rule and draft refs must be distinct")
         if self.rule_ref in self.draft_refs:
             raise ValueError("rubric rule refs cannot be draft refs")
+        if len(set(self.context_only_refs)) != len(self.context_only_refs):
+            raise ValueError("item context-only refs must be unique")
+        if {self.tender_ref, self.rule_ref, *self.draft_refs} & set(self.context_only_refs):
+            raise ValueError("item context-only refs cannot be citation or rule refs")
         return self
 
 
@@ -916,6 +921,10 @@ class ScoreProviderRequest(Contract):
             raise ValueError("context-only refs must be unique")
         if item_refs & set(self.context_only_refs):
             raise ValueError("context-only refs cannot be item refs")
+        if set(self.context_only_refs) != {
+            ref for item in self.items for ref in item.context_only_refs
+        }:
+            raise ValueError("context-only refs must match the included items")
         return self
 
 

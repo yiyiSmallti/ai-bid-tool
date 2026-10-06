@@ -192,6 +192,24 @@ keyring. Preserve retired keys for the backup retention period. Default `--scope
 keeps the existing data rotation behavior. Never downgrade to an env-reading release
 while serving requests; retain the table/audits and repair forward.
 
+## Configure score requests
+
+1. Set `BID_SCORE_BATCH_CHARS` consistently on the API and workers. Its default is
+   `64000` and its minimum is `1000`. This bounds the serialized score request's
+   characters, independently of `BID_LLM_BATCH_CHARS`, which continues to control
+   extraction and rubric item batching. The Compose runtime forwards this setting.
+2. Size it for the selected model alongside `BID_LLM_MAX_OUTPUT_TOKENS`. Reserve
+   room for the system prompt, JSON schema, vendor framing and output. Characters
+   are not tokens; the default is a bounded long-context starting point, not a
+   guarantee that every model accepts it. The precise scope and indivisible-item
+   rule are in the [score Provider contract](../plan/score.md#providers-jobs-and-prepaid-billing).
+3. Preview `bid score run --task UUID --draft UUID --rubric UUID --as-of YYYY-MM-DD
+   --dry-run` after changing the setting. `score_context_limit` with
+   `cost_basis_reason=context_limit` means one complete item, including all confirmed
+   bid-side candidates, still exceeds the configured limit. Inspect the fixed input
+   and adjust the setting within the model's capacity before previewing and submitting
+   again; retries do not remove evidence or truncate text.
+
 ## Configure job guards
 
 1. Set these values consistently on the API and all workers before starting
