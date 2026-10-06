@@ -17,6 +17,12 @@ def upgrade():
     op.execute(GUARD_SQL)
     _consumption()
     _invalidation()
+    # The co-sign snapshot hashes whole rows with to_jsonb, which renders timestamptz
+    # in the session TimeZone; pin it so stored and recomputed snapshots agree across
+    # connections. No review rounds existed when this was introduced.
+    op.execute(
+        "ALTER FUNCTION public.team_cosign_snapshot(uuid,uuid,uuid) SET \"TimeZone\" TO 'UTC'"
+    )
 
 
 def downgrade():

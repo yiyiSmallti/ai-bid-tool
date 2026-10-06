@@ -8,6 +8,9 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-06: Annotation regression fixes
 
+- Pinned `team_cosign_snapshot` to the UTC TimeZone. It hashes whole requirement,
+  chunk and evidence rows with `to_jsonb`, which renders timestamps in the session
+  TimeZone, so connections with different settings invalidated open review rounds.
 - Normalized approval timestamps to UTC before hashing, retaining exact approval
   comparisons across confirmation and worker transactions with different database
   time zones. See [approval binding](notes/annotation.md#how-it-works).
