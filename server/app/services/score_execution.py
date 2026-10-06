@@ -80,6 +80,7 @@ async def prepare(session, fixed, llm, requested_reasoning, settings):
         "prompt_version": PROMPT_VERSION,
         "schema_version": SCHEMA_VERSION,
         "adapter_version": ADAPTER_VERSION,
+        "score_batch_chars": settings.score_batch_chars,
         "model": None,
         "reasoning": None,
         "price": None,
@@ -91,6 +92,8 @@ async def prepare(session, fixed, llm, requested_reasoning, settings):
         fixed.input_hash = drafts.digest(manifest)
         return None
     llm, reasoning, _ = with_reasoning(llm, requested_reasoning)
+    if isinstance(llm, HTTPExtractor):
+        manifest["score_batch_chars"] = llm.settings.score_batch_chars
     manifest |= {
         "model": model_identity(llm),
         "reasoning": reasoning,

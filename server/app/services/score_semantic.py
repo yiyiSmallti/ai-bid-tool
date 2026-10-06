@@ -215,6 +215,7 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
     anchor_draft_refs: dict[str, list[str]] = {}
     anchor_context_refs: dict[str, list[str]] = {}
     context_only_refs: list[str] = []
+    response_context_refs: list[str] = []
     for index, row in enumerate((_plain(value) for value in secret["items"]), 1):
         anchor_id = str(row["response_item_id"])
         source = _plain(row["source"])
@@ -246,6 +247,7 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
         anchor_context_refs.setdefault(anchor_id, []).extend((metadata_ref, tender_ref))
         if row["partition"] != "response":
             continue
+        response_context_refs.extend((metadata_ref, tender_ref))
         for field in ("response_text", "deviation_note"):
             if not row.get(field):
                 continue
@@ -272,6 +274,12 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
     provider_items: list[dict] = []
     for item_id, binding in item_bindings.items():
         item, anchor = binding["item"], binding["anchor"]
+        # Confirmed coverage maps only to items with the same requirement_id.
+        # Cross-requirement support therefore needs all response candidates, not
+        # unrelated text-free partitions or duplicate coverage anchors.
+        item_context_refs = set(response_context_refs) | set(
+            anchor_context_refs[str(anchor["response_item_id"])]
+        )
         reason = _preflight_reason(item, anchor, draft_refs)
         own_refs = [
             binding["tender_ref"],
@@ -294,12 +302,23 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
             tender_ref=binding["tender_ref"],
             rule_ref=binding["rule_ref"],
             draft_refs=draft_refs,
+            context_only_refs=[ref for ref in context_only_refs if ref in item_context_refs],
             anchor_response_item_id=_uuid(anchor["response_item_id"]),
             anchor_partition=anchor["partition"],
             anchor_gap_reason_codes=list(anchor.get("gap_reasons") or []),
             score_range=item["score_range"],
         )
         provider_items.append(provider_item.model_dump(mode="json"))
+    selected_context_refs = {ref for item in provider_items for ref in item["context_only_refs"]}
+    context_only_refs = [ref for ref in context_only_refs if ref in selected_context_refs]
+    selected_refs = {
+        ref
+        for item in provider_items
+        for ref in (item["tender_ref"], item["rule_ref"], *item["draft_refs"])
+    } | selected_context_refs
+    context = context.model_copy(
+        update={"texts": [text for text in context.texts if text.ref in selected_refs]}
+    )
     return {
         "assessment_date": secret["assessment_date"],
         "context": context.model_dump(mode="json"),
@@ -487,8 +506,9 @@ def accept_batches(
                 eligible[item_id]["tender_ref"],
                 eligible[item_id]["rule_ref"],
                 *eligible[item_id]["draft_refs"],
+                *eligible[item_id]["context_only_refs"],
             )
-        } | set(outbound["context_only_refs"])
+        }
         if (
             len(set(batch.sent_refs)) != len(batch.sent_refs)
             or set(batch.sent_refs) != expected_refs

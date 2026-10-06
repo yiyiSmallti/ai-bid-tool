@@ -15,6 +15,26 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   preserve canonical numeric semantics while accelerating ordinary JSON encoding.
   See [Requirement confirmation](notes/requirement-confirmation.md#how-it-works).
 
+## 2026-10-06: Score request evidence scope
+
+- Correct the dev real-model score preview blocker observed after rubric completion:
+  a confirmed rubric with 86 items against a DraftRun containing 16 confirmed response
+  rows (1108 bid-side characters) and 1530 text-free gaps returned
+  `admission_blocker=score_context_limit`, `cost_basis_reason=context_limit` before any
+  call. Every item inherited all gap context and reused extraction's 8000-character budget.
+- Bind gap/comply-only context refs to each score item's own Requirement while
+  preserving every confirmed response as candidate bid-side support. Batch splitting
+  and acceptance retain the exact selected ref union; tender/rule refs and verbatim
+  citation verification remain unchanged. See the [score input contract](plan/score.md#scoring-input).
+- Add the independent `BID_SCORE_BATCH_CHARS` setting, default `64000`, with the same
+  grouping used for preview costs and execution. Complete items that still cannot fit
+  retain the explicit preview blocker. Pin the budget and advance scoring request
+  identities so changed inputs require a fresh preview; see
+  [configuration steps](guides/development.md#configure-score-requests).
+- Add synthetic Provider/request-scope regressions and a database-backed preview/run
+  scenario matching the dev draft shape, with fake Provider transport and unchanged
+  citation acceptance checks.
+
 ## 2026-10-06: Rubric revision regression fixture corrections
 
 - Deep-copy the read report in the shared rubric replacement test helper before constructing
