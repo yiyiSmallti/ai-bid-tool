@@ -68,8 +68,8 @@ observations can still make the report partial.
 
 The model returns `no_risk_found`, `risk` or `unknown` for each requested ID.
 Missing, duplicate and unknown IDs cannot imply a pass. Each accepted citation
-must locate a unique contiguous span in both the sent text and the fixed original
-page/block/field. References must belong to that requirement and its bound
+must locate a unique contiguous span in both the sent text and the pinned original
+Source or field. References must belong to that requirement and its bound
 response. No-risk conclusions and contradictions require both tender and bid
 support; no-risk supporting citations attach directly to the coverage item.
 Rejected conclusions lose their model text and retain a fixed reason code.
@@ -111,6 +111,12 @@ RLS and organization-bound composite references.
 
 ## Pitfalls
 
+- A tender citation may repeat elsewhere on its PDF page or Word block. Resolve
+  the complete pinned `Source.quote` with extraction's boundary preference, then
+  require citation uniqueness inside that span. Missing or ambiguous Sources and
+  citations outside or repeated within the Source still fail. The shared
+  [`locate_source_citation_span`](../../server/app/services/extraction.py) returns
+  offsets in the original page/block and preserves location rejection reasons.
 - Coverage is relative to requirements saved by one extraction job. It does not
   prove that extraction found every tender obligation.
 - `comply_only` records a human disposition; it is not proof that material exists

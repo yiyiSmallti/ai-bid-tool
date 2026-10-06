@@ -50,6 +50,7 @@ class RubricVendor:
         self.mode = "valid"
         self.stages: list[str] = []
         self.structure_output: dict | None = None
+        self.citation_quote: str | None = None
         self.item_failures: dict[int, str] = {}
         self.item_calls = 0
         self.block_stage: str | None = None
@@ -80,7 +81,10 @@ class RubricVendor:
         }
         rows = payload["requirements"]
         anchor = rows[0]
-        source = {"ref": anchor["tender_ref"], "quote": refs[anchor["tender_ref"]]}
+        source = {
+            "ref": anchor["tender_ref"],
+            "quote": self.citation_quote or refs[anchor["tender_ref"]],
+        }
         output = {
             "sections": [
                 {
@@ -110,7 +114,12 @@ class RubricVendor:
                     "score_range": {"minimum": "0", "maximum": "5"},
                     "weight": None,
                     "ambiguity_reason": None,
-                    "citations": [{"ref": row["tender_ref"], "quote": refs[row["tender_ref"]]}],
+                    "citations": [
+                        {
+                            "ref": row["tender_ref"],
+                            "quote": self.citation_quote or refs[row["tender_ref"]],
+                        }
+                    ],
                 }
                 for index, row in enumerate(rows, 1)
             ],
@@ -386,6 +395,133 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
         )
     )
     assert json.loads(artifact.read_text())["job"]["result"]["usage_record_ids"]
+
+
+@pytest.mark.parametrize("repeat_position", ["before", "after"])
+async def test_rubric_short_citation_repeated_outside_pinned_source_completes(
+    rubric_input_case, repeat_position
+):
+    """Exercise snapshot, both Provider stages and persisted public Source bindings.
+
+    Failures: an unrelated page repeat rejects stage 1, short citations replace the
+    pinned Source, stage 2 loses its item, or the persisted structure loses provenance.
+    """
+    case = rubric_input_case
+    quote = "The offered appliance memory shall be at least 64 GB."
+    pinned_quote = f"Synthetic scoring boundary: {quote} Award 5 points for compliance."
+    repeated = f"Synthetic unrelated explanation: {quote} This is outside the scoring boundary."
+    original = "\n".join(
+        (repeated, pinned_quote) if repeat_position == "before" else (pinned_quote, repeated)
+    )
+    assert original.count(quote) == 2
+    assert original.count(pinned_quote) == pinned_quote.count(quote) == 1
+    org = case["tenants"]["orgs"][0]
+    requirement_id = case["requirements"][0]["id"]
+    async with case["app"].state.db.transaction(org) as session:
+        requirement = await session.get(Requirement, UUID(requirement_id))
+        requirement.text = requirement.quote = pinned_quote
+        requirement.fingerprint = hashlib.sha256(pinned_quote.encode()).hexdigest()
+        chunk = await session.get(Chunk, requirement.chunk_id)
+        chunk.text = original
+    source = {**case["requirements"][0]["source"], "quote": pinned_quote}
+    case["vendor"].citation_quote = quote
+
+    preview = await preview_rubric(case)
+    assert preview["admission_blocker"] is None
+    assert preview["scoring_requirement_ids"] == [requirement_id]
+    submitted = await submit_rubric(case, preview)
+    assert submitted.status_code == 200, submitted.text
+    terminal = await finish_rubric(case, submitted.json()["data"])
+    assert terminal["status"] == "succeeded", terminal
+    result = RubricGenerateResult.model_validate(terminal["result"])
+    assert result.completion == "complete"
+    assert result.candidate_items == 1 and result.unresolved_requirements == 0
+    assert len(result.usage_record_ids) == 2
+    vendor = case["vendor"]
+    assert vendor.stages == ["structure", "items"]
+    assert vendor.structure_output is not None
+    assert vendor.structure_output["overall_citations"] == [{"ref": "r1.tender", "quote": quote}]
+    for payload in vendor.requests:
+        assert len(payload["requirements"]) == 1
+        sent = payload["context"]["texts"][0]["text"]
+        assert sent.count(quote) == 1
+        assert sent.endswith(pinned_quote)
+        assert repeated not in sent
+
+    path = f"/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
+    shown = await case["api"].get(path, headers=case["header"])
+    assert shown.status_code == 200, shown.text
+    report = shown.json()["data"]
+    RubricReportData.model_validate(report)
+    assert report["rubric"]["state"] == "candidate"
+    for kind in ("sections", "items", "coverage"):
+        assert len(report[kind]) == 1
+        assert report[kind][0]["source"] == source
+    # Sections carry only their Source; items and coverage also bind the Requirement.
+    for kind in ("items", "coverage"):
+        assert report[kind][0]["requirement_id"] == requirement_id
+    # Generation binds every item, but only a human can map its coverage.
+    pending_report = report
+    coverage = report["coverage"][0]
+    assert coverage["disposition"] == "pending" and coverage["rubric_item_ids"] == []
+    assert report["rubric"]["completeness"]["normalization_errors"] == ["unmapped_item"]
+    mapped = await case["api"].post(
+        f"{path}/coverage/{requirement_id}/decisions",
+        headers=case["header"],
+        json={
+            "expected_revision": coverage["revision"],
+            "expected_input_hash": report["rubric"]["input_hash"],
+            "action": "mapped",
+            "rubric_item_ids": [report["items"][0]["id"]],
+            "reason": "Synthetic human coverage review of the generated scoring item",
+        },
+    )
+    assert mapped.status_code == 200, mapped.text
+    shown = await case["api"].get(path, headers=case["header"])
+    assert shown.status_code == 200, shown.text
+    report = shown.json()["data"]
+    RubricReportData.model_validate(report)
+    assert report["rubric"]["state"] == "candidate"
+    assert report["sections"] == pending_report["sections"]
+    assert report["items"] == pending_report["items"]
+    assert report["coverage"][0]["source"] == source
+    assert report["coverage"][0]["disposition"] == "mapped"
+    assert report["coverage"][0]["rubric_item_ids"] == [report["items"][0]["id"]]
+    assert report["rubric"]["completeness"]["pending_requirement_ids"] == []
+    assert report["rubric"]["completeness"]["normalization_errors"] == []
+    assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
+
+    async with case["app"].state.db.transaction(org) as session:
+        rubric = await session.get(ScoreRubricSet, result.rubric_id)
+        structure = rubric.input_manifest["rubric_structure"]
+        assert structure["proposal"] == vendor.structure_output
+        assert structure["structure_hash"] == vendor.requests[1]["structure_hash"]
+        assert rubric.input_hash == report["rubric"]["input_hash"]
+        assert rubric.input_hash == drafts.digest(rubric.input_manifest)
+        assert rubric.normalization_errors == []
+        assert structure["overall_citations"] == [
+            {"requirement_id": requirement_id, "source": source, "quote": quote}
+        ]
+        assert structure["sections"][0]["source"] == source
+    artifact = case["tmp_path"] / f"rubric-pinned-source-{repeat_position}.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "source_original": original,
+                "pinned_source": source,
+                "provider_quote": quote,
+                "preview": preview,
+                "job": terminal,
+                "pending_report": pending_report,
+                "coverage_decision": mapped.json()["data"],
+                "report": report,
+                "structure": structure,
+                "requests": vendor.requests,
+            },
+            indent=2,
+        )
+    )
+    assert json.loads(artifact.read_text())["report"]["items"][0]["source"] == source
 
 
 async def add_whole_scoring_table(case):

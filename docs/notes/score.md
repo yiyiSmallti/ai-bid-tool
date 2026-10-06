@@ -130,6 +130,14 @@ confidential values, or produce an official tender score. The boundaries are fix
 [score contract](../plan/score.md). Formula text is retained as text and is never evaluated.
 Rejected or ambiguous model citations are not repaired into another source.
 
+Model citation uniqueness is relative to the pinned `Source.quote`, not every sentence on its
+PDF page or Word block. [`locate_source_citation_span`](../../server/app/services/extraction.py)
+first locates the full Source with the extraction boundary preference, then locates the citation
+only inside that original span and maps its offsets back to the page/block. A repeated sentence
+outside the Source does not invalidate the citation. An absent or ambiguous Source, an out-of-span
+citation, or a citation repeated within the Source still fails with the existing location reason.
+Rubric generation and score execution share this check; sent-text verification remains required.
+
 Provider JSON shape validation must not enforce confirmed-rule semantics. A formula section with
 `cap: 35`, or a `capped_sum` section with an explicit null cap, is a reviewable candidate with
 normalization errors. The same applies to unused weights, invalid weight sums and inconsistent

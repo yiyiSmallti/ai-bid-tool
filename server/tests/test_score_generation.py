@@ -247,8 +247,41 @@ def test_outbound_redaction_and_dual_citation_acceptance_use_local_ids_only():
     assert "Synthetic Secret" not in str(accepted)
 
 
+@pytest.mark.parametrize("repeat_position", ["before", "after"])
+def test_rubric_short_citation_repeated_outside_source_accepts_both_stages(repeat_position):
+    """An unrelated sentence must not reject overall, section or item citations."""
+    source = "技术评分标准：内存 64 GB 得 5 分。根据配置完整性评分。"
+    repeated = "其他条款说明：内存 64 GB 得 5 分。"
+    original = "\n".join((repeated, source) if repeat_position == "before" else (source, repeated))
+    secret = fixed_secret(source_original=original)
+    row = secret["requirements"][0]
+    row["text"] = row["source"]["quote"] = source
+    outbound = score_generation.build_outbound(secret, [], [])
+
+    structure = verified_structure(secret, outbound)
+    assert structure["overall_citations"] == [
+        {
+            "requirement_id": str(REAL_REQUIREMENT),
+            "source": row["source"],
+            "quote": "内存 64 GB 得 5 分",
+        }
+    ]
+    batch = RubricAnsweredBatch(
+        requested_requirement_ids=[PROVIDER_REQUIREMENT],
+        sent_refs=["r1.tender"],
+        structure_hash=structure["structure_hash"],
+        output=RubricItemsWireOutput(items=candidate()["items"]),
+    )
+    accepted = score_generation.accept_batches(secret, outbound, structure, [batch])
+    assert accepted["normalization_errors"] == []
+    assert accepted["unresolved_requirement_ids"] == []
+    assert accepted["sections"][0]["source"] == row["source"]
+    assert accepted["items"][0]["source"] == row["source"]
+
+
 def test_invalid_or_ambiguous_structure_citation_fails_before_items():
-    secret = fixed_secret(source_original="内存 64 GB 得 5 分。重复说明：内存 64 GB 得 5 分。")
+    # Both full Sources must have boundaries; extraction can otherwise prefer one.
+    secret = fixed_secret(source_original="内存 64 GB 得 5 分。\n重复说明：内存 64 GB 得 5 分。")
     outbound = score_generation.build_outbound(secret, [], [])
     with pytest.raises(ServiceError) as failure:
         verified_structure(secret, outbound)

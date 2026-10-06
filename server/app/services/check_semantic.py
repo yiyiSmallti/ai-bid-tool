@@ -33,7 +33,7 @@ from app.providers.llm import with_reasoning
 from app.schemas.check_contracts import OutboundContext
 from app.services import confidential, drafts, redaction
 from app.services.check_inputs import CheckSnapshot
-from app.services.extraction import locate_quote, locate_span
+from app.services.extraction import locate_quote, locate_source_citation_span
 from app.services.response_cards import fail
 
 # Only these admission stops permit retaining already completed deterministic coverage.
@@ -408,14 +408,11 @@ def verify_citation(citation, local, sent_refs, outbound, draft_id):
     original_quote, reason = locate_quote(binding["original"], citation.quote)
     if original_quote is None:
         return None, reason
-    # Check the fixed full page/block/material field as well as the bounded excerpt.
-    if (
-        locate_span(binding.get("location_original", binding["original"]), original_quote)[0]
-        is None
-    ):
-        return None, locate_span(
-            binding.get("location_original", binding["original"]), original_quote
-        )[1]
+    span, reason = locate_source_citation_span(
+        binding.get("location_original", binding["original"]), binding["original"], original_quote
+    )
+    if span is None:
+        return None, reason
     if redaction.PLACEHOLDER.search(original_quote) or redaction.SECRET_PLACEHOLDER.search(
         original_quote
     ):
@@ -425,7 +422,6 @@ def verify_citation(citation, local, sent_refs, outbound, draft_id):
     for text, quote in (
         (binding["sent"], sent_quote),
         (binding["original"], original_quote),
-        (binding.get("location_original", binding["original"]), original_quote),
     ):
         first = text.find(quote)
         if first < 0:
