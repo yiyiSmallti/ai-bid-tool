@@ -31,20 +31,28 @@ def seed_scale(admin_engine, tenants):
     """Owner-side fixtures; measurements retain restricted role and tenant RLS."""
     with admin_engine.begin() as connection:
         for org, user in zip(tenants["orgs"], tenants["users"], strict=True):
-            values = {"org": str(org), "actor": user, "roots": ROOTS, "revisions": REVISIONS}
+            values = {
+                "org": str(org),
+                "actor": user,
+                "roots": ROOTS,
+                "revisions": REVISIONS,
+                # Colons inside quoted SQL literals are still parsed by text() as binds.
+                "parent_suffix": ":parent",
+                "parent_revision_suffix": ":parent-revision",
+            }
             connection.execute(text("SELECT set_config('app.current_org', :org, true)"), values)
             connection.execute(
                 text(
                     "INSERT INTO products(id,org_id,created_by,current_revision) "
-                    "VALUES(md5(:org||':parent')::uuid,CAST(:org AS uuid),:actor,1)"
+                    "VALUES(md5(:org||:parent_suffix)::uuid,CAST(:org AS uuid),:actor,1)"
                 ),
                 values,
             )
             connection.execute(
                 text(
                     "INSERT INTO product_revisions(id,org_id,product_id,revision,data) "
-                    "VALUES(md5(:org||':parent-revision')::uuid,CAST(:org AS uuid),"
-                    "md5(:org||':parent')::uuid,1,"
+                    "VALUES(md5(:org||:parent_revision_suffix)::uuid,CAST(:org AS uuid),"
+                    "md5(:org||:parent_suffix)::uuid,1,"
                     "jsonb_build_object('name','Scale parent','vendor','Scale vendor','model','Scale model'))"
                 ),
                 values,
@@ -62,9 +70,9 @@ def seed_scale(admin_engine, tenants):
                 text(
                     "INSERT INTO feature_revisions(id,org_id,feature_id,product_id,revision,data,created_at) "
                     "SELECT md5(:org||':revision:'||n||':'||v)::uuid,CAST(:org AS uuid),"
-                    "md5(:org||':feature:'||n)::uuid,md5(:org||':parent')::uuid,v,"
+                    "md5(:org||':feature:'||n)::uuid,md5(:org||:parent_suffix)::uuid,v,"
                     "jsonb_build_object('name','Scale feature '||lpad(n::text,5,'0'),"
-                    "'product_id',md5(:org||':parent')::uuid,'description','Scale declaration',"
+                    "'product_id',md5(:org||:parent_suffix)::uuid,'description','Scale declaration',"
                     "'status',CASE WHEN n%3=0 THEN 'implemented' WHEN n%3=1 THEN 'planned' ELSE 'developing' END),"
                     "TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second'+v*interval '1 microsecond' "
                     "FROM generate_series(1,:roots) n CROSS JOIN generate_series(1,:revisions) v"

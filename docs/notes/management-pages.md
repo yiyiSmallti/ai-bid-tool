@@ -82,10 +82,22 @@ For direct SQL, tenant `WITH CHECK` rejects foreign or missing org context befor
 resource-state validation. The selection guard runs as a nondeferred AFTER trigger,
 after the existing immediate composite foreign keys. Invalid parent pointers
 therefore retain their FK rejection; every row that passes those keys still runs
-task authority and lifecycle checks before the statement completes. The existing
-BEFORE archive guard retains the task-first lock order. Missing-parent lookup
+task authority and lifecycle checks before the statement completes. The product's
+BEFORE archive guard and the feature's pure BEFORE task lock retain task-first
+locking; the feature archive check runs AFTER composite keys. Missing-parent lookup
 shortcuts must not skip these checks, because FK visibility can differ from an
 earlier ordinary lookup during concurrent or same-statement writes.
+
+An inactive historical pin cannot be reactivated: the retained-history trigger in
+[0023](../../server/migrations/versions/0023_screenshots.py) rejects that update
+before lifecycle checks, even for an authorized actor. New pin inserts pass the
+tenant, composite-key and authority checks before lifecycle rejection.
+
+Token issuance remains human-only in both the API and database. The additive
+[token creation scope guard](../../server/migrations/versions/0051_token_creation_scope.py)
+completes the existing domain-specific token scope checks; it validates existing
+rows without rewriting tokens. Lifecycle actions retain their separate human
+session gate and do not introduce an issuable lifecycle scope.
 
 ## Pitfalls
 

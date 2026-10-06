@@ -242,16 +242,27 @@ async def test_sql_inactive_feature_or_parent_rejects_insert_and_reactivation(
     async with application.state.db.transaction(org) as session:
         await set_actor_context(session, actor)
         await session.execute(text("UPDATE task_features SET active=false WHERE id=:pin"), params)
-    for sql in (
-        "UPDATE task_features SET active=true WHERE id=:pin",
-        "INSERT INTO task_features(id,org_id,task_id,feature_id,feature_revision_id,lot,active)"
-        " VALUES(:id,:org,:task,:root,:revision,'raw-new',true)",
+    # Retained selections cannot be reactivated even with an active library:
+    # the existing BEFORE history guard precedes the AFTER lifecycle guard.
+    for sql, sqlstate, message in (
+        (
+            "UPDATE task_features SET active=true WHERE id=:pin",
+            "42501",
+            "Historical selections cannot be reactivated; create a new selection",
+        ),
+        (
+            "INSERT INTO task_features(id,org_id,task_id,feature_id,feature_revision_id,lot,active)"
+            " VALUES(:id,:org,:task,:root,:revision,'raw-new',true)",
+            "23514",
+            "inactive feature or parent cannot receive a new pin",
+        ),
     ):
         with pytest.raises(DBAPIError) as failure:
             async with application.state.db.transaction(org) as session:
                 await set_actor_context(session, actor)
                 await session.execute(text(sql), params)
-        assert failure.value.orig.sqlstate == "23514"
+        assert failure.value.orig.sqlstate == sqlstate
+        assert failure.value.orig.diag.message_primary == message
 
 
 async def test_same_statement_feature_parents_still_require_pin_authority(

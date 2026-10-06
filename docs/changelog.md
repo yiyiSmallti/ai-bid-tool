@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Token scope and feature acceptance fixes
+
+- Added database rejection of `token:create` in migration `0051`, preserving the
+  existing human-only scope checks. This closes a gap that predates the feature
+  library slice; the API already rejected that scope for tokens.
+- Corrected feature storage acceptance to distinguish forbidden historical-pin
+  reactivation from an inactive resource's new-pin rejection, without changing
+  either production guard. See [selection guards](notes/management-pages.md#how-it-works).
+- Bound fixed-scale fixture suffixes as data so SQLAlchemy does not interpret
+  quoted `:parent` text as a missing parameter. Scale bounds and assertions remain
+  unchanged.
+
 ## 2026-10-06: Feature library management slice
 
 - Added feature prefix browse/search, same-org product and implementation-state
