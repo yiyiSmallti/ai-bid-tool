@@ -58,7 +58,11 @@ from app.schemas.score_contracts import (
 from app.services import confidential, drafts, redaction, score_inputs, score_normalization
 from app.services import response_cards as cards
 from app.services.auth import Identity
-from app.services.extraction import locate_quote, locate_source_citation_span
+from app.services.extraction import (
+    locate_quote,
+    locate_sent_source_quote,
+    locate_source_citation_span,
+)
 from app.services.score_inputs import RubricSnapshot
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
@@ -190,6 +194,7 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
             "location_original": item["source_original"],
             "source": item["source"],
             "sent": sent_text,
+            "sent_source": sent_payload["source_quote"],
             "safe_source": {
                 **item["source"],
                 "quote": sent_payload["source_quote"],
@@ -691,7 +696,7 @@ def _verified_requirement(
         citation.quote
     ):
         return None, "redacted_input_unresolved"
-    sent_quote, reason = locate_quote(binding["sent"], citation.quote)
+    sent_quote, reason = locate_sent_source_quote(binding["sent_source"], citation.quote)
     if sent_quote is None:
         return None, reason
     original_quote, reason = locate_quote(binding["original"], citation.quote)

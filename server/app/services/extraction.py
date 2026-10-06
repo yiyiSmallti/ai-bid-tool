@@ -76,6 +76,22 @@ def locate_quote(text: str, quote: str) -> tuple[str | None, str | None]:
     return (text[span[0] : span[1]], None) if span else (None, reason)
 
 
+def locate_sent_source_quote(sent_source: str, quote: str) -> tuple[str | None, str | None]:
+    """Match only the redacted source segment sent for a tender ref.
+
+    Callers keep this segment apart from summaries and location labels. Extraction
+    may prefer a word boundary, but a model citation still needs literal uniqueness
+    inside the segment, including overlapping or larger-token occurrences.
+    """
+    original_quote, reason = locate_quote(sent_source, quote)
+    if original_quote is None:
+        return None, reason
+    first = sent_source.find(original_quote)
+    if sent_source.find(original_quote, first + 1) >= 0:
+        return None, "ambiguous_quote"
+    return original_quote, None
+
+
 def locate_span(text: str, quote: str) -> tuple[tuple[int, int] | None, str | None]:
     """Offsets of the one original span the quote cites, or the rejection reason."""
     return locate_spans(text, (quote,))[quote]

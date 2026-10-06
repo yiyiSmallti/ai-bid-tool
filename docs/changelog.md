@@ -59,6 +59,19 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   wait for all material controls before reviewing them, and their API fixture
   includes the existing read-only extraction reasoning preview.
 
+## 2026-10-05: Model citations within the sent tender-source segment
+
+- Verify rubric citations against the redacted tender-source segment retained for each ref,
+  excluding requirement summaries and position labels from the sent-side match. Preserve original
+  and pinned-Source checks, and share the segment matcher with check and score semantic acceptance.
+  Summary/position-only quotations and repetitions within the source retain their rejection codes.
+- The dev run's remaining `invalid_overall_citation` came from the requirement summary repeating
+  the full Source quote in the assembled prompt ref, not from page-level repetition. The pinned-span
+  fix in #18 remains correct for repeated text elsewhere on a PDF page or Word block. See
+  [scoring pitfalls](notes/score.md#pitfalls) and [checking pitfalls](notes/check.md#pitfalls).
+- Add synthetic Chinese source-boundary tests and fake-Provider rubric/check/score regressions,
+  including two-stage overall citations and preserved Word locations and original spans.
+
 ## 2026-10-05: Model citations within pinned Source spans
 
 - Resolve rubric, check and score model citations inside the verified Requirement Source span,
