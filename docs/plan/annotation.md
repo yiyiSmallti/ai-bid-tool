@@ -4,7 +4,7 @@ kind: plan
 
 # Cloud evidence annotation jobs
 
-Status: **Pending approval, not implemented.** Corresponds to [roadmap](roadmap.md)
+Status: **Approved with all recommended defaults, not implemented.** Corresponds to [roadmap](roadmap.md)
 B05 and its B07/F03 dependencies.
 
 The owner's cloud-hosted team workflow direction supersedes the earlier, unimplemented
@@ -589,11 +589,11 @@ tests that merely repeat implementation.
 Draft validation is limited to ruff, format check, explicit pyright on the documentation
 module, import and schema consistency. No runtime implementation or migration is included.
 
-## Open decisions
+## Decisions
 
-Defaults below are recommendations for owner approval, not implemented decisions.
+The owner approved every recommended default; implementation follows these decisions.
 
-| Decision | Recommended default | Reason |
+| Decision | Approved default | Reason |
 | --- | --- | --- |
 | First source | Certificate EvidenceSource, one card/page; vendor slice follows | Complete common workflow with existing archive, without inventing profile files. |
 | Profile/contract attachments | Separate immutable archive contract before enablement | Current declarations provide no attachment storage/authorization chain. |

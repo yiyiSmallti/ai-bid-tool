@@ -1,4 +1,4 @@
-"""Review-only B05 server-job proposal; never imported or registered by runtime.
+"""Approved B05 server-job contract; never imported or registered by runtime.
 
 No routes, jobs, persistence, grants, renderer execution or confirmation occurs here.
 The schemas describe a candidate followed by a separately gated release rendition.
