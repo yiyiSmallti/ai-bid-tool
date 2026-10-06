@@ -61,6 +61,7 @@ from bid_cli.check import check_job_exit
 from bid_cli.client import Client, State, new_output_path, save_download
 from bid_cli.confidential import register as register_confidential_commands
 from bid_cli.export import app as export_app
+from bid_cli.management_products import register as register_management_product_commands
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
 from bid_cli.platform_credentials import app as platform_credential_app
@@ -1432,6 +1433,7 @@ app.add_typer(billing_app, name="billing")
 
 register_budget_commands(task_app, billing_app)
 register_team_workflow_commands(task_app, card_app)
+register_management_product_commands(product_app)
 register_requirement_confirmation_commands(req_app)
 
 
@@ -1623,9 +1625,12 @@ def main(args: list[str] | None = None):
             output_contract_version = "3.0"
             from app.schemas.compatibility import NEW_COMMANDS
 
+            from bid_cli.management_products import COMMAND_INPUTS as MANAGEMENT_PRODUCT_COMMANDS
+
             name = command_name(arguments)
             if (
                 name in NEW_COMMANDS
+                or name in MANAGEMENT_PRODUCT_COMMANDS
                 or name.startswith("assessment ")
                 or "--view" in arguments
                 or any(argument.startswith("--view=") for argument in arguments)

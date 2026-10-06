@@ -49,6 +49,8 @@ export const router = createRouter({
     { path: "/org/tasks/:taskId/score-rubrics/:rubricId", component: () => import("./views/OrgRubricReview.vue"), meta: { area: "org", title: "评分规则审阅", nav: "tasks" } },
     { path: "/org/tasks/:taskId/scores", component: () => import("./views/OrgScores.vue"), meta: { area: "org", title: "评分预估", nav: "tasks" } },
     { path: "/org/tasks/:taskId/scores/:reportId", component: () => import("./views/OrgScoreReport.vue"), meta: { area: "org", title: "评分报告", nav: "tasks" } },
+    { path: "/org/products", component: () => import("./views/OrgProducts.vue"), meta: { area: "org", title: "产品库", nav: "products" } },
+    { path: "/org/products/:productId", component: () => import("./views/OrgProduct.vue"), meta: { area: "org", title: "产品详情", nav: "products" } },
     { path: "/org/profiles", component: OrgProfiles, meta: { area: "org", title: "单位资料", nav: "profiles" } },
     { path: "/org/confidential", component: OrgConfidential, meta: { area: "org", title: "保密字段", nav: "confidential" } },
     { path: "/org/billing", component: OrgBilling, meta: { area: "org", admin: true, title: "余额与充值", nav: "billing" } },

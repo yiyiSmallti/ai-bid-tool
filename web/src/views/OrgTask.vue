@@ -85,6 +85,7 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
   <TaskNavigation :task-id="taskId" />
   <el-alert v-if="authority.access.value?.workflow.state === 'archived'" title="任务已归档，当前只能读取已有记录。" type="info" :closable="false" class="section" />
   <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><span>{{ task?.name ?? "任务" }}</span></nav>
+  <p v-if="authority.access.value"><RouterLink :to="{path:'/org/products',query:{task:taskId}}">前往产品库核对并选择精确修订</RouterLink></p>
   <div class="page-header">
     <div>
       <h2>{{ task?.name ?? "任务" }}</h2>
