@@ -43,6 +43,7 @@ RUBRIC = "00000000-0000-0000-0000-000000000005"
 SECTION = "00000000-0000-0000-0000-000000000006"
 ITEM = "00000000-0000-0000-0000-000000000007"
 REQUIREMENT = "00000000-0000-0000-0000-000000000008"
+SECOND_REQUIREMENT = "00000000-0000-0000-0000-000000000011"
 ACTOR = "00000000-0000-0000-0000-000000000009"
 JOB = "00000000-0000-0000-0000-000000000010"
 SHA = "a" * 64
@@ -107,7 +108,22 @@ SECTION_VIEW = {
     "included_in_overall_total": True,
     "ambiguity_reason": None,
     "review_domain": None,
-    "source": SOURCE,
+    "sources": [
+        {
+            "requirement_id": REQUIREMENT,
+            "source": SOURCE,
+            "quote": "Technical response quality: 0 to 10 points.",
+        },
+        {
+            "requirement_id": SECOND_REQUIREMENT,
+            "source": {
+                **SOURCE,
+                "page": 8,
+                "quote": "The technical response is scored from 0 to 10 points.",
+            },
+            "quote": "The technical response is scored from 0 to 10 points.",
+        },
+    ],
     "state": "candidate",
     "revision": 1,
     "confirmed_by": None,
@@ -493,7 +509,16 @@ def write_inputs(tmp_path: Path) -> dict[str, Path]:
             "sections": [
                 {
                     "source_section_id": SECTION,
-                    "requirement_id": REQUIREMENT,
+                    "sources": [
+                        {
+                            "requirement_id": REQUIREMENT,
+                            "quote": "Technical response quality: 0 to 10 points.",
+                        },
+                        {
+                            "requirement_id": SECOND_REQUIREMENT,
+                            "quote": "The technical response is scored from 0 to 10 points.",
+                        },
+                    ],
                     "key": "technical",
                     "title": "Technical response",
                     "order": 1,

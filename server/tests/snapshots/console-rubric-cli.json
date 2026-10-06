@@ -264,12 +264,21 @@
               "included_in_overall_total": true,
               "key": "technical",
               "order": 1,
-              "requirement_id": "00000000-0000-0000-0000-000000000008",
               "score_range": {
                 "maximum": "10",
                 "minimum": "0"
               },
               "source_section_id": "00000000-0000-0000-0000-000000000006",
+              "sources": [
+                {
+                  "quote": "Technical response quality: 0 to 10 points.",
+                  "requirement_id": "00000000-0000-0000-0000-000000000008"
+                },
+                {
+                  "quote": "The technical response is scored from 0 to 10 points.",
+                  "requirement_id": "00000000-0000-0000-0000-000000000011"
+                }
+              ],
               "title": "Technical response"
             }
           ]
@@ -689,12 +698,21 @@
               "included_in_overall_total": true,
               "key": "technical",
               "order": 1,
-              "requirement_id": "00000000-0000-0000-0000-000000000008",
               "score_range": {
                 "maximum": "10",
                 "minimum": "0"
               },
               "source_section_id": "00000000-0000-0000-0000-000000000006",
+              "sources": [
+                {
+                  "quote": "Technical response quality: 0 to 10 points.",
+                  "requirement_id": "00000000-0000-0000-0000-000000000008"
+                },
+                {
+                  "quote": "The technical response is scored from 0 to 10 points.",
+                  "requirement_id": "00000000-0000-0000-0000-000000000011"
+                }
+              ],
               "title": "Technical response"
             }
           ]

@@ -9,6 +9,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import func, literal, select, text, tuple_, union_all
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
 
 from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
@@ -40,12 +41,14 @@ from app.schemas.score_contracts import (
     RubricReviseRequest,
     RubricRevisionView,
     RubricSectionDecisionRequest,
+    RubricSectionRevisionInput,
     RubricSectionView,
     RubricSetDecisionRequest,
 )
 from app.services import drafts, score_generation, score_inputs, score_normalization
 from app.services import response_cards as cards
 from app.services.auth import Identity
+from app.services.extraction import locate_sent_source_quote
 from app.services.task_authorization import task_authorized
 from app.services.task_workflow import access as task_access
 from app.services.versioned import audit
@@ -72,6 +75,7 @@ async def get_set(
     if row is None:
         raise not_found()
     await require_dependencies(session, actor, row)
+    await require_section_sources(session, row)
     return actor, row
 
 
@@ -141,6 +145,98 @@ async def require_dependencies(session: AsyncSession, actor: Identity, row: Scor
                 "The fixed scoring source has changed or is no longer verifiable",
                 409,
             )
+
+
+def section_sources(row: ScoreRubricSection) -> list[dict[str, Any]]:
+    """Expand legacy snapshots in memory without rewriting their stored history."""
+    if row.sources is not None:
+        return row.sources
+    return [
+        {
+            "requirement_id": str(row.requirement_id),
+            "source": row.source,
+            "quote": row.source["quote"],
+        }
+    ]
+
+
+async def require_section_sources(session: AsyncSession, row: ScoreRubricSet) -> None:
+    """Re-resolve every section citation, including non-anchor requirements."""
+    sections = list(
+        await session.scalars(
+            select(ScoreRubricSection)
+            .options(
+                load_only(
+                    ScoreRubricSection.id,
+                    ScoreRubricSection.requirement_id,
+                    ScoreRubricSection.source,
+                    ScoreRubricSection.sources,
+                )
+            )
+            .where(
+                ScoreRubricSection.rubric_id == row.id,
+                ScoreRubricSection.org_id == row.org_id,
+                ScoreRubricSection.task_id == row.task_id,
+            )
+        )
+    )
+    requirement_ids = {
+        UUID(citation["requirement_id"])
+        for section in sections
+        for citation in section_sources(section)
+    }
+    requirements = {
+        requirement.id: requirement
+        for requirement in await session.scalars(
+            select(Requirement).where(Requirement.id.in_(requirement_ids))
+        )
+    }
+    chunks = {
+        chunk.id: chunk
+        for chunk in await session.scalars(
+            select(Chunk).where(
+                Chunk.id.in_({requirement.chunk_id for requirement in requirements.values()})
+            )
+        )
+    }
+    citations_valid = cards.citation_validity_batch(requirements.values(), chunks)
+    pinned = {entry["requirement_id"] for entry in row.input_manifest["requirements"]}
+    for section in sections:
+        sources = section_sources(section)
+        if (
+            not sources
+            or sources[0]["requirement_id"] != str(section.requirement_id)
+            or sources[0]["source"] != section.source
+        ):
+            cards.fail("rubric_input_changed", "The section source binding has changed", 409)
+        for citation in sources:
+            requirement = requirements.get(UUID(citation["requirement_id"]))
+            if (
+                requirement is None
+                or requirement.org_id != row.org_id
+                or requirement.task_id != row.task_id
+            ):
+                raise not_found()
+            chunk = chunks.get(requirement.chunk_id)
+            if (
+                chunk is None
+                or chunk.task_id != row.task_id
+                or chunk.document_id != row.document_id
+            ):
+                raise not_found()
+            if (
+                citation["requirement_id"] not in pinned
+                or requirement.job_id != row.extraction_job_id
+                or requirement.document_id != row.document_id
+                or requirement.category != "scoring"
+                or citation["source"] != cards.source(requirement)
+                or not citations_valid[requirement.id]
+                or locate_sent_source_quote(requirement.quote, citation["quote"])[0]
+                != citation["quote"]
+            ):
+                cards.fail(
+                    "rubric_input_changed", "The section citation is no longer verifiable", 409
+                )
 
 
 async def set_revision(session: AsyncSession, row: ScoreRubricSet) -> int:
@@ -250,6 +346,7 @@ async def coverage_view(session: AsyncSession, row: ScoreRubricCoverage) -> dict
 
 
 async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
+    await require_section_sources(session, row)
     sections = []
     for section in (
         await session.scalars(
@@ -277,9 +374,9 @@ async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
                         "cap",
                         "included_in_overall_total",
                         "ambiguity_reason",
-                        "source",
                     ),
                 ),
+                "sources": section_sources(section),
                 "aggregation_assessable": section.aggregation
                 in {"sum", "weighted_sum", "capped_sum"},
                 **await review_state(session, row, section_id=section.id),
@@ -1171,7 +1268,12 @@ async def revise_rubric(
         seen = set()
         for entry in replacements:
             source_id = getattr(entry, source_key)
-            if entry.requirement_id not in fixed_coverage:
+            requirements = (
+                [citation.requirement_id for citation in entry.sources]
+                if isinstance(entry, RubricSectionRevisionInput)
+                else [entry.requirement_id]
+            )
+            if any(requirement_id not in fixed_coverage for requirement_id in requirements):
                 cards.fail(
                     "invalid_requirement",
                     "Replacement may only use fixed scoring requirements",
@@ -1188,9 +1290,17 @@ async def revise_rubric(
                 seen.add(source_id)
                 if previous["review_domain"] != own_domain:
                     replacement = entry.model_dump(mode="json")
-                    if (
-                        any(replacement[key] != previous[key] for key in keys)
-                        or previous["source"] != fixed_coverage[entry.requirement_id]["source"]
+                    if any(replacement[key] != previous[key] for key in keys) or (
+                        replacement["sources"]
+                        != [
+                            {
+                                "requirement_id": citation["requirement_id"],
+                                "quote": citation["quote"],
+                            }
+                            for citation in previous["sources"]
+                        ]
+                        if isinstance(entry, RubricSectionRevisionInput)
+                        else previous["source"] != fixed_coverage[entry.requirement_id]["source"]
                     ):
                         cards.fail(
                             "forbidden",
@@ -1224,6 +1334,31 @@ async def revise_rubric(
         ):
             if body.model_dump(mode="json")[key] != current["rubric"][key]:
                 cards.fail("forbidden", "Only bidder may revise the overall aggregation", 403, 4)
+    verified_sources = {
+        (citation["requirement_id"], citation["quote"]): citation
+        for section in old_sections.values()
+        for citation in section["sources"]
+    }
+    for requirement_id, coverage in fixed_coverage.items():
+        source = coverage["source"]
+        verified_sources[(str(requirement_id), source["quote"])] = {
+            "requirement_id": str(requirement_id),
+            "source": source,
+            "quote": source["quote"],
+        }
+    selected_sources = {}
+    for entry in body.sections:
+        citations = []
+        for citation in entry.sources:
+            verified = verified_sources.get((str(citation.requirement_id), citation.quote))
+            if verified is None:
+                cards.fail(
+                    "invalid_revision_source",
+                    "Section citations must retain a verified quotation",
+                    409,
+                )
+            citations.append(verified)
+        selected_sources[entry.key] = citations
     version = (
         await session.scalar(
             select(func.max(ScoreRubricSet.version)).where(
@@ -1264,9 +1399,10 @@ async def revise_rubric(
     section_ids = {}
     for entry in body.sections:
         payload = entry.model_dump(mode="json", exclude={"source_section_id"})
-        payload["requirement_id"] = entry.requirement_id
+        payload["sources"] = selected_sources[entry.key]
+        payload["requirement_id"] = UUID(payload["sources"][0]["requirement_id"])
         payload["weight"] = entry.weight
-        payload["source"] = fixed_coverage[entry.requirement_id]["source"]
+        payload["source"] = payload["sources"][0]["source"]
         payload["cap"] = entry.cap
         section = ScoreRubricSection(
             id=uuid4(),

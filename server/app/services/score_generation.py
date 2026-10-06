@@ -769,10 +769,24 @@ def accept_structure(
     sections: list[dict] = []
     for section in output.sections:
         candidate = section.model_dump(mode="json")
-        requirement_id, reason = _candidate_requirement(section.citations, scope, outbound)
-        if reason is not None or requirement_id not in known:
-            cards.fail(
-                "invalid_section_citation", "A rubric section lacks a verified citation", 502, 4
+        sources = []
+        for citation in section.citations:
+            requirement_id, reason = _verified_requirement(citation, scope, outbound)
+            if reason is not None or requirement_id not in known:
+                cards.fail(
+                    "invalid_section_citation", "A rubric section lacks a verified citation", 502, 4
+                )
+            # Verification resolves normalized transport spelling to the exact
+            # original span. Keep that spelling for immutable review selections.
+            original_quote, _ = locate_quote(
+                outbound["refs"][citation.ref]["original"], citation.quote
+            )
+            sources.append(
+                {
+                    "requirement_id": requirement_id,
+                    "source": outbound["refs"][citation.ref]["source"],
+                    "quote": original_quote,
+                }
             )
         if not _safe_candidate_text(
             candidate,
@@ -783,8 +797,9 @@ def accept_structure(
             cards.fail("sensitive_model_output", "Rubric structure contains sensitive text", 409, 4)
         candidate.pop("citations")
         candidate |= {
-            "requirement_id": requirement_id,
-            "source": outbound["refs"][section.citations[0].ref]["source"],
+            "requirement_id": sources[0]["requirement_id"],
+            "source": sources[0]["source"],
+            "sources": sources,
             "citation_valid": True,
         }
         candidate["fingerprint"] = score_normalization.content_fingerprint("section", candidate)
@@ -1082,6 +1097,7 @@ async def publish(
             included_in_overall_total=candidate["included_in_overall_total"],
             ambiguity_reason=candidate["ambiguity_reason"],
             source=candidate["source"],
+            sources=candidate["sources"],
             fingerprint=candidate["fingerprint"],
             citation_valid=candidate["citation_valid"],
         )

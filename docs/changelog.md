@@ -6,6 +6,34 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Rubric section-source regression corrections
+
+- Authorize citation-window tasks before validating query fields or section source selectors.
+  Nonmembers and cross-org callers retain 404 responses even for malformed queries; authorized
+  callers retain normal input validation. See [task authority](plan/team-workflow.md#membership-ownership-and-authorization).
+- Keep section binding checks separate from expensive citation location during score publication.
+  The existing shared draft/rubric batch verifies each distinct Source pair once; insertion still
+  verifies every new section quotation strictly. See [scoring pitfalls](notes/score.md#pitfalls).
+- Correct the historical-report fixture to supply the required card-reopen reason, and align
+  source-drift regression checks with the existing immutable-input 404 behavior for both anchor
+  and additional section sources, as specified in [scoring citations](plan/score.md#citations-outbound-calls-and-confidentiality).
+
+## 2026-10-05: Multiple verified sources per rubric section
+
+- Apply owner-approved option A after the dev real-model rubric run reached `invalid_section_citation`
+  following #20: the `price` section separately cited the benchmark-price rule and price formula,
+  but the single-Requirement section gate rejected them as `cross_requirement_citation`. Sections
+  now preserve and independently verify every citation across pinned scoring Requirements; items
+  retain their single-Requirement contract, and joined or unverifiable citations still fail.
+- Add migration `0045` for ordered section sources, retaining legacy single-source reads, existing
+  FORCE RLS and immutable history, with database and application checks over every binding. Complete
+  human replacement may select/remove only verified pinned citations and cannot rewrite Source.
+- Update bounded console/assessment reads, indexed source context, rubric review/replacement UI,
+  CLI discovery and intentional snapshots. Advance rubric wire/prompt/cache identities so old queued
+  jobs require a fresh preview. See the [scoring contract](plan/score.md) and [mechanism](notes/score.md).
+- Add synthetic two-stage Provider, persisted review/confirmation, tenant-isolation and mocked browser
+  regressions for multiple sources, invalid second citations, joined text and source removal.
+
 ## 2026-10-05: Team workflow co-sign review and consumption gates
 
 - Implemented requirement co-sign policy and the starred-task rule, immutable

@@ -307,6 +307,10 @@ def test_candidate_rule_text_is_preserved_without_inferred_corrections():
         for key, value in accepted["sections"][0].items()
         if key in RubricSectionRevisionInput.model_fields
     }
+    section["sources"] = [
+        {key: source[key] for key in ("requirement_id", "quote")}
+        for source in accepted["sections"][0]["sources"]
+    ]
     item = {
         key: value
         for key, value in accepted["items"][0].items()
