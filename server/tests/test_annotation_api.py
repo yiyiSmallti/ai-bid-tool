@@ -240,7 +240,15 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
             )
             assert legacy.status_code == 400, legacy.text
         for url in (linked.json()["data"]["url"], release_link.json()["data"]["url"]):
-            tampered = await api.get(url + "changed", headers=headers[0])
+            # Change a character inside the token: base64 decoding ignores anything
+            # appended after its padding, so a suffix may leave the token intact.
+            base, signature = url.split("signature=", 1)
+            middle = len(signature) // 2
+            flipped = "B" if signature[middle] == "A" else "A"
+            tampered = await api.get(
+                f"{base}signature={signature[:middle]}{flipped}{signature[middle + 1 :]}",
+                headers=headers[0],
+            )
             assert tampered.status_code == 404
         reopened = await require_action(
             api, headers[0], approved_card, "reopen", reason="Review again."
