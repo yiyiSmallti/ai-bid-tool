@@ -122,9 +122,6 @@ memory CRUD and approval, budget mechanisms and public evaluation-set preparatio
 | Some drafting batches omit items, recorded as `missing_proposal` | Partial job completion; omitted requirements have no response cards | Rerun drafting to fill gaps; the job could automatically resubmit omitted items once |
 | Tender table rows without a name column are named “表 X 第 Y 行” | Simulated proposals have difficulty determining the category, reducing recall | Derive the name from the table title or preceding paragraph |
 | Some vendor official sites are unreachable from the worker network or have incomplete certificate chains | Only search excerpts can be used, or the vendor is omitted | Verify production-node networking; do not relax certificate validation |
-| The drafting cache key for requirements without a response card excludes the cited chunk content | A source text change without a card change can reuse a cached draft proposal | Include the cited chunk/block content hash in the no-card cache identity |
-| Worker logs emit Pydantic serialization warnings for `category` enum values | Noise in worker logs hides real warnings | Serialize the enum value explicitly where the job result is dumped |
-| Interrupted sandbox worker runs can leave `procrastinate_jobs` rows in `doing` with no matching application job | Stale queue rows persist after worker restarts | Reconcile stale queue rows at worker start against application job state |
 | With high reasoning, `glm-5.3-flash` can spend the 32,000-token output ceiling before answering a rubric structure request | The request ends as `provider_output_truncated` | Use low reasoning for rubric generation or raise `BID_LLM_MAX_OUTPUT_TOKENS` |
 
 ## Suggested order
