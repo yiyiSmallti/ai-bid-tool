@@ -107,6 +107,7 @@ SECTION_VIEW = {
     "cap": None,
     "included_in_overall_total": True,
     "ambiguity_reason": None,
+    "normalization_errors": [],
     "review_domain": None,
     "sources": [
         {
@@ -147,6 +148,7 @@ ITEM_VIEW = {
     "ambiguity_reason": None,
     "source": SOURCE,
     "fingerprint": SHA,
+    "normalization_errors": [],
     "review_domain": None,
     "state": "candidate",
     "revision": 1,

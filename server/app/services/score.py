@@ -429,6 +429,7 @@ async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
             }
         ).model_dump(mode="json")
         value.update(citation_valid=section.citation_valid, fingerprint=section.fingerprint)
+        value["normalization_errors"] = sorted(score_normalization.subject_errors("section", value))
         sections.append(value)
     items = []
     for item in (
@@ -465,6 +466,7 @@ async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
             }
         ).model_dump(mode="json")
         value["citation_valid"] = item.citation_valid
+        value["normalization_errors"] = sorted(score_normalization.subject_errors("item", value))
         items.append(value)
     coverage = [
         await coverage_view(session, entry)
@@ -1293,6 +1295,17 @@ async def rubric_history(
     ), items
 
 
+def same_revision_value(key: str, proposed: Any, stored: Any) -> bool:
+    """Compare candidate declarations against storage without confirmed-rule validation.
+
+    Range bounds are stored as JSON strings, so their spelling remains exact just
+    like rule text. Numeric columns compare Decimal values at database precision.
+    """
+    if key in {"score_range", "overall_score_range"} and proposed is not None:
+        proposed = {bound: str(value) for bound, value in proposed.items()}
+    return proposed == stored
+
+
 @review_denials
 async def revise_rubric(
     session: AsyncSession,
@@ -1338,8 +1351,23 @@ async def revise_rubric(
                 "Proposed canonical must reference another fixed scoring requirement",
                 409,
             )
-    old_sections = {UUID(entry["id"]): entry for entry in current["sections"]}
-    old_items = {UUID(entry["id"]): entry for entry in current["items"]}
+    # Compare against immutable stored declarations, not revalidated public views.
+    old_sections = {
+        entry.id: entry
+        for entry in await session.scalars(
+            select(ScoreRubricSection).where(ScoreRubricSection.rubric_id == prior.id)
+        )
+    }
+    old_items = {
+        entry.id: entry
+        for entry in await session.scalars(
+            select(ScoreRubricItem).where(ScoreRubricItem.rubric_id == prior.id)
+        )
+    }
+    domains = {
+        UUID(entry["id"]): entry["review_domain"]
+        for entry in [*current["sections"], *current["items"]]
+    }
     section_fields = (
         "key",
         "title",
@@ -1353,6 +1381,7 @@ async def revise_rubric(
         "ambiguity_reason",
     )
     item_fields = (
+        "requirement_id",
         "key",
         "title",
         "rule_text",
@@ -1389,19 +1418,24 @@ async def revise_rubric(
                         409,
                     )
                 seen.add(source_id)
-                if previous["review_domain"] != own_domain:
-                    replacement = entry.model_dump(mode="json")
-                    if any(replacement[key] != previous[key] for key in keys) or (
-                        replacement["sources"]
+                if domains[source_id] != own_domain:
+                    replacement = entry.model_dump()
+                    changed_sources = (
+                        entry.model_dump(mode="json")["sources"]
                         != [
                             {
                                 "requirement_id": citation["requirement_id"],
                                 "quote": citation["quote"],
                             }
-                            for citation in previous["sources"]
+                            for citation in section_sources(previous)
                         ]
-                        if isinstance(entry, RubricSectionRevisionInput)
-                        else previous["source"] != fixed_coverage[entry.requirement_id]["source"]
+                        if isinstance(previous, ScoreRubricSection)
+                        else previous.source
+                        != fixed_coverage[replacement["requirement_id"]]["source"]
+                    )
+                    if changed_sources or any(
+                        not same_revision_value(key, replacement[key], getattr(previous, key))
+                        for key in keys
                     ):
                         cards.fail(
                             "forbidden",
@@ -1409,11 +1443,11 @@ async def revise_rubric(
                             403,
                             4,
                         )
-                if source_key == "source_item_id":
-                    prior_section = old_sections[UUID(previous["section_id"])]
+                if isinstance(previous, ScoreRubricItem):
+                    prior_section = old_sections[previous.section_id]
                     if (
-                        previous["review_domain"] != own_domain
-                        and entry.model_dump(mode="json")["section_key"] != prior_section["key"]
+                        domains[source_id] != own_domain
+                        and entry.model_dump()["section_key"] != prior_section.key
                     ):
                         cards.fail(
                             "forbidden",
@@ -1422,8 +1456,7 @@ async def revise_rubric(
                             4,
                         )
         if any(
-            previous["review_domain"] != own_domain and source_id not in seen
-            for source_id, previous in originals.items()
+            domains[source_id] != own_domain and source_id not in seen for source_id in originals
         ):
             cards.fail("forbidden", "Replacement cannot remove other review domains", 403, 4)
     if actor.role != "bidder":
@@ -1433,12 +1466,12 @@ async def revise_rubric(
             "overall_score_range",
             "overall_cap",
         ):
-            if body.model_dump(mode="json")[key] != current["rubric"][key]:
+            if not same_revision_value(key, body.model_dump()[key], getattr(prior, key)):
                 cards.fail("forbidden", "Only bidder may revise the overall aggregation", 403, 4)
     verified_sources = {
         (citation["requirement_id"], citation["quote"]): citation
         for section in old_sections.values()
-        for citation in section["sources"]
+        for citation in section_sources(section)
     }
     for requirement_id, coverage in fixed_coverage.items():
         source = coverage["source"]

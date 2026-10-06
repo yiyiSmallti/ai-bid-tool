@@ -292,9 +292,17 @@ def _citation_location_key(value):
     return value
 
 
+class CitationValidityBatch(dict[UUID, bool]):
+    """One request's validity decisions and the exact source spans behind them."""
+
+    def __init__(self):
+        super().__init__()
+        self.source_spans: dict[str, dict[str, tuple[tuple[int, int] | None, str | None]]] = {}
+
+
 def citation_validity_batch(
     requirements: Iterable[Requirement], chunks: Mapping[UUID, Chunk]
-) -> dict[UUID, bool]:
+) -> CitationValidityBatch:
     """The scalar citation predicate, grouped by source rather than requirement UUID.
 
     Keep page and full Word-location bindings before matching. A block's ambiguity
@@ -305,7 +313,7 @@ def citation_validity_batch(
     from app.services.extraction import locate_spans
 
     grouped: dict[UUID, list[Requirement]] = defaultdict(list)
-    valid: dict[UUID, bool] = {}
+    valid = CitationValidityBatch()
     for requirement in requirements:
         grouped[requirement.chunk_id].append(requirement)
         valid[requirement.id] = False
@@ -329,7 +337,10 @@ def citation_validity_batch(
                 if location == requirement.location:
                     sources[block["text"]].append(requirement)
         for original, located in sources.items():
-            spans = locate_spans(original, (row.quote for row in located), require_verbatim=True)
+            spans = valid.source_spans.setdefault(original, {})
+            missing = {row.quote for row in located} - spans.keys()
+            if missing:
+                spans.update(locate_spans(original, missing, require_verbatim=True))
             for requirement in located:
                 if spans[requirement.quote][0] is not None:
                     valid[requirement.id] = True

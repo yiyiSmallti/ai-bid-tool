@@ -8,6 +8,7 @@ from authentication are retained. Run with an explicitly supplied bid_test DB.
 """
 
 import asyncio
+import fcntl
 import json
 from contextlib import asynccontextmanager, suppress
 from datetime import UTC, datetime, timedelta
@@ -37,6 +38,45 @@ INVALIDATION = {
 
 
 def artifact(name, value):
+    if "api_elapsed_seconds" in value:
+        elapsed = value["api_elapsed_seconds"]
+        value = {
+            **value,
+            "latency_observation": {
+                "target_seconds": 0.5,
+                "target_met": elapsed <= 0.5,
+                "ci_contract_limit_seconds": 2,
+                "ci_contract_limit_met": elapsed <= 2,
+                "ci_projection_sql_limit": 20,
+                "enforcement": "existing 2 second and 20 statement assertions",
+            },
+        }
+        summary_path = (
+            Path(__file__).resolve().parents[2] / "data/work/b02-latency/runtime-board-summary.json"
+        )
+        summary_path.parent.mkdir(parents=True, exist_ok=True)
+        with summary_path.open("a+") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            handle.seek(0)
+            content = handle.read()
+            summary = (
+                json.loads(content)
+                if content
+                else {"kind": "database_board_latency_observations", "fixtures": {}}
+            )
+            scope = value["fixture"]
+            summary["fixtures"][name] = {
+                "requirement_count": scope["count"],
+                "chunk_count": scope["chunk_count"],
+                "status": value["status"],
+                "api_elapsed_seconds": elapsed,
+                "database_backed_api_executed": value["database_backed_api_executed"],
+                "projection_sql_count": value.get("projection_sql_count"),
+                "latency_observation": value["latency_observation"],
+            }
+            handle.seek(0)
+            handle.truncate()
+            handle.write(json.dumps(summary, indent=2) + "\n")
     destination = ARTIFACTS / name
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(json.dumps(value, indent=2, default=str) + "\n")

@@ -119,6 +119,7 @@ async def board(session, actor, task_id, query, storage, settings):
         BoardQuery(extraction_job_id=query.extraction_job_id, limit=100),
         storage,
         settings,
+        review_details=True,
     )
     inputs = session.info["requirement_board_inputs"]
     reviews = session.info["board_requirement_reviews"]

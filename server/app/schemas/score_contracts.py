@@ -153,6 +153,7 @@ class RubricSectionView(Contract):
     ambiguity_reason: NonBlank | None = None
     review_domain: ReviewDomain | None = None
     sources: list[RubricSectionSource] = Field(min_length=1)
+    normalization_errors: list[str] = Field(default_factory=list)
     state: RubricItemState
     revision: int = Field(ge=1)
     confirmed_by: UUID | None = None
@@ -203,6 +204,7 @@ class RubricItemView(Contract):
     ambiguity_reason: NonBlank | None = None
     source: Source
     fingerprint: Sha256
+    normalization_errors: list[str] = Field(default_factory=list)
     review_domain: ReviewDomain | None = None
     state: RubricItemState
     revision: int = Field(ge=1)
@@ -362,6 +364,8 @@ class RubricReportData(Contract):
 
 
 class RubricSectionRevisionInput(Contract):
+    """A candidate replacement; semantic errors remain confirmation blockers."""
+
     source_section_id: UUID | None = None
     sources: list[RubricSectionSourceSelection] = Field(min_length=1)
     key: NonBlank
@@ -369,22 +373,16 @@ class RubricSectionRevisionInput(Contract):
     order: int = Field(ge=1)
     aggregation: AggregationRule
     aggregation_rule_text: VerbatimRule | None = None
-    score_range: ScoreRange | None = None
-    weight: Weight | None = None
-    cap: Money | None = None
+    score_range: CandidateScoreRange | None = None
+    weight: CandidateScoreNumber | None = None
+    cap: CandidateScoreNumber | None = None
     included_in_overall_total: bool
     ambiguity_reason: NonBlank | None = None
 
-    @model_validator(mode="after")
-    def cap_matches_aggregation(self) -> Self:
-        if (self.aggregation == "capped_sum") != (self.cap is not None):
-            raise ValueError("only capped_sum requires a cap")
-        if self.aggregation in {"formula", "non_additive"} and self.aggregation_rule_text is None:
-            raise ValueError("unsupported aggregation rules require their fixed original wording")
-        return self
-
 
 class RubricItemRevisionInput(Contract):
+    """Retain typed candidate values while a responsible human repairs their domain."""
+
     source_item_id: UUID | None = None
     requirement_id: UUID
     section_key: NonBlank
@@ -393,17 +391,9 @@ class RubricItemRevisionInput(Contract):
     rule_text: VerbatimRule
     order: int = Field(ge=1)
     assessment_mode: AssessmentMode
-    score_range: ScoreRange | None = None
-    weight: Weight | None = None
+    score_range: CandidateScoreRange | None = None
+    weight: CandidateScoreNumber | None = None
     ambiguity_reason: NonBlank | None = None
-
-    @model_validator(mode="after")
-    def assessment_fields_are_explicit(self) -> Self:
-        if self.assessment_mode == "model_assessable" and self.score_range is None:
-            raise ValueError("model-assessable items require score bounds")
-        if self.assessment_mode != "model_assessable" and self.ambiguity_reason is None:
-            raise ValueError("non-model items require an explicit reason")
-        return self
 
 
 class RubricCoverageRevisionInput(Contract):
@@ -436,8 +426,8 @@ class RubricReviseRequest(Contract):
     coverage: list[RubricCoverageRevisionInput] = Field(min_length=1)
     overall_aggregation: AggregationRule
     overall_rule_text: VerbatimRule | None = None
-    overall_score_range: ScoreRange | None = None
-    overall_cap: Money | None = None
+    overall_score_range: CandidateScoreRange | None = None
+    overall_cap: CandidateScoreNumber | None = None
     reason: NonBlank
 
     @model_validator(mode="after")
@@ -455,13 +445,6 @@ class RubricReviseRequest(Contract):
             raise ValueError("every rubric item must name a section in this revision")
         if not {key for entry in self.coverage for key in entry.rubric_item_keys} <= set(item_keys):
             raise ValueError("coverage may only name rubric item keys in this revision")
-        if (self.overall_aggregation == "capped_sum") != (self.overall_cap is not None):
-            raise ValueError("only capped_sum requires an overall cap")
-        if (
-            self.overall_aggregation in {"formula", "non_additive"}
-            and self.overall_rule_text is None
-        ):
-            raise ValueError("unsupported overall aggregation requires its fixed original wording")
         return self
 
 

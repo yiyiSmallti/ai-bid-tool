@@ -676,7 +676,9 @@ def matches(row, query, actor, *, bucket=True, mentioned=False):
     )
 
 
-async def board(session, actor, task_id, query: BoardQuery, storage, settings):
+async def board(
+    session, actor, task_id, query: BoardQuery, storage, settings, *, review_details=False
+):
     task, workflow, member = await task_workflow.access(session, actor, task_id)
     actor.require("card:read")
     actor.require("job:read")
@@ -716,7 +718,9 @@ async def board(session, actor, task_id, query: BoardQuery, storage, settings):
         if query.cursor
         else None
     )
-    views = await load(session, actor, requirements, task_id, as_of.date())
+    views = await load(
+        session, actor, requirements, task_id, as_of.date(), review_details=review_details
+    )
     reviewers = list(
         await session.execute(
             select(TaskMember, Membership.role)
@@ -837,7 +841,7 @@ async def board(session, actor, task_id, query: BoardQuery, storage, settings):
                 assignment,
                 session.info["board_requirement_citations"][requirement.id],
             )
-            if review.state != "confirmed"
+            if review_details and review.state != "confirmed"
             else None
         )
         if requirement_consumption.gap_reason(review):

@@ -63,6 +63,11 @@ prototype and co-sign gates remain independent.
 The opt-in board places pending review in `requirement_review`, names the eligible
 assignee/owner or recovery action, and keeps response completion separate. Legacy
 boards retain their existing enums and show pending requirement review as a gap.
+Default-board state reads skip full pins only for missing or nonconfirmed review
+metadata; confirmed rows still recheck current meaning, complete source and policy.
+Explicit requirement-review views and all preparation/consumption manifests retain
+full current hashes. Both board paths reuse the exact citation batch's source spans
+within the same read, without changing PDF page or complete Word-location matching.
 Metadata-only durable task events invalidate snapshots in the committing
 transaction; audit payloads contain IDs and hashes, never reasons or quotations.
 Source-invalidation audit binding includes the actual savepoint writer transaction,

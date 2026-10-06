@@ -20,7 +20,51 @@ from app.services.extraction import locate_source_citation_span, locate_spans, s
 POLICY = "requirement-source-v1"
 
 
-def canonical(value):
+_FAST_JSON_ATOMS = frozenset((str, int, bool, type(None), UUID))
+
+
+def _uses_standard_json_numbers(value):
+    """Keep floats, Decimal and unusual keys on the frozen decimal encoder."""
+    pending = [value]
+    containers = set()
+    while pending:
+        current = pending.pop()
+        kind = type(current)
+        if kind in _FAST_JSON_ATOMS or isinstance(current, str):
+            continue
+        if kind is dict or kind is list or kind is tuple:
+            # Repeated containers include cycles. Let the original encoder keep
+            # its established behavior instead of looping in this fast scan.
+            identity = id(current)
+            if identity in containers:
+                return False
+            containers.add(identity)
+        if kind is dict:
+            if any(type(key) is not str for key in current):
+                return False
+            pending.extend(current.values())
+        elif kind is list or kind is tuple:
+            pending.extend(current)
+        else:
+            return False
+    return True
+
+
+def canonical(value) -> str:
+    """Same canonical bytes, with C JSON encoding for ordinary non-float data."""
+    if _uses_standard_json_numbers(value):
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+            default=str,
+            allow_nan=False,
+        )
+    return _canonical_precise(value)
+
+
+def _canonical_precise(value) -> str:
     """Canonical JSON with decimal numbers shared with PostgreSQL jsonb."""
     if value is None or isinstance(value, (str, bool)):
         return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
@@ -34,12 +78,15 @@ def canonical(value):
     if isinstance(value, dict):
         return (
             "{"
-            + ",".join(canonical(str(key)) + ":" + canonical(value[key]) for key in sorted(value))
+            + ",".join(
+                _canonical_precise(str(key)) + ":" + _canonical_precise(value[key])
+                for key in sorted(value)
+            )
             + "}"
         )
     if isinstance(value, (list, tuple)):
-        return "[" + ",".join(canonical(item) for item in value) + "]"
-    return canonical(str(value))
+        return "[" + ",".join(_canonical_precise(item) for item in value) + "]"
+    return _canonical_precise(str(value))
 
 
 def digest(value):
@@ -257,8 +304,12 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
                 unresolved[located].append(req)
         else:
             unresolved[located].append(req)
+    shared_spans = getattr(citation_validity, "source_spans", {})
     for located, items in unresolved.items():
-        spans = locate_spans(located, [r.quote for r in items])
+        spans = shared_spans.get(located, {})
+        missing = {r.quote for r in items if r.quote not in spans}
+        if missing:
+            spans = {**spans, **locate_spans(located, missing)}
         for req in items:
             pins[req.id] = make_pin(
                 source_of(req),
@@ -283,5 +334,72 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
             old.confirmed_by_user_id if old and state == "confirmed" else None,
             old.confirmed_at if old and state == "confirmed" else None,
             old,
+        )
+    return result
+
+
+@dataclass
+class ReviewStateSummary:
+    """Board-only status; intentionally cannot supply a consumption hash or pin."""
+
+    state: str
+    revision: int
+    citation_valid: bool
+    confirmed_by_user_id: UUID | None = None
+    confirmed_at: object = None
+    stored: RequirementReview | None = None
+
+    @property
+    def confirmed(self):
+        return self.state == "confirmed"
+
+
+def _state_summary(value):
+    return ReviewStateSummary(
+        value.state,
+        value.revision,
+        value.citation_valid,
+        value.confirmed_by_user_id,
+        value.confirmed_at,
+        value.stored,
+    )
+
+
+async def effective_review_states(session, requirements, *, citation_validity=None):
+    """Project board states from one fresh review batch and caller-owned citations.
+
+    The board supplies requirements and citation results from its repeatable-read
+    snapshot. Only stored confirmations need full live input/hash verification.
+    No result here can be used as a review/consumption manifest; those callers use
+    effective_reviews. Without caller citations, use the complete path as before.
+    """
+    if not requirements:
+        return {}
+    if citation_validity is None:
+        complete = await effective_reviews(session, requirements)
+        return {key: _state_summary(value) for key, value in complete.items()}
+    stored = {
+        row.requirement_id: row
+        for row in (
+            await session.scalars(
+                select(RequirementReview)
+                .where(RequirementReview.requirement_id.in_([r.id for r in requirements]))
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+    }
+    confirmed = [r for r in requirements if r.id in stored and stored[r.id].state == "confirmed"]
+    complete = await effective_reviews(session, confirmed, citation_validity=citation_validity)
+    result = {}
+    for req in requirements:
+        if req.id in complete:
+            result[req.id] = _state_summary(complete[req.id])
+            continue
+        row = stored.get(req.id)
+        result[req.id] = ReviewStateSummary(
+            row.state if row is not None else "legacy_unconfirmed",
+            row.revision if row is not None else 1,
+            bool(citation_validity.get(req.id, False)),
+            stored=row,
         )
     return result
