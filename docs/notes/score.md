@@ -36,8 +36,8 @@ item is unassessable, a provider batch is incomplete, or a complete total cannot
 ## How it works
 
 The rubric input fixes one organization, task, successful extraction job, document, and the complete
-set of scoring requirements from that extraction. The generation provider receives only the verified
-source text for those requirements after configured redaction. It creates candidates and cannot
+set of scoring requirements from that extraction. The generation provider receives the verified
+source text with requirement summaries and position metadata after configured redaction. It creates candidates and cannot
 confirm, classify, revise, or exclude anything.
 
 Rubric sets, sections, items, requirement coverage, normalized coverage links, and append-only review
@@ -118,6 +118,26 @@ aggregates are stored on the immutable report; item support and citations use se
 
 ## Pitfalls
 
+Section aggregation can depend on several scoring Requirements. Each section therefore exposes an
+ordered `sources` list containing each verified Requirement, immutable Source and exact original
+quotation, under the [owner-approved option A rule](../plan/score.md#rubric-versions-coverage-and-human-confirmation-人工确认).
+Every citation is checked against the sent source segment, original text and pinned span before
+stage 2. A bad citation fails the whole structure; a single quotation joining two Requirements is
+still invalid. Item citations must all bind the same single Requirement.
+
+Migration [`0046_score_section_sources.py`](../../server/migrations/versions/0046_score_section_sources.py)
+adds the list to the existing immutable, FORCE-RLS section table. Old NULL lists read as one legacy
+source without rewriting history. Confirmation and report reads resolve every source again. Human
+replacement selects verified `{requirement_id, quote}` pairs, keeps at least one, and never supplies
+Source JSON. The console displays all entries and opens each saved citation by index. The wire and
+preview identity change requires old queued jobs to be resubmitted; no stale preview is reused.
+
+Database section insertion verifies each distinct quoted span and its live Requirement citation.
+Publication rechecks the immutable section bindings and exact quotation spans against the pinned
+Source, while the shared Requirement batch locates live source text once per distinct text/quote
+pair across draft and rubric inputs. Binding checks do not repeat that source lookup; fixed-input
+hashes and the final live batch still reject source drift, without caching validity across calls.
+
 A complete rubric means that it covers the scoring requirements saved by the specified extraction.
 It does not prove that extraction found every scoring rule in the tender. Generation never scans the
 document or adjacent chunks to discover missing requirements.
@@ -129,6 +149,23 @@ Rubric confirmation and advisory scoring do not modify response cards (响应卡
 confidential values, or produce an official tender score. The boundaries are fixed in the
 [score contract](../plan/score.md). Formula text is retained as text and is never evaluated.
 Rejected or ambiguous model citations are not repaired into another source.
+
+Model citation uniqueness is relative to the pinned `Source.quote`, not every sentence on its
+PDF page or Word block. [`locate_source_citation_span`](../../server/app/services/extraction.py)
+first locates the full Source with the extraction boundary preference, then locates the citation
+only inside that original span and maps its offsets back to the page/block. A repeated sentence
+outside the Source does not invalidate the citation. An absent or ambiguous Source, an out-of-span
+citation, or a citation repeated within the Source still fails with the existing location reason.
+Rubric generation and score execution share this check; sent-text verification remains required.
+
+Sent-side tender verification must use the redacted `source_quote` segment retained as
+`sent_source`, through [`locate_sent_source_quote`](../../server/app/services/extraction.py).
+A rubric ref also carries the requirement summary and source-position labels; those fields can
+repeat a valid quotation or contain words absent from the tender. Searching the assembled ref can
+therefore reject a valid citation as ambiguous. A quote found only in the summary or position text
+fails with `quote_not_at_position`; repetitions within the sent source segment fail with
+`ambiguous_quote`. Score execution keeps normalized rules and metadata in separate refs and uses
+the same tender-segment matcher. Original-quote and pinned-span checks remain independent gates.
 
 Provider JSON shape validation must not enforce confirmed-rule semantics. A formula section with
 `cap: 35`, or a `capped_sum` section with an explicit null cap, is a reviewable candidate with

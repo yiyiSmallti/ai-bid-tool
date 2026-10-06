@@ -567,6 +567,8 @@ async def card_view(
     revision: ResponseCardRevision,
     requirement: Requirement,
     storage: Storage | None = None,
+    *,
+    requirement_review_gate: bool = True,
 ) -> dict:
     material_rows = await linked_evidence(session, revision.id)
     evidence = [await evidence_view(session, actor, row) for row in material_rows]
@@ -584,8 +586,12 @@ async def card_view(
     if memory_warning:
         image_warnings.add(memory_warning)
     valid_citation = await citation_valid(session, requirement)
-    reviews = await requirement_consumption.effective(
-        session, [requirement], citations={requirement.id: valid_citation}
+    reviews = (
+        await requirement_consumption.effective(
+            session, [requirement], citations={requirement.id: valid_citation}
+        )
+        if requirement_review_gate
+        else {}
     )
     view = card_view_data(
         card,
@@ -597,7 +603,7 @@ async def card_view(
         invalid_image,
         image_warnings,
         memory_lineage,
-        requirement_review=reviews[requirement.id],
+        requirement_review=reviews.get(requirement.id),
     )
     from app.services import task_cosign
 
@@ -833,7 +839,7 @@ class CardReadBatch:
     _citations: dict[UUID, bool] = field(default_factory=dict)
     _evidence: dict[UUID, dict] = field(default_factory=dict)
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
-    _views: dict[UUID, dict] = field(default_factory=dict)
+    _views: dict[tuple[UUID, bool], dict] = field(default_factory=dict)
     memory_epoch: int = 0
     cosign: dict[UUID, dict] = field(default_factory=dict)
     requirement_reviews: dict = field(default_factory=dict)
@@ -1060,9 +1066,15 @@ class CardReadBatch:
         return self._generation_stale[job_id]
 
     def card_view(
-        self, card: ResponseCard, revision: ResponseCardRevision, requirement: Requirement
+        self,
+        card: ResponseCard,
+        revision: ResponseCardRevision,
+        requirement: Requirement,
+        *,
+        requirement_review_gate: bool = True,
     ) -> dict:
-        if revision.id not in self._views:
+        key = (revision.id, requirement_review_gate)
+        if key not in self._views:
             rows = self.links.get(revision.id, [])
             evidence = [self.evidence_view(row) for row in rows]
             images = [self.image(row) for row in rows if row.kind == "image_region"]
@@ -1072,7 +1084,7 @@ class CardReadBatch:
                 else {}
             )
             warning = memory_warning_for(revision, manifest, self.memory_epoch)
-            self._views[revision.id] = card_view_data(
+            self._views[key] = card_view_data(
                 card,
                 revision,
                 requirement,
@@ -1083,11 +1095,13 @@ class CardReadBatch:
                 {code for _, warnings, _ in images for code in warnings}
                 | ({warning} if warning else set()),
                 memory_lineage_for(manifest, requirement.id),
-                requirement_review=self.requirement_reviews[requirement.id],
+                requirement_review=self.requirement_reviews[requirement.id]
+                if requirement_review_gate
+                else None,
             )
         from app.services import task_cosign
 
-        return task_cosign.apply_eligibility(self._views[revision.id], self.cosign[card.id])
+        return task_cosign.apply_eligibility(self._views[key], self.cosign[card.id])
 
 
 async def append_revision(

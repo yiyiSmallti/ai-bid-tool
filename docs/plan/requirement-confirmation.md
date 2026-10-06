@@ -355,7 +355,14 @@ not only Python enums. Extend response confirmation/disposition triggers, rubric
 confirmation, `score_inputs_current`, `score_report_gate` and `score_publication_complete`
 from [0039_fast_citation_locate.py](../../server/migrations/versions/0039_fast_citation_locate.py).
 Preserve later `rubric_shape_complete` changes in
-[0044_score_rubric_candidates.py](../../server/migrations/versions/0044_score_rubric_candidates.py).
+[0044_score_rubric_candidates.py](../../server/migrations/versions/0044_score_rubric_candidates.py)
+and every ordered section-source binding in
+[0046_score_section_sources.py](../../server/migrations/versions/0046_score_section_sources.py).
+Requirement-level gap reasons precede the specific response/material/citation cause;
+the gap reason `cosign_required` and export blocker `export_cosign_required` remain
+exclusive to multi-domain policies.
+Whole-rubric and score acceptance check every section source as well as all fixed
+scoring requirements, reusing the loaded review batch and existing citation verifier.
 Preparation-time `rubric_current_inputs` cannot globally require confirmation, since it
 also validates unconfirmed rubric preparation. Extend `GapReason`, `CardEligibility`,
 board enums and client renderers in one compatible rollout.
@@ -365,7 +372,9 @@ content and the consumer-specific review manifest at submission, each paid admis
 and publication. Changes after dispatch still settle sent calls through `JobExecution`;
 they cannot publish stale accepted output or erase actual cost. Historical reads return
 validity metadata, not blanket 404 because an input is now stale. Actual authorization
-loss still follows current 404/403 boundaries.
+loss still follows current 404/403 boundaries. Scoring Source identity resolution follows
+the [scoring citation contract](score.md#citations-outbound-calls-and-confidentiality);
+identity-preserving classification or verification drift remains readable as stale.
 
 ## Dashboard, progress and console outline
 

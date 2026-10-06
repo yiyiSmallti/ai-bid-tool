@@ -13,7 +13,7 @@ const errorMessages = {
   incomplete_response: "响应种类、正文、偏离和说明都需要填写，说明不能只写“满足”", missing_evidence: "证据响应至少需要关联一项材料才能确认",
   unexpected_evidence: "承诺不能关联证据材料", review_mismatch: "请逐项勾选本修订关联的全部材料", warning_review_required: "请勾选全部警示并填写处理理由",
   revision_conflict: "修订已被他人更新，请重新读取", stale_material: "所选材料已变化，需要重新核对", invalid_citation: "招标原文引用无效",
-  needs_reconfirmation: "引用修复后需要重新确认", stale_card: "卡片需要按当前要求重新确认", not_parsed: "请先完成文档解析再抽取要求",
+  needs_reconfirmation: "当前要求需要重新核对并确认", stale_card: "卡片需要按当前要求重新确认", not_parsed: "请先完成文档解析再抽取要求",
   insufficient_balance: "余额不足，请联系单位管理员", generation_input_changed: "预检后输入、模型或价格已变化，请重新预检",
   generation_model_changed: "模型目录已变化，请重新预检", generation_rules_changed: "起草规则已变化，请重新预检", draft_input_changed: "输入已变化，请重新预检后提交",
   unsupported_reasoning: "所选推理档位不受支持", provider_unavailable: "模型服务不可用", invalid_document: "只支持可读取、未加密且在大小限制内的 PDF 或 DOCX",

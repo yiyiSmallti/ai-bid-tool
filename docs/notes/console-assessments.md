@@ -51,6 +51,11 @@ The response ends before an oversized next row and carries a continuation cursor
 A single row exceeding that ceiling fails visibly without truncating its verified text.
 Citation reads traverse a saved authorized entry and verify the entire saved quote,
 then expose a window of at most 8,000 Unicode characters with absolute quote offsets.
+Rubric sections expose every saved source binding and its selected quote. Their
+`origin=sources` traversal selects a zero-based `citation_index`, re-resolves the
+pinned Requirement and canonical Source, and verifies the selected quote at that
+location. Items and coverage retain single-source traversal. Every section source
+contributes to the encoded row limit; sources and quotes are never silently removed.
 No arbitrary document, URL or supplied quote is accepted as a citation source.
 
 The console sends assessment and associated job requests through `/v4/` to retain real
@@ -60,7 +65,10 @@ Org reset aborts requests, invalidates the response epoch and clears unsaved ass
 state. Reasons and replacement content are never persisted in browser navigation storage.
 
 The full replacement editor loads every page before allowing edits to be saved. It retains
-source identities and other-domain content, compares changes with that baseline and
+source identities and other-domain content. Section source selectors can be kept,
+removed or added from the pinned requirements, with at least one retained; the editor
+sends only requirement IDs and selected quotes, never rewritten Source objects. It
+compares changes with that baseline and
 bounds the serialized replacement to 512 KiB. Revision proposals are read separately
 from the current baseline; applying a pending coverage proposal still requires a human
 decision. Whole-set and full-replacement mutations can return compact console receipts

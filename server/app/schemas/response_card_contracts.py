@@ -26,7 +26,7 @@ type GapReason = Literal[
     "unclassified",
     "stale_material",
     "invalid_citation",
-    # The card was confirmed against a quote that citation repair later changed.
+    # The reviewed inputs or single-domain approval require renewed human review.
     "needs_reconfirmation",
     "cosign_required",
     "requirement_unconfirmed",

@@ -27,7 +27,7 @@ def content_fingerprint(kind: str, payload: dict) -> str:
             "cap",
             "included_in_overall_total",
             "ambiguity_reason",
-            "source",
+            "sources",
         )
     )
     if kind not in {"section", "item"}:
@@ -42,6 +42,8 @@ def content_fingerprint(kind: str, payload: dict) -> str:
             return format(Decimal(str(value)).normalize(), "f")
         if isinstance(value, dict):
             return {name: canonical(child, name) for name, child in value.items()}
+        if isinstance(value, list):
+            return [canonical(child) for child in value]
         if isinstance(value, str):
             return " ".join(unicodedata.normalize("NFKC", value).split())
         if isinstance(value, UUID):

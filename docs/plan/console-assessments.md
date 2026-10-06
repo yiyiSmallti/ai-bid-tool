@@ -286,16 +286,21 @@ arbitrary formulas, or claim confirmation guarantees an available score total.
 Revision opens a structured **full replacement** editor, with sections/items/coverage
 and overall rule. Load every page for one unchanged set revision/snapshot before
 enabling save. Paged review must never submit just the current page as replacement.
-Retain `source_section_id`/`source_item_id`, keys and pinned requirement identities;
-derive Source from the server-owned requirement, not an editable quote. Comparison
+Retain `source_section_id`/`source_item_id`, keys and pinned requirement identities.
+Section `sources` selects verified `{requirement_id, quote}` pairs, retaining at least
+one; the server derives each immutable Source. Items retain one requirement identity.
+Quotations are selected from verified bindings, never edited. Comparison
 shows added/removed/changed content. A technical reviewer may edit only their permitted
 domain and must retain the overall rule and other-domain content exactly; a bid
 specialist has the corresponding commercial boundary and may revise the overall rule.
 Unclassified content follows the actual `revise_rubric` gate, not a client assumption.
 
-`ConsoleRubricSectionView` adds the persisted section `requirement_id` to the existing
-section view, which omits it. Do not infer that ID by matching source text: more than
-one requirement may cite the same location. Build the current editing baseline from
+`ConsoleRubricSectionView` inherits the complete ordered `sources` list, with each
+Requirement, original Source and verified quotation, under the
+[section multi-citation amendment](score.md#rubric-versions-coverage-and-human-confirmation-人工确认).
+Show all entries and use `origin=sources&citation_index=N` for each section citation's
+context; items and coverage retain `origin=source`. Do not infer Requirement IDs by
+matching source text: more than one Requirement may cite the same location. Build the current editing baseline from
 this complete same-snapshot section/item/coverage graph and current summary revision,
 hash and overall rule; this works for generated first versions without revision events.
 Other-domain and unclassified existing content must be preserved exactly under

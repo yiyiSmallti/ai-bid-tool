@@ -131,7 +131,14 @@ async def test_check_keyset_does_not_fetch_full_show_and_cursors_bind_filters(
 from test_score_api import rubric_case as rubric_case  # noqa: E402
 from test_score_api import rubric_counts  # noqa: E402
 from test_score_api import rubric_input_case as rubric_input_case  # noqa: E402
-from test_score_review import base, confirm_contents, decision, replacement  # noqa: E402
+from test_score_review import (  # noqa: E402
+    base,
+    classify_all,
+    confirm_contents,
+    decision,
+    replacement,
+)
+from test_score_review import many_rubric_case as many_rubric_case  # noqa: E402
 from test_score_run import counts as score_counts  # noqa: E402
 from test_score_run import finish_score, preview_score, submit_score  # noqa: E402
 from test_score_run import score_case as score_case  # noqa: E402
@@ -242,7 +249,8 @@ async def test_rubric_and_score_source_windows_bind_exact_parent_graph(score_cas
         ("coverage", "coverage"),
     ):
         row = case["rubric"][collection][0]
-        path = f"/v4/tasks/{case['task']}/assessment-citation?parent_kind=rubric&parent_id={rubric}&part={part}&entry_id={row['id']}&limit=1"
+        origin = "sources" if part == "rubric_section" else "source"
+        path = f"/v4/tasks/{case['task']}/assessment-citation?parent_kind=rubric&parent_id={rubric}&part={part}&entry_id={row['id']}&origin={origin}&limit=1"
         response = await case["api"].get(path, headers=case["header"])
         assert response.status_code == 200, response.text
         assert response.json()["data"]["verified"]
@@ -261,6 +269,58 @@ async def test_rubric_and_score_source_windows_bind_exact_parent_graph(score_cas
         assert response.status_code == 200, response.text
         assert response.json()["data"]["kind"] == citation["kind"]
         assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
+
+    # Historical authorization must still traverse section-only citations when
+    # content freshness already fails; run_view must not convert lost access to stale.
+    from sqlalchemy import text
+    from test_response_cards import require_action
+    from test_score_review import role
+
+    role(case, "technical")
+    await require_action(
+        case["api"],
+        case["header"],
+        case["support_card"],
+        "reopen",
+        reason="Synthetic support review reopened to exercise historical source authorization",
+    )
+    role(case, "bidder")
+    report_path = f"/v4/tasks/{case['task']}/scores/{report}"
+    stale = await case["api"].get(report_path, headers=case["header"])
+    assert stale.status_code == 200, stale.text
+    assert stale.json()["data"]["report"]["validity"] == "stale"
+    section = case["rubric"]["sections"][0]
+    sources = [*section["sources"], {**section["sources"][0], "requirement_id": str(uuid4())}]
+    # Only the fixture owner can simulate corrupt historical JSON; normal runtime
+    # updates remain denied by the immutable snapshot trigger.
+    with case["admin_engine"].begin() as connection:
+        connection.execute(
+            text("ALTER TABLE score_rubric_sections DISABLE TRIGGER rubric_immutable")
+        )
+        connection.execute(
+            text("UPDATE score_rubric_sections SET sources=CAST(:sources AS jsonb) WHERE id=:id"),
+            {"sources": json.dumps(sources), "id": section["id"]},
+        )
+        connection.execute(
+            text("ALTER TABLE score_rubric_sections ENABLE TRIGGER rubric_immutable")
+        )
+    for suffix in (
+        "",
+        "?view=console&part=summary",
+        "?view=console&part=sections",
+        "?view=console&part=items",
+    ):
+        denied = await case["api"].get(report_path + suffix, headers=case["header"])
+        assert denied.status_code == 404, denied.text
+    (case["tmp_path"] / "stale-score-section-authorization.json").write_text(
+        json.dumps(
+            {"stale_read": stale.json(), "missing_section_source_status": 404},
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
 
 
 @pytest.mark.parametrize(
@@ -374,3 +434,66 @@ async def test_rubric_blocker_filters_cannot_name_objects_outside_parent(rubric_
     )
     assert other_org.status_code == 404
     assert response.json()["data"]["error"] == other_org.json()["data"]["error"]
+
+
+async def test_section_sources_projection_and_indexed_context_bind_pinned_graph(many_rubric_case):
+    # Fail closed for wrong source index, cross-org parent/entry, rewritten saved
+    # quotes and silently dropped sources; every quoted selection stays explicit.
+    case = many_rubric_case
+    reviewed = await classify_all(case)
+    proposal = replacement(reviewed)
+    selected = [
+        {"requirement_id": row["requirement_id"], "quote": row["source"]["quote"]}
+        for row in reviewed["coverage"][:2]
+    ]
+    assert len(selected) == 2
+    proposal["sections"][0]["sources"] = selected
+    revised = await case["api"].post(
+        "/v4" + base(case) + "/revisions?view=console",
+        headers=case["header"],
+        json=proposal,
+    )
+    assert revised.status_code == 200, revised.text
+    parent = revised.json()["data"]["id"]
+    page_path = (
+        f"/v4/tasks/{case['task']}/score-rubrics/{parent}?view=console&part=sections&limit=1"
+    )
+    page = await case["api"].get(page_path, headers=case["header"])
+    assert page.status_code == 200, page.text
+    section = page.json()["items"][0]
+    assert [
+        dict(requirement_id=row["requirement_id"], quote=row["quote"]) for row in section["sources"]
+    ] == selected
+    assert "source" not in section and "requirement_id" not in section
+    assert (await case["api"].get(page_path, headers=case["headers"][1])).status_code == 404
+    for index, saved in enumerate(selected):
+        path = f"/v4/tasks/{case['task']}/assessment-citation?parent_kind=rubric&parent_id={parent}&part=rubric_section&entry_id={section['id']}&origin=sources&citation_index={index}&text=quote"
+        response = await case["api"].get(path, headers=case["header"])
+        assert response.status_code == 200, response.text
+        assert response.json()["data"]["window"]["text"] == saved["quote"]
+        assert response.json()["data"]["fix"]["requirement_id"] == saved["requirement_id"]
+        assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
+    invalid = await case["api"].get(
+        path.replace("citation_index=1", "citation_index=2"), headers=case["header"]
+    )
+    assert invalid.status_code == 404
+    missing_entry = await case["api"].get(
+        path.replace(section["id"], str(uuid4())), headers=case["header"]
+    )
+    assert missing_entry.status_code == 404
+    artifact = case["tmp_path"] / "console-section-sources.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "projection": page.json(),
+                "selectors": selected,
+                "verified_contexts": len(selected),
+                "foreign_org_status": 404,
+                "out_of_range_status": invalid.status_code,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )

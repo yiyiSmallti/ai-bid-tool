@@ -497,6 +497,29 @@ test.describe("rubric acceptance", () => {
     await artifact(page, state, "rubric-coverage-decisions");
   });
 
+  test("rubric section reviews every source and replacement removes one verified selection", async ({ page }) => {
+    const state = await rubricFixture(page, { multipleSectionSources: true });
+    await page.goto(rubricReview);
+    const section = page.locator('.el-card').filter({ has: page.getByRole('heading', { name: '合成分节 1', exact: true }) });
+    await expect(section.getByRole('button', { name: '查看引用原文', exact: true })).toHaveCount(2);
+    await section.getByRole('button', { name: '查看引用原文', exact: true }).nth(1).click();
+    await expect(page.getByRole('dialog', { name: '引用原文' })).toContainText(state.sections[0].sources[1].quote);
+    expect(state.requests.at(-1).query).toMatchObject({ origin: 'sources', citation_index: '1' });
+    await page.keyboard.press('Escape');
+    await page.getByRole('button', { name: '完整修订评分规则', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: '完整修订评分规则' });
+    await expect(dialog.getByRole('button', { name: '移除此原文', exact: true })).toHaveCount(2);
+    await dialog.getByRole('button', { name: '移除此原文', exact: true }).nth(1).click();
+    await expect(dialog.getByRole('button', { name: '移除此原文', exact: true })).toBeDisabled();
+    await dialog.getByLabel('完整修订理由', { exact: true }).fill('核对两段固定原文后移除不属于此分节的一段。');
+    await dialog.getByRole('button', { name: '保存完整修订', exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/score-rubrics/${uuid(23)}$`));
+    expect(state.replacements[0].sections[0].sources).toEqual([{ requirement_id: uuid(700), quote: state.rubricCoverage[0].source.quote }]);
+    expect(state.replacements[0].sections[0]).not.toHaveProperty('source');
+    expect(state.replacements[0].sections[0]).not.toHaveProperty('requirement_id');
+    await artifact(page, state, 'rubric-multiple-section-sources');
+  });
+
   test("rubric full replacement reads every page, preserves graph and resets approvals with new IDs", async ({ page }) => {
     const state = await rubricFixture(page);
     await page.goto(rubricReview);

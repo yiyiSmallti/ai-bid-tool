@@ -29,11 +29,11 @@ from app.schemas.score_contracts import (
 if TYPE_CHECKING:
     from app.providers.llm import HTTPExtractor
 
-RUBRIC_ADAPTER_VERSION = "http-score-rubric-v3"
-RUBRIC_PROMPT_VERSION = "score-rubric-v3"
-RUBRIC_SCHEMA_VERSION = "score-rubric-wire-v3"
-STRUCTURE_PROMPT_VERSION = "score-rubric-structure-v1"
-ITEMS_PROMPT_VERSION = "score-rubric-items-v2"
+RUBRIC_ADAPTER_VERSION = "http-score-rubric-v4"
+RUBRIC_PROMPT_VERSION = "score-rubric-v4"
+RUBRIC_SCHEMA_VERSION = "score-rubric-wire-v4"
+STRUCTURE_PROMPT_VERSION = "score-rubric-structure-v2"
+ITEMS_PROMPT_VERSION = "score-rubric-items-v3"
 ADAPTER_VERSION = RUBRIC_ADAPTER_VERSION
 PROMPT_VERSION = RUBRIC_PROMPT_VERSION
 SCHEMA_VERSION = RUBRIC_SCHEMA_VERSION
@@ -49,6 +49,8 @@ condition 或缺失规则。
 区块，不能引用摘要或位置。quote 必须逐字复制该 tender_ref 中唯一连续招标原文片段，不得拼接、
 改写、补全或引用遮挡占位符。每个 section 与 overall 都必须给出处；无法确定时保留原文并使用
 formula、non_additive 或 ambiguity_reason 等明确不可执行状态，不得编造数字或公式。
+每个 section 和 overall 可以包含多条 citations，分别引用不同评分要求的 tender_ref。
+每条 quote 独立绑定该 ref 的原文；不得把两个要求的文字拼成一条 quote。必须保留所有规则出处。
 review_domain 仅提出 technical 或 commercial 职责建议，无法确定时为 null，不代表人工分类或确认。
 section.key 必须在整表中唯一，供下一阶段固定引用。输出只是待人工复核候选，不代表已确认规则。
 只返回符合 schema 的 JSON。
@@ -64,6 +66,7 @@ structure_hash 是该上下文的固定绑定。不得新建、重命名或修�
 “招标原文”区块，不能引用摘要、位置或 sections。quote 必须逐字复制该 tender_ref 中唯一连续
 招标原文片段，不得拼接、改写、补全或引用遮挡占位符。item.requirement_id 必须逐字使用本批
 requirements 中与引用对应的 UUID。同一要求可有多个独立评分项；没有明确评分项时不得编造。
+同一 item 的所有 citations 必须属于它的同一个 requirement_id，不得跨要求引用。
 item.key 使用 tender_ref 的 rN 前缀加 .item- 和该要求内的子项序号，例如 r1.item-1、r1.item-2、
 r2.item-1，确保不同批次的 key 不会重复；不要把 UUID 放进 key。
 item.order 使用 tender_ref 中 r 后的全表序号乘以 1000 再加子项序号，不按本批从 1 重新编号。

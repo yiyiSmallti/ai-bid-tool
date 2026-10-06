@@ -225,6 +225,19 @@ async def test_rubric_console_replacement_and_history_hide_nonmembers(rubric_cas
             f"/v4/tasks/{case['task']}/assessment-citation?parent_kind=rubric"
             f"&parent_id={old['rubric']['id']}&part={part}&entry_id={old[rows][0]['id']}"
         )
+        if part == "rubric_section":
+            section_path = paths[-1]
+            invalid_paths = [
+                section_path,
+                section_path + "&origin=source",
+                section_path + "&origin=sources&citation_index=-1",
+                section_path + "&origin=sources&citation_index=invalid",
+            ]
+            for path in invalid_paths:
+                invalid = await case["api"].get(path, headers=case["header"])
+                assert invalid.status_code == 422, (path, invalid.text)
+            paths.extend(invalid_paths[1:])
+            paths.append(section_path + "&origin=sources&citation_index=0")
     paths += [
         f"/v4/tasks/{case['task']}/score-rubrics?view=console&extraction_job_id={case['extraction']}",
         "/v4" + base(case) + "/history",

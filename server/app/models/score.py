@@ -97,6 +97,7 @@ class ScoreRubricSection(Tenant, Base):
     included_in_overall_total: Mapped[bool] = mapped_column(Boolean)
     ambiguity_reason: Mapped[str | None] = mapped_column(Text)
     source: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    sources: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
     fingerprint: Mapped[str] = mapped_column(String(64))
     citation_valid: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (

@@ -58,7 +58,11 @@ from app.schemas.score_contracts import (
 from app.services import confidential, drafts, redaction, score_inputs, score_normalization
 from app.services import response_cards as cards
 from app.services.auth import Identity
-from app.services.extraction import locate_quote, locate_span
+from app.services.extraction import (
+    locate_quote,
+    locate_sent_source_quote,
+    locate_source_citation_span,
+)
 from app.services.score_inputs import RubricSnapshot
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
@@ -190,6 +194,7 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
             "location_original": item["source_original"],
             "source": item["source"],
             "sent": sent_text,
+            "sent_source": sent_payload["source_quote"],
             "safe_source": {
                 **item["source"],
                 "quote": sent_payload["source_quote"],
@@ -691,14 +696,17 @@ def _verified_requirement(
         citation.quote
     ):
         return None, "redacted_input_unresolved"
-    sent_quote, reason = locate_quote(binding["sent"], citation.quote)
+    sent_quote, reason = locate_sent_source_quote(binding["sent_source"], citation.quote)
     if sent_quote is None:
         return None, reason
     original_quote, reason = locate_quote(binding["original"], citation.quote)
     if original_quote is None:
         return None, reason
-    if locate_span(binding["location_original"], original_quote)[0] is None:
-        return None, locate_span(binding["location_original"], original_quote)[1]
+    span, reason = locate_source_citation_span(
+        binding["location_original"], binding["original"], original_quote
+    )
+    if span is None:
+        return None, reason
     return binding["requirement_id"], None
 
 
@@ -761,10 +769,24 @@ def accept_structure(
     sections: list[dict] = []
     for section in output.sections:
         candidate = section.model_dump(mode="json")
-        requirement_id, reason = _candidate_requirement(section.citations, scope, outbound)
-        if reason is not None or requirement_id not in known:
-            cards.fail(
-                "invalid_section_citation", "A rubric section lacks a verified citation", 502, 4
+        sources = []
+        for citation in section.citations:
+            requirement_id, reason = _verified_requirement(citation, scope, outbound)
+            if reason is not None or requirement_id not in known:
+                cards.fail(
+                    "invalid_section_citation", "A rubric section lacks a verified citation", 502, 4
+                )
+            # Verification resolves normalized transport spelling to the exact
+            # original span. Keep that spelling for immutable review selections.
+            original_quote, _ = locate_quote(
+                outbound["refs"][citation.ref]["original"], citation.quote
+            )
+            sources.append(
+                {
+                    "requirement_id": requirement_id,
+                    "source": outbound["refs"][citation.ref]["source"],
+                    "quote": original_quote,
+                }
             )
         if not _safe_candidate_text(
             candidate,
@@ -775,8 +797,9 @@ def accept_structure(
             cards.fail("sensitive_model_output", "Rubric structure contains sensitive text", 409, 4)
         candidate.pop("citations")
         candidate |= {
-            "requirement_id": requirement_id,
-            "source": outbound["refs"][section.citations[0].ref]["source"],
+            "requirement_id": sources[0]["requirement_id"],
+            "source": sources[0]["source"],
+            "sources": sources,
             "citation_valid": True,
         }
         candidate["fingerprint"] = score_normalization.content_fingerprint("section", candidate)
@@ -1074,6 +1097,7 @@ async def publish(
             included_in_overall_total=candidate["included_in_overall_total"],
             ambiguity_reason=candidate["ambiguity_reason"],
             source=candidate["source"],
+            sources=candidate["sources"],
             fingerprint=candidate["fingerprint"],
             citation_valid=candidate["citation_valid"],
         )

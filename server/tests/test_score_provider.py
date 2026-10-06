@@ -233,9 +233,9 @@ async def test_two_stage_rubric_sends_fixed_refs_and_accounts_each_call(tmp_path
     assert "items" not in first_schema
     assert "overall_citations" in first_schema
     assert set(second_schema) == {"items"}
-    assert provider.adapter_version == RUBRIC_ADAPTER_VERSION == "http-score-rubric-v3"
-    assert provider.prompt_version == RUBRIC_PROMPT_VERSION == "score-rubric-v3"
-    assert provider.schema_version == RUBRIC_SCHEMA_VERSION == "score-rubric-wire-v3"
+    assert provider.adapter_version == RUBRIC_ADAPTER_VERSION == "http-score-rubric-v4"
+    assert provider.prompt_version == RUBRIC_PROMPT_VERSION == "score-rubric-v4"
+    assert provider.schema_version == RUBRIC_SCHEMA_VERSION == "score-rubric-wire-v4"
     assert STRUCTURE_PROMPT_VERSION != ITEMS_PROMPT_VERSION
     artifact = {
         "structure": structure.model_dump(mode="json"),

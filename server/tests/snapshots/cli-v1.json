@@ -10026,7 +10026,6 @@
             "properties": {
               "citation_index": {
                 "default": 0,
-                "maximum": 1000,
                 "minimum": 0,
                 "title": "Citation Index",
                 "type": "integer"
@@ -10051,6 +10050,7 @@
                 "default": "source",
                 "enum": [
                   "source",
+                  "sources",
                   "citations"
                 ],
                 "title": "Origin",
@@ -48083,11 +48083,6 @@
                     "title": "Order",
                     "type": "integer"
                   },
-                  "requirement_id": {
-                    "format": "uuid",
-                    "title": "Requirement Id",
-                    "type": "string"
-                  },
                   "score_range": {
                     "anyOf": [
                       {
@@ -48112,6 +48107,14 @@
                     "default": null,
                     "title": "Source Section Id"
                   },
+                  "sources": {
+                    "items": {
+                      "$ref": "#/$defs/RubricSectionSourceSelection"
+                    },
+                    "minItems": 1,
+                    "title": "Sources",
+                    "type": "array"
+                  },
                   "title": {
                     "$ref": "#/$defs/NonBlank"
                   },
@@ -48128,7 +48131,7 @@
                   }
                 },
                 "required": [
-                  "requirement_id",
+                  "sources",
                   "key",
                   "title",
                   "order",
@@ -48136,6 +48139,26 @@
                   "included_in_overall_total"
                 ],
                 "title": "RubricSectionRevisionInput",
+                "type": "object"
+              },
+              "RubricSectionSourceSelection": {
+                "additionalProperties": false,
+                "description": "Select a previously verified quote without accepting a replacement Source.",
+                "properties": {
+                  "quote": {
+                    "$ref": "#/$defs/VerbatimRule"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "quote"
+                ],
+                "title": "RubricSectionSourceSelection",
                 "type": "object"
               },
               "ScoreRange": {
@@ -48829,6 +48852,30 @@
                 "title": "RubricRequirementReadiness",
                 "type": "object"
               },
+              "RubricSectionSource": {
+                "additionalProperties": false,
+                "description": "One independently verified citation and its immutable Requirement Source.",
+                "properties": {
+                  "quote": {
+                    "$ref": "#/$defs/VerbatimRule"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "quote",
+                  "source"
+                ],
+                "title": "RubricSectionSource",
+                "type": "object"
+              },
               "RubricSectionView": {
                 "additionalProperties": false,
                 "properties": {
@@ -48952,8 +48999,13 @@
                     ],
                     "default": null
                   },
-                  "source": {
-                    "$ref": "#/$defs/Source"
+                  "sources": {
+                    "items": {
+                      "$ref": "#/$defs/RubricSectionSource"
+                    },
+                    "minItems": 1,
+                    "title": "Sources",
+                    "type": "array"
                   },
                   "state": {
                     "$ref": "#/$defs/RubricItemState"
@@ -48989,7 +49041,7 @@
                   "aggregation",
                   "aggregation_assessable",
                   "included_in_overall_total",
-                  "source",
+                  "sources",
                   "state",
                   "revision"
                 ],
@@ -49512,11 +49564,6 @@
                         "title": "Order",
                         "type": "integer"
                       },
-                      "requirement_id": {
-                        "format": "uuid",
-                        "title": "Requirement Id",
-                        "type": "string"
-                      },
                       "score_range": {
                         "anyOf": [
                           {
@@ -49541,6 +49588,14 @@
                         "default": null,
                         "title": "Source Section Id"
                       },
+                      "sources": {
+                        "items": {
+                          "$ref": "#/$defs/RubricSectionSourceSelection"
+                        },
+                        "minItems": 1,
+                        "title": "Sources",
+                        "type": "array"
+                      },
                       "title": {
                         "$ref": "#/$defs/NonBlank"
                       },
@@ -49557,7 +49612,7 @@
                       }
                     },
                     "required": [
-                      "requirement_id",
+                      "sources",
                       "key",
                       "title",
                       "order",
@@ -49565,6 +49620,26 @@
                       "included_in_overall_total"
                     ],
                     "title": "RubricSectionRevisionInput",
+                    "type": "object"
+                  },
+                  "RubricSectionSourceSelection": {
+                    "additionalProperties": false,
+                    "description": "Select a previously verified quote without accepting a replacement Source.",
+                    "properties": {
+                      "quote": {
+                        "$ref": "#/$defs/VerbatimRule"
+                      },
+                      "requirement_id": {
+                        "format": "uuid",
+                        "title": "Requirement Id",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "requirement_id",
+                      "quote"
+                    ],
+                    "title": "RubricSectionSourceSelection",
                     "type": "object"
                   },
                   "ScoreRange": {
@@ -51012,6 +51087,30 @@
                 "title": "RubricRequirementReadiness",
                 "type": "object"
               },
+              "RubricSectionSource": {
+                "additionalProperties": false,
+                "description": "One independently verified citation and its immutable Requirement Source.",
+                "properties": {
+                  "quote": {
+                    "$ref": "#/$defs/VerbatimRule"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/Source"
+                  }
+                },
+                "required": [
+                  "requirement_id",
+                  "quote",
+                  "source"
+                ],
+                "title": "RubricSectionSource",
+                "type": "object"
+              },
               "RubricSectionView": {
                 "additionalProperties": false,
                 "properties": {
@@ -51135,8 +51234,13 @@
                     ],
                     "default": null
                   },
-                  "source": {
-                    "$ref": "#/$defs/Source"
+                  "sources": {
+                    "items": {
+                      "$ref": "#/$defs/RubricSectionSource"
+                    },
+                    "minItems": 1,
+                    "title": "Sources",
+                    "type": "array"
                   },
                   "state": {
                     "$ref": "#/$defs/RubricItemState"
@@ -51172,7 +51276,7 @@
                   "aggregation",
                   "aggregation_assessable",
                   "included_in_overall_total",
-                  "source",
+                  "sources",
                   "state",
                   "revision"
                 ],
@@ -53553,11 +53657,6 @@
                           "title": "Order",
                           "type": "integer"
                         },
-                        "requirement_id": {
-                          "format": "uuid",
-                          "title": "Requirement Id",
-                          "type": "string"
-                        },
                         "score_range": {
                           "anyOf": [
                             {
@@ -53582,6 +53681,14 @@
                           "default": null,
                           "title": "Source Section Id"
                         },
+                        "sources": {
+                          "items": {
+                            "$ref": "#/$defs/RubricSectionSourceSelection"
+                          },
+                          "minItems": 1,
+                          "title": "Sources",
+                          "type": "array"
+                        },
                         "title": {
                           "$ref": "#/$defs/NonBlank"
                         },
@@ -53598,7 +53705,7 @@
                         }
                       },
                       "required": [
-                        "requirement_id",
+                        "sources",
                         "key",
                         "title",
                         "order",
@@ -53606,6 +53713,26 @@
                         "included_in_overall_total"
                       ],
                       "title": "RubricSectionRevisionInput",
+                      "type": "object"
+                    },
+                    "RubricSectionSourceSelection": {
+                      "additionalProperties": false,
+                      "description": "Select a previously verified quote without accepting a replacement Source.",
+                      "properties": {
+                        "quote": {
+                          "$ref": "#/$defs/VerbatimRule"
+                        },
+                        "requirement_id": {
+                          "format": "uuid",
+                          "title": "Requirement Id",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "requirement_id",
+                        "quote"
+                      ],
+                      "title": "RubricSectionSourceSelection",
                       "type": "object"
                     },
                     "ScoreRange": {
@@ -53968,6 +54095,30 @@
                       ],
                       "type": "string"
                     },
+                    "RubricSectionSource": {
+                      "additionalProperties": false,
+                      "description": "One independently verified citation and its immutable Requirement Source.",
+                      "properties": {
+                        "quote": {
+                          "$ref": "#/$defs/VerbatimRule"
+                        },
+                        "requirement_id": {
+                          "format": "uuid",
+                          "title": "Requirement Id",
+                          "type": "string"
+                        },
+                        "source": {
+                          "$ref": "#/$defs/Source"
+                        }
+                      },
+                      "required": [
+                        "requirement_id",
+                        "quote",
+                        "source"
+                      ],
+                      "title": "RubricSectionSource",
+                      "type": "object"
+                    },
                     "Source": {
                       "additionalProperties": false,
                       "properties": {
@@ -54027,7 +54178,7 @@
                     }
                   },
                   "additionalProperties": false,
-                  "description": "The persisted source binding is needed to build a complete replacement.",
+                  "description": "Complete source bindings inherited for bounded review and replacement.",
                   "properties": {
                     "aggregation": {
                       "$ref": "#/$defs/AggregationRule"
@@ -54117,11 +54268,6 @@
                       "title": "Org Id",
                       "type": "string"
                     },
-                    "requirement_id": {
-                      "format": "uuid",
-                      "title": "Requirement Id",
-                      "type": "string"
-                    },
                     "review_domain": {
                       "anyOf": [
                         {
@@ -54154,8 +54300,13 @@
                       ],
                       "default": null
                     },
-                    "source": {
-                      "$ref": "#/$defs/Source"
+                    "sources": {
+                      "items": {
+                        "$ref": "#/$defs/RubricSectionSource"
+                      },
+                      "minItems": 1,
+                      "title": "Sources",
+                      "type": "array"
                     },
                     "state": {
                       "$ref": "#/$defs/RubricItemState"
@@ -54191,10 +54342,9 @@
                     "aggregation",
                     "aggregation_assessable",
                     "included_in_overall_total",
-                    "source",
+                    "sources",
                     "state",
-                    "revision",
-                    "requirement_id"
+                    "revision"
                   ],
                   "title": "ConsoleRubricSectionView",
                   "type": "object"

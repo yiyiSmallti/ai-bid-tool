@@ -384,9 +384,7 @@ class RubricReplacementData(Contract):
 
 
 class ConsoleRubricSectionView(RubricSectionView):
-    """The persisted source binding is needed to build a complete replacement."""
-
-    requirement_id: UUID
+    """Complete source bindings inherited for bounded review and replacement."""
 
 
 class ScoreSummaryData(Contract):
@@ -503,8 +501,8 @@ class CitationRequest(Contract):
     parent_id: UUID
     part: Literal["finding", "coverage", "rubric_section", "rubric_item", "score_item"]
     entry_id: UUID
-    origin: Literal["source", "citations"] = "source"
-    citation_index: int = Field(default=0, strict=True, ge=0, le=1000)
+    origin: Literal["source", "sources", "citations"] = "source"
+    citation_index: int = Field(default=0, strict=True, ge=0)
     text: Literal["quote", "context"] = "context"
     offset: Count = 0
     limit: int = Field(default=4000, strict=True, ge=1, le=8000)
@@ -520,8 +518,16 @@ class CitationRequest(Contract):
             raise ValueError("entry kind does not belong to this assessment parent")
         if self.origin == "source" and self.citation_index != 0:
             raise ValueError("source selects the one canonical tender source")
-        if self.parent_kind == "rubric" and self.origin != "source":
-            raise ValueError("rubric entries expose their saved canonical Source")
+        if self.part == "rubric_section" and self.origin != "sources":
+            raise ValueError("rubric sections select an indexed saved source")
+        if self.origin == "sources" and self.part != "rubric_section":
+            raise ValueError("indexed sources belong only to rubric sections")
+        if (
+            self.parent_kind == "rubric"
+            and self.part != "rubric_section"
+            and self.origin != "source"
+        ):
+            raise ValueError("rubric items and coverage expose their canonical Source")
         if self.parent_kind == "score" and self.origin != "citations":
             raise ValueError("score item context selects a verified citation")
         return self

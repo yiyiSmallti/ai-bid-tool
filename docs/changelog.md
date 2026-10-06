@@ -35,43 +35,34 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   next-human responsibility, durable metadata events and the console review/manual
   workspace. See [Requirement confirmation](notes/requirement-confirmation.md).
 
-## 2026-10-05: Co-sign consumer and citation batching compatibility
+## 2026-10-05: Rubric section-source regression corrections
 
-- Reuse a review round's immutable, already-validated citation inputs during
-  approval checks, retaining the check/score shared citation batch and strict
-  changed-source gates without repeated per-card location work.
-- Preserve specific legacy confirmation input errors and the completed
-  single-domain memory-after-review behavior. Pending and multi-domain review,
-  material, citation and signer invalidation remain strict.
-- Use independent professional reviewers in generated-card, simulation and agent
-  acceptance flows; require real renewed review after changing a pinned
-  requirement. Align stale-export acceptance with the existing blocked-preflight
-  response. See [Team workflow](notes/team-workflow.md).
+- Authorize citation-window tasks before validating query fields or section source selectors.
+  Nonmembers and cross-org callers retain 404 responses even for malformed queries; authorized
+  callers retain normal input validation. See [task authority](plan/team-workflow.md#membership-ownership-and-authorization).
+- Keep section binding checks separate from expensive citation location during score publication.
+  The existing shared draft/rubric batch verifies each distinct Source pair once; insertion still
+  verifies every new section quotation strictly. See [scoring pitfalls](notes/score.md#pitfalls).
+- Correct the historical-report fixture to supply the required card-reopen reason, and align
+  source-drift regression checks with the existing immutable-input 404 behavior for both anchor
+  and additional section sources, as specified in [scoring citations](plan/score.md#citations-outbound-calls-and-confidentiality).
 
-## 2026-10-05: Co-sign final-signature state and domain gates
+## 2026-10-05: Multiple verified sources per rubric section
 
-- Derive completed round summaries from the valid required-domain signature set,
-  including the final signing transaction's recheck before the card decision is
-  applied. Keep the independent consumption predicate and strict partial-round
-  invariant; failed final checks roll back the last signature and confirmation.
-- Allow either authorized required-domain human to finalize the exact complete
-  round through the legacy task-content trigger, including Evidence and independent
-  disposition decisions. Retain primary-domain authorization for reject,
-  needs-material and reopen; see [Team workflow](notes/team-workflow.md#how-it-works).
-
-## 2026-10-05: Co-sign validation and fixture compatibility
-
-- Granted only the review-round column update privilege needed for PostgreSQL
-  row locks; immutable-history triggers still reject updates. Unit deactivation
-  uses an authorization epoch without granting platform functions business-table
-  access, and task rule changes advance the existing access epoch.
-- Preserved the [new single-domain review contract](plan/team-workflow.md#co-sign-policy-rounds-and-consumption-gates):
-  successful fixture preparation now submits and confirms through the real service,
-  while direct SQL denial cases retain their triggers. Independent professional
-  fixture reviewers keep unrelated actor-role changes from retiring their reviews.
-- Gave required co-sign reason fields explicit accessible names. Browser scenarios
-  wait for all material controls before reviewing them, and their API fixture
-  includes the existing read-only extraction reasoning preview.
+- Apply owner-approved option A after the dev real-model rubric run reached `invalid_section_citation`
+  following #20: the `price` section separately cited the benchmark-price rule and price formula,
+  but the single-Requirement section gate rejected them as `cross_requirement_citation`. Sections
+  now preserve and independently verify every citation across pinned scoring Requirements; items
+  retain their single-Requirement contract, and joined or unverifiable citations still fail.
+- Add the [section-source migration](../server/migrations/versions/0046_score_section_sources.py)
+  for ordered section sources, retaining legacy single-source reads, existing
+  FORCE RLS and immutable history, with database and application checks over every binding. Complete
+  human replacement may select/remove only verified pinned citations and cannot rewrite Source.
+- Update bounded console/assessment reads, indexed source context, rubric review/replacement UI,
+  CLI discovery and intentional snapshots. Advance rubric wire/prompt/cache identities so old queued
+  jobs require a fresh preview. See the [scoring contract](plan/score.md) and [mechanism](notes/score.md).
+- Add synthetic two-stage Provider, persisted review/confirmation, tenant-isolation and mocked browser
+  regressions for multiple sources, invalid second citations, joined text and source removal.
 
 ## 2026-10-05: Team workflow co-sign review and consumption gates
 
@@ -89,6 +80,63 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Added co-sign board projections, Chinese console controls, API/CLI commands,
   schema discovery and intended Result snapshots. See
   [Team workflow](notes/team-workflow.md) for the mechanism and recovery boundaries.
+- Preserve `stale_material` as the sole input reason when screenshot withdrawal
+  retires a single-domain response review. Use `needs_reconfirmation` when only
+  that approval is lost, and reserve `cosign_required` for multi-domain policies.
+- Align database response-item reasons, new and stale draft projections, export
+  readiness and board actions without changing approval or Evidence gates. Keep
+  the screenshot regression's exact reason assertion and add cross-consumer
+  reason checks; see [Team workflow](notes/team-workflow.md).
+- Reuse a review round's immutable, already-validated citation inputs during
+  approval checks, retaining the check/score shared citation batch and strict
+  changed-source gates without repeated per-card location work.
+- Preserve specific legacy confirmation input errors and the completed
+  single-domain memory-after-review behavior. Pending and multi-domain review,
+  material, citation and signer invalidation remain strict.
+- Use independent professional reviewers in generated-card, simulation and agent
+  acceptance flows; require real renewed review after changing a pinned
+  requirement. Align stale-export acceptance with the existing blocked-preflight
+  response. See [Team workflow](notes/team-workflow.md).
+- Derive completed round summaries from the valid required-domain signature set,
+  including the final signing transaction's recheck before the card decision is
+  applied. Keep the independent consumption predicate and strict partial-round
+  invariant; failed final checks roll back the last signature and confirmation.
+- Allow either authorized required-domain human to finalize the exact complete
+  round through the legacy task-content trigger, including Evidence and independent
+  disposition decisions. Retain primary-domain authorization for reject,
+  needs-material and reopen; see [Team workflow](notes/team-workflow.md#how-it-works).
+- Granted only the review-round column update privilege needed for PostgreSQL
+  row locks; immutable-history triggers still reject updates. Unit deactivation
+  uses an authorization epoch without granting platform functions business-table
+  access, and task rule changes advance the existing access epoch.
+- Preserved the [new single-domain review contract](plan/team-workflow.md#co-sign-policy-rounds-and-consumption-gates):
+  successful fixture preparation now submits and confirms through the real service,
+  while direct SQL denial cases retain their triggers. Independent professional
+  fixture reviewers keep unrelated actor-role changes from retiring their reviews.
+- Gave required co-sign reason fields explicit accessible names. Browser scenarios
+  wait for all material controls before reviewing them, and their API fixture
+  includes the existing read-only extraction reasoning preview.
+
+## 2026-10-05: Model citations within the sent tender-source segment
+
+- Verify rubric citations against the redacted tender-source segment retained for each ref,
+  excluding requirement summaries and position labels from the sent-side match. Preserve original
+  and pinned-Source checks, and share the segment matcher with check and score semantic acceptance.
+  Summary/position-only quotations and repetitions within the source retain their rejection codes.
+- The dev run's remaining `invalid_overall_citation` came from the requirement summary repeating
+  the full Source quote in the assembled prompt ref, not from page-level repetition. The pinned-span
+  fix in #18 remains correct for repeated text elsewhere on a PDF page or Word block. See
+  [scoring pitfalls](notes/score.md#pitfalls) and [checking pitfalls](notes/check.md#pitfalls).
+- Add synthetic Chinese source-boundary tests and fake-Provider rubric/check/score regressions,
+  including two-stage overall citations and preserved Word locations and original spans.
+
+## 2026-10-05: Model citations within pinned Source spans
+
+- Resolve rubric, check and score model citations inside the verified Requirement Source span,
+  preserving extraction's boundary preference when locating the full Source. Repeated text elsewhere
+  on the same PDF page or Word block no longer rejects an otherwise unique citation; missing or
+  ambiguous Sources and citations outside or ambiguous within the Source retain their rejection
+  reasons. See [scoring pitfalls](notes/score.md#pitfalls) and [checking pitfalls](notes/check.md#pitfalls).
 
 ## 2026-10-05: Reviewable rubric normalization failures
 

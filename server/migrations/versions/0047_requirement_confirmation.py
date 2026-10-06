@@ -209,7 +209,7 @@ def backfill():
         if crypto is None:
             key = os.environ.get("BID_ENCRYPTION_KEY")
             if not key:
-                raise RuntimeError("0046 legacy review backfill requires BID_ENCRYPTION_KEY")
+                raise RuntimeError("0047 legacy review backfill requires BID_ENCRYPTION_KEY")
             crypto = Secrets(key)
         for row in rows:
             connection.execute(
@@ -496,21 +496,55 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER requirement_response_gate BEFORE INSERT ON public.response_card_revisions FOR EACH ROW EXECUTE FUNCTION public.requirement_response_gate();
-CREATE FUNCTION public.requirement_rubric_confirmed(p_org uuid,p_rubric uuid) RETURNS boolean LANGUAGE sql STABLE SET search_path=pg_catalog AS $$
- SELECT EXISTS(SELECT 1 FROM public.score_rubric_sets r WHERE r.org_id=p_org AND r.id=p_rubric
- AND jsonb_typeof(r.input_manifest->'requirements')='array' AND NOT EXISTS(
- SELECT 1 FROM jsonb_array_elements(r.input_manifest->'requirements') e
- WHERE NOT public.requirement_review_current(p_org,(e->>'requirement_id')::uuid)))
-$$;
-DO $$ DECLARE definition text; patched text; BEGIN
+CREATE FUNCTION public.requirement_rubric_confirmed(p_org uuid,p_rubric uuid) RETURNS boolean
+LANGUAGE plpgsql STABLE SECURITY INVOKER SET search_path=pg_catalog AS $$
+DECLARE rubric public.score_rubric_sets;
+BEGIN
+ SELECT * INTO rubric FROM public.score_rubric_sets WHERE org_id=p_org AND id=p_rubric;
+ IF rubric.id IS NULL OR jsonb_typeof(rubric.input_manifest->'requirements') IS DISTINCT FROM 'array' THEN RETURN false; END IF;
+ IF jsonb_array_length(rubric.input_manifest->'requirements') NOT BETWEEN 1 AND 2000
+  OR public.rubric_section_bindings_current(p_org,p_rubric) IS DISTINCT FROM true THEN RETURN false; END IF;
+ -- 0046 checks immutable subquote bindings without locating again. New section
+ -- sources may include several fixed requirements; deduplicate all references
+ -- here while retaining ignored/duplicate coverage requirements in the gate.
+ RETURN NOT EXISTS(WITH required AS MATERIALIZED (
+  SELECT (entry->>'requirement_id')::uuid AS id
+   FROM jsonb_array_elements(rubric.input_manifest->'requirements') entry
+  UNION
+  SELECT (entry->>'requirement_id')::uuid AS id
+   FROM public.score_rubric_sections section,
+    LATERAL jsonb_array_elements(public.rubric_section_sources(section)) entry
+   WHERE section.org_id=p_org AND section.rubric_id=p_rubric
+ ) SELECT 1 FROM required LEFT JOIN public.requirements req ON req.org_id=p_org AND req.id=required.id
+  WHERE req.id IS NULL OR req.task_id IS DISTINCT FROM rubric.task_id
+   OR req.document_id IS DISTINCT FROM rubric.document_id OR req.job_id IS DISTINCT FROM rubric.extraction_job_id
+   OR req.category IS DISTINCT FROM 'scoring'
+   OR public.requirement_review_current(p_org,required.id) IS DISTINCT FROM true);
+EXCEPTION WHEN invalid_text_representation THEN RETURN false;
+END $$;
+DO $$ DECLARE definition text; patched text; anchor text; BEGIN
  SELECT pg_get_functiondef('public.response_item_gate()'::regprocedure) INTO definition;
+ -- Patch the final 0045 function, including its single-domain specific-cause
+ -- fallback. Fail explicitly if a merge changes any required integration point.
+ FOREACH anchor IN ARRAY ARRAY[
+  'citation_ok boolean;',
+  'cosign_ok := public.team_cosign_card_approved',
+  'IF cosign_ok AND citation_ok AND quote_current AND (revision.disposition=',
+  'IF NEW.card_id IS NULL THEN expected_reasons :='
+ ] LOOP
+  IF strpos(definition,anchor)=0 THEN RAISE EXCEPTION 'response_item_gate integration anchor missing: %',anchor; END IF;
+ END LOOP;
  patched:=replace(definition,'citation_ok boolean;', 'requirement_ok boolean; requirement_state text; citation_ok boolean;');
- patched:=replace(patched,'citation_ok := public.response_citation_valid',E'requirement_ok := public.requirement_review_current(NEW.org_id,NEW.requirement_id);\n requirement_state := public.requirement_review_state(NEW.org_id,NEW.requirement_id);\n IF NEW.kind IN (''row'',''comply_only'') AND NOT requirement_ok THEN RAISE EXCEPTION ''requirement_unconfirmed'' USING ERRCODE=''23514''; END IF;\n citation_ok := public.response_citation_valid');
+ patched:=replace(patched,'cosign_ok := public.team_cosign_card_approved',
+  E'requirement_ok := public.requirement_review_current(NEW.org_id,NEW.requirement_id);\n requirement_state := public.requirement_review_state(NEW.org_id,NEW.requirement_id);\n IF NEW.kind IN (''row'',''comply_only'') AND NOT requirement_ok THEN RAISE EXCEPTION ''requirement_unconfirmed'' USING ERRCODE=''23514''; END IF;\n cosign_ok := public.team_cosign_card_approved');
  patched:=replace(patched,'IF cosign_ok AND citation_ok AND quote_current AND (revision.disposition=', 'IF requirement_ok AND cosign_ok AND citation_ok AND quote_current AND (revision.disposition=');
- patched:=replace(patched,'IF NEW.card_id IS NULL THEN expected_reasons :=',E'IF NOT requirement_ok THEN expected_reasons := jsonb_build_array(CASE WHEN requirement_state=''invalidated'' THEN ''requirement_invalidated'' ELSE ''requirement_unconfirmed'' END); END IF;\n IF NEW.card_id IS NULL THEN expected_reasons :=');
- IF patched=definition THEN RAISE EXCEPTION 'response_item_gate integration anchor missing'; END IF;
+ patched:=replace(patched,'IF NEW.card_id IS NULL THEN expected_reasons :=',
+  E'IF NOT requirement_ok THEN expected_reasons := jsonb_build_array(CASE WHEN requirement_state=''invalidated'' THEN ''requirement_invalidated'' ELSE ''requirement_unconfirmed'' END); END IF;\n IF NEW.card_id IS NULL THEN expected_reasons :=');
+ -- The untouched tail appends one specific response cause for single-domain
+ -- approval loss, or cosign_required only for a multi-domain incomplete round.
  EXECUTE patched;
 END $$;
+
 """
 
 CONSUMER_SQL += r"""

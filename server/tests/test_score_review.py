@@ -123,11 +123,10 @@ def replacement(report):
             {
                 **{key: row[key] for key in section_fields},
                 "source_section_id": row["id"],
-                "requirement_id": next(
-                    entry["requirement_id"]
-                    for entry in report["coverage"]
-                    if entry["source"] == row["source"]
-                ),
+                "sources": [
+                    {"requirement_id": citation["requirement_id"], "quote": citation["quote"]}
+                    for citation in row["sources"]
+                ],
             }
             for row in report["sections"]
         ],

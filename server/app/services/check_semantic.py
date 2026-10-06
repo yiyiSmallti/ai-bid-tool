@@ -33,7 +33,11 @@ from app.providers.llm import with_reasoning
 from app.schemas.check_contracts import OutboundContext
 from app.services import confidential, drafts, redaction
 from app.services.check_inputs import CheckSnapshot
-from app.services.extraction import locate_quote, locate_span
+from app.services.extraction import (
+    locate_quote,
+    locate_sent_source_quote,
+    locate_source_citation_span,
+)
 from app.services.response_cards import fail
 
 # Only these admission stops permit retaining already completed deterministic coverage.
@@ -183,6 +187,8 @@ def build_outbound(secret: dict, fields: list[dict], library) -> dict:
     redacted = set()
     for row in context.texts:
         refs[row.ref]["sent"] = row.text
+        if refs[row.ref]["kind"] == "tender":
+            refs[row.ref]["sent_source"] = row.text
         if redaction.PLACEHOLDER.search(row.text) or redaction.SECRET_PLACEHOLDER.search(row.text):
             if refs[row.ref]["kind"] != "metadata":
                 redacted.add(refs[row.ref]["requirement"])
@@ -402,20 +408,19 @@ def verify_citation(citation, local, sent_refs, outbound, draft_id):
         citation.quote
     ):
         return None, "redacted_input_unassessable"
-    sent_quote, reason = locate_quote(binding["sent"], citation.quote)
+    sent_text = binding["sent_source"] if binding["kind"] == "tender" else binding["sent"]
+    locate_sent = locate_sent_source_quote if binding["kind"] == "tender" else locate_quote
+    sent_quote, reason = locate_sent(sent_text, citation.quote)
     if sent_quote is None:
         return None, reason
     original_quote, reason = locate_quote(binding["original"], citation.quote)
     if original_quote is None:
         return None, reason
-    # Check the fixed full page/block/material field as well as the bounded excerpt.
-    if (
-        locate_span(binding.get("location_original", binding["original"]), original_quote)[0]
-        is None
-    ):
-        return None, locate_span(
-            binding.get("location_original", binding["original"]), original_quote
-        )[1]
+    span, reason = locate_source_citation_span(
+        binding.get("location_original", binding["original"]), binding["original"], original_quote
+    )
+    if span is None:
+        return None, reason
     if redaction.PLACEHOLDER.search(original_quote) or redaction.SECRET_PLACEHOLDER.search(
         original_quote
     ):
@@ -423,9 +428,8 @@ def verify_citation(citation, local, sent_refs, outbound, draft_id):
     # locate_span can prefer a word-boundary occurrence. The database citation
     # gate intentionally requires literal uniqueness even inside a longer token.
     for text, quote in (
-        (binding["sent"], sent_quote),
+        (sent_text, sent_quote),
         (binding["original"], original_quote),
-        (binding.get("location_original", binding["original"]), original_quote),
     ):
         first = text.find(quote)
         if first < 0:

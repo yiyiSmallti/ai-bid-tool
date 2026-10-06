@@ -514,13 +514,30 @@
               "maximum": "10",
               "minimum": "0"
             },
-            "source": {
-              "chunk_id": "00000000-0000-0000-0000-000000000004",
-              "document_id": "00000000-0000-0000-0000-000000000004",
-              "location": null,
-              "page": 7,
-              "quote": "Technical response quality: 0 to 10 points."
-            },
+            "sources": [
+              {
+                "quote": "Technical response quality: 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000008",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 7,
+                  "quote": "Technical response quality: 0 to 10 points."
+                }
+              },
+              {
+                "quote": "The technical response is scored from 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000011",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 8,
+                  "quote": "The technical response is scored from 0 to 10 points."
+                }
+              }
+            ],
             "state": "candidate",
             "task_id": "00000000-0000-0000-0000-000000000002",
             "title": "Technical response",
@@ -702,13 +719,30 @@
               "maximum": "10",
               "minimum": "0"
             },
-            "source": {
-              "chunk_id": "00000000-0000-0000-0000-000000000004",
-              "document_id": "00000000-0000-0000-0000-000000000004",
-              "location": null,
-              "page": 7,
-              "quote": "Technical response quality: 0 to 10 points."
-            },
+            "sources": [
+              {
+                "quote": "Technical response quality: 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000008",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 7,
+                  "quote": "Technical response quality: 0 to 10 points."
+                }
+              },
+              {
+                "quote": "The technical response is scored from 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000011",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 8,
+                  "quote": "The technical response is scored from 0 to 10 points."
+                }
+              }
+            ],
             "state": "candidate",
             "task_id": "00000000-0000-0000-0000-000000000002",
             "title": "Technical response",
@@ -1237,13 +1271,30 @@
               "maximum": "10",
               "minimum": "0"
             },
-            "source": {
-              "chunk_id": "00000000-0000-0000-0000-000000000004",
-              "document_id": "00000000-0000-0000-0000-000000000004",
-              "location": null,
-              "page": 7,
-              "quote": "Technical response quality: 0 to 10 points."
-            },
+            "sources": [
+              {
+                "quote": "Technical response quality: 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000008",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 7,
+                  "quote": "Technical response quality: 0 to 10 points."
+                }
+              },
+              {
+                "quote": "The technical response is scored from 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000011",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 8,
+                  "quote": "The technical response is scored from 0 to 10 points."
+                }
+              }
+            ],
             "state": "candidate",
             "task_id": "00000000-0000-0000-0000-000000000002",
             "title": "Technical response",
@@ -1425,13 +1476,30 @@
               "maximum": "10",
               "minimum": "0"
             },
-            "source": {
-              "chunk_id": "00000000-0000-0000-0000-000000000004",
-              "document_id": "00000000-0000-0000-0000-000000000004",
-              "location": null,
-              "page": 7,
-              "quote": "Technical response quality: 0 to 10 points."
-            },
+            "sources": [
+              {
+                "quote": "Technical response quality: 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000008",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 7,
+                  "quote": "Technical response quality: 0 to 10 points."
+                }
+              },
+              {
+                "quote": "The technical response is scored from 0 to 10 points.",
+                "requirement_id": "00000000-0000-0000-0000-000000000011",
+                "source": {
+                  "chunk_id": "00000000-0000-0000-0000-000000000004",
+                  "document_id": "00000000-0000-0000-0000-000000000004",
+                  "location": null,
+                  "page": 8,
+                  "quote": "The technical response is scored from 0 to 10 points."
+                }
+              }
+            ],
             "state": "candidate",
             "task_id": "00000000-0000-0000-0000-000000000002",
             "title": "Technical response",

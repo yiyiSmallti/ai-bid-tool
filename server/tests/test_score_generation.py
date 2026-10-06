@@ -15,6 +15,7 @@ from app.core.db import Database
 from app.core.errors import ServiceError
 from app.providers.calls import current_accounting
 from app.providers.rubric import HTTPRubricProvider
+from app.schemas.response_card_contracts import ModelEvidenceRef
 from app.schemas.score_contracts import (
     RubricAnsweredBatch,
     RubricCoverageDecisionRequest,
@@ -25,6 +26,7 @@ from app.schemas.score_contracts import (
 )
 from app.services import redaction, score_generation, score_inputs
 from app.services.auth import Identity
+from app.services.extraction import locate_source_citation_span
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 from test_check_combined import semantic_llm
@@ -104,6 +106,146 @@ def verified_structure(secret, outbound):
     return score_generation.accept_structure(
         secret, outbound, RubricStructureOutput.model_validate(wire)
     )
+
+
+def docx_summary_secret():
+    source = "技术评分标准：内存 64 GB 得 5 分。"
+    original = "本段说明评分办法。\n" + source + "\n本段说明提交材料。"
+    secret = fixed_secret(source_original=original)
+    row = secret["requirements"][0]
+    row["text"] = f"内存评分要求摘要：\n{source}\n请提交配置说明。"
+    row["source"] |= {
+        "page": None,
+        "quote": source,
+        "location": {
+            "block_id": "p3",
+            "kind": "paragraph",
+            "section_path": ["评标办法", "技术评分"],
+            "paragraph": 3,
+            "table": None,
+            "row": None,
+            "column": None,
+            "label": "评标办法 / 技术评分 / 第3段",
+        },
+    }
+    return secret
+
+
+async def test_two_stage_docx_summary_quote_does_not_ambiguous_sent_citation(tmp_path):
+    """Run Chinese DOCX citations through the fake HTTP provider and both acceptors.
+
+    Failures: summary duplicates a valid quote and rejects overall/section/item;
+    source metadata is lost; original offsets point at a different paragraph;
+    item extraction skips accounting; or the reproducible JSON artifact is absent.
+    """
+    import json
+
+    secret = docx_summary_secret()
+    row = secret["requirements"][0]
+    source = row["source"]["quote"]
+    outbound = score_generation.build_outbound(secret, [], [])
+    sent = outbound["context"]["texts"][0]["text"]
+    assert sent.count(source) == 2
+    assert "要求摘要：" in sent and "来源位置：" in sent and "招标原文：" in sent
+    vendor = RubricVendor()
+    provider = HTTPRubricProvider(
+        semantic_llm(
+            tmp_path,
+            vendor,
+            database_url="postgresql+psycopg://unused/unused",
+            encryption_key=Fernet.generate_key().decode(),
+            token_key=Fernet.generate_key().decode(),
+        )
+    )
+    accounting = Accounting()
+    token = current_accounting.set(accounting)
+    try:
+        proposed = await provider.extract_structure(score_generation.provider_request(outbound))
+        assert proposed.failure is None and proposed.output is not None
+        structure = score_generation.accept_structure(secret, outbound, proposed.output)
+        generated = await provider.extract_items(
+            score_generation.items_request(outbound, structure)
+        )
+    finally:
+        current_accounting.reset(token)
+    assert generated.failure is None
+    accepted = score_generation.accept_batches(secret, outbound, structure, generated.batches)
+    assert accepted["normalization_errors"] == []
+    assert accepted["unresolved_requirement_ids"] == []
+    assert len(accepted["sections"]) == len(accepted["items"]) == 1
+    assert vendor.stages == ["structure", "items"]
+    assert len(accounting.completed) == 2
+    assert len(vendor.requests) == 2
+    citations = [
+        accepted["overall_citations"][0],
+        accepted["sections"][0],
+        accepted["items"][0],
+    ]
+    spans = []
+    start = row["source_original"].index(source)
+    for citation in citations:
+        assert citation["requirement_id"] == str(REAL_REQUIREMENT)
+        assert citation["source"] == row["source"]
+        quote = citation.get("quote", citation["source"]["quote"])
+        span, reason = locate_source_citation_span(row["source_original"], source, quote)
+        assert reason is None and span == (start, start + len(source))
+        assert row["source_original"][slice(*span)] == source
+        spans.append(list(span))
+    artifact = tmp_path / "rubric-docx-summary-citations.json"
+    artifact.write_text(
+        json.dumps(
+            {
+                "stages": vendor.stages,
+                "accounted_calls": len(accounting.completed),
+                "source_original": row["source_original"],
+                "source": row["source"],
+                "original_spans": spans,
+                "accepted": accepted,
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    assert (
+        json.loads(artifact.read_text())["original_spans"]
+        == [list((start, start + len(source)))] * 3
+    )
+
+
+@pytest.mark.parametrize(
+    "case,expected_reason",
+    [
+        ("summary_contains_source", None),
+        ("summary_only", "quote_not_at_position"),
+        ("position_only", "quote_not_at_position"),
+        ("source_repeated", "ambiguous_quote"),
+    ],
+)
+def test_rubric_sent_source_verifier_boundary(case, expected_reason):
+    """Failures: metadata rejects valid source or grants missing/ambiguous source quotes."""
+    secret = docx_summary_secret()
+    row = secret["requirements"][0]
+    quote = row["source"]["quote"]
+    if case == "summary_only":
+        quote = "摘要独有短句。"
+        row["text"] = quote
+    elif case == "position_only":
+        quote = "位置独有短句。"
+        row["text"] = "内存评分要求。"
+        row["source"]["location"]["label"] = quote
+    elif case == "source_repeated":
+        quote = "内存 64 GB 得 5 分。"
+        row["text"] = "内存评分要求。"
+        row["source"]["quote"] = f"技术评分标准：{quote}复述评分：{quote}"
+        row["source_original"] = row["source"]["quote"]
+    outbound = score_generation.build_outbound(secret, [], [])
+    scope = score_generation._CitationScope(
+        requested_requirement_ids=[PROVIDER_REQUIREMENT], sent_refs=["r1.tender"]
+    )
+    result = score_generation._verified_requirement(
+        ModelEvidenceRef(ref="r1.tender", quote=quote), scope, outbound
+    )
+    assert result == (str(REAL_REQUIREMENT) if expected_reason is None else None, expected_reason)
 
 
 @pytest.mark.parametrize("requirement_count", [1, 3])
@@ -247,8 +389,41 @@ def test_outbound_redaction_and_dual_citation_acceptance_use_local_ids_only():
     assert "Synthetic Secret" not in str(accepted)
 
 
+@pytest.mark.parametrize("repeat_position", ["before", "after"])
+def test_rubric_short_citation_repeated_outside_source_accepts_both_stages(repeat_position):
+    """An unrelated sentence must not reject overall, section or item citations."""
+    source = "技术评分标准：内存 64 GB 得 5 分。根据配置完整性评分。"
+    repeated = "其他条款说明：内存 64 GB 得 5 分。"
+    original = "\n".join((repeated, source) if repeat_position == "before" else (source, repeated))
+    secret = fixed_secret(source_original=original)
+    row = secret["requirements"][0]
+    row["text"] = row["source"]["quote"] = source
+    outbound = score_generation.build_outbound(secret, [], [])
+
+    structure = verified_structure(secret, outbound)
+    assert structure["overall_citations"] == [
+        {
+            "requirement_id": str(REAL_REQUIREMENT),
+            "source": row["source"],
+            "quote": "内存 64 GB 得 5 分",
+        }
+    ]
+    batch = RubricAnsweredBatch(
+        requested_requirement_ids=[PROVIDER_REQUIREMENT],
+        sent_refs=["r1.tender"],
+        structure_hash=structure["structure_hash"],
+        output=RubricItemsWireOutput(items=candidate()["items"]),
+    )
+    accepted = score_generation.accept_batches(secret, outbound, structure, [batch])
+    assert accepted["normalization_errors"] == []
+    assert accepted["unresolved_requirement_ids"] == []
+    assert accepted["sections"][0]["source"] == row["source"]
+    assert accepted["items"][0]["source"] == row["source"]
+
+
 def test_invalid_or_ambiguous_structure_citation_fails_before_items():
-    secret = fixed_secret(source_original="内存 64 GB 得 5 分。重复说明：内存 64 GB 得 5 分。")
+    # Both full Sources must have boundaries; extraction can otherwise prefer one.
+    secret = fixed_secret(source_original="内存 64 GB 得 5 分。\n重复说明：内存 64 GB 得 5 分。")
     outbound = score_generation.build_outbound(secret, [], [])
     with pytest.raises(ServiceError) as failure:
         verified_structure(secret, outbound)

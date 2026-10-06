@@ -587,6 +587,17 @@ def test_assessment_inputs_and_citation_cli_typed_queries(monkeypatch, tmp_path,
     )
     assert code == 2 and body["ok"] is False
     assert len(requests) == 4
+    query.update(parent_kind="rubric", part="rubric_section", origin="sources", citation_index=1)
+    path.write_text(json.dumps(query), encoding="utf-8")
+    for mode in ("local", "remote"):
+        code, body = invoke(
+            ["--mode", mode, "assessment", "citation", "--task", IDENTIFIER, "--input", str(path)],
+            capsys,
+        )
+        assert code == 0 and body["data"]["verified"] is True
+    assert requests[4] == requests[5]
+    assert requests[4]["params"]["origin"] == "sources"
+    assert requests[4]["params"]["citation_index"] == "1"
 
 
 def test_console_variants_require_v4_and_are_absent_from_legacy_schema(monkeypatch, capsys):

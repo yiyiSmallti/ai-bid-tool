@@ -431,7 +431,6 @@ async def subject_view(session: AsyncSession, row: ScoreRubricSet, child: Any, p
             "org_id",
             "task_id",
             "rubric_id",
-            "requirement_id",
             "key",
             "title",
             "order",
@@ -442,11 +441,11 @@ async def subject_view(session: AsyncSession, row: ScoreRubricSet, child: Any, p
             "cap",
             "included_in_overall_total",
             "ambiguity_reason",
-            "source",
         )
         return ConsoleRubricSectionView.model_validate(
             {
                 **score.fields(child, fields),
+                "sources": score.section_sources(child),
                 "aggregation_assessable": child.aggregation
                 in {"sum", "weighted_sum", "capped_sum"},
                 **await score.review_state(session, row, section_id=child.id),
