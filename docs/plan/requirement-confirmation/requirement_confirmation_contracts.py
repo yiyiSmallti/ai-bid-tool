@@ -1,4 +1,4 @@
-"""Pending approval, not implemented: B02 requirement review and manual entry.
+"""Approved, not implemented: B02 requirement review and manual entry.
 
 These models and service protocols register no routes, jobs or database objects.
 Actor/org/task authority and literal source verification are service/DB duties;

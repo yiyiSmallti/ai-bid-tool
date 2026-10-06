@@ -4,9 +4,9 @@ kind: plan
 
 # B02 requirement confirmation and manual entry contract
 
-Status: **Pending approval, not implemented.** This draft covers the remaining B02
-scope in [the roadmap](roadmap.md). Approval is required under
-[agent.md](../../agent.md#workflow) before runtime implementation. Its importable
+Status: **Approved with all recommended defaults, not implemented.** This contract covers the
+remaining B02 scope in [the roadmap](roadmap.md), satisfying the interface-first requirement in
+[agent.md](../../agent.md#workflow). Its importable
 [Pydantic v2 models and service protocols](requirement-confirmation/requirement_confirmation_contracts.py)
 define proposed payloads; importing them registers no handlers or database objects.
 
@@ -593,11 +593,11 @@ content and redact session headers. Tests demonstrate the actual human/role entr
 not merely model validation. Draft verification is limited to ruff, format, pyright and
 module import; it cannot establish runtime or database acceptance.
 
-## Open decisions
+## Decisions
 
-Every row is pending owner approval; the models use these recommended defaults.
+The owner approved every recommended default; the models implement these decisions.
 
-| Decision | Recommended default | Reason |
+| Decision | Approved default | Reason |
 | --- | --- | --- |
 | Who confirms requirements? | Human task owner/contributor with org admin/bidder/technical and req:confirm; no domain or co-sign; same-person entry/confirm allowed | Accepting the extracted basis is coordination work. Professional response and evidence approval keep their separate domain gates. |
 | Hard stop before any preparation? | Allow labelled preparation; gate accepted response/comply-only, accepted draft rows, rubric set confirmation and score inputs | Preserves useful work while keeping an unambiguous next-human action and preventing provisional text becoming accepted output. |
