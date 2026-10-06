@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Draft production deployment plan
+
+- Add the [production deployment plan](plan/production-deployment.md) covering
+  environment decisions, repository deployment prerequisites, recovery and release
+  acceptance; link it from roadmap F10. The plan remains pending owner approval and
+  environment decisions and does not record an executed deployment.
+
 ## 2026-10-06: Bounded product and feature revision authors
 
 - Resolve product and feature authors with explicit page-revision filters on a
