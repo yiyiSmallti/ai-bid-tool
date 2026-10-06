@@ -277,15 +277,45 @@ async def test_thread_pages_bind_card_reader_and_org(api, headers, tenants, admi
         cursor = page.json()["data"]["next_cursor"]
     assert seen == expected and len(set(seen)) == 3
     cursor = first.json()["data"]["next_cursor"]
-    for card, auth in (
-        (one["card"], reader),
-        (two["card"], headers[0]),
-        (foreign["card"], headers[1]),
+    # This observer can read the task, but cannot reuse another reader's snapshot.
+    # Task ACL runs first; a visible task with a changed cursor fingerprint asks
+    # for a fresh snapshot rather than pretending that its card is inaccessible.
+    fresh = await api.get(path, headers=reader, params={"limit": 1})
+    assert fresh.status_code == 200 and fresh.json()["items"]
+    _, outsider = await person(api, admin_engine, one["org_id"], "viewer")
+    for card, auth, status, code in (
+        (one["card"], reader, 409, "board_changed"),
+        (two["card"], headers[0], 404, "not_found"),
+        (foreign["card"], headers[1], 404, "not_found"),
+        (one["card"], outsider, 404, "not_found"),
+        (one["card"], headers[1], 404, "not_found"),
     ):
         denied = await api.get(
             f"/cards/{card['id']}/threads", headers=auth, params={"limit": 1, "cursor": cursor}
         )
-        assert denied.status_code == 404 and denied.json()["data"]["error"]["code"] == "not_found"
+        assert (denied.status_code, denied.json()["data"]["error"]["code"]) == (status, code)
+        assert denied.json()["items"] == []
+
+    # Access masking also precedes stale cursors and archive write errors. Reads
+    # remain legal for active task members after archival.
+    current = await workflow(api, headers[0], one["task_id"])
+    archived = await api.post(
+        f"/tasks/{one['task_id']}/archive",
+        headers=headers[0],
+        json={"expected_revision": current["revision"], "reason": "Synthetic visibility gate"},
+    )
+    assert archived.status_code == 200
+    assert (await api.get(path, headers=reader)).status_code == 200
+    for auth in (outsider, headers[1]):
+        hidden = await api.get(path, headers=auth, params={"cursor": cursor})
+        assert (hidden.status_code, hidden.json()["data"]["error"]["code"]) == (404, "not_found")
+    for auth, status, code in (
+        (reader, 409, "task_archived"),
+        (outsider, 404, "not_found"),
+        (headers[1], 404, "not_found"),
+    ):
+        denied = await api.post(path, headers=auth, json=message(expected_card_revision=1))
+        assert (denied.status_code, denied.json()["data"]["error"]["code"]) == (status, code)
 
 
 async def test_assigned_owner_handover_cannot_demote_but_can_retain_contributor(

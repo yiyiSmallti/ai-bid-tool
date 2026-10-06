@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Task stream snapshot recovery
+
+- Require a successful authorized snapshot and its cursor before opening or
+  resuming console task streams. Failed discussion parent validation retries the
+  snapshot without opening a cursorless stream; org reset discards late snapshot
+  results and clears task content and unsaved discussion drafts. See the
+  [snapshot and reconnect contract](plan/team-workflow.md#durable-task-events-and-sse).
+
 ## 2026-10-05: Team workflow assignment and discussion
 
 - Added requirement/extraction assignment with explicit revision and reason, active
