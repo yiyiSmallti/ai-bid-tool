@@ -270,13 +270,28 @@ async def test_complete_http_body_bound_and_literal_unicode_prefix(api, headers)
         assert [row["ref"]["resource_id"] for row in page.json()["items"]] == [
             profile["profile_id"]
         ]
-    response = await api.post(
+    root = profile["profile_id"]
+    for path in (
+        BASE + "/query",
+        f"{BASE}/{root}/history/query",
+        f"{BASE}/{root}/lifecycle/history/query",
+        f"{BASE}/{root}/lifecycle",
+    ):
+        # Whitespace disappears after JSON parsing: the bound applies to the
+        # actual HTTP bytes, before Pydantic normalizes any of these commands.
+        response = await api.post(
+            path,
+            headers={**headers[0], "Content-Type": "application/json"},
+            content=b" " * (16 * 1024) + b"{}",
+        )
+        assert response.status_code == 413
+        assert response.json()["data"]["error"]["code"] == "invalid_input"
+    boundary = await api.post(
         BASE + "/query",
         headers={**headers[0], "Content-Type": "application/json"},
-        content=b" " * (16 * 1024) + b"{}",
+        content=b" " * (16 * 1024 - 2) + b"{}",
     )
-    assert response.status_code == 413
-    assert response.json()["data"]["error"]["code"] == "invalid_input"
+    assert boundary.status_code == 200
     assert (
         await api.post(BASE.replace("/v4", "") + "/query", headers=headers[0], json={})
     ).status_code == 404
@@ -516,9 +531,8 @@ async def test_library_read_never_grants_task_selection(
         )
         assert added.status_code == 200, added.text
         if task_role == "removed":
-            removed = await api.request(
-                "DELETE",
-                f"/tasks/{task}/members/{user}",
+            removed = await api.post(
+                f"/tasks/{task}/members/{user}/remove",
                 headers=headers[0],
                 json={"expected_revision": 2, "reason": "Synthetic removed member"},
             )

@@ -8,6 +8,14 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 ## 2026-10-06: Certificate and org-profile management slice
 
+- Keep qualification list tables mounted across page loads so clearing their data
+  releases the previous page; table-column teardown must not retain old pages in
+  rearmed layout callbacks.
+- Enforce the raw 16 KiB HTTP body limit on certificate/profile management POSTs
+  and reject profile historical-pin reactivation after database constraints.
+  Align acceptance setup with authorized pin creation, the established member
+  removal route and the approved human-only lifecycle role grants; keep source
+  constraint and removed-member access assertions intact.
 - Extended profile and certificate management with bounded prefix browse/search,
   exact revision details, separate content/lifecycle history, complete declaration
   editing and explicit authorized task pins. Certificate originals remain bound to

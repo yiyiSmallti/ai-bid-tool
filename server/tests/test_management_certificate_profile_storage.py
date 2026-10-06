@@ -274,8 +274,9 @@ async def test_token_scope_database_guard(scope, tenants, application):
 
 
 @pytest.mark.parametrize("kind,arm,table,revisions,pins,create", KINDS)
+@pytest.mark.parametrize("restored", [False, True])
 async def test_retained_inactive_pin_cannot_be_reactivated(
-    kind, arm, table, revisions, pins, create, api, headers, tenants, application
+    kind, arm, table, revisions, pins, create, restored, api, headers, tenants, application
 ):
     row = await create(api, headers[0])
     root = row[f"{arm}_id"]
@@ -295,8 +296,30 @@ async def test_retained_inactive_pin_cannot_be_reactivated(
     )
     assert second.status_code == 200
     await transition(api, headers[0], kind, root, revision=2)
+    if restored:
+        await transition(api, headers[0], kind, root, "active", sequence=1, revision=2)
     org = tenants["orgs"][0]
     actor = Identity(tenants["users"][0], org, set(ROLE_SCOPES["admin"]), "admin")
+    if kind == "profiles":
+        # The replacement still owns the active slot: its UNIQUE rejection must
+        # precede the AFTER history guard, independently of library lifecycle.
+        with pytest.raises(DBAPIError) as duplicate:
+            async with application.state.db.transaction(org) as session:
+                await set_actor_context(session, actor)
+                await session.execute(
+                    text(f"UPDATE {pins} SET active=true WHERE id=:id"),
+                    {"id": UUID(first.json()["data"]["id"])},
+                )
+        assert duplicate.value.orig.sqlstate == "23505"
+        assert duplicate.value.orig.diag.constraint_name == "task_profile_active_slot"
+    # Remove the separate slot conflict so only historical reactivation is under
+    # test. A library restore must never make a retired snapshot writable again.
+    async with application.state.db.transaction(org) as session:
+        await set_actor_context(session, actor)
+        await session.execute(
+            text(f"UPDATE {pins} SET active=false WHERE id=:id"),
+            {"id": UUID(second.json()["data"]["id"])},
+        )
     with pytest.raises(DBAPIError) as failure:
         async with application.state.db.transaction(org) as session:
             await set_actor_context(session, actor)

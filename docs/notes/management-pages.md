@@ -121,10 +121,15 @@ bidder/admin lifecycle authority. Missing-parent lookup
 shortcuts must not skip these checks, because FK visibility can differ from an
 earlier ordinary lookup during concurrent or same-statement writes.
 
-An inactive historical pin cannot be reactivated: the retained-history trigger in
-[0023](../../server/migrations/versions/0023_screenshots.py) rejects that update
-before lifecycle checks, even for an authorized actor. New pin inserts pass the
-tenant, composite-key and authority checks before lifecycle rejection.
+An inactive historical pin cannot be reactivated, even by an authorized actor.
+The retained-history trigger in [0023](../../server/migrations/versions/0023_screenshots.py)
+protects product, feature and certificate pins. The profile trigger in
+[0052](../../server/migrations/versions/0052_certificate_profile_library.py) runs
+after row, unique and composite-key constraints, then rejects historical activation
+before new-pin authority and lifecycle checks. A conflicting active profile slot
+therefore retains its unique-constraint rejection. Restoring a library root does
+not restore retired pins. New pin inserts pass the tenant, composite-key and
+authority checks before lifecycle rejection.
 
 Token issuance remains human-only in both the API and database. The additive
 [token creation scope guard](../../server/migrations/versions/0051_token_creation_scope.py)

@@ -161,7 +161,12 @@ def create_app(
         )
         credential_route = request.url.path.startswith("/platform/credentials")
         resource_management_route = request.method == "POST" and request.url.path.startswith(
-            ("/management/resources/products", "/management/resources/features")
+            (
+                "/management/resources/products",
+                "/management/resources/features",
+                "/management/resources/certificates",
+                "/management/resources/profiles",
+            )
         )
         if credential_route:
             from app.services.platform import identify

@@ -102,7 +102,7 @@ BEGIN
    OR current_setting('app.actor_kind',true) IS DISTINCT FROM 'session'
    OR coalesce(current_setting('app.actor_token_id',true),'')<>''
    OR nullif(current_setting('app.actor_user_id',true),'')::uuid IS DISTINCT FROM p_actor
-   OR NOT (scopes ? (p_kind || ':write')) OR NOT (scopes ? (p_kind || ':lifecycle')) THEN
+   OR NOT (scopes ? (p_kind || '\:write')) OR NOT (scopes ? (p_kind || '\:lifecycle')) THEN
   RAISE EXCEPTION 'human library maintenance required' USING ERRCODE='42501'; END IF;
  SELECT m.role INTO r FROM public.memberships m JOIN public.users u ON u.id=m.user_id
   JOIN public.orgs o ON o.id=m.org_id
@@ -227,6 +227,11 @@ CREATE TRIGGER management_profile_task_lock BEFORE INSERT OR UPDATE OR DELETE ON
  FOR EACH ROW EXECUTE FUNCTION public.management_feature_task_lock();
 CREATE TRIGGER task_archived_write AFTER INSERT OR UPDATE OR DELETE ON public.task_org_profiles
  FOR EACH ROW EXECUTE FUNCTION public.task_archived_guard();
+-- Retired profile pins are immutable even after the library is restored. Keep
+-- row/composite-key/unique constraints first, then reject historical activation
+-- before the new-pin authority and lifecycle checks below.
+CREATE TRIGGER management_profile_no_reactivation AFTER UPDATE OF active ON public.task_org_profiles
+ FOR EACH ROW EXECUTE FUNCTION public.screenshot_selection_no_reactivation();
 CREATE FUNCTION public.management_profile_selection_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE root_state text;
