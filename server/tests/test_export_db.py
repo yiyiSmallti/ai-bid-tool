@@ -279,7 +279,7 @@ async def exports_seeded(tenants, tmp_path, admin_engine):
         for index, org in enumerate(tenants["orgs"]):
             user, header = tenants["users"][index], headers[index]
             task, _, extraction, requirements = await create_tender(
-                api, app, header, tmp_path, suffix=str(index)
+                api, app, header, tmp_path, suffix=str(index), confirmed=True
             )
             _, product, _, _, _ = await select_real_materials(api, header, task, tmp_path)
             card = await create_card(

@@ -238,7 +238,7 @@ async def test_prototype_keep_replace_permissions_and_card_reopen(tenants, tmp_p
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
         task, _, extraction, requirements = await create_tender(
-            api, app, header, tmp_path, suffix="prototype-decisions"
+            api, app, header, tmp_path, suffix="prototype-decisions", confirmed=True
         )
         feature = await selected_feature(api, header, task)
         prototype = await seed_prototype(

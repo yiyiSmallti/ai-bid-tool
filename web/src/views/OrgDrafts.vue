@@ -90,6 +90,9 @@ const statusLabels = {
 };
 
 const gapLabels = {
+  requirement_unconfirmed: "招标要求尚未确认",
+  requirement_invalidated: "招标要求确认已失效",
+  cosign_required: "响应会签尚未完成",
   missing_card: "尚无响应卡",
   unconfirmed: "响应卡尚未确认",
   rejected: "响应卡已驳回",
@@ -99,6 +102,11 @@ const gapLabels = {
   invalid_citation: "招标原文引用无效",
   needs_reconfirmation: "引用修复后需要重新确认",
 };
+
+function gapReviewHref(row) {
+  if (row.reasons?.some(reason => reason.startsWith("requirement_"))) return `/org/tasks/${encodeURIComponent(taskId.value)}/requirements?job=${encodeURIComponent(jobId.value)}&requirement=${encodeURIComponent(row.requirement_id)}`;
+  return reviewHref(row.requirement_id);
+}
 
 function reviewHref(requirementId) {
   const base = `/org/tasks/${encodeURIComponent(taskId.value)}/review?job=${encodeURIComponent(jobId.value)}`;
@@ -405,7 +413,7 @@ onBeforeUnmount(() => {
               <td><blockquote class="quote">{{ row.tender_clause.quote }}</blockquote></td>
               <td class="hint">{{ sourceLabel(row) }}</td>
               <td><div class="tags"><span v-for="reason in row.reasons" :key="reason" class="tag warning">{{ gapLabels[reason] ?? reason }}</span></div></td>
-              <td><RouterLink :to="reviewHref(row.requirement_id)">回到审阅</RouterLink></td>
+              <td><RouterLink :to="gapReviewHref(row)">回到审阅</RouterLink></td>
             </tr>
           </tbody>
         </table>

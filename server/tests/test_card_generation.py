@@ -302,7 +302,9 @@ def same_instants(value):
 async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_engine, provider):
     async with drafting_client(tenants, tmp_path, provider) as (api, app, headers, vendor, _):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         await select_real_materials(api, header, task, tmp_path)
         agent = await token_header(api, header)
         receipt = await submit(api, agent, task, extraction)
@@ -642,7 +644,9 @@ async def test_state_skips_negative_deviation_and_no_prior_response_leak(
 ):
     async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         content = {
             "response_kind": "commitment",
             "response_text": "PRIVATE PRIOR RESPONSE MUST NEVER BE SENT",
@@ -693,7 +697,9 @@ async def test_state_skips_negative_deviation_and_no_prior_response_leak(
 async def test_changes_while_vendor_runs_are_fenced(tenants, tmp_path, admin_engine, change):
     async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, _):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         card = await create_card(
             api,
@@ -1142,7 +1148,9 @@ async def test_uncited_model_inputs_become_stale_and_block_confirmation_and_draf
 ):
     async with drafting_client(tenants, tmp_path) as (api, app, headers, _, _):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         product, _, _, _, _ = await select_real_materials(api, header, task, tmp_path)
         receipt = await submit(
             api, header, task, extraction, requirement_ids=[requirements[2]["id"]]

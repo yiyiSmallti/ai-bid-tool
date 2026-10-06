@@ -4,11 +4,14 @@ kind: plan
 
 # B02 requirement confirmation and manual entry contract
 
-Status: **Approved with all recommended defaults, not implemented.** This contract covers the
-remaining B02 scope in [the roadmap](roadmap.md), satisfying the interface-first requirement in
+Status: **approved; first slice implemented**. This contract covers the
+B02 requirement-review and manual-entry scope in [the roadmap](roadmap.md), satisfying the interface-first requirement in
 [agent.md](../../agent.md#workflow). Its importable
 [Pydantic v2 models and service protocols](requirement-confirmation/requirement_confirmation_contracts.py)
-define proposed payloads; importing them registers no handlers or database objects.
+re-export the implemented runtime payloads; importing them registers no handlers or database objects.
+The [mechanism note](../notes/requirement-confirmation.md) names the implementation.
+Database and browser acceptance remain separate execution checks; implementing the
+acceptance suites does not assert that those suites have run.
 
 ## Goal and boundary
 
@@ -42,39 +45,37 @@ A disputed saved requirement can remain unconfirmed, with a review reason; it ca
 silently removed from coverage. General correction/supersession of saved semantics needs
 a later contract. Existing quote repair remains available with its actual authority.
 
-## Current code basis and design differences
+## Integration points and design differences
 
-These are integration requirements grounded in named functions, not claims that B02
-confirmation already exists. Historical baseline paragraphs in approved plans do not
+These integration requirements identify the existing mechanisms that B02 extends. Historical baseline paragraphs in approved plans do not
 override the runtime modules listed here.
 
-| Current code | Consequence for this draft |
+| Existing mechanism | B02 integration |
 | --- | --- |
-| `Source`, `ExtractedRequirement`, `Result`, `Cost`, `CONTRACT_VERSION` in [schemas/contracts.py](../../server/app/schemas/contracts.py); `Requirement` in [models/entities.py](../../server/app/models/entities.py) | Source requires exactly one PDF page or Word `Location`; Requirement has no review state/revision/confirmer. Result is **4.0**, including the task-budget cost fields. No duplicate Source or Result definition is needed. |
+| `Source`, `ExtractedRequirement`, `Result`, `Cost`, `CONTRACT_VERSION` in [schemas/contracts.py](../../server/app/schemas/contracts.py); `Requirement` in [models/entities.py](../../server/app/models/entities.py) | Source requires exactly one PDF page or Word `Location`; separate `requirement_reviews` records hold review state/revision/confirmer. Result is **4.0**, including the task-budget cost fields. No duplicate Source or Result definition is needed. |
 | `source_text`, `locate_span`, `locate_spans`, `split_cited`, `merge_starred`, `fingerprint` in [services/extraction.py](../../server/app/services/extraction.py) | Verification binds a parsed page/block. Normalized matching resolves a unique original span, with a boundary preference; saved quote is literal original text. Fingerprint deduplicates normalized quote and position within a job, not a full reviewed meaning or explicit occurrence. |
 | `attach` in [providers/llm.py](../../server/app/providers/llm.py), `Processor.__call__` in [jobs/processor.py](../../server/app/jobs/processor.py) | Rejected records contain `position`, at most 200 quote characters and `reason`, without complete Source/category/text/condition. All rejected and no kept items fails `invalid_citation` before the starred-rule union. Mixed results succeed with warnings. There is no `jobs/extract*.py` module in this checkout: extraction execution lives in Processor. |
 | `submit` in [services/tender_jobs.py](../../server/app/services/tender_jobs.py), `latest_extractions`, `list_requirements`, `extraction_history` in [services/requirements.py](../../server/app/services/requirements.py) | Fixed model/reasoning inputs reuse a cached job. Successful different jobs keep separate requirements; default lists select the latest successful job per document. Original `created` counts describe model publication, not subsequent manual additions. |
 | `repair_citations` in [services/citation_repair.py](../../server/app/services/citation_repair.py) | Existing repair previews/updates quote and model_quote for saved requirements only. It cannot re-enter rejected items or accept a new position. Its human admin check also requires `evidence:confirm`; B02 must not silently widen this endpoint. |
 | `citation_valid_in_chunk`, `citation_validity_batch`, `extraction_scope` in [services/response_cards.py](../../server/app/services/response_cards.py) | Current consumers recheck literal presence and unique normalized location. `extraction_scope` requires a successful extract job with saved requirements; it is also used by historical reads and must not become a global confirmation gate. |
-| [api/tenders.py](../../server/app/api/tenders.py), `req extract/list/history/repair-citations` in [cli/bid_cli/main.py](../../cli/bid_cli/main.py), [schema.py](../../cli/bid_cli/schema.py) | These are the existing entry points. None creates or confirms a manual requirement. `partial_completion_exit` does not return 5 merely because a successful extraction reports rejected items. |
+| [api/tenders.py](../../server/app/api/tenders.py), `req extract/list/history/repair-citations` in [cli/bid_cli/main.py](../../cli/bid_cli/main.py), [schema.py](../../cli/bid_cli/schema.py) | These entry points retain their meanings; [requirement confirmation routes](../../server/app/api/requirement_confirmation.py) add review and manual creation. `partial_completion_exit` does not return 5 merely because a successful extraction reports rejected items. |
 | `access`, `live_actor` in [task_workflow.py](../../server/app/services/task_workflow.py), [team workflow](team-workflow.md#membership-ownership-and-authorization) | Live org/task grants and archive guards already exist. The older code-basis statements about absent task membership/SSE in that plan are superseded by these functions, [documents.list_tasks](../../server/app/services/documents.py) and [api/task_board.py](../../server/app/api/task_board.py). Co-sign remains a separate response policy. |
-| `row_projection`, `matches`, `board`, `progress`, `activity` in [task_board.py](../../server/app/services/task_board.py), `requirements_with_collaboration`, `load` in [task_board_projection.py](../../server/app/services/task_board_projection.py) | Board buckets and actions currently describe response progress. Eligible-user lists often describe only the reader, and citation-repair hints are broader than the actual admin-only handler. B02 needs a real next actor and separate requirement blockers. |
+| `row_projection`, `matches`, `board`, `progress`, `activity` in [task_board.py](../../server/app/services/task_board.py), `requirements_with_collaboration`, `load` in [task_board_projection.py](../../server/app/services/task_board_projection.py) | The default projection retains response enums with requirement gaps; [the opt-in overlay](../../server/app/services/requirement_board.py) adds requirement buckets and a live next actor. Citation repair remains admin-only. |
 
 [The design's typical flow](../design.md#users-and-core-scenarios) includes “confirm
 requirements”; its human-gate prose largely describes evidence confirmation. These are
-different decisions. The runtime has the latter, not the former. Likewise, the design's
+different decisions. The runtime keeps independent decisions for both. Likewise, the design's
 rerun wording does not mean equivalent requirements inherit human decisions: extraction
 jobs are separate scopes under [ADR 0004](../adr/0004-extractions-per-reasoning-level.md).
 Old budget examples in [org-console.md](org-console.md) and [check.md](check.md) predate
 the enforced task budget and Result 4.0; this contract reuses the current schemas.
 
-The pinned-span citation helper referenced by PR #18 is **not present in this checkout**.
-Use `source_text` plus `extraction.locate_span` here, with the exact-literal guard used
-by `response_cards.citation_validity_batch`. If that helper lands before implementation,
-use its real interface and equivalent tests instead of copying the algorithm. Do not
-claim an arbitrary offset can resolve ambiguity: the initial API accepts no caller
-offsets. `assessment_bounds.text_window` uses the first literal `.find` result for a
-display window and is not a substitute verifier.
+Manual verification uses `extraction.locate_source_citation_span`, integrated from the
+merged PR #18 helper, with the requested Source quote as both the pinned quote and
+candidate. Effective-state batches retain `locate_spans` and reuse unchanged, verified
+pins without repeated per-item location calls. Both preserve the literal equality guard.
+The input accepts no caller offsets: a longer exact quote must resolve ambiguity within
+one page/block. `assessment_bounds.text_window` is a display helper, never the verifier.
 
 ## First vertical slice
 
@@ -242,7 +243,7 @@ remain in their runtime homes.
 | New table | Required fields, keys and invariants |
 | --- | --- |
 | `requirement_review_sets` | id, org_id, task_id, extraction_job_id, document_id, origin=model/manual, revision>=1, membership_sha256, confirmation_sha256. Unique `(org_id,extraction_job_id)` and `(org_id,id,task_id,extraction_job_id)`; job FK `(org_id,extraction_job_id,task_id,document_id)` to the existing Job scope key. Origin immutable; model origin seeded by publication/backfill, manual origin by the human-entry service. |
-| `requirement_reviews` | id, org_id, task_id, extraction_job_id, requirement_id, origin, revision, current_event_id, state, current review_hash/source pin, confirmed_by_user_id/at, optional rejected_job_id/index/summary hash. Unique `(org_id,requirement_id)` and `(org_id,id,task_id,extraction_job_id,requirement_id)`. FK `(org_id,requirement_id,task_id,extraction_job_id)` to Requirement; FK to same review set; source job FK plus same-task/document trigger; confirmer references `(org_id,user_id)` Membership. Confirmed requires both confirmer/time and a current verified binding; all other states have neither. |
+| `requirement_reviews` | id, org_id, task_id, extraction_job_id, requirement_id, origin, revision, current_event_id, state, current review_hash/source pin, encrypted baseline snapshot, confirmed_by_user_id/at, optional rejected_job_id/index/summary hash. Unique `(org_id,requirement_id)` and `(org_id,id,task_id,extraction_job_id,requirement_id)`. FK `(org_id,requirement_id,task_id,extraction_job_id)` to Requirement; FK to same review set; source job FK plus same-task/document trigger; confirmer references `(org_id,user_id)` Membership. Confirmed requires both confirmer/time and a current verified binding; all other states have neither. |
 | `requirement_review_events` | id, org_id, task_id, extraction_job_id, requirement_id, review_id, revision, action, state_after, canonical content/source snapshot hash, encrypted snapshot/reason, verified pin, authenticated actor kind/user, occurred_at, request_id. Append-only, unique `(org_id,review_id,revision)` and `(org_id,review_id,id,revision)`; composite FK to the matching review/requirement scope. Reviews' current pointer uses deferred FK `(org_id,id,current_event_id,revision)` to that full event key. Seed/invalidate events may have no human actor; confirm/reopen/manual_add require a live human session. |
 | `requirement_review_requests` | id, org_id, task_id, actor_user_id, request_id, action, request_sha256, encrypted result receipt, created_at. Unique `(org_id,actor_user_id,request_id)` across actions, composite task and Membership FKs; append-only. Stores atomic replay receipts for single/batch/manual operations, not just the last request on a review row. No raw request body, token or source text in indexes/audit. |
 
@@ -251,7 +252,10 @@ document tuple is not already unique. Stored pin Source/chunk/document reference
 rejected references must be checked by database triggers against actual parents; JSON
 fields cannot replace same-org foreign-key enforcement. Actor user references Membership,
 not the global User table alone. Encrypted snapshots/receipts use `Secrets.for_data` with
-org/record binding; public history returns authorized source snapshots but not raw reasons
+org/review binding for content/reasons and org/receipt binding for replay receipts.
+Source-trigger invalidation events copy the encrypted prior baseline and hash to identify
+the input being invalidated; current views derive the changed source independently.
+A later human decision stores the new encrypted baseline. Public history returns authorized source snapshots but not raw reasons
 or encrypted data. Audit/event streams contain metadata only.
 
 Migration order:
@@ -408,7 +412,7 @@ unconfirmed/legacy/invalidated/manual/rejected counts. A response that was previ
 complete cannot continue counting complete while its requirement is unconfirmed.
 
 The console adds `/app/org/tasks/:taskId/requirements?job=J`, linked from the existing
-task/extraction history and review board. This is an outline for implementation:
+task/extraction history and review board. The implemented console follows this outline:
 
 - Header: selected document/scope, origin/model/reasoning, original extraction receipt,
   current saved/manual/review counts, “已确认不代表无遗漏”, and named next owner/action.
@@ -437,11 +441,11 @@ All routes are relative to the existing versioned API base, with session/org con
 resolved by `api.main.context`; no mutation accepts actor, org_id or confirmation time.
 Resource existence/access is established before revealing scoped errors. Multi-ID bodies
 are same-task/same-scope or fail atomically. Request payloads and envelopes use strict
-shared `Contract` (`extra=forbid`). The draft defines `RequirementCitationVerifier`
+shared `Contract` (`extra=forbid`). The runtime exports `RequirementCitationVerifier`
 (deterministic local provider) and `RequirementReviewService` Protocols; no new vendor
 Provider method or dependency is needed. No LLM/OCR/billing work happens in these methods.
 
-| Proposed HTTP | CLI, all with `--json` | Request → Result.data / Result.items |
+| HTTP | CLI, all with `--json` | Request → Result.data / Result.items |
 | --- | --- | --- |
 | `GET /tasks/{T}/extractions/{J}/requirement-reviews` | `bid req review-list --task T --job J [--state STATE] [--cursor C] [--limit N]` | ReviewPageQuery → ReviewPageData / RequirementReviewView[] |
 | `GET /requirements/{R}/review` | `bid req show --id R` | → RequirementReviewData / [] |
@@ -455,8 +459,7 @@ Provider method or dependency is needed. No LLM/OCR/billing work happens in thes
 GET/manual-preview/reads return HTTP 200; a new manual entry returns 201 and an idempotent
 replay 200; decisions return 200. Existing `req list/history/extract/repair-citations`
 retain their names; append origin/review summaries and navigation IDs to existing views
-without repurposing `req history` (extraction history). `bid schema` registration happens
-only with approved implementation. Remote and local CLI call the same services and
+without repurposing `req history` (extraction history). `bid schema` registers the approved implementation and keeps a separate legacy projection. Remote and local CLI call the same services and
 PostgreSQL/RLS, without interactive questions. `--input FILE` avoids putting quoted
 business text and reasons into shell history. No asynchronous wait/retry flag is needed
 for these new synchronous commands.
@@ -520,12 +523,12 @@ are illustrative, not an execution record:
 | Exit | HTTP and Result behavior |
 | --- | --- |
 | 0 | Successful read/preview/add/decision/replay. A visible unconfirmed item or rejected receipt is not failure of the read. `--dry-run` success does not authorize later creation. |
-| 2 | 400/422 malformed input, missing parameters, nonverbatim/ambiguous/wrong-location quote, unsupported filter/size; 409 expected revision/hash/cursor/duplicate/idempotency/archive or requirement-acceptance conflict. `ok=false`, data.code/message, items=[]; reload/correct before retry. |
+| 2 | 400/422 malformed input, missing parameters, nonverbatim/ambiguous/wrong-location quote, unsupported filter/size; 409 expected revision/hash/cursor/duplicate/idempotency/archive or requirement-acceptance conflict. `ok=false`, `data.error.{code,message,exit_code}`, `items=[]`; reload/correct before retry. |
 | 3 | Retryable transport, database availability/serialization exhaustion or service timeout. Never claim failure proves no commit: retry the same mutation request_id and input to recover its receipt. |
 | 4 | 401 unauthenticated, 403 missing scope/human/task-role authority on a visible object, uniform 404 nonexistent/cross-org/inaccessible parent, or detected stored-source integrity failure. No other-org IDs/quotes in errors. |
 | 5 | Reserved for existing commands' partial-success contract; new batches are atomic and never partially confirm/save. B02 does not change the existing mixed-extraction rejection exit behavior. Any later change to that behavior needs explicit CLI compatibility approval. |
 
-Error `data` keeps the runtime `code`/`message` convention, with authorized conflict
+Error `data` keeps the runtime nested `error` object with `code`, `message` and `exit_code`, with authorized conflict
 IDs/revisions only when safe. Shared new codes include `requirement_unconfirmed`,
 `requirement_invalidated`, `review_changed`, `manual_preview_changed`,
 `rejected_reference_changed`, `duplicate_requirement`, `idempotency_conflict`,
@@ -565,10 +568,14 @@ server snapshot; the browser cannot reconstruct approval from locally cached cli
 
 ## Failure modes and implementation acceptance plan
 
-The following are planned acceptance tests, not claimed execution evidence. No unit
-tests or runtime changes are part of this draft. Future implementation should use the
-existing two-org PostgreSQL/API/CLI/browser end-to-end harness and fake Providers; do not
-call external models to verify this deterministic feature.
+The acceptance suites use the existing two-org PostgreSQL/API/CLI/browser harness
+and fake Providers. Database-backed tests are in
+[test_requirement_confirmation.py](../../server/tests/test_requirement_confirmation.py),
+[test_requirement_source_acceptance.py](../../server/tests/test_requirement_source_acceptance.py)
+and [test_requirement_consumption.py](../../server/tests/test_requirement_consumption.py).
+The [mocked browser flow](../../web/e2e/requirement-confirmation.spec.js) writes reproducible
+artifacts under `data/work/requirement-confirmation/`. The following matrix defines the
+required evidence; test definitions and discovery do not establish executed acceptance.
 
 | Failure family | Required acceptance evidence |
 | --- | --- |
@@ -590,8 +597,8 @@ weakening their gates. Produce reproducible Playwright trace, sanitized fixture/
 IDs, CLI snapshots and a command/outcome manifest under ignored
 `data/work/requirement-confirmation/`, never under `docs/`. Screenshots/traces use synthetic
 content and redact session headers. Tests demonstrate the actual human/role entry points,
-not merely model validation. Draft verification is limited to ruff, format, pyright and
-module import; it cannot establish runtime or database acceptance.
+not merely model validation. Static checks, DB-free suites, console build and browser test discovery can run in
+a restricted sandbox; PostgreSQL and browser execution must establish runtime acceptance.
 
 ## Decisions
 

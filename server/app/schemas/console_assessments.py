@@ -35,6 +35,7 @@ from app.schemas.score_contracts import (
     RubricItemView,
     RubricPreview,
     RubricRequirementCoverageView,
+    RubricRequirementReadiness,
     RubricReviseRequest,
     RubricSectionDecisionRequest,
     RubricSectionView,
@@ -366,6 +367,7 @@ class RubricSummaryData(Contract):
     section_count: Count
     item_count: Count
     completeness: RubricCompletenessSummary
+    requirement_review: RubricRequirementReadiness | None = None
     overall_aggregation: AggregationRule
     overall_aggregation_assessable: bool
     overall_rule_text: VerbatimRule | None

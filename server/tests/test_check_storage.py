@@ -59,6 +59,9 @@ def actor(session, org, user, kind="worker"):
 
 def confirmed_certificate_draft(session, org, user, ids, selection, certificate_revision):
     """Pass real edit, submit, confirm and draft gates for the storage fixture."""
+    from task_fixtures import confirm_requirements
+
+    confirm_requirements(session, org, ids["task"])
     actor(session, org, user, "session")
     old = session.get(ResponseItem, ids["item"])
     card = session.get(ResponseCard, old.card_id)

@@ -38,7 +38,7 @@ from app.models.screenshots import (
 )
 from app.models.team_workflow import CardCommentMention, CardCommentThread, RequirementWorkflow
 from app.schemas.screenshot_contracts import ContentMapping, ImageEvidenceInput
-from app.services import response_cards
+from app.services import requirement_consumption, response_cards
 
 
 async def requirements_with_collaboration(session, actor, task_id, extraction, *, limit, member):
@@ -127,6 +127,9 @@ async def load(session, actor, requirements, task_id, assessment_day):
     }
     citations = response_cards.citation_validity_batch(requirements, chunks)
     session.info["board_requirement_citations"] = citations
+    session.info["board_requirement_reviews"] = await requirement_consumption.effective(
+        session, requirements, citations=citations
+    )
     pairs = list(
         await session.execute(
             select(ResponseCard, ResponseCardRevision)

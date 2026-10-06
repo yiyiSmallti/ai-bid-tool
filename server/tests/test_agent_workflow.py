@@ -194,7 +194,9 @@ async def test_proposals_human_review_and_confirmed_draft(
     monkeypatch.setattr(controller, "record_tool_output", observe_output)
     async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         await select_real_materials(api, header, task, tmp_path)
         actions = [
             {

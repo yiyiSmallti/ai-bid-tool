@@ -6,6 +6,20 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Requirement confirmation and verified manual entry
+
+- Added independent requirement review, source pins, legacy-unconfirmed migration,
+  immutable encrypted decisions, atomic owner batches and replay receipts with
+  human-only task authority and FORCE RLS.
+- Added verified manual recovery for omitted and rejected requirements, explicit
+  manual extraction sets and preserved original model receipts, costs and lineage.
+- Bound response acceptance, draft gaps, rubric confirmation, scoring and artifact
+  freshness to requirement review while retaining provisional preparation and
+  existing evidence/domain/co-sign gates.
+- Added API/CLI Result 4.0 commands, explicit requirement-review board/progress,
+  next-human responsibility, durable metadata events and the console review/manual
+  workspace. See [Requirement confirmation](notes/requirement-confirmation.md).
+
 ## 2026-10-05: Co-sign consumer and citation batching compatibility
 
 - Reuse a review round's immutable, already-validated citation inputs during

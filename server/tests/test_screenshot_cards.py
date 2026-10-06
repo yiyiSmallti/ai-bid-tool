@@ -230,7 +230,7 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
         task_id, _, extraction_id, requirements = await create_tender(
-            api, app, header, tmp_path, suffix="screenshot-card"
+            api, app, header, tmp_path, suffix="screenshot-card", confirmed=True
         )
         feature = await selected_feature(api, header, task_id)
         uploaded = await ingest_synthetic_screenshot(

@@ -65,6 +65,9 @@ COMPLY_COLUMNS = (("序号", 8), ("招标文件要求", 72), ("响应情况", 20
 GAP_COLUMNS = (("序号", 8), ("招标文件要求", 62), ("缺口原因", 30))
 INDEX_COLUMNS = (("编号", 10), ("材料", 30), ("内容", 35), ("对应条款", 25))
 GAP_LABELS = {
+    "requirement_unconfirmed": "招标要求尚未确认",
+    "requirement_invalidated": "招标要求确认已失效",
+    "cosign_required": "响应会签尚未完成",
     "missing_card": "缺少响应卡",
     "unconfirmed": "响应尚未确认",
     "rejected": "响应已驳回",

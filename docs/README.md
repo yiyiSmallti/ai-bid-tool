@@ -30,6 +30,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [platform-credentials.md](notes/platform-credentials.md): platform credential authority, resolution before each call, import and root-key rotation.
 - [tenant-isolation.md](notes/tenant-isolation.md): RLS, org (organization/tenant; 单位) context and file isolation.
 - [memory.md](notes/memory.md): human approval of org memory (记忆), keyword retrieval, per-call traceability, cache invalidation and feedback candidates.
+- [requirement-confirmation.md](notes/requirement-confirmation.md): independently reviewed requirements, verified manual recovery, source-bound acceptance and stale-output gates.
 - [response-cards.md](notes/response-cards.md): human response cards (响应卡), evidence confirmation, atomic disposition and three-table drafts (初稿).
 - [console-assessments.md](notes/console-assessments.md): bounded check/score console reads, human review, budget preflight and complete rubric replacement.
 - [check.md](notes/check.md): deterministic risk checks on confirmed drafts, certificate (证书) dates, citations and human false-positive decisions.

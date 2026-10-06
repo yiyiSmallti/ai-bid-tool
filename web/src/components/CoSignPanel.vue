@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { orgSession } from "../api.js";
 import { dispositions, domains, errorText, formatTime, label, mine, orgAccess, orgRequest } from "../org.js";
 import { canReviewTask, useProvidedTaskAuthority } from "../task-authority.js";
-const props = defineProps({ taskId: String, jobId: String, requirementId: String, card: Object, reviewed: Array, warnings: Array, reason: String, confirmBlocker: String, dirty: Boolean, conflict: Boolean });
+const props = defineProps({ taskId: String, jobId: String, requirementId: String, card: Object, reviewed: Array, warnings: Array, reason: String, confirmBlocker: String, requirementBlocker: String, dirty: Boolean, conflict: Boolean });
 const emit = defineEmits(["updated", "policy", "review", "clear-review", "dirty", "denied", "refresh-card"]);
 const authority = useProvidedTaskAuthority();
 const policy = ref(null), review = ref(null), signatures = ref([]), currentSignatures = ref([]), cursor = ref(null), prior = ref([]);
@@ -29,6 +29,7 @@ const dispositionBlocker = computed(() => {
   return "";
 });
 const signBlocker = computed(() => {
+  if (props.requirementBlocker) return `${props.requirementBlocker}，请先确认要求`;
   if (!loaded.value) return "会签状态尚未读取";
   if (policyDirty.value || dispositionReason.value.trim()) return "有未保存的会签策略或处置原因，请先处理这些编辑";
   if (!signableDomains.value.includes(selectedDomain.value)) return "请明确选择本人负责且尚未签署的职责";
@@ -87,6 +88,7 @@ function savePolicy() {
   mutate(`/tasks/${props.taskId}/requirements/${props.requirementId}/review-policy?extraction_job_id=${props.jobId}`, { expected_policy_revision: policy.value.revision, co_sign_required: policyRequired.value, reason: policyReason.value.trim() }, "PUT");
 }
 function openDisposition(intended) {
+  if (intended === "comply_only" && props.requirementBlocker) { error.value = "请先确认要求，再发起仅需遵守处置"; return; }
   if (!editableDisposition.value || props.dirty || props.conflict || !dispositionReason.value.trim()) return;
   mutate(`/cards/${props.card.id}/review-rounds`, { expected_revision: props.card.revision, reason: dispositionReason.value.trim(), purpose: "disposition", intended_disposition: intended, client_request_id: crypto.randomUUID() });
 }

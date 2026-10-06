@@ -126,6 +126,10 @@ def bootstrap(org_name: str, email: str):
 
 # Every column written with Secrets.encrypt. A new encrypted column must be added here.
 ENCRYPTED_COLUMNS = (
+    ("requirement_reviews", "snapshot_ciphertext"),
+    ("requirement_review_events", "snapshot_ciphertext"),
+    ("requirement_review_events", "reason_ciphertext"),
+    ("requirement_review_requests", "receipt_ciphertext"),
     ("requirement_workflows", "last_reason_ciphertext"),
     ("card_comments", "body_ciphertext"),
     ("agent_sessions", "start_receipt_enc"),

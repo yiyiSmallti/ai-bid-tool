@@ -27,6 +27,8 @@ from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES, Identity, 
 from app.services.versioned import audit
 
 HUMAN_SCOPES = {
+    "req:confirm",
+    "req:manual",
     "task:members:write",
     "task:archive",
     "card:assign",

@@ -258,6 +258,8 @@ async def snapshot(
         )
     items, fixed_items = [], []
     limitations = list(LIMITATIONS)
+    if any(value.state != "confirmed" for value in batch.requirement_reviews.values()):
+        limitations.append("unconfirmed_tender_interpretations_are_provisional")
     for requirement in requirements:
         row = by_requirement[requirement.id]
         revision = batch.revisions.get(row.card_revision_id) if row.card_revision_id else None
@@ -417,6 +419,7 @@ async def snapshot(
         "task_id": str(task_id),
         "draft_id": str(draft.id),
         "draft_input_hash": draft.input_hash,
+        "requirement_reviews": {key: entry["requirement_review"] for key, entry in current.items()},
         "extraction_job_id": str(extraction.id),
         "document_id": str(extraction.document_id),
         "document_sha256": batch.documents[requirements[0].document_id].sha256,

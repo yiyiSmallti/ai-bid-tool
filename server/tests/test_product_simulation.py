@@ -34,7 +34,7 @@ from app.providers.llm import OpenAICompatibleExtractor
 from conftest import FakeQueue, credential_app
 from docx import Document
 from sqlalchemy import select
-from task_fixtures import reviewer_header
+from task_fixtures import confirm_requirements_async, reviewer_header
 from test_exports import draft, setup_template
 from test_llm_providers import settings_for
 from test_response_cards import login, run_document_job, set_role
@@ -516,6 +516,10 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         requirements = (
             await api.get(f"/tasks/{task}/requirements", headers=header, params={"job": extraction})
         ).json()["items"]
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session, tenants["orgs"][0], UUID(task), settings=app.state.processor.settings
+            )
         memory = next(row for row in requirements if "内存" in row["text"])
         card = await api.post(
             f"/tasks/{task}/cards",

@@ -70,7 +70,7 @@ from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
-MANIFEST_VERSION = "human-export-manifest-v2"
+MANIFEST_VERSION = "human-export-manifest-v3-requirement-review"
 REQUIRED_SCOPES = ("export", "task:read", "draft:read", "card:read", "template:read")
 
 
@@ -519,8 +519,9 @@ async def build_manifest(
         for n, entry in enumerate(draft.input_manifest["requirements"])
     }
     rows.sort(key=lambda row: positions[row.requirement_id])
-    from app.services import task_cosign
+    from app.services import requirement_consumption, task_cosign
 
+    reviews = await requirement_consumption.effective(session, requirements)
     cosign = await task_cosign.projections(
         session, actor.org_id, [row.card_id for row in rows if row.card_id]
     )
@@ -541,6 +542,7 @@ async def build_manifest(
         entry = {
             "response_item_id": str(row.id),
             "requirement_id": str(row.requirement_id),
+            "requirement_review": requirement_consumption.fields(reviews[row.requirement_id]),
             "card_id": str(row.card_id) if row.card_id else None,
             "card_revision_id": str(row.card_revision_id) if row.card_revision_id else None,
             "kind": row.kind,
@@ -552,6 +554,12 @@ async def build_manifest(
             "starred": row.starred,
             "evidence": [],
         }
+        review_gap = requirement_consumption.gap_reason(reviews[row.requirement_id])
+        if review_gap and row.kind != "gap":
+            issues.append(issue("export_stale_draft", "block", requirements=[row.requirement_id]))
+            entry.update(kind="gap", gap_reasons=[review_gap])
+            items.append(entry)
+            continue
         if row.card_id is not None:
             projection = cosign[row.card_id]
             entry.update(task_cosign.manifest_fields(projection))

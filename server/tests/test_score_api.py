@@ -38,6 +38,7 @@ from app.schemas.score_contracts import (
 )
 from app.services import drafts
 from sqlalchemy import func, select
+from task_fixtures import confirm_requirements_async
 from test_check import LiveCheckClient, check_client, invoke_live_cli
 from test_check_combined import platform_llm, seed_platform, semantic_llm
 from test_response_cards import create_tender, set_role
@@ -257,7 +258,7 @@ async def rubric_counts(case):
 async def rubric_input_case(tenants, tmp_path, admin_engine, monkeypatch):
     async with check_client(tenants, tmp_path) as (api, app, headers, provider):
         task, document, extraction, requirements = await create_tender(
-            api, app, headers[0], tmp_path, suffix="rubric"
+            api, app, headers[0], tmp_path, suffix="rubric", confirmed=True
         )
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         vendor = RubricVendor()
@@ -426,6 +427,11 @@ async def add_whole_scoring_table(case):
                     job_id=UUID(case["extraction"]),
                 )
             )
+
+        await session.flush()
+        await confirm_requirements_async(
+            session, org, UUID(case["task"]), settings=case["app"].state.processor.settings
+        )
 
 
 async def test_rubric_whole_table_structure_survives_fixed_section_item_batches(

@@ -71,12 +71,25 @@ async def get_set(
     row = await session.scalar(query)
     if row is None:
         raise not_found()
-    await require_dependencies(session, actor, row)
+    await require_dependencies(session, actor, row, require_current=lock)
     return actor, row
 
 
-async def require_dependencies(session: AsyncSession, actor: Identity, row: ScoreRubricSet) -> None:
+async def require_dependencies(
+    session: AsyncSession, actor: Identity, row: ScoreRubricSet, *, require_current=False
+) -> None:
     await score_inputs.require_dependencies(session, actor, row.task_id, row.input_manifest)
+    if not require_current:
+        return
+    from app.services.requirement_consumption import preparation
+
+    fixed = await score_inputs.snapshot(session, actor, row.task_id, row.extraction_job_id)
+    if row.input_manifest.get("requirement_preparation") != await preparation(
+        session, fixed.requirements, citations={req.id: True for req in fixed.requirements}
+    ):
+        cards.fail(
+            "rubric_input_changed", "The fixed scoring inputs changed; generate a new rubric", 409
+        )
     document = await session.get(Document, row.document_id)
     if document is None:
         raise not_found()
@@ -380,9 +393,61 @@ async def report_data(session: AsyncSession, row: ScoreRubricSet) -> dict:
         section.pop("fingerprint")
     for item in items:
         item.pop("citation_valid")
+    rubric["requirement_review"] = await requirement_readiness(session, row)
     return RubricReportData.model_validate(
         {key: report[key] for key in ("rubric", "sections", "items", "coverage")}
     ).model_dump(mode="json")
+
+
+async def requirement_readiness(session, row):
+    from app.services import requirement_consumption
+
+    fixed_ids = {UUID(entry["requirement_id"]) for entry in row.input_manifest["requirements"]}
+    requirements = list(
+        await session.scalars(
+            select(Requirement).where(
+                Requirement.task_id == row.task_id,
+                Requirement.job_id == row.extraction_job_id,
+                Requirement.id.in_(fixed_ids),
+            )
+        )
+    )
+    reviews = await requirement_consumption.effective(session, requirements)
+    current_preparation = {
+        "policy_version": "requirement-review-v1",
+        "entries": [
+            {"requirement_id": str(req.id), "review_hash": reviews[req.id].review_hash}
+            for req in sorted(requirements, key=lambda value: str(value.id))
+        ],
+    }
+    scoring_ids = set(
+        await session.scalars(
+            select(Requirement.id).where(
+                Requirement.task_id == row.task_id,
+                Requirement.job_id == row.extraction_job_id,
+                Requirement.category == "scoring",
+            )
+        )
+    )
+    changed = (
+        scoring_ids != fixed_ids
+        or row.input_manifest.get("requirement_preparation") != current_preparation
+    )
+    confirmed = sum(value.confirmed for value in reviews.values())
+    return {
+        "state": "stale" if changed else "ready" if confirmed == len(fixed_ids) else "preparation",
+        "fixed_count": len(fixed_ids),
+        "confirmed_count": confirmed,
+        "invalidation_codes": ["review_changed"]
+        if changed
+        else sorted(
+            {
+                reason
+                for value in reviews.values()
+                if (reason := requirement_consumption.gap_reason(value))
+            }
+        ),
+    }
 
 
 async def show_rubric(
@@ -528,7 +593,7 @@ async def human_set(
     await score_inputs.lock_inputs(session, actor, task_id, extraction_id)
     await session.refresh(row)
     actor = await access(session, actor, "score:rubric:review")
-    await require_dependencies(session, actor, row)
+    await require_dependencies(session, actor, row, require_current=True)
     if (await review_state(session, row))["state"] == "superseded":
         cards.fail("rubric_superseded", "Review the replacement rubric", 409)
     return actor, row
@@ -976,6 +1041,10 @@ async def decide_rubric(
             "Resolve all coverage, normalization and human confirmation blockers",
             409,
         )
+    if body.action == "confirm":
+        from app.services.requirement_consumption import scoring_confirmed
+
+        await scoring_confirmed(session, task_id, row.extraction_job_id)
     event = ScoreRubricDecision(
         **await review_values(session, actor, row, body),
         action=body.action,

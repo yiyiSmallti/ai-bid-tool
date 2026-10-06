@@ -157,7 +157,9 @@ async def test_review_export_real_chain_and_every_route_isolated(
 ):
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         selected, binding = await setup_template(api, header, task)
         foreign_binding = await api.post(
             "/export-template-bindings",
@@ -374,7 +376,9 @@ async def complete_inputs(
     `texts` replaces the response text of the cards for those requirement indexes;
     `profile_wording` makes requirement 2 cite a selected org profile declaration
     instead of the certificate page."""
-    task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+    task, _, extraction, requirements = await create_tender(
+        api, app, header, tmp_path, confirmed=True
+    )
     selected, binding = await setup_template(api, header, task)
     _, _, _, _, page = await select_real_materials(api, header, task, tmp_path)
     proof = [

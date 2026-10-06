@@ -14,13 +14,13 @@ from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevisi
 from app.providers.storage import Storage
 from app.schemas.contracts import Cost
 from app.schemas.response_card_contracts import DraftPreview, DraftRequest, DraftView
+from app.services import requirement_consumption, task_cosign
 from app.services import response_cards as cards
-from app.services import task_cosign
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
-RULE_VERSION = "response-draft-v3"
+RULE_VERSION = "response-draft-v4-requirement-review"
 TABLES = ("substantive", "commercial", "technical")
 
 
@@ -65,6 +65,9 @@ async def assemble(
 ):
     job, requirements = await cards.extraction_scope(session, task_id, job_id)
     items, manifest, negatives = [], [], 0
+    reviews = await requirement_consumption.effective(session, requirements)
+    if len(requirements) > 2000:
+        cards.fail("requirement_manifest_limit", "At most 2000 requirements can be consumed", 422)
     cosign = await task_cosign.projections(
         session,
         actor.org_id,
@@ -96,7 +99,9 @@ async def assemble(
             "source": cards.source(requirement),
             "location_label": await cards.location_label(session, requirement),
         }
-        eligibility = view["eligibility"] if view else "missing_card"
+        review = reviews[requirement.id]
+        review_gap = requirement_consumption.gap_reason(review)
+        eligibility = review_gap or (view["eligibility"] if view else "missing_card")
         if view and eligibility == "comply_only":
             entry |= {
                 "kind": "comply_only",
@@ -116,7 +121,7 @@ async def assemble(
             }
             negatives += entry["deviation"] == "negative"
         else:
-            reasons = []
+            reasons = [review_gap] if review_gap else []
             if not view:
                 reasons.append("missing_card")
             else:
@@ -156,6 +161,7 @@ async def assemble(
         manifest.append(
             {
                 "requirement_id": str(requirement.id),
+                "requirement_review": requirement_consumption.fields(review),
                 **(task_cosign.manifest_fields(cosign[card.id]) if card else {}),
                 "card_revision_id": view["revision_id"] if view else None,
                 "source_hash": digest(entry["source"]),
@@ -232,9 +238,17 @@ async def submit_draft(
             for kind in ("row", "comply_only", "gap")
         }
         reasons = {}
+        legacy_reasons = {}
+        legacy_codes = {
+            "requirement_unconfirmed": "unconfirmed",
+            "requirement_invalidated": "needs_reconfirmation",
+        }
         for item in items:
+            for reason in {legacy_codes.get(code, code) for code in item.get("gap_reasons", [])}:
+                legacy_reasons[reason] = legacy_reasons.get(reason, 0) + 1
             for reason in item.get("gap_reasons", []):
                 reasons[reason] = reasons.get(reason, 0) + 1
+        session.info["draft_legacy_gap_reasons"] = legacy_reasons
         data = DraftPreview.model_validate(
             {
                 "task_id": task_id,
@@ -430,10 +444,14 @@ def current_draft_inputs(requirements: list[Requirement], batch: cards.CardReadB
         # Preserve assembly's source checks for missing cards as well as rows.
         batch.citation_valid(requirement)
         cards.location_label_for(requirement, batch.documents.get(requirement.document_id))
-        eligibility = view["eligibility"] if view else "missing_card"
+        review = batch.requirement_reviews[requirement.id]
+        eligibility = requirement_consumption.gap_reason(review) or (
+            view["eligibility"] if view else "missing_card"
+        )
         kind = {"eligible": "row", "comply_only": "comply_only"}.get(eligibility, "gap")
         current[str(requirement.id)] = {
             "requirement_id": str(requirement.id),
+            "requirement_review": requirement_consumption.fields(review),
             **(task_cosign.manifest_fields(batch.cosign[card.id]) if card else {}),
             "card_revision_id": view["revision_id"] if view else None,
             "source_hash": digest(cards.source(requirement)),
@@ -496,6 +514,10 @@ def draft_view(
         for entry in run.input_manifest["requirements"]
         if current_inputs.get(entry["requirement_id"]) != entry
     ]
+    invalidated.extend(
+        set(current_inputs)
+        - {entry["requirement_id"] for entry in run.input_manifest["requirements"]}
+    )
     comply_only, gaps = [], []
     for item in rows:
         requirement = batch.requirements.get(item.requirement_id)
@@ -530,6 +552,13 @@ def draft_view(
             "tender_clause": item.source,
             "location_label": item.location_label,
         }
+        review_gap = requirement_consumption.gap_reason(
+            batch.requirement_reviews[item.requirement_id]
+        )
+        if review_gap and item.kind != "gap":
+            entry["reasons"] = [review_gap]
+            gaps.append(entry)
+            continue
         if card is not None and item.kind != "gap" and not batch.cosign[card.id]["approved"]:
             entry["reasons"] = ["cosign_required"]
             gaps.append(entry)

@@ -6,6 +6,7 @@ export const severityLabels = { disqualification_risk: "废标风险", deduction
 export const domainLabels = { commercial: "商务负责人（投标专员）", technical: "技术负责人", unclassified: "待管理员分配职责" };
 export const stateLabels = { current: "当前有效", stale: "已过期", complete: "已完成", partial: "部分完成", candidate: "待审核", confirmed: "已确认", rejected: "已驳回", superseded: "已被新版本替代", open: "待处理", dismissed: "已忽略", response: "响应", comply_only: "须遵守", gap: "缺口", assessed: "已评估", unassessed: "尚未评估", not_requested: "未请求语义检查", no_risk_found: "在已评估范围未发现风险", risk: "发现风险", unknown: "未知", valid: "有效", expired: "已过期", not_yet_valid: "尚未生效" };
 const errors = {
+  requirement_unconfirmed: "评分来源要求尚未确认，请核对要求并重新读取评分条件", requirement_invalidated: "评分来源要求确认已失效，请重新核对要求并刷新评分条件", review_changed: "要求审阅修订已变化，请重新读取并核对来源后再明确提交",
   redaction_required: "尚未开启外发遮挡，请由管理员或投标专员处理后重新预览",
   insufficient_balance: "余额不足，暂不能提交；请联系管理员补充余额",
   task_budget_exceeded: "任务预算不足，请联系管理员或投标专员调整预算后重新预览",

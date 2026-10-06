@@ -29,6 +29,7 @@ from app.models.response_cards import (
 )
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.orm import Session
 
 RESPONSE_TABLES = (
     "response_cards",
@@ -43,8 +44,9 @@ RESPONSE_TABLES = (
 
 def seed_response_rows(session, org, user, task, extraction, requirement):
     """Seed genuine relational materials under actor context, never bypass triggers."""
-    from task_fixtures import actor_context
+    from task_fixtures import actor_context, confirm_requirements
 
+    confirm_requirements(session, org, task.id, [requirement.id])
     actor_context(session, org, user)
     card_id, revision_id = uuid4(), uuid4()
     card = ResponseCard(
@@ -430,8 +432,11 @@ async def test_cross_org_response_reads_are_empty(gate_db, seeded, table):
 
 @pytest.fixture
 def technical_member(seeded, admin_engine):
-    from task_fixtures import set_role
+    from task_fixtures import confirm_requirements, set_role
 
+    org = seeded["orgs"][0]
+    with Session(admin_engine) as session, session.begin():
+        confirm_requirements(session, org, seeded["ids"][org]["task"])
     set_role(admin_engine, seeded["orgs"][0], seeded["users"][0], "technical")
     return seeded
 

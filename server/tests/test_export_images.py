@@ -96,7 +96,7 @@ async def test_prototype_image_export_gate_keep_attachment_and_replace(
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
         task, _, extraction, requirements = await create_tender(
-            api, app, header, tmp_path, suffix="export-images"
+            api, app, header, tmp_path, suffix="export-images", confirmed=True
         )
         selected, binding = await setup_template(api, header, task)
         feature = await selected_feature(api, header, task)

@@ -281,6 +281,13 @@ class RubricCompletenessView(Contract):
         return self
 
 
+class RubricRequirementReadiness(Contract):
+    state: Literal["preparation", "ready", "stale"]
+    fixed_count: int = Field(ge=0)
+    confirmed_count: int = Field(ge=0)
+    invalidation_codes: list[str] = Field(default_factory=list)
+
+
 class RubricSetView(Contract):
     id: UUID
     prior_rubric_id: UUID | None = None
@@ -301,6 +308,7 @@ class RubricSetView(Contract):
     overall_score_range: CandidateScoreRange | None = None
     overall_cap: CandidateScoreNumber | None = None
     completeness: RubricCompletenessView
+    requirement_review: RubricRequirementReadiness | None = None
     confirmed_by: UUID | None = None
     confirmed_at: AwareDatetime | None = None
     created_at: AwareDatetime

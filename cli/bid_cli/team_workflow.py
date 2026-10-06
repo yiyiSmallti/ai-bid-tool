@@ -7,6 +7,7 @@ from uuid import UUID
 
 import typer
 from app.core.errors import ServiceError
+from app.schemas.requirement_confirmation import RequirementBoardQuery
 from app.schemas.team_workflow import (
     BoardQuery,
     CommentReplyCreate,
@@ -250,10 +251,22 @@ def register(task_app: typer.Typer, card_app: typer.Typer):
         task: Annotated[UUID, typer.Option()],
         cursor: Annotated[str | None, typer.Option()] = None,
         limit: Annotated[int, typer.Option(min=1, max=20)] = 20,
+        job: Annotated[UUID | None, typer.Option()] = None,
+        view: Annotated[str | None, typer.Option()] = None,
         json_output: cli.JsonOption = False,
     ):
+        if view not in {None, "requirement-review"} or (view is None) != (job is None):
+            raise ServiceError(
+                "invalid_input",
+                "Requirement review progress requires --view requirement-review and --job",
+                400,
+                2,
+            )
+        params = _page(cursor, limit)
+        if view is not None:
+            params.update(view=view, extraction_job_id=str(job))
         cli.emit(
-            cli.call("GET", f"/tasks/{task}/progress", params=_page(cursor, limit)),
+            cli.call("GET", f"/tasks/{task}/progress", params=params),
             "task progress",
             json_output,
         )
@@ -389,10 +402,13 @@ def register(task_app: typer.Typer, card_app: typer.Typer):
         mine: Annotated[bool, typer.Option()] = False,
         cursor: Annotated[str | None, typer.Option()] = None,
         limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+        view: Annotated[str | None, typer.Option()] = None,
         json_output: cli.JsonOption = False,
     ):
+        if view not in {None, "requirement-review"}:
+            raise ServiceError("invalid_input", "Unsupported task board view", 400, 2)
         params = _body(
-            BoardQuery,
+            RequirementBoardQuery if view is not None else BoardQuery,
             extraction_job_id=job,
             bucket=bucket,
             category=category,
@@ -409,6 +425,8 @@ def register(task_app: typer.Typer, card_app: typer.Typer):
             key: str(value).lower() if isinstance(value, bool) else value
             for key, value in params.items()
         }
+        if view is not None:
+            params["view"] = view
         cli.emit(cli.call("GET", f"/tasks/{task}/board", params=params), "task board", json_output)
 
     @task_app.command("activity")

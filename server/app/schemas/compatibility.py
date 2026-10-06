@@ -12,6 +12,14 @@ NEW_COMMANDS = frozenset(
         "billing alert set",
         "billing notices",
         "product simulate",
+        "req review-list",
+        "req show",
+        "req review-history",
+        "req rejected",
+        "req add",
+        "req confirm",
+        "req reopen",
+        "req confirm-batch",
     }
 )
 
@@ -22,11 +30,27 @@ def legacy_projection(
     if isinstance(value, list):
         return [legacy_projection(item, path=path, command=command) for item in value]
     if not isinstance(value, dict):
+        if (
+            isinstance(value, str)
+            and path
+            and path[-1] in {"eligibility", "reasons", "gap_reasons"}
+        ):
+            return {
+                "requirement_unconfirmed": "unconfirmed",
+                "requirement_invalidated": "needs_reconfirmation",
+            }.get(value, value)
         return value
     if not path:
         command = value.get("command", command)
 
     def added_attachment(key, item):
+        if key in {
+            "requirement_review",
+            "requirement_reviews",
+            "requirement_preparation",
+            "review_requirement_id",
+        }:
+            return True
         if key == "agent_provenance":
             return True
         if key == "budget_preflight" and path == ("data",):

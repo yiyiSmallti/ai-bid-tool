@@ -209,7 +209,12 @@ async def test_all_rubric_tables_reject_same_org_cross_task_foreign_keys(rubric_
     )
     assert revised.status_code == 200, revised.text
     task, document, extraction, requirements = await create_tender(
-        case["api"], case["app"], case["header"], case["tmp_path"], suffix="cross-task-rubric"
+        case["api"],
+        case["app"],
+        case["header"],
+        case["tmp_path"],
+        suffix="cross-task-rubric",
+        confirmed=True,
     )
     other = {
         **case,

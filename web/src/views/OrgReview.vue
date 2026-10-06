@@ -27,7 +27,7 @@ const pages = computed(() => Math.max(1, Math.ceil(filtered.value.length / pageS
 const visible = computed(() => filtered.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
 const summary = computed(() => rows.value ? { total: rows.value.length, confirmed: rows.value.filter(r => r.card?.state === "confirmed").length, comply: rows.value.filter(r => r.card?.eligibility === "comply_only").length, gaps: rows.value.filter(isGap).length, negative: rows.value.filter(r => r.card?.content.deviation === "negative").length } : null);
 const documentName = (id) => docs.value.find(d => d.id === id)?.name;
-function batchAllowed(row) { return (authority.canReview(domainFor(row)) && mine(domainFor(row))) && !["pending_review", "confirmed"].includes(row.status); }
+function batchAllowed(row) { return (authority.canReview(domainFor(row)) && mine(domainFor(row))) && !["pending_review", "confirmed"].includes(row.status) && !["requirement_unconfirmed", "requirement_invalidated"].includes(row.card?.eligibility); }
 async function discard() { return !dirty.value || !orgSession.get() || await confirmAction("有未保存的响应编辑或评论。离开将丢弃这些内容，继续？", "放弃未保存的编辑", "放弃编辑", true); }
 onBeforeRouteLeave(discard);
 onBeforeRouteUpdate((to) => (to.query.job !== jobId || to.params.taskId !== taskId || String(to.query.requirement ?? "") !== (selectedRow.value?.id ?? "")) ? discard() : true);
@@ -151,7 +151,7 @@ onMounted(load);
   <nav class="breadcrumb" aria-label="位置"><RouterLink to="/org/tasks">招标任务</RouterLink><span>/</span><RouterLink :to="`/org/tasks/${taskId}`">{{ task?.name ?? "任务" }}</RouterLink><span>/</span><span>要求与响应审阅</span></nav>
   <div class="page-header">
     <div><h2 ref="title" tabindex="-1">要求与响应审阅</h2><p class="subtitle">任务 {{ task?.name }} · 固定抽取 <code>{{ jobId }}</code></p></div>
-    <div class="actions"><el-button :icon="Back" @click="router.push(`/org/tasks/${taskId}`)">返回任务</el-button><el-button type="primary" plain :icon="Document" @click="router.push(`/org/tasks/${taskId}/drafts?job=${jobId}`)">三表与缺口</el-button><RouterLink :to="`/org/tasks/${taskId}/checks?job=${jobId}`">检查风险</RouterLink><RouterLink :to="`/org/tasks/${taskId}/scores?job=${jobId}`">评分预估</RouterLink></div>
+    <div class="actions"><RouterLink :to="`/org/tasks/${taskId}/requirements?job=${jobId}${selectedRow ? `&requirement=${selectedRow.id}` : ''}`">查看要求确认状态</RouterLink><el-button :icon="Back" @click="router.push(`/org/tasks/${taskId}`)">返回任务</el-button><el-button type="primary" plain :icon="Document" @click="router.push(`/org/tasks/${taskId}/drafts?job=${jobId}`)">三表与缺口</el-button><RouterLink :to="`/org/tasks/${taskId}/checks?job=${jobId}`">检查风险</RouterLink><RouterLink :to="`/org/tasks/${taskId}/scores?job=${jobId}`">评分预估</RouterLink></div>
   </div>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
   <p v-if="notice" class="notice" role="status">{{ notice }}</p>

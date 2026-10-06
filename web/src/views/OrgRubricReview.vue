@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import AssessmentCitation from "../components/AssessmentCitation.vue";
 import RubricReplacement from "../components/RubricReplacement.vue";
 import { assessmentError, domainLabels, enc, queryPath, stateLabels, useAssessmentPage, useUnsaved } from "../assessments.js";
+import { preparationBlocker, preparationStates, requirementRefreshErrors } from "../requirement-review.js";
 import { formatTime, orgRequest } from "../org.js";
 const route = useRoute(), router = useRouter();
 const taskId = computed(() => String(route.params.taskId)), rubricId = computed(() => String(route.params.rubricId)), base = computed(() => `/tasks/${enc(taskId.value)}/score-rubrics/${enc(rubricId.value)}`);
@@ -18,7 +19,8 @@ function clearCoverage() { candidateItems.value = []; canonical.value = null; ca
 const dirty = computed(() => !!reason.value.trim() || replacementDirty.value);
 useUnsaved(dirty, () => { sequence++; summary.value = null; dialog.value = false; reason.value = ''; replacementOpen.value = false; historyItems.value = []; proposal.value = null; clearCoverage(); });
 const readonly = computed(() => summary.value?.state === 'superseded' || summary.value?.validity !== 'current');
-const can = (name) => !readonly.value && summary.value?.actions?.some(a => a.action === name && a.allowed);
+const sourceBlocker = computed(() => preparationBlocker(summary.value?.requirement_review));
+const can = (name) => !(name === 'rubric_confirm' && sourceBlocker.value) && !readonly.value && summary.value?.actions?.some(a => a.action === name && a.allowed);
 const canRow = (row, name) => !readonly.value && meta.value?.subject_actions?.find(s => s.subject_id === row.id)?.actions.some(a => a.action === name && a.allowed);
 const aggregationLabels = { sum: '加总', weighted_sum: '加权合计', capped_sum: '封顶合计', formula: '公式（不能自动合计）', non_additive: '非加总规则（不能自动合计）' };
 const modeLabels = { model_assessable: '可由模型评估', ambiguous: '表述存在歧义', price_comparison: '价格比较', external_comparison: '外部比较', manual_only: '需人工评估', unsupported_formula: '不支持的公式' };
@@ -73,6 +75,7 @@ async function open(row, operation, decisionAction) {
 async function submit() {
   if (!reason.value.trim()) { decisionError.value = '请填写处理理由'; reasonInput.value?.focus(); return; }
   if (!action.value || readonly.value) return;
+  if (action.value.operation === 'set' && action.value.decisionAction === 'confirm' && sourceBlocker.value) { decisionError.value = sourceBlocker.value; return; }
   const current = action.value, row = current.row;
   const body = { expected_revision: row?.revision ?? summary.value.revision, expected_input_hash: summary.value.input_hash, reason: reason.value.trim() };
   let path = base.value;
@@ -85,7 +88,7 @@ async function submit() {
   try { await orgRequest('POST', path, body); dialog.value = false; reason.value = ''; await refreshSummary(); await listing.load(); if (historyOpen.value) await loadHistory(); }
   catch (exc) {
     if (exc.name === 'AbortError') return; decisionError.value = assessmentError(exc);
-    if (['revision_conflict', 'assessment_view_changed', 'invalid_transition', 'rubric_superseded'].includes(exc.code)) {
+    if ([...requirementRefreshErrors, 'revision_conflict', 'assessment_view_changed', 'invalid_transition', 'rubric_superseded'].includes(exc.code)) {
       try { await refreshSummary(); await listing.load(); if (row) { const result = await orgRequest('GET', queryPath(base.value, { view: 'console', part: current.part, entry_id: row.id })); if (result.items[0]) action.value = { ...current, row: result.items[0] }; } } catch (reload) { decisionError.value += `；${assessmentError(reload)}`; }
     }
   } finally { busy.value = false; }
@@ -120,6 +123,8 @@ watch(filters, () => listing.load()); watch(() => [taskId.value, rubricId.value]
   <header class="page-header"><div><h2>评分规则审阅</h2><p>已核对评分规则与总分是否可计算是两个独立状态。评分仅评估已保存初稿。</p></div><el-button @click="load">重新读取规则</el-button></header>
   <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" /><el-skeleton v-if="loading" :rows="4" animated />
   <template v-if="summary">
+    <p data-testid="rubric-source-state"><el-tag :type="summary.requirement_review?.state==='ready'?'success':'warning'">{{preparationStates[summary.requirement_review?.state] ?? '评分来源待核对'}}</el-tag><span v-if="summary.requirement_review"> · 固定来源 {{summary.requirement_review.fixed_count}} 项 / 已确认 {{summary.requirement_review.confirmed_count}} 项</span></p>
+    <el-alert v-if="sourceBlocker" :title="sourceBlocker" type="warning" :closable="false" show-icon><p>分节、条目准备、完整修订和职责分类可继续；来源就绪后才能确认整套规则。</p><p v-if="summary.requirement_review?.invalidation_codes.length">失效原因：{{summary.requirement_review.invalidation_codes.join('、')}}</p><RouterLink :to="`/org/tasks/${taskId}/requirements?job=${summary.extraction_job_id}`">核对评分来源要求</RouterLink></el-alert>
     <p>第 {{ summary.version }} 版 · 修订 {{ summary.revision }} · {{ stateLabels[summary.state] }} · {{ stateLabels[summary.validity] }} · 提取 {{ summary.extraction_job_id }}</p>
     <p v-if="summary.prior_rubric_id"><RouterLink :to="`/org/tasks/${taskId}/score-rubrics/${summary.prior_rubric_id}`">查看前一版 {{ summary.prior_rubric_id }}</RouterLink></p>
     <el-alert v-if="readonly" :title="summary.state === 'superseded' ? '此评分规则已被新版本替代，仅供追溯' : '评分要求已变化，请重新生成并审核规则'" type="warning" :closable="false" show-icon role="alert"><RouterLink :to="`/org/tasks/${taskId}/score-rubrics?job=${summary.extraction_job_id}`">查看评分规则版本</RouterLink></el-alert>
@@ -157,7 +162,7 @@ watch(filters, () => listing.load()); watch(() => [taskId.value, rubricId.value]
         <template v-if="coverageAction === 'mapped'"><el-checkbox-group v-model="itemIds" aria-label="选择对应评分项"><div v-for="item in candidateItems" :key="item.id"><el-checkbox :value="item.id">{{ item.title }} · {{ item.rule_text }}</el-checkbox></div></el-checkbox-group><el-button v-if="itemCursor" @click="safeMore(() => loadItems(itemCursor))">更多目标评分项</el-button><p v-if="!candidateItems.length">该要求没有评分项，请先完整修订规则。</p></template>
         <template v-if="coverageAction === 'duplicate'"><el-select v-model="canonicalId" aria-label="规范要求" @change="chooseCanonical"><el-option v-for="entry in coverageCandidates" :key="entry.requirement_id" :value="entry.requirement_id" :label="entry.source.quote" /></el-select><el-button v-if="coverageCursor" @click="safeMore(() => loadCoverageCandidates(coverageCursor))">更多规范要求</el-button><blockquote v-if="canonical" class="quote">{{ canonical.source.quote }}</blockquote><p v-for="item in canonicalItems" :key="item.id">规范要求目标项：{{ item.title }} · {{ item.rule_text }}</p><el-button v-if="canonicalItemCursor" @click="safeMore(() => loadItems(canonicalItemCursor, canonicalId))">更多规范要求目标项</el-button></template>
       </template>
-      <el-form-item label="处理理由" required><el-input ref="reasonInput" v-model="reason" type="textarea" :rows="4" aria-label="处理理由" aria-describedby="rubric-decision-error" /></el-form-item><el-button native-type="submit" type="primary" :loading="busy" :disabled="readonly">提交决定</el-button><el-button @click="dialog = false; reason = ''">取消</el-button>
+      <el-form-item label="处理理由" required><el-input ref="reasonInput" v-model="reason" type="textarea" :rows="4" aria-label="处理理由" aria-describedby="rubric-decision-error" /></el-form-item><el-button native-type="submit" type="primary" :loading="busy" :disabled="readonly || (action?.operation==='set' && action?.decisionAction==='confirm' && !!sourceBlocker)">提交决定</el-button><el-button @click="dialog = false; reason = ''">取消</el-button>
     </el-form>
   </el-dialog>
 </template>

@@ -42,6 +42,9 @@ class ServiceSession:
     async def refresh(self, *args, **kwargs):
         self.session.refresh(*args, **kwargs)
 
+    def expire_all(self):
+        self.session.expire_all()
+
 
 def service_call(coroutine):
     try:
@@ -90,6 +93,10 @@ async def review_card_async(session, org, user, card_id, *, action, storage=None
     card, revision, requirement = await response_cards.require_card(session, card_id)
     values = {"action": action, "expected_revision": card.revision}
     if action == "confirm":
+        await confirm_requirements_async(
+            session, org, card.task_id, [requirement.id], settings=settings
+        )
+        actor = await actor_context_async(session, org, user)
         view = await response_cards.card_view(session, actor, card, revision, requirement, storage)
         values.update(
             reviewed_evidence_ids=[row["id"] for row in view["evidence"]],
@@ -100,6 +107,67 @@ async def review_card_async(session, org, user, card_id, *, action, storage=None
         session, actor, card_id, CardAction(**values), storage, settings or Settings()
     )
     return await session.get(type(revision), card.current_revision_id)
+
+
+async def confirm_requirements_async(session, org, task_id, requirement_ids=None, *, settings=None):
+    """Explicit accepted-input setup through the same review services as HTTP.
+
+    Tests of unconfirmed inputs deliberately do not call this helper. Existing
+    consumer fixtures use their real task owner and retain all DB/human triggers.
+    """
+    from app.models.entities import Requirement
+    from app.schemas.requirement_confirmation import ConfirmationTarget, RequirementConfirmBatch
+    from app.services import requirement_confirmation
+
+    settings = settings or Settings()
+    workflow = await session.scalar(
+        select(TaskWorkflow).where(TaskWorkflow.org_id == org, TaskWorkflow.task_id == task_id)
+    )
+    assert workflow is not None
+    actor = await actor_context_async(session, org, workflow.owner_user_id)
+    query = select(Requirement).where(Requirement.org_id == org, Requirement.task_id == task_id)
+    if requirement_ids is not None:
+        query = query.where(Requirement.id.in_(requirement_ids))
+    requirements = list(await session.scalars(query.order_by(Requirement.id)))
+    for job_id in sorted({row.job_id for row in requirements}, key=str):
+        await requirement_confirmation.seed_reviews(
+            session, actor, task_id, job_id, settings=settings, origin="legacy"
+        )
+    for job_id in sorted({row.job_id for row in requirements}, key=str):
+        rows = [row for row in requirements if row.job_id == job_id]
+        current = await requirement_confirmation.effective_reviews(session, rows)
+        pending = [row for row in rows if not current[row.id].confirmed]
+        for offset in range(0, len(pending), 100):
+            scope = await requirement_confirmation.scope_row(session, actor, task_id, job_id)
+            await requirement_confirmation.confirm_batch(
+                session,
+                actor,
+                task_id,
+                job_id,
+                RequirementConfirmBatch(
+                    request_id=uuid4(),
+                    expected_set_revision=scope.revision,
+                    reviewed_each=True,
+                    reason="Synthetic task owner inspected every selected requirement and its exact source.",
+                    items=[
+                        ConfirmationTarget(
+                            requirement_id=row.id,
+                            expected_revision=current[row.id].revision,
+                            expected_review_hash=current[row.id].review_hash,
+                        )
+                        for row in pending[offset : offset + 100]
+                    ],
+                ),
+                settings=settings,
+            )
+
+
+def confirm_requirements(session, org, task_id, requirement_ids=None, *, settings=None):
+    return service_call(
+        confirm_requirements_async(
+            ServiceSession(session), org, task_id, requirement_ids, settings=settings
+        )
+    )
 
 
 def review_card(session, org, user, card_id, *, action, storage=None, settings=None):

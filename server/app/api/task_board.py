@@ -4,6 +4,7 @@ import asyncio
 import time
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, Request
@@ -18,11 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.db import set_org
 from app.core.errors import ServiceError
 from app.core.security import TokenSigner
-from app.schemas.contracts import Category, Result
+from app.schemas.contracts import Category, Cost, Result
 from app.schemas.response_card_contracts import ReviewDomain
 from app.schemas.team_workflow import (
-    BoardBlocker,
-    BoardBucket,
     BoardQuery,
     EventReplayQuery,
     TaskProgressQuery,
@@ -35,8 +34,15 @@ MAX_BUFFER_BYTES = 256 * 1024
 MAX_BUFFER_FRAMES = 100
 
 
-def bounded_result(command, data, items):
-    result = Result(ok=True, command=command, data=data, items=items)
+def bounded_result(command, data, items, *, warnings=None, currency="USD"):
+    result = Result(
+        ok=True,
+        command=command,
+        data=data,
+        items=items,
+        warnings=warnings or [],
+        cost=Cost(billing_currency=currency),
+    )
     if len(result.model_dump_json().encode()) > MAX_RESULT_BYTES:
         raise ServiceError("board_limit_exceeded", "Snapshot exceeds 1 MiB response bound", 422, 2)
     return result
@@ -205,15 +211,17 @@ def create_router(context, db, storage, queue, settings):
 
     @router.get("/tasks/{task_id}/board", name="task_board", response_model=Result)
     async def board(
+        request: Request,
         task_id: UUID,
+        view: Literal["requirement-review"] | None = None,
         extraction_job_id: UUID | None = None,
-        bucket: BoardBucket | None = None,
+        bucket: str | None = None,
         category: Category | None = None,
         starred: bool | None = None,
         owner_user_id: UUID | None = None,
         unassigned: bool = False,
         review_domain: ReviewDomain | None = None,
-        blocker: BoardBlocker | None = None,
+        blocker: str | None = None,
         mine: bool = False,
         cursor: str | None = None,
         limit: int = Query(50, ge=1, le=100),
@@ -227,40 +235,109 @@ def create_router(context, db, storage, queue, settings):
                 await access(session, actor, task_id)
                 raise ServiceError("extraction_required", "Choose an extraction job", 422, 2)
             try:
-                query = BoardQuery(
-                    extraction_job_id=extraction_job_id,
-                    bucket=bucket,
-                    category=category,
-                    starred=starred,
-                    owner_user_id=owner_user_id,
-                    unassigned=unassigned,
-                    review_domain=review_domain,
-                    blocker=blocker,
-                    mine=mine,
-                    cursor=cursor,
-                    limit=limit,
+                from app.schemas.requirement_confirmation import RequirementBoardQuery
+
+                query_type = RequirementBoardQuery if view == "requirement-review" else BoardQuery
+                query = query_type.model_validate(
+                    dict(
+                        extraction_job_id=extraction_job_id,
+                        bucket=bucket,
+                        category=category,
+                        starred=starred,
+                        owner_user_id=owner_user_id,
+                        unassigned=unassigned,
+                        review_domain=review_domain,
+                        blocker=blocker,
+                        mine=mine,
+                        cursor=cursor,
+                        limit=limit,
+                    )
                 )
             except ValidationError as error:
                 raise RequestValidationError(error.errors()) from None
-            view = await task_board.board(session, actor, task_id, query, storage, settings)
+            if view == "requirement-review":
+                if request.state.contract_version != "4.0":
+                    raise ServiceError(
+                        "contract_version_required",
+                        "Requirement review requires contract 4.0",
+                        404,
+                        4,
+                    )
+                from app.services import requirement_board
+
+                data, items = await requirement_board.board(
+                    session, actor, task_id, query, storage, settings
+                )
+                return bounded_result(
+                    "task board",
+                    data.model_dump(mode="json"),
+                    [item.model_dump(mode="json") for item in items],
+                    currency=settings.billing_currency,
+                )
+            result_view = await task_board.board(
+                session,
+                actor,
+                task_id,
+                BoardQuery.model_validate(query.model_dump()),
+                storage,
+                settings,
+            )
+            pending = any(
+                value.state != "confirmed"
+                for value in session.info.get("board_requirement_reviews", {}).values()
+            )
             return bounded_result(
                 "task board",
-                view.model_dump(mode="json", exclude={"rows"}),
-                [row.model_dump(mode="json") for row in view.rows],
+                result_view.model_dump(mode="json", exclude={"rows"}),
+                [row.model_dump(mode="json") for row in result_view.rows],
+                warnings=["requirement_review_pending:open_requirement_review"] if pending else [],
+                currency=settings.billing_currency,
             )
 
         return await read(credentials, x_org_id, operation)
 
     @router.get("/tasks/{task_id}/progress", name="task_progress", response_model=Result)
     async def progress(
+        request: Request,
         task_id: UUID,
+        view: Literal["requirement-review"] | None = None,
+        extraction_job_id: UUID | None = None,
         cursor: str | None = None,
         limit: int = Query(20, ge=1, le=20),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
         x_org_id: UUID = Header(...),
     ):
         async def operation(session, actor):
-            view = await task_board.progress(
+            if view == "requirement-review":
+                from app.services import requirement_board
+                from app.services.task_workflow import access
+
+                await access(session, actor, task_id)
+                if request.state.contract_version != "4.0":
+                    raise ServiceError(
+                        "contract_version_required",
+                        "Requirement review requires contract 4.0",
+                        404,
+                        4,
+                    )
+                if extraction_job_id is None:
+                    raise ServiceError("extraction_required", "Choose an extraction job", 422, 2)
+                data, jobs = await requirement_board.progress(
+                    session,
+                    actor,
+                    task_id,
+                    extraction_job_id,
+                    TaskProgressQuery(cursor=cursor, limit=limit),
+                    storage,
+                    settings,
+                )
+                return bounded_result(
+                    "task progress",
+                    data.model_dump(mode="json"),
+                    [job.model_dump(mode="json") for job in jobs],
+                    currency=settings.billing_currency,
+                )
+            result_view = await task_board.progress(
                 session,
                 actor,
                 task_id,
@@ -270,8 +347,9 @@ def create_router(context, db, storage, queue, settings):
             )
             return bounded_result(
                 "task progress",
-                view.model_dump(mode="json", exclude={"jobs"}),
-                [job.model_dump(mode="json") for job in view.jobs],
+                result_view.model_dump(mode="json", exclude={"jobs"}),
+                [job.model_dump(mode="json") for job in result_view.jobs],
+                currency=settings.billing_currency,
             )
 
         return await read(credentials, x_org_id, operation)

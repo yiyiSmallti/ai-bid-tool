@@ -238,7 +238,7 @@ async def feedback_client(tenants, tmp_path, admin_engine, *, masked=False):
     from test_response_cards import create_tender, login, select_real_materials, set_role
 
     async with drafting_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
-        task, _, extraction, _ = await create_tender(api, app, headers[0], tmp_path)
+        task, _, extraction, _ = await create_tender(api, app, headers[0], tmp_path, confirmed=True)
         await select_real_materials(api, headers[0], task, tmp_path)
         if masked:
 

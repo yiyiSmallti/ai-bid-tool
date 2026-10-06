@@ -254,7 +254,9 @@ async def test_vendor_web_and_pdf_capture_to_confirmed_draft(
     org = tenants["orgs"][0]
     async with vendor_client(tenants, tmp_path, monkeypatch) as (api, app, headers):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         product, selection = await select_product(api, header, task)
 
         # Manifest-only captures keep receipts but not page bytes; they cannot be archived.

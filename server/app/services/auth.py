@@ -204,7 +204,13 @@ for _role, _scopes in ROLE_SCOPES.items():
         )
 
 
+for _role in ("admin", "bidder", "technical"):
+    ROLE_SCOPES[_role].update({"req:confirm", "req:manual"})
+
+
 HUMAN_ONLY_SCOPES = {
+    "req:confirm",
+    "req:manual",
     "agent:read",
     "agent:run",
     "agent:cancel",

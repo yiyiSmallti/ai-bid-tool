@@ -242,7 +242,11 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning, 
         memory_output = await memory_retrieval.retrieve(
             session, actor, memory_request, settings, preview=True
         )
+    from app.services import requirement_consumption
+
+    preparation = await requirement_consumption.preparation(session, requirements)
     manifest = {
+        "requirement_preparation": preparation,
         "org_id": str(actor.org_id),
         "task_id": str(task.id),
         "requirements": [
@@ -672,6 +676,15 @@ def worker(job: Job) -> Identity:
 
 
 async def check_input_access(session, actor, task_id, manifest, *, active=False):
+    if active:
+        from app.services.requirement_consumption import current_preparation
+
+        await current_preparation(
+            session,
+            task_id,
+            UUID(manifest["extraction_job_id"]),
+            manifest.get("requirement_preparation"),
+        )
     if "memory" in manifest:
         actor.require("memory:read")
         actor.require("memory:retrieve")
@@ -801,10 +814,18 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
 
 
 async def publish(session, actor, job, output, secret, storage, settings):
+    from app.services.requirement_consumption import current_preparation
+
     submitted = job.result["submission"]
     manifest = submitted["input_manifest"]
     if "memory" in manifest:
         await memory_retrieval.require_current(session, actor.org_id, manifest["memory"], lock=True)
+    await current_preparation(
+        session,
+        job.task_id,
+        UUID(manifest["extraction_job_id"]),
+        manifest.get("requirement_preparation"),
+    )
     mappings = {entry["ref"]: entry for entry in manifest["materials"]}
     selected = set(submitted["selected_requirements"])
     skipped, rejected, needs_material, created, seen = dict(submitted["skipped"]), {}, [], [], set()

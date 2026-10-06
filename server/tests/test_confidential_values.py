@@ -289,7 +289,9 @@ async def test_permissions_isolation_and_card_references(tenants, tmp_path, admi
         field = await add_field(api, header, "bank_account", "银行账号", "bank_account", "org")
         value = await set_value(api, header, field, "6222 0212 3456 7890 123")
         assert value["tail"] == "0123" and value["status"] == "filled"
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
 
         # Scope rules, duplicate keys and archive state.
         duplicate = await api.post(
