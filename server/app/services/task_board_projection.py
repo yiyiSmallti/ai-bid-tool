@@ -38,7 +38,7 @@ from app.models.screenshots import (
 )
 from app.models.team_workflow import CardCommentMention, CardCommentThread, RequirementWorkflow
 from app.schemas.screenshot_contracts import ContentMapping, ImageEvidenceInput
-from app.services import response_cards
+from app.services import requirement_consumption, requirement_source, response_cards
 
 
 async def requirements_with_collaboration(session, actor, task_id, extraction, *, limit, member):
@@ -114,7 +114,7 @@ async def requirements_with_collaboration(session, actor, task_id, extraction, *
     ).all()
 
 
-async def load(session, actor, requirements, task_id, assessment_day):
+async def load(session, actor, requirements, task_id, assessment_day, *, review_details=False):
     required = {row.id: row for row in requirements}
     # Requirement/chunk IDs are already scope-validated by the board extraction.
     chunks = {
@@ -127,6 +127,15 @@ async def load(session, actor, requirements, task_id, assessment_day):
     }
     citations = response_cards.citation_validity_batch(requirements, chunks)
     session.info["board_requirement_citations"] = citations
+    # Default board rows need only fail-closed states. Confirmation views and
+    # consumer manifests still require current full content/source bindings.
+    session.info["board_requirement_reviews"] = (
+        await requirement_consumption.effective(session, requirements, citations=citations)
+        if review_details
+        else await requirement_source.effective_review_states(
+            session, requirements, citation_validity=citations
+        )
+    )
     pairs = list(
         await session.execute(
             select(ResponseCard, ResponseCardRevision)

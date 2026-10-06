@@ -31,7 +31,7 @@ def artifact(name, value):
 async def test_confirmed_card_discussion_preserves_revision_and_evidence(
     api, headers, tenants, admin_engine, tmp_path
 ):
-    scope = await scope_with_card(api, headers, tenants, admin_engine)
+    scope = await scope_with_card(api, headers, tenants, admin_engine, confirmed=True)
     reviewer, reviewer_header = await person(api, admin_engine, scope["org_id"], "bidder")
     assert (
         await add_member(api, headers[0], scope["task_id"], reviewer, 1, "reviewer", ["commercial"])

@@ -338,7 +338,7 @@ async def combined_scope_case(tenants, admin_engine, tmp_path):
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
         task, _, extraction, requirements = await create_tender(
-            api, app, header, tmp_path, suffix="check-scope"
+            api, app, header, tmp_path, suffix="check-scope", confirmed=True
         )
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         disposition = await api.post(

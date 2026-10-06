@@ -60,7 +60,7 @@ from app.schemas.contracts import (
 from conftest import PASSWORD, FakeQueue
 from fakes import FakeLLM, source_for
 from sqlalchemy import select, text
-from task_fixtures import reviewer_header
+from task_fixtures import confirm_requirements_async, reviewer_header
 from task_fixtures import set_role as set_task_actor_role
 
 TENDER_LINES = [
@@ -173,7 +173,9 @@ async def run_document_job(api, app, header, document_id, action, body=None):
     return job_id
 
 
-async def create_tender(api, app, header, tmp_path: Path, *, suffix: str = "one"):
+async def create_tender(
+    api, app, header, tmp_path: Path, *, suffix: str = "one", confirmed: bool = False
+):
     task = (
         await api.post("/tasks", headers=header, json={"name": f"Synthetic phase 1 {suffix}"})
     ).json()["data"]["id"]
@@ -192,6 +194,11 @@ async def create_tender(api, app, header, tmp_path: Path, *, suffix: str = "one"
         await api.get(f"/tasks/{task}/requirements", headers=header, params={"job": extraction})
     ).json()["items"]
     assert [row["source"]["page"] for row in requirements] == [1, 2, 3, 4, 5]
+    if confirmed:
+        async with app.state.db.transaction(UUID(header["X-Org-Id"])) as session:
+            await confirm_requirements_async(
+                session, UUID(header["X-Org-Id"]), UUID(task), settings=app.state.processor.settings
+            )
     return task, document, extraction, requirements
 
 
@@ -303,7 +310,9 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
     """Human decisions consume fixed materials and the deterministic worker partitions all rows."""
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         _, product_selection, _, _, page_source = await select_real_materials(
             api, header, task, tmp_path
         )
@@ -635,7 +644,9 @@ async def test_human_gate_roles_evidence_and_revision_conflicts(tenants, tmp_pat
 
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         _, product_selection, _, _, _ = await select_real_materials(api, header, task, tmp_path)
         expiry = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
         token_record = (
@@ -886,7 +897,9 @@ async def test_atomic_disposition_and_reextraction_do_not_mix_requirements(
 ):
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, provider):
         header = headers[0]
-        task, document, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, document, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         first, second = sorted(requirements[2:4], key=lambda row: row["id"])
         failed = await api.post(
@@ -1003,7 +1016,7 @@ async def test_atomic_disposition_and_reextraction_do_not_mix_requirements(
 async def test_every_response_route_hides_the_other_organization(tenants, tmp_path):
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         task_b, _, job_b, requirements_b = await create_tender(
-            api, app, headers[1], tmp_path, suffix="foreign"
+            api, app, headers[1], tmp_path, suffix="foreign", confirmed=True
         )
         card_b = await create_card(
             api,
@@ -1103,7 +1116,9 @@ async def test_selection_replacement_stales_card_and_draft_and_cancel_publishes_
 ):
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
-        task, _, extraction, requirements = await create_tender(api, app, header, tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, header, tmp_path, confirmed=True
+        )
         product, selection, _, _, _ = await select_real_materials(api, header, task, tmp_path)
         card = await create_card(
             api,
@@ -1291,7 +1306,7 @@ async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
         header = headers[0]
 
         gap_task, _, gap_extraction, gap_requirements = await create_tender(
-            api, app, header, tmp_path, suffix="all-gap"
+            api, app, header, tmp_path, suffix="all-gap", confirmed=True
         )
         all_gap = (
             await api.post(
@@ -1315,7 +1330,7 @@ async def test_draft_worker_rechecks_inputs_membership_and_run_identity(
         assert len(gap_view["gaps"]) == len(gap_requirements) == 5
 
         task, _, extraction, requirements = await create_tender(
-            api, app, header, tmp_path, suffix="worker-boundaries"
+            api, app, header, tmp_path, suffix="worker-boundaries", confirmed=True
         )
         changed_job = (
             await api.post(
@@ -1418,7 +1433,7 @@ async def test_all_comply_only_draft_is_complete_with_exit_zero(tenants, tmp_pat
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
         task, _, extraction, requirements = await create_tender(
-            api, app, header, tmp_path, suffix="all-comply"
+            api, app, header, tmp_path, suffix="all-comply", confirmed=True
         )
         scored = await create_card(
             api,
@@ -1516,7 +1531,7 @@ async def test_citation_already_reported_as_a_gap_keeps_a_new_draft_current(
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         header = headers[0]
         task, _, extraction, requirements = await create_tender(
-            api, app, header, tmp_path, suffix="known-invalid"
+            api, app, header, tmp_path, suffix="known-invalid", confirmed=True
         )
         # A quote accepted only by normalized matching fails the verbatim check from the start.
         with admin_engine.begin() as connection:

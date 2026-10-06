@@ -187,6 +187,14 @@ async def test_all_four_routes_identity_org_and_foreign_hidden(api, headers, pdf
 async def test_source_role_matrix_preserves_all_prior_grants(
     role, api, headers, pdf_bytes, tenants, admin_engine
 ):
+    from app.services.auth import SCOPES
+
+    requirement_scopes = {"req:confirm", "req:manual"}
+    assert ROLE_SCOPES[role] & requirement_scopes == (
+        requirement_scopes if role in {"admin", "bidder", "technical"} else set()
+    )
+    assert requirement_scopes.isdisjoint(SCOPES)
+
     _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
     source = (await add(api, headers[0], task, choice["id"])).json()["data"]["source"]
     with Session(admin_engine) as session, session.begin():
@@ -248,6 +256,8 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "sandbox:read",
         "sandbox:render",
         "sandbox:capture",
+        "req:confirm",
+        "req:manual",
     }
     assert ROLE_SCOPES[role] - later == set(BASELINE[role])
     # Export is a human bidder responsibility; source-read remains unchanged.

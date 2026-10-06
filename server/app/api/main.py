@@ -133,6 +133,13 @@ def create_app(
     @app.middleware("http")
     async def bound_source_input(request: Request, call_next):
         parts = request.url.path.split("/")
+        manual_requirement_route = (
+            request.method == "POST"
+            and len(parts) == 5
+            and parts[1] == "tasks"
+            and parts[3] == "requirements"
+            and parts[4] in {"manual", "manual-preview"}
+        )
         credential_route = request.url.path.startswith("/platform/credentials")
         if credential_route:
             from app.services.platform import identify
@@ -170,16 +177,26 @@ def create_app(
                 return error_response(
                     request, ServiceError("invalid_session", "Invalid platform session", 401, 4)
                 )
-        if credential_route or (
-            request.method == "POST"
-            and len(parts) == 4
-            and parts[1] == "tasks"
-            and parts[3] == "evidence-sources"
+        if (
+            credential_route
+            or manual_requirement_route
+            or (
+                request.method == "POST"
+                and len(parts) == 4
+                and parts[1] == "tasks"
+                and parts[3] == "evidence-sources"
+            )
         ):
             content = bytearray()
             async for chunk in request.stream():
                 content.extend(chunk)
-                if len(content) > (512 * 1024 if credential_route else 128 * 1024):
+                if len(content) > (
+                    512 * 1024
+                    if credential_route
+                    else 256 * 1024
+                    if manual_requirement_route
+                    else 128 * 1024
+                ):
                     if credential_route:
                         from app.services.platform_credentials import (
                             PlatformCredentialService,
@@ -199,7 +216,10 @@ def create_app(
                         ServiceError("invalid_input", "Credential input exceeds JSON limit", 422, 2)
                         if credential_route
                         else ServiceError(
-                            "input_too_large", "Source input exceeds JSON limit", 413, 2
+                            "input_too_large",
+                            "Source input exceeds JSON limit",
+                            422 if manual_requirement_route else 413,
+                            2,
                         ),
                     )
             # Starlette's wrapped request replays its cached body to FastAPI.
@@ -494,6 +514,9 @@ def create_app(
     app.include_router(create_budget_router(context, settings))
     app.include_router(create_org_console_router(context, storage, settings))
     app.include_router(create_task_workflow_router(context, settings))
+    from app.api.requirement_confirmation import create_router as create_requirement_review_router
+
+    app.include_router(create_requirement_review_router(context, settings))
     app.include_router(create_task_cosign_router(context, settings, storage))
     app.include_router(create_task_discussion_router(context, settings))
     task_board_router = create_task_board_router(context, db, storage, queue, settings)

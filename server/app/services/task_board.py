@@ -27,7 +27,7 @@ from app.schemas.team_workflow import (
     TaskProgressView,
     TaskWorkflowView,
 )
-from app.services import budgets, task_events, task_workflow
+from app.services import budgets, requirement_consumption, task_events, task_workflow
 from app.services.auth import ROLE_SCOPES
 
 MAX_REQUIREMENTS = 5000
@@ -533,6 +533,13 @@ def row_projection(
             "cosign": "card:cosign",
             "view": "card:read",
         }
+        if code == "repair_citation" and not (
+            actor.role == "admin"
+            and actor.actor_kind == "session"
+            and actor.token_id is None
+            and "evidence:confirm" in actor.scopes
+        ):
+            code = "view"
         if scopes[code] in actor.scopes and (
             code in ("view", "confirm", "cosign", "reopen")
             or member.role in ("owner", "contributor")
@@ -669,7 +676,9 @@ def matches(row, query, actor, *, bucket=True, mentioned=False):
     )
 
 
-async def board(session, actor, task_id, query: BoardQuery, storage, settings):
+async def board(
+    session, actor, task_id, query: BoardQuery, storage, settings, *, review_details=False
+):
     task, workflow, member = await task_workflow.access(session, actor, task_id)
     actor.require("card:read")
     actor.require("job:read")
@@ -709,7 +718,9 @@ async def board(session, actor, task_id, query: BoardQuery, storage, settings):
         if query.cursor
         else None
     )
-    views = await load(session, actor, requirements, task_id, as_of.date())
+    views = await load(
+        session, actor, requirements, task_id, as_of.date(), review_details=review_details
+    )
     reviewers = list(
         await session.execute(
             select(TaskMember, Membership.role)
@@ -733,6 +744,9 @@ async def board(session, actor, task_id, query: BoardQuery, storage, settings):
             user_id=entry.user_id,
             review_domains=set(entry.review_domains) & set(task_workflow.domains(role)),
             can_edit=entry.role in {"owner", "contributor"} and "card:write" in ROLE_SCOPES[role],
+            can_confirm_requirement=entry.role in {"owner", "contributor"}
+            and "req:confirm" in ROLE_SCOPES[role],
+            role=role,
         )
         for entry, role in reviewers
     ]
@@ -752,6 +766,8 @@ async def board(session, actor, task_id, query: BoardQuery, storage, settings):
         if code in admission_codes:
             job_blockers.add(code)
     rows = []
+    all_rows = []
+    review_hints = {}
     for requirement, assignment, thread_count, mentioned_thread_id in scoped:
         view = views.get(requirement.id)
         row = row_projection(
@@ -782,6 +798,10 @@ async def board(session, actor, task_id, query: BoardQuery, storage, settings):
                     if member
                     and member.role in ("owner", "contributor")
                     and "req:extract" in actor.scopes
+                    and "evidence:confirm" in actor.scopes
+                    and actor.role == "admin"
+                    and actor.actor_kind == "session"
+                    and actor.token_id is None
                     and workflow.state == "active"
                     else [action.model_dump(mode="json") for action in row.next_actions],
                 }
@@ -809,8 +829,49 @@ async def board(session, actor, task_id, query: BoardQuery, storage, settings):
                     else [action.model_dump(mode="json") for action in row.next_actions],
                 }
             )
+        review = session.info["board_requirement_reviews"][requirement.id]
+        from app.services.requirement_board import actor_hint
+
+        review_hints[requirement.id] = (
+            actor_hint(
+                actor,
+                workflow,
+                member,
+                reviewers,
+                assignment,
+                session.info["board_requirement_citations"][requirement.id],
+            )
+            if review_details and review.state != "confirmed"
+            else None
+        )
+        if requirement_consumption.gap_reason(review):
+            row = row.model_copy(
+                update={
+                    "bucket": "gap",
+                    "eligibility": "unconfirmed" if row.eligibility is not None else None,
+                    "blockers": list(dict.fromkeys([*row.blockers, "unconfirmed"])),
+                    "next_actions": [
+                        BoardActionView.model_validate(
+                            dict(
+                                code="view",
+                                target={"kind": "requirement", "id": requirement.id},
+                                eligible_user_ids=[],
+                            )
+                        )
+                    ],
+                }
+            )
+        all_rows.append(row)
         if matches(row, query, actor, bucket=False, mentioned=mentioned_thread_id is not None):
             rows.append(row)
+    session.info["requirement_board_inputs"] = {
+        "rows": all_rows,
+        "requirements": requirements,
+        "hints": review_hints,
+        "workflow": workflow,
+        "watermark": watermark,
+        "mentioned": {entry[0].id for entry in scoped if entry[3] is not None},
+    }
     # Eligibility and citation checks use shared pure validators; SQL performs
     # the grouped count of that bounded metadata set rather than per-row reads.
     groups = dict(

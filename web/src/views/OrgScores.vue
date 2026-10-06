@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import AssessmentBudget from "../components/AssessmentBudget.vue";
 import JobPanel from "../components/JobPanel.vue";
 import { assessmentError, enc, queryPath, stateLabels, suggestedCap, usePreviewInvalidation } from "../assessments.js";
+import { preparationBlocker, preparationStates, requirementRefreshErrors } from "../requirement-review.js";
 import { formatTime, orgRequest } from "../org.js";
 
 const route = useRoute();
@@ -13,7 +14,7 @@ const base = computed(() => `/tasks/${enc(taskId.value)}/scores`);
 const task = ref(null), inputs = ref(null), explicitDraft = ref(null), selectedRubric = ref(null);
 const draftId = ref(""), rubricId = ref(""), assessmentDate = ref(localDate()), reasoning = ref(""), cap = ref("");
 const preview = ref(null), consent = ref(false), retry = ref(false), busy = ref(false), loading = ref(false), error = ref("");
-const submitting = ref(false);
+const submitting = ref(false), sourceNeedsRefresh = ref(false);
 const activeJob = ref(""), cached = ref(false), queueRequest = ref(null), queuedKey = ref("");
 const rubricLoading = ref(false), unassessableDetail = ref(null), detailError = ref(""), detailLoading = ref(false), detailPage = ref(0);
 const rubricPage = collection(), scorePage = collection(), jobPage = collection();
@@ -30,12 +31,14 @@ const draftChoices = computed(() => [...new Map([inputs.value?.current_draft, in
 const selectedDraft = computed(() => draftChoices.value.find(item => item.draft_id === draftId.value));
 const rubricChoices = computed(() => [...new Map([...rubricPage.rows, selectedRubric.value].filter(Boolean).map(item => [item.id, item])).values()]);
 const canRun = computed(() => inputs.value?.actions?.some(item => item.action === "score_run" && item.allowed));
+const sourceBlocker = computed(() => sourceNeedsRefresh.value ? "要求确认已变化，请先重新核对要求，再刷新评分规则来源" : selectedRubric.value ? preparationBlocker(selectedRubric.value.requirement_review) : "");
 const prerequisite = computed(() => {
   if (!draftId.value) return "尚未生成初稿，请先完成响应审阅并组表";
   if (selectedDraft.value?.validity !== "current") return "所选初稿已过期，请重新组表后评分";
   if (!rubricId.value) return "请明确选择本次评分规则";
   if (!selectedRubric.value) return rubricLoading.value ? "正在核对所选评分规则" : "所选评分规则尚未读取，请重新核对";
   if (selectedRubric.value.extraction_job_id !== extractionId.value || selectedRubric.value.document_id !== inputs.value?.document_id) return "所选评分规则与当前提取或招标文件不一致，请重新选择";
+  if (sourceBlocker.value) return sourceBlocker.value;
   if (selectedRubric.value.validity !== "current" || selectedRubric.value.state === "superseded") return "所选评分规则已过期或被替代，请选择当前版本";
   if (selectedRubric.value.state !== "confirmed" || !selectedRubric.value.completeness.complete) return "请先完成所选评分规则的审核清单并确认整套规则";
   return "";
@@ -78,7 +81,7 @@ async function readRubric() {
     const result = await orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/score-rubrics/${enc(id)}`, { view: "console", part: "summary" }));
     if (!active()) return;
     if (result.data.task_id !== taskId.value || result.data.id !== id) throw { status: 404 };
-    selectedRubric.value = result.data;
+    selectedRubric.value = result.data; sourceNeedsRefresh.value = false;
   } catch (exc) { if (active() && exc.name !== "AbortError") error.value = assessmentError(exc); }
   finally { if (active()) rubricLoading.value = false; }
 }
@@ -117,11 +120,11 @@ async function preflight() {
     const suggested = suggestedCap(data.estimated_charge);
     if (!cap.value && suggested) { cap.value = suggested; await preflight(); return; }
     preview.value = data; previewKey = key;
-  } catch (exc) { if (active() && exc.name !== "AbortError") error.value = assessmentError(exc); }
+  } catch (exc) { if (active() && exc.name !== "AbortError") { error.value = assessmentError(exc); if (requirementRefreshErrors.includes(exc.code)) { sourceNeedsRefresh.value = true; invalidate(); } } }
   finally { if (active()) busy.value = false; }
 }
 async function submit(recover = false) {
-  if (busy.value || !canRun.value || (recover ? !queueRequest.value || queuedKey.value !== selectionKey() : !ready.value)) return;
+  if (busy.value || !canRun.value || prerequisite.value || (recover ? !queueRequest.value || queuedKey.value !== selectionKey() : !ready.value)) return;
   const generation = sequence, context = scope(), key = selectionKey(), request = ++submitSerial;
   const active = () => current(generation, context) && key === selectionKey() && request === submitSerial;
   const body = recover ? { ...queueRequest.value } : requestBody(false);
@@ -134,6 +137,7 @@ async function submit(recover = false) {
   } catch (exc) {
     if (!active() || exc.name === "AbortError") return;
     error.value = assessmentError(exc); consent.value = false;
+    if (requirementRefreshErrors.includes(exc.code)) { sourceNeedsRefresh.value = true; invalidate(); }
     if (exc.code === "queue_unavailable" && exc.payload?.data.job_id) { activeJob.value = exc.payload.data.job_id; queueRequest.value = { ...body }; queuedKey.value = key; }
     else if (exc.code?.includes("input_changed") || exc.code?.includes("stale") || ["score_rubric_unconfirmed", "rubric_superseded"].includes(exc.code)) invalidate();
   } finally { if (active()) { submitting.value = false; busy.value = false; } }
@@ -152,7 +156,7 @@ async function showUnassessable(id) {
 }
 function finished() { return Promise.all([scoreHistory(), discover()]); }
 function clear() {
-  sequence++; rubricSerial++; submitSerial++; submitting.value = false; invalidate(); task.value = null; inputs.value = null; explicitDraft.value = null; selectedRubric.value = null; draftId.value = ""; rubricId.value = ""; reasoning.value = ""; cap.value = ""; retry.value = false; cached.value = false; activeJob.value = ""; error.value = ""; loading.value = false; rubricLoading.value = false;
+  sequence++; rubricSerial++; submitSerial++; submitting.value = false; invalidate(); task.value = null; inputs.value = null; explicitDraft.value = null; selectedRubric.value = null; sourceNeedsRefresh.value = false; draftId.value = ""; rubricId.value = ""; reasoning.value = ""; cap.value = ""; retry.value = false; cached.value = false; activeJob.value = ""; error.value = ""; loading.value = false; rubricLoading.value = false;
   for (const page of [rubricPage, scorePage, jobPage]) { page.request++; page.rows = []; page.meta = null; page.error = ""; page.loading = false; page.cursors = [null]; page.position = 0; }
 }
 watch(() => [taskId.value, extractionId.value, route.query.draft, route.query.rubric], load, { immediate: true });
@@ -166,11 +170,13 @@ onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", cle
   <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon role="alert" />
   <el-skeleton v-if="loading" :rows="5" animated />
   <template v-if="inputs">
-    <el-alert v-if="prerequisite" :title="prerequisite" type="warning" :closable="false" show-icon><RouterLink v-if="!draftId || selectedDraft?.validity !== 'current'" :to="`/org/tasks/${taskId}/drafts?job=${extractionId}`">前往组表</RouterLink><RouterLink v-else-if="rubricId" :to="`/org/tasks/${taskId}/score-rubrics/${rubricId}`">核对评分规则</RouterLink></el-alert>
+    <el-alert v-if="sourceBlocker" :title="sourceBlocker" type="warning" :closable="false" show-icon><RouterLink :to="`/org/tasks/${taskId}/requirements?job=${selectedRubric?.extraction_job_id ?? extractionId}`">核对评分来源要求</RouterLink><el-button :disabled="busy || rubricLoading" @click="readRubric">重新核对评分规则来源</el-button></el-alert>
+    <el-alert v-if="prerequisite && !sourceBlocker" :title="prerequisite" type="warning" :closable="false" show-icon><RouterLink v-if="!draftId || selectedDraft?.validity !== 'current'" :to="`/org/tasks/${taskId}/drafts?job=${extractionId}`">前往组表</RouterLink><RouterLink v-else-if="rubricId" :to="`/org/tasks/${taskId}/score-rubrics/${rubricId}`">核对评分规则</RouterLink></el-alert>
     <el-card class="section" shadow="never"><h3>预览评分</h3>
       <el-form label-position="top" @submit.prevent="preflight">
         <el-form-item label="本次初稿"><el-select v-model="draftId" aria-label="本次初稿" :disabled="busy"><el-option v-for="draft in draftChoices" :key="draft.draft_id" :value="draft.draft_id" :label="`${draft.draft_id} · ${stateLabels[draft.validity]}`" /></el-select></el-form-item>
         <el-form-item label="本次评分规则"><el-select v-model="rubricId" aria-label="本次评分规则" :disabled="busy" :loading="rubricLoading" @change="readRubric"><el-option v-for="rubric in rubricChoices" :key="rubric.id" :value="rubric.id" :label="`第 ${rubric.version} 版 · ${stateLabels[rubric.state]} · ${rubric.id}`" /></el-select></el-form-item>
+        <p v-if="selectedRubric" data-testid="score-source-state"><el-tag :type="!sourceNeedsRefresh && selectedRubric.requirement_review?.state==='ready'?'success':'warning'">{{sourceNeedsRefresh ? '评分来源待刷新' : preparationStates[selectedRubric.requirement_review?.state] ?? '评分来源待核对'}}</el-tag><span v-if="selectedRubric.requirement_review"> · 固定来源 {{selectedRubric.requirement_review.fixed_count}} 项 / 已确认 {{selectedRubric.requirement_review.confirmed_count}} 项</span></p>
         <p v-if="selectedRubric">所选规则：第 {{ selectedRubric.version }} 版 · 修订 {{ selectedRubric.revision }} · {{ stateLabels[selectedRubric.state] }} · {{ stateLabels[selectedRubric.validity] }}</p>
         <el-form-item label="评估日期"><el-input v-model="assessmentDate" type="date" aria-label="评估日期" :disabled="busy" /></el-form-item>
         <el-form-item label="推理档位（留空使用默认）"><el-input v-model="reasoning" aria-label="推理档位" :disabled="busy" /></el-form-item>

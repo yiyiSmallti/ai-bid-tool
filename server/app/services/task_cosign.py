@@ -586,6 +586,9 @@ async def sign(session, actor, card_id, body, settings, *, storage=None):
         if original.request_sha256 != digest:
             task_workflow.fail("idempotency_conflict", "Request ID was used for different input")
         return await signature_receipt(session, original)
+    from app.services.requirement_consumption import require_confirmed
+
+    await require_confirmed(session, [requirement])
     cards.expected(card, body.expected_revision)
     row = await current_round(session, card, lock=True)
     if row is None or row.round_revision != body.expected_round or row.purpose != body.purpose:

@@ -8,6 +8,7 @@ export const orgRequest = (method, path, body, options = {}) => request(method, 
 export const display = (value) => value === null || value === undefined ? "未知" : typeof value === "object" ? JSON.stringify(value, null, 2) : String(value);
 // Server messages are English for the CLI; the console shows Chinese for the codes a member can hit.
 const errorMessages = {
+  requirement_unconfirmed: "要求尚未确认，请先核对要求", requirement_invalidated: "要求确认已失效，请重新核对", review_changed: "要求修订已变化，请重新核对", manual_preview_changed: "补录来源或集合已变化，请重新核验", requirement_set_changed: "要求集合已变化，请重新读取", quote_not_at_position: "逐字引文不在所选位置", nonverbatim_quote: "请填写与原文完全相同的逐字引文", ambiguous_quote: "引文在该位置有多个匹配，请明确引用", unverified_location: "所选原文位置尚未核验",
   cosign_required: "本项需要会签，请在详情中逐个职责签署", stale_round: "会签轮次已变化，请重新核对", stale_policy: "会签策略已变化，请重新核对", policy_conflict: "会签策略修订已变化，请重新核对", review_round_conflict: "会签轮次已变化，请重新核对", cosign_invalidated: "会签已失效，需要重新审阅", task_archived: "任务已归档，请先恢复任务", task_busy: "仍有作业或未确定费用，无法归档", member_has_assignments: "该成员仍有未交接的工作", event_cursor_expired: "进度游标已过期，需要重新读取", invalid_event_cursor: "进度游标无效，需要重新读取", board_cursor_expired: "看板分页已过期，需要重新读取", forbidden: "当前角色无权执行此操作", invalid_transition: "当前状态下不能执行此操作，请重新核对当前修订",
   incomplete_response: "响应种类、正文、偏离和说明都需要填写，说明不能只写“满足”", missing_evidence: "证据响应至少需要关联一项材料才能确认",
   unexpected_evidence: "承诺不能关联证据材料", review_mismatch: "请逐项勾选本修订关联的全部材料", warning_review_required: "请勾选全部警示并填写处理理由",
@@ -49,7 +50,7 @@ export const categories = { qualification: "资格", technical: "技术", scorin
 export const states = { missing_card: "缺卡片", draft: "草稿", pending_review: "待审阅", confirmed: "已确认", rejected: "已驳回", needs_material: "需补材料" };
 export const roles = { admin: "单位管理员", bidder: "商务审核", technical: "技术审核", viewer: "只读成员" };
 export const domains = { commercial: "商务 / 资格", technical: "技术" };
-export const eligibilities = { eligible: "可进入初稿", unconfirmed: "待确认", unclassified: "待分类", comply_only: "仅需遵守", stale_material: "材料已变化", invalid_citation: "引用无效", needs_reconfirmation: "需重新确认", missing_card: "缺卡片" };
+export const eligibilities = { requirement_unconfirmed: "要求尚未确认", requirement_invalidated: "要求确认已失效", eligible: "可进入初稿", unconfirmed: "待确认", unclassified: "待分类", comply_only: "仅需遵守", stale_material: "材料已变化", invalid_citation: "引用无效", needs_reconfirmation: "需重新确认", missing_card: "缺卡片" };
 export const dispositions = { respond: "逐项响应", comply_only: "仅需遵守" };
 export const deviations = { none: "无偏离", positive: "正偏离", negative: "负偏离" };
 export const responseKinds = { commitment: "承诺", evidence: "证据响应" };

@@ -20,7 +20,7 @@ from app.models.response_cards import (
     ResponseItem,
 )
 from app.models.score import ScoreRubricSection, ScoreRubricSet
-from app.services import check_inputs, drafts, score, score_inputs
+from app.services import check_inputs, drafts, requirement_consumption, score, score_inputs
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.card_generation import check_input_access
@@ -97,6 +97,8 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
                         Requirement.text,
                         Requirement.category,
                         Requirement.starred,
+                        Requirement.condition,
+                        Requirement.model_quote,
                     )
                 )
                 .join(Chunk, Chunk.id == Requirement.chunk_id)
@@ -149,9 +151,18 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
     citations = cards.citation_validity_batch(
         (requirement for requirement, _ in located), {chunk.id: chunk for _, chunk in located}
     )
+    reviews = await requirement_consumption.effective(
+        session, [req for req, _ in located], citations=citations
+    )
     for requirement, chunk in located:
         row = by_requirement[requirement.id]
         entry = fixed[str(requirement.id)]
+        if require_current and entry.get("requirement_review") != requirement_consumption.fields(
+            reviews[requirement.id]
+        ):
+            stale()
+        if row.kind != "gap" and requirement_consumption.gap_reason(reviews[requirement.id]):
+            stale()
         if (
             requirement.document_id != chunk.document_id
             or chunk.task_id != draft.task_id
@@ -291,6 +302,10 @@ async def snapshot(
         raise not_found()
     _, rubric = await score.get_set(session, actor, task_id, rubric_id)
     rubric_data = await score.report_data(session, rubric)
+    if rubric_data["rubric"]["requirement_review"]["state"] == "stale":
+        cards.fail(
+            "rubric_input_changed", "The scoring sources changed; prepare a current rubric", 409
+        )
     if (
         rubric_data["rubric"]["state"] != "confirmed"
         or not rubric_data["rubric"]["completeness"]["complete"]
@@ -311,6 +326,12 @@ async def snapshot(
     if document is None or document.task_id != task_id:
         raise not_found()
     rubric_fixed = await score_inputs.snapshot(session, actor, task_id, extraction.id)
+    scoring_reviews = await requirement_consumption.require_confirmed(
+        session,
+        rubric_fixed.requirements,
+        citations={row.id: True for row in rubric_fixed.requirements},
+    )
+    score.require_confirmed_section_sources(rubric_data, scoring_reviews)
     items, fixed_items = await fixed_rows(session, actor, draft, require_current=True)
     if any(entry["document_id"] != str(document.id) for entry in fixed_items):
         integrity()
@@ -341,6 +362,10 @@ async def snapshot(
         "rubric_revision": rubric_data["rubric"]["revision"],
         "rubric_sha256": drafts.digest(rubric_data),
         "scoring_rule_version": RULE_VERSION,
+        "requirement_reviews": {
+            str(key): requirement_consumption.fields(value)
+            for key, value in scoring_reviews.items()
+        },
     }
     secret = {
         "draft_id": str(draft.id),

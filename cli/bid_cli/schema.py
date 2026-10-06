@@ -145,6 +145,28 @@ from app.schemas.profile_contracts import (
     TaskOrgProfileSelection,
 )
 from app.schemas.provider_contracts import ProviderConfigInput, ProviderTest
+from app.schemas.requirement_confirmation import (
+    ConfirmationBatchData,
+    ConfirmationReceiptItem,
+    ManualEntryCreate,
+    ManualEntryData,
+    ManualEntryPreview,
+    ManualRequirementInput,
+    RejectedItemView,
+    RequirementBoardData,
+    RequirementBoardItem,
+    RequirementBoardQuery,
+    RequirementConfirmBatch,
+    RequirementDecision,
+    RequirementProgressData,
+    RequirementReviewData,
+    RequirementReviewEvent,
+    RequirementReviewView,
+    ReviewPageData,
+    ReviewPageQuery,
+)
+from app.schemas.requirement_confirmation import PageData as RequirementPageData
+from app.schemas.requirement_confirmation import PageQuery as RequirementPageQuery
 from app.schemas.resource_contracts import ProductCreate, ProductUpdate, TaskProductSelection
 from app.schemas.response_card_contracts import (
     CardAction,
@@ -235,6 +257,8 @@ from app.schemas.team_workflow import (
 from app.schemas.team_workflow import PageData as WorkflowPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
+
+from bid_cli.requirement_confirmation import RequirementProgressInvocation
 
 # Only implemented commands are advertised; future commands are deliberately absent.
 COMMANDS = {
@@ -665,6 +689,44 @@ CONSOLE_VARIANTS = {
 
 
 LEGACY_COMMANDS = dict(COMMANDS)
+REQUIREMENT_COMMANDS = {
+    "req review-list": ReviewPageQuery,
+    "req show": None,
+    "req review-history": RequirementPageQuery,
+    "req rejected": RequirementPageQuery,
+    "req add": ManualEntryCreate,
+    "req confirm": RequirementDecision,
+    "req reopen": RequirementDecision,
+    "req confirm-batch": RequirementConfirmBatch,
+}
+COMMANDS.update(REQUIREMENT_COMMANDS)
+OUTPUTS.update(
+    {
+        "req review-list": TypeAdapter(ReviewPageData),
+        "req show": TypeAdapter(RequirementReviewData),
+        "req review-history": TypeAdapter(RequirementPageData),
+        "req rejected": TypeAdapter(RequirementPageData),
+        "req add": TypeAdapter(ManualEntryData),
+        "req confirm": TypeAdapter(RequirementReviewData),
+        "req reopen": TypeAdapter(RequirementReviewData),
+        "req confirm-batch": TypeAdapter(ConfirmationBatchData),
+    }
+)
+CONSOLE_VARIANTS.update(
+    {
+        "req add": {"dry_run": console_variant(ManualRequirementInput, ManualEntryPreview)},
+        "task board": {
+            "requirement-review": console_variant(
+                RequirementBoardQuery, RequirementBoardData, RequirementBoardItem
+            )
+        },
+        "task progress": {
+            "requirement-review": console_variant(
+                RequirementProgressInvocation, RequirementProgressData, BoardJobView
+            )
+        },
+    }
+)
 COMMANDS.update(
     {
         "task create": BudgetTaskCreate,
@@ -798,6 +860,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                 for item in items
                 if item["name"] not in legacy_options
                 and not (name in CONSOLE_VARIANTS and item["name"] in console_options)
+                and not (name == "task progress" and item["name"] == "job")
                 and not (
                     name in {"check show", "score show", "score rubric show"}
                     and item["name"] in {"cursor", "limit"}
@@ -852,6 +915,10 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         },
     }
     workflow_items = {
+        "req review-list": RequirementReviewView,
+        "req review-history": RequirementReviewEvent,
+        "req rejected": RejectedItemView,
+        "req confirm-batch": ConfirmationReceiptItem,
         "task board": BoardRow,
         "task progress": BoardJobView,
         "task activity": BoardActivityView,
@@ -916,8 +983,10 @@ def command_schema(app=None, version: str = "4.0") -> dict:
             if isinstance(value, dict):
                 if "properties" in value:
                     value["properties"].pop("agent_provenance", None)
+                    value["properties"].pop("requirement_review", None)
                 if "$defs" in value:
                     value["$defs"].pop("AgentProvenance", None)
+                    value["$defs"].pop("RubricRequirementReadiness", None)
                 if "$defs" in value and "Cost" in value["$defs"]:
                     value["$defs"]["Cost"] = legacy_cost
                 for child in value.values():

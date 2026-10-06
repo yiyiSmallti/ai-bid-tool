@@ -29,6 +29,8 @@ type GapReason = Literal[
     # The reviewed inputs or single-domain approval require renewed human review.
     "needs_reconfirmation",
     "cosign_required",
+    "requirement_unconfirmed",
+    "requirement_invalidated",
 ]
 
 RESOURCE_FIELD_PATHS = {
@@ -418,6 +420,8 @@ class CardView(_TimestampContract):
         "stale_material",
         "invalid_citation",
         "needs_reconfirmation",
+        "requirement_unconfirmed",
+        "requirement_invalidated",
     ]
 
     @model_validator(mode="after")

@@ -17,6 +17,8 @@ from pathlib import Path
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.orm import Session
+from task_fixtures import confirm_requirements
 from test_team_workflow_membership import add_member, person
 from test_team_workflow_stream_acceptance import seed_scope
 
@@ -25,6 +27,8 @@ ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "data/work/team-workflow-a
 
 async def cosign_scope(api, headers, tenants, admin_engine, *, required=True, count=1):
     scope = await seed_scope(api, headers, tenants, admin_engine, count=count)
+    with Session(admin_engine) as session, session.begin():
+        confirm_requirements(session, scope["org_id"], scope["task_id"])
     members = {}
     for index, (domain, role) in enumerate((("commercial", "bidder"), ("technical", "technical"))):
         user, auth = await person(api, admin_engine, tenants["orgs"][0], role)

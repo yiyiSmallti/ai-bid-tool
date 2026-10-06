@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from procrastinate.exceptions import ConnectorException
 from psycopg import OperationalError
 
@@ -116,9 +116,13 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
         )
 
     @router.post("/tasks/{task_id}/drafts", name="draft", response_model=Result)
-    async def draft(task_id: UUID, body: DraftRequest, ctx=Depends(context, scope="function")):
+    async def draft(
+        request: Request, task_id: UUID, body: DraftRequest, ctx=Depends(context, scope="function")
+    ):
         session, actor = ctx
         data, job = await drafts.submit_draft(session, actor, task_id, body, storage)
+        if body.dry_run and request.state.contract_version == "3.0":
+            data["gap_reasons"] = session.info["draft_legacy_gap_reasons"]
         warnings = await cards.scope_warnings(session, body.extraction_job_id)
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()

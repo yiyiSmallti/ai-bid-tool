@@ -1,0 +1,1994 @@
+{
+  "local:HTTP404": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "not_found",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP409": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "review_changed",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP422": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "nonverbatim_quote",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP503": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "service_unavailable",
+        "exit_code": 3,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:empty:req rejected": {
+    "command": "req rejected",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:empty:req review-history": {
+    "command": "req review-history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:empty:req review-list": {
+    "command": "req review-list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:manual-replay": {
+    "command": "req add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created_scope": true,
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": true,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req add": {
+    "command": "req add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created_scope": true,
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req add preview": {
+    "command": "req add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "creates_manual_scope": true,
+      "duplicate_requirement_id": null,
+      "estimated_cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "expected_set_revision": null,
+      "extraction_job_id": null,
+      "preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "verified_source": {
+        "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "end": 21,
+        "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
+          "page": 1,
+          "quote": "Synthetic requirement"
+        },
+        "start": 0,
+        "verifier_version": "literal-v1"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req confirm": {
+    "command": "req confirm",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": "2026-10-05T00:00:00Z",
+        "confirmed_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 2,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "confirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 2,
+        "summary": {
+          "confirmed": 1,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 0
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req confirm-batch": {
+    "command": "req confirm-batch",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "changed": 1,
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 2,
+        "summary": {
+          "confirmed": 1,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 0
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "confirmed_revision": 2,
+        "current_revision": 2,
+        "current_state": "confirmed",
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "requirement_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req rejected": {
+    "command": "req rejected",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "complete_candidate": false,
+        "entered_requirement_count": 1,
+        "entered_requirement_ids": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "index": 0,
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "position": "page 1",
+        "quote": "Synthetic requirement",
+        "reason": "unverified_location",
+        "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req reopen": {
+    "command": "req reopen",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 3,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 3,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req review-history": {
+    "command": "req review-history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "action": "manual_add",
+        "actor_kind": "session",
+        "actor_user_id": "00000000-0000-0000-0000-000000000001",
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "occurred_at": "2026-10-05T00:00:00Z",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "request_id": "00000000-0000-0000-0000-000000000001",
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state_after": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req review-list": {
+    "command": "req review-list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:req show": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "event_ids": [],
+      "replayed": false,
+      "request_id": null,
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:HTTP404": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "not_found",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP409": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "review_changed",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP422": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "nonverbatim_quote",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP503": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "service_unavailable",
+        "exit_code": 3,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:empty:req rejected": {
+    "command": "req rejected",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:empty:req review-history": {
+    "command": "req review-history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:empty:req review-list": {
+    "command": "req review-list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:manual-replay": {
+    "command": "req add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created_scope": true,
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": true,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req add": {
+    "command": "req add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created_scope": true,
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req add preview": {
+    "command": "req add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "creates_manual_scope": true,
+      "duplicate_requirement_id": null,
+      "estimated_cost": {
+        "basis": "zero",
+        "billing_currency": "USD",
+        "charge": "0",
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "task_amount": "0",
+        "unpriced_calls": 0,
+        "unresolved_calls": 0,
+        "usd": 0.0
+      },
+      "expected_set_revision": null,
+      "extraction_job_id": null,
+      "preview_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "verified_source": {
+        "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "end": 21,
+        "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source": {
+          "chunk_id": "00000000-0000-0000-0000-000000000001",
+          "document_id": "00000000-0000-0000-0000-000000000001",
+          "location": null,
+          "page": 1,
+          "quote": "Synthetic requirement"
+        },
+        "start": 0,
+        "verifier_version": "literal-v1"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req confirm": {
+    "command": "req confirm",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": "2026-10-05T00:00:00Z",
+        "confirmed_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": null,
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 2,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "confirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 2,
+        "summary": {
+          "confirmed": 1,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 0
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req confirm-batch": {
+    "command": "req confirm-batch",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "changed": 1,
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 2,
+        "summary": {
+          "confirmed": 1,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 0
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "confirmed_revision": 2,
+        "current_revision": 2,
+        "current_state": "confirmed",
+        "event_id": "00000000-0000-0000-0000-000000000001",
+        "requirement_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req rejected": {
+    "command": "req rejected",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "complete_candidate": false,
+        "entered_requirement_count": 1,
+        "entered_requirement_ids": [
+          "00000000-0000-0000-0000-000000000001"
+        ],
+        "index": 0,
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "position": "page 1",
+        "quote": "Synthetic requirement",
+        "reason": "unverified_location",
+        "summary_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req reopen": {
+    "command": "req reopen",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "event_ids": [
+        "00000000-0000-0000-0000-000000000001"
+      ],
+      "replayed": false,
+      "request_id": "00000000-0000-0000-0000-000000000001",
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 3,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 3,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req review-history": {
+    "command": "req review-history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "action": "manual_add",
+        "actor_kind": "session",
+        "actor_user_id": "00000000-0000-0000-0000-000000000001",
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "occurred_at": "2026-10-05T00:00:00Z",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "request_id": "00000000-0000-0000-0000-000000000001",
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state_after": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req review-list": {
+    "command": "req review-list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:req show": {
+    "command": "req show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "event_ids": [],
+      "replayed": false,
+      "request_id": null,
+      "requirement": {
+        "citation_valid": true,
+        "confirmed_at": null,
+        "confirmed_by_user_id": null,
+        "content": {
+          "category": "technical",
+          "condition": {},
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "starred": false,
+          "text": "Synthetic requirement"
+        },
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "model_quote": null,
+        "next_actor": {
+          "action": "confirm_requirement",
+          "basis": "owner",
+          "can_current_actor_act": true,
+          "user_id": "00000000-0000-0000-0000-000000000001"
+        },
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual_missing",
+        "rejected_item": null,
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "review_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "source_pin": {
+          "binding_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "chunk_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "document_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "end": 21,
+          "location_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "quote_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "source": {
+            "chunk_id": "00000000-0000-0000-0000-000000000001",
+            "document_id": "00000000-0000-0000-0000-000000000001",
+            "location": null,
+            "page": 1,
+            "quote": "Synthetic requirement"
+          },
+          "start": 0,
+          "verifier_version": "literal-v1"
+        },
+        "state": "unconfirmed",
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "scope": {
+        "confirmation_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "document_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "last_event_cursor": "synthetic-cursor",
+        "membership_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "origin": "manual",
+        "revision": 1,
+        "summary": {
+          "confirmed": 0,
+          "extraction_completeness": "not_asserted",
+          "invalid_citations": 0,
+          "invalidated": 0,
+          "legacy_unconfirmed": 0,
+          "manual_added": 1,
+          "rejected_reported": null,
+          "total": 1,
+          "unconfirmed": 1
+        },
+        "task_id": "00000000-0000-0000-0000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

@@ -46,7 +46,7 @@ from conftest import FakeQueue
 from docx import Document
 from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from task_fixtures import reviewer_header
+from task_fixtures import confirm_requirements_async, reviewer_header
 from test_response_cards import (
     PRODUCT_DATA,
     create_card,
@@ -121,9 +121,17 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
         }
         # The slow reference keeps its own reads and consumption gate; only
         # reason precedence is shared with the production projection.
-        if (
-            card is not None
-            and item.kind != "gap"
+        requirement_state = current_inputs[str(item.requirement_id)]["requirement_review"]["state"]
+        requirement_gap = (
+            None
+            if requirement_state == "confirmed"
+            else "requirement_invalidated"
+            if requirement_state == "invalidated"
+            else "requirement_unconfirmed"
+        )
+        if item.kind != "gap" and (
+            requirement_gap
+            or card is not None
             and not await session.scalar(
                 select(func.team_cosign_card_approved(actor.org_id, card.id))
             )
@@ -132,12 +140,13 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             if current_revision is None:
                 raise not_found()
             current_view = await cards.card_view(
-                session, actor, card, current_revision, requirement
+                session, actor, card, current_revision, requirement, requirement_review_gate=False
             )
             review = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
             entry["reasons"] = drafts.gap_reasons(
                 current_view,
                 review,
+                requirement_gap=requirement_gap,
                 valid_citation=await cards.citation_valid(session, requirement),
                 quote_current=cards.revision_quote_hash(current_revision, requirement)
                 == cards.quote_hash(requirement.quote),
@@ -307,6 +316,10 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
     assert response.status_code == 200, response.text
     requirements = response.json()["items"]
     assert len(requirements) == count
+    async with app.state.db.transaction(org) as session:
+        await confirm_requirements_async(
+            session, org, UUID(task), settings=app.state.processor.settings
+        )
     (
         product,
         product_selection,

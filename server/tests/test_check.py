@@ -214,7 +214,7 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
     """Create one current draft containing every phase-one rule boundary."""
     header = headers[0]
     task, document, extraction, requirements = await create_tender(
-        api, app, header, tmp_path, suffix="check"
+        api, app, header, tmp_path, suffix="check", confirmed=True
     )
     assert requirements[0]["category"] == "scoring" and requirements[0]["starred"] is True
     assert requirements[2]["category"] == "technical" and requirements[2]["starred"] is True

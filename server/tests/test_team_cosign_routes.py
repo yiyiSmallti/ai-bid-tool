@@ -84,7 +84,7 @@ async def request(api, auth, scope, operation, **changes):
 async def test_cosign_routes_hide_foreign_org_nonmember_and_removed(
     api, headers, tenants, admin_engine, operation
 ):
-    scope = await scope_with_card(api, headers, tenants, admin_engine)
+    scope = await scope_with_card(api, headers, tenants, admin_engine, confirmed=True)
     outsider, removed_header = await person(api, admin_engine, tenants["orgs"][0])
     assert (
         await add_member(api, headers[0], scope["task_id"], outsider, 1, "observer")
@@ -110,7 +110,7 @@ async def test_cosign_routes_hide_foreign_org_nonmember_and_removed(
 async def test_cosign_writes_deny_tokens_and_observers(
     api, headers, tenants, admin_engine, operation
 ):
-    scope = await scope_with_card(api, headers, tenants, admin_engine)
+    scope = await scope_with_card(api, headers, tenants, admin_engine, confirmed=True)
     observer, observer_header = await person(api, admin_engine, tenants["orgs"][0], "viewer")
     assert (
         await add_member(api, headers[0], scope["task_id"], observer, 1, "observer")
@@ -124,7 +124,7 @@ async def test_cosign_writes_deny_tokens_and_observers(
 
 @pytest.mark.parametrize("operation", WRITES)
 async def test_cosign_archived_task_blocks_writes(api, headers, tenants, admin_engine, operation):
-    scope = await scope_with_card(api, headers, tenants, admin_engine)
+    scope = await scope_with_card(api, headers, tenants, admin_engine, confirmed=True)
     uid, reviewer = await person(api, admin_engine, tenants["orgs"][0], "technical")
     assert (
         await add_member(api, headers[0], scope["task_id"], uid, 1, "reviewer", ["technical"])
@@ -152,7 +152,7 @@ async def test_cosign_archived_task_blocks_writes(api, headers, tenants, admin_e
 async def test_rule_preview_is_read_only_and_policy_keeps_rule_domains(
     api, headers, tenants, admin_engine
 ):
-    scope = await scope_with_card(api, headers, tenants, admin_engine)
+    scope = await scope_with_card(api, headers, tenants, admin_engine, confirmed=True)
     before = await workflow(api, headers[0], scope["task_id"])
     before.pop("last_event_cursor")
     policy_before = (await request(api, headers[0], scope, "policy_show")).json()["data"]
@@ -179,8 +179,8 @@ async def test_rule_preview_is_read_only_and_policy_keeps_rule_domains(
 async def test_policy_extraction_binding_and_recovery_admin_cannot_sign(
     api, headers, tenants, admin_engine
 ):
-    scope = await scope_with_card(api, headers, tenants, admin_engine)
-    foreign = await scope_with_card(api, headers, tenants, admin_engine, tenant=1)
+    scope = await scope_with_card(api, headers, tenants, admin_engine, confirmed=True)
+    foreign = await scope_with_card(api, headers, tenants, admin_engine, tenant=1, confirmed=True)
     path = f"/tasks/{scope['task_id']}/requirements/{scope['requirement_ids'][0]}/review-policy"
     for job in (foreign["job_id"], uuid4()):
         for method in ("GET", "PUT"):

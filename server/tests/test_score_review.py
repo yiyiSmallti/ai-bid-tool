@@ -527,7 +527,7 @@ async def many_rubric_case(tenants, tmp_path, admin_engine, monkeypatch):
 
         monkeypatch.setattr(provider, "_extract", all_scoring)
         task, document, extraction, requirements = await create_tender(
-            api, app, headers[0], tmp_path, suffix="multi-rubric"
+            api, app, headers[0], tmp_path, suffix="multi-rubric", confirmed=True
         )
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         vendor = RubricVendor()
@@ -771,7 +771,12 @@ async def test_same_org_wrong_task_routes_are_not_found(rubric_case):
     case = rubric_case
     report = await classify_all(case)
     other_task, _, _, _ = await create_tender(
-        case["api"], case["app"], case["header"], case["tmp_path"], suffix="wrong-task-rubric"
+        case["api"],
+        case["app"],
+        case["header"],
+        case["tmp_path"],
+        suffix="wrong-task-rubric",
+        confirmed=True,
     )
     prefix = f"/tasks/{other_task}/score-rubrics/{report['rubric']['id']}"
     for path in (prefix, prefix + "/history"):

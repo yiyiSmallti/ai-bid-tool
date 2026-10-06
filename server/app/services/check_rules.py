@@ -13,6 +13,8 @@ REASONS = {
     "certificate_date_unknown": "A linked certificate has insufficient declared dates for assessment.",
 }
 UNCONFIRMED = {
+    "requirement_unconfirmed",
+    "requirement_invalidated",
     "unconfirmed",
     "cosign_required",
     "needs_reconfirmation",

@@ -218,6 +218,7 @@ test.describe("rules check acceptance", () => {
   test("rules date edit invalidates preview and delayed source is discarded on org exit", async ({ page }) => {
     const state = await fixture(page);
     await page.goto(workspace);
+    // A fixed starting date makes the later edit a real change on every run day.
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toBeEnabled();

@@ -65,6 +65,7 @@ from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
 from bid_cli.platform_credentials import app as platform_credential_app
 from bid_cli.providers import app as provider_app
+from bid_cli.requirement_confirmation import register as register_requirement_confirmation_commands
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
 from bid_cli.schema import command_schema
 from bid_cli.score import app as score_app
@@ -1431,6 +1432,7 @@ app.add_typer(billing_app, name="billing")
 
 register_budget_commands(task_app, billing_app)
 register_team_workflow_commands(task_app, card_app)
+register_requirement_confirmation_commands(req_app)
 
 
 @platform_card_app.command("create")

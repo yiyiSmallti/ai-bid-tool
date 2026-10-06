@@ -27,13 +27,14 @@ from app.models.check import CheckFinding, CheckFindingCitation, CheckItem, Chec
 from app.models.entities import Chunk, Document, Job, Requirement, Task
 from app.models.response_cards import DraftRun, ResponseItem
 from app.models.score import ScoreItemCitation, ScoreReport
-from app.services import check, check_rules, drafts
+from app.services import check, check_rules, drafts, requirement_consumption
 from app.services.auth import ROLE_SCOPES, Identity
 from app.services.check_inputs import RULE_VERSION, SCHEMA_VERSION, CheckSnapshot
 from app.services.extraction import SEGMENT_SEPARATORS, locate_quote, normalize
 from sqlalchemy import event, func, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_fixtures import confirm_requirements_async
 from test_check import publish_draft
 from test_check_semantic_storage import semantic_report
 from test_check_storage import TABLES
@@ -362,11 +363,20 @@ async def prepare_scale_input(db, actor, settings):
         await session.flush()
         session.add_all(requirements)
         await session.flush()
+        await confirm_requirements_async(session, actor.org_id, task.id, settings=settings)
+        reviews = await requirement_consumption.effective(session, requirements)
+        review_fields = {
+            str(row.id): requirement_consumption.fields(reviews[row.id]) for row in requirements
+        }
         draft_manifest = {
             "task_id": str(task.id),
             "extraction_job_id": str(extraction.id),
             "requirements": [
-                {"requirement_id": str(requirement.id)} for requirement in requirements
+                {
+                    "requirement_id": str(requirement.id),
+                    "requirement_review": review_fields[str(requirement.id)],
+                }
+                for requirement in requirements
             ],
         }
         draft = DraftRun(
@@ -450,6 +460,7 @@ async def prepare_scale_input(db, actor, settings):
         "document_id": str(document.id),
         "document_sha256": document.sha256,
         "draft_input_hash": draft.input_hash,
+        "requirement_reviews": review_fields,
         "assessment_date": "2026-10-04",
         "mode": "rules",
         "rule_version": RULE_VERSION,
@@ -1110,9 +1121,11 @@ async def test_score_preserves_explicit_invalid_citation_gap_outside_rubric(scor
         assert requirement is not None
         chunk = await session.get(Chunk, requirement.chunk_id)
         assert chunk is not None
-        # Changing only Chunk.text leaves a missing-card draft's source hash and
-        # eligibility unchanged, so submit_draft reuses the fixture's old job.
-        # Change the citation itself to request a fresh, explicitly invalid gap.
+        review = (await requirement_consumption.effective(session, [requirement]))[requirement_id]
+        assert review.confirmed
+        # This fixture starts with a human-accepted source. Changing its quote
+        # invalidates that acceptance and creates a fresh, explicitly invalid
+        # non-scoring gap without changing the fixed scoring rubric.
         requirement.quote = "Synthetic non-scoring quotation absent from parsed text"
         assert requirement.quote not in chunk.text
         await session.flush()
@@ -1136,7 +1149,7 @@ async def test_score_preserves_explicit_invalid_citation_gap_outside_rubric(scor
             )
         )
         assert gap is not None and gap.kind == "gap" and gap.card_id is None
-        assert gap.gap_reasons == ["missing_card", "invalid_citation"]
+        assert gap.gap_reasons == ["requirement_invalidated", "missing_card", "invalid_citation"]
         # The confirmed rubric remains strict; only the explicitly recorded,
         # unrelated draft gap may remain unassessable without blocking the report.
         report = await pending_score(session, changed_case)

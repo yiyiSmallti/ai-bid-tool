@@ -172,7 +172,11 @@ def create_router(
     ):
         session, identity = ctx
         items = await requirements.list_requirements(session, identity, task_id, job)
-        return result("req list", items=items)
+        return result(
+            "req list",
+            items=items,
+            warnings=await requirements.list_warnings(session, task_id, job, items),
+        )
 
     @router.get(
         "/tasks/{task_id}/requirements/repair", name="req_repair_preview", response_model=Result

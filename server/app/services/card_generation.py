@@ -149,7 +149,9 @@ async def material_inputs(session: AsyncSession, actor: Identity, task_id: UUID,
     return entries, originals, unavailable
 
 
-async def snapshot(session, actor, task, requirements, storage, llm, reasoning, settings):
+async def snapshot(
+    session, actor, task, requirements, storage, llm, reasoning, settings, *, scope_requirements
+):
     by_requirement = {str(row.id): row for row in requirements}
     # Registered confidential values become their placeholders before any pattern
     # rule runs; the task switch turns both off together.
@@ -242,7 +244,13 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning, 
         memory_output = await memory_retrieval.retrieve(
             session, actor, memory_request, settings, preview=True
         )
+    from app.services import requirement_consumption
+
+    # The provider receives only the selected requirements, but admission and
+    # publication compare membership against the same complete extraction scope.
+    preparation = await requirement_consumption.preparation(session, scope_requirements)
     manifest = {
+        "requirement_preparation": preparation,
         "org_id": str(actor.org_id),
         "task_id": str(task.id),
         "requirements": [
@@ -373,6 +381,7 @@ async def submit_generation(
     extraction, requirements = await cards.extraction_scope(
         session, task_id, body.extraction_job_id
     )
+    scope_requirements = requirements
     if body.requirement_ids is not None:
         if not set(body.requirement_ids) <= {row.id for row in requirements}:
             raise not_found()
@@ -381,7 +390,15 @@ async def submit_generation(
     if reasoning is None and not warnings:
         warnings.append("The current model has no reasoning levels configured.")
     manifest, secret, targets, selected, skipped = await snapshot(
-        session, actor, task, requirements, storage, llm, reasoning, settings
+        session,
+        actor,
+        task,
+        requirements,
+        storage,
+        llm,
+        reasoning,
+        settings,
+        scope_requirements=scope_requirements,
     )
     manifest["extraction_job_id"] = str(extraction.id)
     input_hash = digest(manifest)
@@ -672,6 +689,15 @@ def worker(job: Job) -> Identity:
 
 
 async def check_input_access(session, actor, task_id, manifest, *, active=False):
+    if active:
+        from app.services.requirement_consumption import current_preparation
+
+        await current_preparation(
+            session,
+            task_id,
+            UUID(manifest["extraction_job_id"]),
+            manifest.get("requirement_preparation"),
+        )
     if "memory" in manifest:
         actor.require("memory:read")
         actor.require("memory:retrieve")
@@ -801,10 +827,18 @@ async def generate(execution: JobExecution, llm: LLMProvider, storage: Storage):
 
 
 async def publish(session, actor, job, output, secret, storage, settings):
+    from app.services.requirement_consumption import current_preparation
+
     submitted = job.result["submission"]
     manifest = submitted["input_manifest"]
     if "memory" in manifest:
         await memory_retrieval.require_current(session, actor.org_id, manifest["memory"], lock=True)
+    await current_preparation(
+        session,
+        job.task_id,
+        UUID(manifest["extraction_job_id"]),
+        manifest.get("requirement_preparation"),
+    )
     mappings = {entry["ref"]: entry for entry in manifest["materials"]}
     selected = set(submitted["selected_requirements"])
     skipped, rejected, needs_material, created, seen = dict(submitted["skipped"]), {}, [], [], set()

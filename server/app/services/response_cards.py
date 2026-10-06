@@ -55,7 +55,7 @@ from app.schemas.response_card_contracts import (
     TaskRedactionSet,
 )
 from app.schemas.screenshot_contracts import ImageEvidenceInput
-from app.services import confidential, redaction
+from app.services import confidential, redaction, requirement_consumption
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership, set_actor_context
 from app.services.evidence_sources import joined_sources, require_source, source_data
 from app.services.evidence_sources import require_access as require_source_access
@@ -218,15 +218,18 @@ async def extraction_scope(session: AsyncSession, task_id: UUID, job_id: UUID):
 
 async def scope_warnings(session: AsyncSession, job_id: UUID) -> list[str]:
     job = await session.get(Job, job_id)
-    if job is None:
+    if job is None or job.task_id is None:
         raise not_found()
+    from app.services.requirements import latest_extractions
+
     latest = await session.scalar(
-        select(Job.id)
-        .where(Job.document_id == job.document_id, Job.kind == "extract", Job.status == "succeeded")
-        .order_by(Job.created_at.desc(), Job.id.desc())
-        .limit(1)
+        select(Job.id).where(
+            Job.document_id == job.document_id, Job.id.in_(latest_extractions(job.task_id))
+        )
     )
     warnings = [f"historical_extraction:{job_id}"] if latest != job_id else []
+    if job.result.get("origin") == "manual":
+        warnings.append("manual_scope:extraction_completeness_not_asserted")
     if job.result.get("rejected"):
         warnings.append(f"extraction_rejected:{len(job.result['rejected'])}")
     parsed = await session.scalar(
@@ -289,9 +292,17 @@ def _citation_location_key(value):
     return value
 
 
+class CitationValidityBatch(dict[UUID, bool]):
+    """One request's validity decisions and the exact source spans behind them."""
+
+    def __init__(self):
+        super().__init__()
+        self.source_spans: dict[str, dict[str, tuple[tuple[int, int] | None, str | None]]] = {}
+
+
 def citation_validity_batch(
     requirements: Iterable[Requirement], chunks: Mapping[UUID, Chunk]
-) -> dict[UUID, bool]:
+) -> CitationValidityBatch:
     """The scalar citation predicate, grouped by source rather than requirement UUID.
 
     Keep page and full Word-location bindings before matching. A block's ambiguity
@@ -302,7 +313,7 @@ def citation_validity_batch(
     from app.services.extraction import locate_spans
 
     grouped: dict[UUID, list[Requirement]] = defaultdict(list)
-    valid: dict[UUID, bool] = {}
+    valid = CitationValidityBatch()
     for requirement in requirements:
         grouped[requirement.chunk_id].append(requirement)
         valid[requirement.id] = False
@@ -326,7 +337,10 @@ def citation_validity_batch(
                 if location == requirement.location:
                     sources[block["text"]].append(requirement)
         for original, located in sources.items():
-            spans = locate_spans(original, (row.quote for row in located), require_verbatim=True)
+            spans = valid.source_spans.setdefault(original, {})
+            missing = {row.quote for row in located} - spans.keys()
+            if missing:
+                spans.update(locate_spans(original, missing, require_verbatim=True))
             for requirement in located:
                 if spans[requirement.quote][0] is not None:
                     valid[requirement.id] = True
@@ -564,6 +578,8 @@ async def card_view(
     revision: ResponseCardRevision,
     requirement: Requirement,
     storage: Storage | None = None,
+    *,
+    requirement_review_gate: bool = True,
 ) -> dict:
     material_rows = await linked_evidence(session, revision.id)
     evidence = [await evidence_view(session, actor, row) for row in material_rows]
@@ -580,16 +596,25 @@ async def card_view(
     )
     if memory_warning:
         image_warnings.add(memory_warning)
+    valid_citation = await citation_valid(session, requirement)
+    reviews = (
+        await requirement_consumption.effective(
+            session, [requirement], citations={requirement.id: valid_citation}
+        )
+        if requirement_review_gate
+        else {}
+    )
     view = card_view_data(
         card,
         revision,
         requirement,
         evidence,
         generation_stale,
-        await citation_valid(session, requirement),
+        valid_citation,
         invalid_image,
         image_warnings,
         memory_lineage,
+        requirement_review=reviews.get(requirement.id),
     )
     from app.services import task_cosign
 
@@ -642,8 +667,13 @@ def card_eligibility(
     generation_stale=False,
     invalid_image=False,
     inactive_evidence=False,
+    requirement_review=None,
 ):
     """Single eligibility precedence for content views and board metadata reads."""
+    if requirement_review is not None and (
+        reason := requirement_consumption.gap_reason(requirement_review)
+    ):
+        return reason
     if not valid_citation:
         return "invalid_citation"
     elif revision_quote_hash(revision, requirement) != quote_hash(requirement.quote):
@@ -670,6 +700,8 @@ def card_view_data(
     invalid_image: bool = False,
     image_warnings: set[str] | None = None,
     memory_lineage: dict | None = None,
+    *,
+    requirement_review=None,
 ) -> dict:
     """One projection/eligibility rule for both single-card and batched reads."""
     eligibility = card_eligibility(
@@ -679,6 +711,7 @@ def card_view_data(
         generation_stale=generation_stale,
         invalid_image=invalid_image,
         inactive_evidence=any(not row["active_selection"] for row in evidence),
+        requirement_review=requirement_review,
     )
     return CardView.model_validate(
         dict(
@@ -817,9 +850,10 @@ class CardReadBatch:
     _citations: dict[UUID, bool] = field(default_factory=dict)
     _evidence: dict[UUID, dict] = field(default_factory=dict)
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
-    _views: dict[UUID, dict] = field(default_factory=dict)
+    _views: dict[tuple[UUID, bool], dict] = field(default_factory=dict)
     memory_epoch: int = 0
     cosign: dict[UUID, dict] = field(default_factory=dict)
+    requirement_reviews: dict = field(default_factory=dict)
 
     @classmethod
     async def load(
@@ -941,7 +975,12 @@ class CardReadBatch:
         from app.services import task_cosign
 
         cosign = await task_cosign.projections(session, actor.org_id, list(loaded_cards))
+        citations = citation_validity_batch(requirements, chunks)
+        reviews = await requirement_consumption.effective(
+            session, requirements, citations=citations
+        )
         return cls(
+            requirement_reviews=reviews,
             cosign=cosign,
             memory_epoch=memory_epoch,
             actor=actor,
@@ -956,7 +995,7 @@ class CardReadBatch:
             generation_manifests=generation_manifests,
             by_requirement={row.requirement_id: row for row in loaded_cards.values()},
             images=images,
-            _citations=citation_validity_batch(requirements, chunks),
+            _citations=citations,
         )
 
     def citation_valid(self, requirement: Requirement) -> bool:
@@ -1038,9 +1077,15 @@ class CardReadBatch:
         return self._generation_stale[job_id]
 
     def card_view(
-        self, card: ResponseCard, revision: ResponseCardRevision, requirement: Requirement
+        self,
+        card: ResponseCard,
+        revision: ResponseCardRevision,
+        requirement: Requirement,
+        *,
+        requirement_review_gate: bool = True,
     ) -> dict:
-        if revision.id not in self._views:
+        key = (revision.id, requirement_review_gate)
+        if key not in self._views:
             rows = self.links.get(revision.id, [])
             evidence = [self.evidence_view(row) for row in rows]
             images = [self.image(row) for row in rows if row.kind == "image_region"]
@@ -1050,7 +1095,7 @@ class CardReadBatch:
                 else {}
             )
             warning = memory_warning_for(revision, manifest, self.memory_epoch)
-            self._views[revision.id] = card_view_data(
+            self._views[key] = card_view_data(
                 card,
                 revision,
                 requirement,
@@ -1061,10 +1106,13 @@ class CardReadBatch:
                 {code for _, warnings, _ in images for code in warnings}
                 | ({warning} if warning else set()),
                 memory_lineage_for(manifest, requirement.id),
+                requirement_review=self.requirement_reviews[requirement.id]
+                if requirement_review_gate
+                else None,
             )
         from app.services import task_cosign
 
-        return task_cosign.apply_eligibility(self._views[revision.id], self.cosign[card.id])
+        return task_cosign.apply_eligibility(self._views[key], self.cosign[card.id])
 
 
 async def append_revision(
@@ -1336,6 +1384,7 @@ async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, b
 
 async def confirmation_inputs(session, actor, card, previous, requirement, storage):
     """Expose actionable stale-input failures before a legacy round conflict."""
+    await requirement_consumption.require_confirmed(session, [requirement])
     view = await card_view(session, actor, card, previous, requirement, storage)
     if "memory_input_stale" in view["warning_codes"]:
         fail("memory_input_stale", "Memory changed; edit or regenerate before review", 409, 4)
@@ -1538,6 +1587,8 @@ async def dispose_cards(
                 requirement.category
             )
         human(actor, domain)
+        if item.disposition == "comply_only":
+            await requirement_consumption.require_confirmed(session, [requirement])
         if card is None:
             card = await new_card(session, actor, task_id, body.extraction_job_id, requirement)
         revision = await append_revision(

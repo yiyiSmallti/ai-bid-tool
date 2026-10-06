@@ -15,6 +15,8 @@ import httpx
 import pytest
 from app.models.entities import Requirement
 from app.schemas.score_contracts import RubricReviseRequest
+from app.services import requirement_consumption
+from task_fixtures import confirm_requirements_async
 from test_check_combined import semantic_llm
 from test_score_api import (
     RubricVendor,
@@ -73,6 +75,17 @@ async def invalid_domains_case(rubric_input_case, monkeypatch):
         second = await session.get(Requirement, UUID(case["requirements"][1]["id"]))
         assert second is not None
         second.category = "scoring"
+        await session.flush()
+        review = (await requirement_consumption.effective(session, [second]))[second.id]
+        assert review.state == "invalidated"
+        await confirm_requirements_async(
+            session,
+            case["tenants"]["orgs"][0],
+            UUID(case["task"]),
+            [second.id],
+            settings=case["app"].state.processor.settings,
+        )
+        assert (await requirement_consumption.effective(session, [second]))[second.id].confirmed
     vendor = TwoDomainCandidateVendor()
     install_rubric_resolver(monkeypatch, semantic_llm(case["tmp_path"], vendor))
     submitted = await submit_rubric(case, await preview_rubric(case))

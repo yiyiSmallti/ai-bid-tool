@@ -38,6 +38,7 @@ from app.schemas.score_contracts import (
     RubricCompletenessView,
     RubricItemView,
     RubricRequirementCoverageView,
+    RubricRequirementReadiness,
     RubricReviseRequest,
 )
 from app.services import score, score_normalization
@@ -346,6 +347,7 @@ async def summary(
         select(func.count()).select_from(ScoreRubricItem).where(ScoreRubricItem.rubric_id == row.id)
     )
     active = state["state"] != "superseded"
+    readiness = await score.requirement_readiness(session, row)
     confirm = await action(
         session,
         actor,
@@ -356,7 +358,10 @@ async def summary(
         domain="commercial",
         human=True,
         checks=checks,
-        valid=active and state["state"] == "candidate" and complete.complete,
+        valid=active
+        and state["state"] == "candidate"
+        and complete.complete
+        and readiness["state"] == "ready",
     )
     reopen = await action(
         session,
@@ -408,6 +413,7 @@ async def summary(
         section_count=section_count or 0,
         item_count=item_count or 0,
         completeness=compact_completeness(complete),
+        requirement_review=RubricRequirementReadiness.model_validate(readiness),
         overall_aggregation_assessable=row.overall_aggregation
         in {"sum", "weighted_sum", "capped_sum"},
         actions=[confirm, reopen, revise],

@@ -149,6 +149,8 @@ async def snapshot(
                         Requirement.text,
                         Requirement.category,
                         Requirement.starred,
+                        Requirement.condition,
+                        Requirement.model_quote,
                         Requirement.job_id,
                     ),
                     load_only(
@@ -189,6 +191,11 @@ async def snapshot(
     secret_requirements: list[dict] = []
     citations = cards.citation_validity_batch(
         (requirement for requirement, _ in located), {chunk.id: chunk for _, chunk in located}
+    )
+    from app.services import requirement_consumption
+
+    review_inputs = await requirement_consumption.preparation(
+        session, [row for row, _ in located], citations=citations
     )
     for index, (requirement, chunk) in enumerate(located, 1):
         if requirement.category != "scoring" or not citations[requirement.id]:
@@ -250,6 +257,7 @@ async def snapshot(
         "document_id": str(document.id),
         "document_sha256": document.sha256,
         "scope": "scoring_requirements",
+        "requirement_preparation": review_inputs,
         "requirements": fixed_requirements,
         "warnings": warning_codes,
         "normalization_rule_version": NORMALIZATION_RULE_VERSION,
@@ -290,69 +298,29 @@ async def require_dependencies(
         or manifest.get("org_id") != str(actor.org_id)
     ):
         raise not_found()
-    expected = {entry["requirement_id"] for entry in manifest.get("requirements", [])}
+    expected = {UUID(entry["requirement_id"]) for entry in manifest.get("requirements", [])}
     rows = list(
-        (
-            await session.execute(
-                select(Requirement, Chunk)
-                .join(Chunk, Chunk.id == Requirement.chunk_id)
-                .options(
-                    load_only(
-                        Requirement.id,
-                        Requirement.task_id,
-                        Requirement.document_id,
-                        Requirement.chunk_id,
-                        Requirement.page,
-                        Requirement.location,
-                        Requirement.quote,
-                        Requirement.text,
-                        Requirement.category,
-                        Requirement.starred,
-                        Requirement.job_id,
-                    ),
-                    load_only(
-                        Chunk.id,
-                        Chunk.task_id,
-                        Chunk.document_id,
-                        Chunk.page,
-                        Chunk.text,
-                        Chunk.citation_verified,
-                        Chunk.blocks,
-                    ),
-                )
-                .where(
-                    Requirement.job_id == extraction.id,
-                    Requirement.task_id == task_id,
-                    Requirement.category == "scoring",
-                )
+        await session.scalars(
+            select(Requirement).where(
+                Requirement.org_id == actor.org_id,
+                Requirement.task_id == task_id,
+                Requirement.job_id == extraction.id,
+                Requirement.id.in_(expected),
             )
-        ).all()
+        )
     )
-    if {str(requirement.id) for requirement, _ in rows} != expected:
+    if {row.id for row in rows} != expected:
         raise not_found()
-    fixed = {entry["requirement_id"]: entry for entry in manifest["requirements"]}
-    for requirement, chunk in rows:
-        entry = fixed[str(requirement.id)]
-        if (
-            str(requirement.document_id) != entry["document_id"]
-            or str(requirement.chunk_id) != entry["chunk_id"]
-            or drafts.digest(
-                {
-                    "text": chunk.text,
-                    "blocks": chunk.blocks,
-                    "page": chunk.page,
-                    "citation_verified": chunk.citation_verified,
-                }
+    chunk_ids = {UUID(entry["chunk_id"]) for entry in manifest.get("requirements", [])}
+    available_chunks = set(
+        await session.scalars(
+            select(Chunk.id).where(
+                Chunk.org_id == actor.org_id,
+                Chunk.task_id == task_id,
+                Chunk.document_id == document.id,
+                Chunk.id.in_(chunk_ids),
             )
-            != entry["chunk_sha256"]
-            or drafts.digest(cards.source(requirement)) != entry["source_sha256"]
-            or drafts.digest(
-                {
-                    "text": requirement.text,
-                    "category": requirement.category,
-                    "starred": requirement.starred,
-                }
-            )
-            != entry["requirement_sha256"]
-        ):
-            raise not_found()
+        )
+    )
+    if available_chunks != chunk_ids:
+        raise not_found()

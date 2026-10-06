@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Bounded requirement-review work on board reads
+
+- Project fail-closed review states for the default board without deriving unused
+  pins for unconfirmed requirements. Revalidate confirmed inputs fully; explicit
+  requirement-review views and consumer manifests retain complete current hashes.
+- Reuse the citation batch's exact source spans during review evaluation and
+  preserve canonical numeric semantics while accelerating ordinary JSON encoding.
+  See [Requirement confirmation](notes/requirement-confirmation.md#how-it-works).
+
 ## 2026-10-06: Score request evidence scope
 
 - Correct the dev real-model score preview blocker observed after rubric completion:
@@ -52,6 +61,48 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   Playwright replacement flows. The [mechanism note](notes/score.md#pitfalls) describes the failure
   mode and retained gates.
 
+## 2026-10-06: Requirement review batch reads and savepoint audit binding
+
+- Refresh requirement/review and distinct chunk/document dependencies in two
+  bounded queries, retaining live ORM refresh, citation checks and the existing
+  draft-read statement budget.
+- Bind source-invalidation audits to the current backend's actual writer
+  transaction, including savepoint subtransactions. Preserve immutable-event,
+  org, action and metadata checks, and reject committed-history replay.
+- Keep source-changing citation fixtures behind real human reconfirmation,
+  distinguish human repair from system invalidation audits, and compare rubric
+  CLI/report output under the same contract version. See
+  [Requirement confirmation](notes/requirement-confirmation.md).
+
+## 2026-10-06: Requirement-review publication and console regression fixes
+
+- Preserve tenant event context during privileged source maintenance without
+  granting runtime roles permission to infer another org. Keep human requirement
+  decisions under the live org-role, task-role and scope checks.
+- Bind selected response generation to the complete extraction preparation scope
+  at submission, admission and publication; send only selected requirement content
+  to the provider. Return explicit zero counts for empty response buckets.
+- Give requirement-review and manual-entry fields stable accessible names, restore
+  rejected batch selections to their accepted state, and retain the 100-item limit.
+  See [Requirement confirmation](notes/requirement-confirmation.md).
+- Update accepted-source fixtures through the real review service and current
+  publication manifest. Preserve source verification, deferred gates and exact
+  citation-location count assertions.
+
+## 2026-10-05: Requirement confirmation and verified manual entry
+
+- Added independent requirement review, source pins, legacy-unconfirmed migration,
+  immutable encrypted decisions, atomic owner batches and replay receipts with
+  human-only task authority and FORCE RLS.
+- Added verified manual recovery for omitted and rejected requirements, explicit
+  manual extraction sets and preserved original model receipts, costs and lineage.
+- Bound response acceptance, draft gaps, rubric confirmation, scoring and artifact
+  freshness to requirement review while retaining provisional preparation and
+  existing evidence/domain/co-sign gates.
+- Added API/CLI Result 4.0 commands, explicit requirement-review board/progress,
+  next-human responsibility, durable metadata events and the console review/manual
+  workspace. See [Requirement confirmation](notes/requirement-confirmation.md).
+
 ## 2026-10-05: Rubric section-source regression corrections
 
 - Authorize citation-window tasks before validating query fields or section source selectors.
@@ -71,7 +122,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   but the single-Requirement section gate rejected them as `cross_requirement_citation`. Sections
   now preserve and independently verify every citation across pinned scoring Requirements; items
   retain their single-Requirement contract, and joined or unverifiable citations still fail.
-- Add migration `0045` for ordered section sources, retaining legacy single-source reads, existing
+- Add the [section-source migration](../server/migrations/versions/0046_score_section_sources.py)
+  for ordered section sources, retaining legacy single-source reads, existing
   FORCE RLS and immutable history, with database and application checks over every binding. Complete
   human replacement may select/remove only verified pinned citations and cannot rewrite Source.
 - Update bounded console/assessment reads, indexed source context, rubric review/replacement UI,

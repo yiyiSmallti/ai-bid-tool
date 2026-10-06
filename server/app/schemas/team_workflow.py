@@ -340,11 +340,16 @@ class CoSignSummary(Contract):
 
     @model_validator(mode="after")
     def domain_partition(self):
-        for field in ("required_domains", "signed_domains", "pending_domains"):
-            _unique(getattr(self, field), field)
         required, signed, pending = map(
             set, (self.required_domains, self.signed_domains, self.pending_domains)
         )
+        for field, domains in (
+            ("required_domains", required),
+            ("signed_domains", signed),
+            ("pending_domains", pending),
+        ):
+            if len(getattr(self, field)) != len(domains):
+                raise ValueError(f"{field} cannot contain duplicates")
         if signed & pending or signed | pending != required:
             raise ValueError("signed and pending must partition the required domains")
         if self.status == "not_required":

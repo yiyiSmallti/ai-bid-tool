@@ -38,6 +38,7 @@ from app.schemas.score_contracts import (
 )
 from app.services import drafts
 from sqlalchemy import func, select
+from task_fixtures import confirm_requirements_async
 from test_check import LiveCheckClient, check_client, invoke_live_cli
 from test_check_combined import platform_llm, seed_platform, semantic_llm
 from test_response_cards import create_tender, set_role
@@ -266,7 +267,7 @@ async def rubric_counts(case):
 async def rubric_input_case(tenants, tmp_path, admin_engine, monkeypatch):
     async with check_client(tenants, tmp_path) as (api, app, headers, provider):
         task, document, extraction, requirements = await create_tender(
-            api, app, headers[0], tmp_path, suffix="rubric"
+            api, app, headers[0], tmp_path, suffix="rubric", confirmed=True
         )
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
         vendor = RubricVendor()
@@ -365,11 +366,14 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     assert len(case["vendor"].requests) == 2
     assert await rubric_counts(case) == after
 
-    path = f"/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
+    path = f"/v4/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
     report = await case["api"].get(path, headers=case["header"])
     assert report.status_code == 200, report.text
     RubricReportData.model_validate(report.json()["data"])
     assert report.json()["data"]["rubric"]["state"] == "candidate"
+    legacy_report = await case["api"].get(path.removeprefix("/v4"), headers=case["header"])
+    assert legacy_report.status_code == 200, legacy_report.text
+    assert "requirement_review" not in legacy_report.json()["data"]["rubric"]
     assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
 
     monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
@@ -532,6 +536,7 @@ async def add_whole_scoring_table(case):
     async with case["app"].state.db.transaction(org) as session:
         original = await session.get(Requirement, UUID(case["requirements"][0]["id"]))
         original.category = "technical"
+        accepted_ids = [original.id]
         for index, section in enumerate(("Technical", "Technical", "Commercial"), 6):
             text = (
                 f"{section} criterion {index}: earn 5 points. " + "Supporting rule wording. " * 140
@@ -544,18 +549,21 @@ async def add_whole_scoring_table(case):
                 page=index,
                 seq=index,
                 text=text,
+                citation_verified=True,
             )
             session.add(chunk)
             await session.flush()
+            requirement_id = uuid4()
+            accepted_ids.append(requirement_id)
             session.add(
                 Requirement(
-                    id=uuid4(),
+                    id=requirement_id,
                     org_id=org,
                     task_id=chunk.task_id,
                     document_id=chunk.document_id,
                     chunk_id=chunk.id,
                     page=index,
-                    quote=text,
+                    quote=text.rstrip(),
                     text=text,
                     category="scoring",
                     starred=False,
@@ -564,6 +572,15 @@ async def add_whole_scoring_table(case):
                     job_id=UUID(case["extraction"]),
                 )
             )
+
+        await session.flush()
+        await confirm_requirements_async(
+            session,
+            org,
+            UUID(case["task"]),
+            accepted_ids,
+            settings=case["app"].state.processor.settings,
+        )
 
 
 async def test_rubric_whole_table_structure_survives_fixed_section_item_batches(
@@ -876,7 +893,7 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
     if failure == "task_budget_exceeded":
         assert result["stop_reason"] == failure
     shown = await case["api"].get(
-        f"/tasks/{case['task']}/score-rubrics/{result['rubric_id']}", headers=case["header"]
+        f"/v4/tasks/{case['task']}/score-rubrics/{result['rubric_id']}", headers=case["header"]
     )
     assert shown.status_code == 200, shown.text
     report = shown.json()["data"]

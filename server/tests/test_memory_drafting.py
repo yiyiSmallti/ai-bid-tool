@@ -201,7 +201,9 @@ async def test_memory_stale_review_gate_preserves_already_confirmed_card(
     from test_response_cards import require_action
 
     async with drafting_client(tenants, tmp_path) as (api, app, headers, _, _):
-        task, _, extraction, requirements = await create_tender(api, app, headers[0], tmp_path)
+        task, _, extraction, requirements = await create_tender(
+            api, app, headers[0], tmp_path, confirmed=True
+        )
         memory = await approved_rule(
             api, headers[0], "review.rule", "Use concise wording", ["drafting"]
         )

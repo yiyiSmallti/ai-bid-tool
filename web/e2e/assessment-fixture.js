@@ -49,8 +49,9 @@ export async function fixture(page, options = {}) {
     state.requests.push({ method, path, versioned_path: versionedPath, query: Object.fromEntries(url.searchParams), ...(body ? { body } : {}) });
     try {
       expect(request.headers()["x-org-id"]).toBe(state.org);
+      const requirementPath = /^\/(?:tasks\/[^/]+\/(?:extractions\/[^/]+\/(?:requirement-reviews|rejected-items|requirement-confirmations)|requirements\/(?:manual-preview|manual|repair))|requirements\/[^/]+\/(?:review|review-history|review-decisions))$/.test(path) || ["requirement-review"].includes(url.searchParams.get("view"));
       const assessmentPath = /\/(?:assessment-inputs|assessment-citation|checks|scores|score-rubrics)(?:\/|$)/.test(path) || /^\/jobs\//.test(path) || (path.endsWith("/jobs") && ["check", "score_rubric", "score"].includes(url.searchParams.get("kind")));
-      expect(versionedPath.startsWith("/v4/")).toBe(assessmentPath);
+      expect(versionedPath.startsWith("/v4/")).toBe(assessmentPath || requirementPath);
       if (state.org === ids.orgB && path !== "/org/current") { const failure = fail("not_found", 404); return route.fulfill({ status: failure.status, json: failure.payload }); }
       let response;
       const extra = await state.extra?.({ method, path, url, body });

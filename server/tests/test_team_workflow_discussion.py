@@ -26,6 +26,8 @@ from app.schemas.team_workflow import CommentThreadCreate
 from app.services import task_discussion
 from app.services.auth import ROLE_SCOPES, Identity
 from sqlalchemy import text
+from sqlalchemy.orm import Session
+from task_fixtures import confirm_requirements
 from test_card_generation import token_header
 from test_team_workflow_membership import add_member, person, workflow
 from test_team_workflow_stream_acceptance import authenticated, seed_scope
@@ -36,8 +38,11 @@ ARTIFACT = (
 )
 
 
-async def scope_with_card(api, headers, tenants, admin_engine, *, tenant=0):
+async def scope_with_card(api, headers, tenants, admin_engine, *, tenant=0, confirmed=False):
     scope = await seed_scope(api, headers, tenants, admin_engine, count=2, tenant=tenant)
+    if confirmed:
+        with Session(admin_engine) as session, session.begin():
+            confirm_requirements(session, scope["org_id"], scope["task_id"])
     created = await api.post(
         f"/tasks/{scope['task_id']}/cards",
         headers=headers[tenant],

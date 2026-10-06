@@ -3,7 +3,7 @@
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import not_found
@@ -16,8 +16,18 @@ def latest_extractions(task_id: UUID):
     # The most recent succeeded extraction of each document in the task.
     return (
         select(Job.id)
-        .where(Job.task_id == task_id, Job.kind == "extract", Job.status == "succeeded")
-        .order_by(Job.document_id, Job.finished_at.desc().nulls_last(), Job.created_at.desc())
+        .where(
+            Job.task_id == task_id,
+            Job.kind == "extract",
+            Job.status == "succeeded",
+            func.coalesce(Job.result["origin"].astext, "model") != "manual",
+        )
+        .order_by(
+            Job.document_id,
+            Job.finished_at.desc().nulls_last(),
+            Job.created_at.desc(),
+            Job.id.desc(),
+        )
         .distinct(Job.document_id)
     )
 
@@ -64,8 +74,13 @@ async def list_requirements(
             str(requirement.id),
         )
 
+    from app.services import requirement_consumption
+
+    reviews = await requirement_consumption.effective(session, [row for row, _, _ in pairs])
     return [
         {
+            "requirement_review": requirement_consumption.fields(reviews[row.id]),
+            "review_requirement_id": str(row.id),
             **_fields(
                 row, ("id", "text", "category", "starred", "condition", "job_id", "model_quote")
             ),
@@ -88,13 +103,45 @@ async def extraction_history(
         query = query.where(Job.document_id == document)
     jobs = (await session.scalars(query.order_by(Job.created_at.desc(), Job.id))).all()
     latest = set((await session.scalars(latest_extractions(task_id))).all())
+    from app.models.requirement_confirmation import RequirementReview
+
+    counts = {
+        key: count
+        for key, count in (
+            await session.execute(
+                select(Requirement.job_id, func.count(Requirement.id))
+                .where(Requirement.task_id == task_id)
+                .group_by(Requirement.job_id)
+            )
+        ).all()
+    }
+    manual_counts = {
+        key: count
+        for key, count in (
+            await session.execute(
+                select(RequirementReview.extraction_job_id, func.count(RequirementReview.id))
+                .where(
+                    RequirementReview.task_id == task_id,
+                    RequirementReview.origin.in_(["manual_missing", "manual_rejected"]),
+                )
+                .group_by(RequirementReview.extraction_job_id)
+            )
+        ).all()
+    }
     items = []
+    from app.services.task_events import visible_job
+
     for job in jobs:
+        if not await visible_job(session, identity, job, None):
+            continue
         outcome = job.result or {}
         items.append(
             {
                 "job_id": str(job.id),
                 "document_id": str(job.document_id),
+                "origin": outcome.get("origin", "model"),
+                "current_saved": counts.get(job.id, 0),
+                "manual_added": manual_counts.get(job.id, 0),
                 "reasoning": job.reasoning,
                 "model": outcome.get("model"),
                 "status": job.status,
@@ -109,3 +156,19 @@ async def extraction_history(
             }
         )
     return items
+
+
+async def list_warnings(session, task_id, job, items):
+    if job is not None or items:
+        return []
+    manual = await session.scalar(
+        select(Job.id)
+        .where(
+            Job.task_id == task_id,
+            Job.kind == "extract",
+            Job.status == "succeeded",
+            Job.result["origin"].astext == "manual",
+        )
+        .limit(1)
+    )
+    return ["manual_scope_requires_selection:use_req_list_job"] if manual else []

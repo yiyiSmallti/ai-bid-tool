@@ -461,6 +461,14 @@ class Processor:
                     result["cost"] = await job_cost(session, job_id, self.settings.billing_currency)
                     current.status, current.result, current.error = "succeeded", result, None
                     current.finished_at = datetime.now(UTC)
+                    if kind == "extract":
+                        from app.services.requirement_confirmation import seed_reviews
+
+                        actor = await authorized_job(session, current)
+                        await session.flush()
+                        await seed_reviews(
+                            session, actor, current.task_id, current.id, settings=self.settings
+                        )
             except Exception as exc:
                 if isinstance(exc, ServiceError):
                     error = {"code": exc.code, "message": exc.message, "exit_code": exc.exit_code}

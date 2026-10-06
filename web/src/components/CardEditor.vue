@@ -35,11 +35,13 @@ const canSignReview = computed(() => cosignPolicy.value?.required_domains.some(d
 const dispositionReview = computed(() => cosignReview.value?.round?.purpose === "disposition" && cosignReview.value.round.state === "open");
 const multiDomain = computed(() => (cosignPolicy.value?.required_domains.length ?? 0) > 1);
 const canDecide = computed(() => card.value && canReviewTask(authority.value, card.value.review_domain) && mine(card.value.review_domain));
-const invalid = computed(() => ["stale_material", "invalid_citation", "needs_reconfirmation"].includes(card.value?.eligibility));
+const requirementBlocker = computed(() => ["requirement_unconfirmed", "requirement_invalidated"].includes(card.value?.eligibility) ? label(eligibilities, card.value.eligibility) : "");
+const invalid = computed(() => ["requirement_unconfirmed", "requirement_invalidated", "stale_material", "invalid_citation", "needs_reconfirmation"].includes(card.value?.eligibility));
 const completeResponse = computed(() => card.value && ["response_kind", "response_text", "deviation", "deviation_note"].every(key => typeof card.value.content[key] === "string" && card.value.content[key].trim()) && card.value.content.deviation_note.trim() !== "满足");
 // The first unmet confirmation condition, shown next to the disabled button.
 const confirmBlocker = computed(() => {
   if (!card.value) return "";
+  if (requirementBlocker.value) return `${requirementBlocker.value}，请先核对并确认要求`;
   if (!cosignPolicy.value) return "会签策略尚未读取，请重新核对";
   if (dirty.value) return "有未保存的编辑，请先保存并重新提交审阅";
   if (conflict.value) return "修订已变化，请先处理修订冲突";
@@ -163,6 +165,7 @@ onMounted(async () => {
       <el-tabs v-if="card" v-model="tab" aria-label="审阅详情内容"><el-tab-pane label="原文、材料与响应" name="response" /><el-tab-pane label="讨论" name="discussion" /></el-tabs>
       <TaskCollaboration v-if="card && discussionOpened" v-show="tab === 'discussion'" :task-id="taskId" :job-id="jobId" :row="{requirement_id:row.id,card_id:card.id,card_revision:card.revision}" discussion-only @dirty="discussionDirty=$event" @denied="emit('denied',$event)" />
       <div v-show="tab === 'response'">
+      <RouterLink :to="`/org/tasks/${taskId}/requirements?job=${jobId}&requirement=${row.id}`">核对当前要求确认与决策历史</RouterLink><p v-if="requirementBlocker" class="notice warning">{{requirementBlocker}}；可准备响应，接受响应前须先确认要求。</p>
       <p class="req-title">{{ props.row.text }}</p>
       <h4>招标原文</h4>
       <p class="hint">{{ locationLabel(displayedSource, documentName) }}</p>
@@ -245,7 +248,7 @@ onMounted(async () => {
           <p v-if="dispositionReview" class="hint">当前有待完成的处置会签；请先完成本轮处置，响应编辑与提交暂不可用。</p>
           <p v-if="card.disposition === 'comply_only'" class="hint">已决定“仅需遵守”，这张卡片不再逐项响应；由负责的审核人改回“逐项响应”后才能编辑。</p>
         </template>
-        <CoSignPanel ref="cosign" :task-id="taskId" :job-id="jobId" :requirement-id="row.id" :card="card" :reviewed="reviewed" :warnings="warnings" :reason="reason" :confirm-blocker="confirmBlocker" :dirty="dirty" :conflict="!!conflict" @policy="cosignPolicy=$event" @review="cosignReview=$event" @clear-review="clearReview" @dirty="cosignDirty=$event" @updated="install($event); emit('updated',$event)" @refresh-card="refresh()" @denied="emit('denied',$event)" />
+        <CoSignPanel ref="cosign" :task-id="taskId" :job-id="jobId" :requirement-id="row.id" :card="card" :reviewed="reviewed" :warnings="warnings" :reason="reason" :requirement-blocker="requirementBlocker" :confirm-blocker="confirmBlocker" :dirty="dirty" :conflict="!!conflict" @policy="cosignPolicy=$event" @review="cosignReview=$event" @clear-review="clearReview" @dirty="cosignDirty=$event" @updated="install($event); emit('updated',$event)" @refresh-card="refresh()" @denied="emit('denied',$event)" />
         <p v-if="card?.confirmed_by" class="hint">确认人 {{ card.confirmed_by }} · {{ formatTime(card.confirmed_at) }}</p>
         <div v-if="card" class="actions"><el-button size="small" :icon="Refresh" @click="refresh(true)">重新核对当前修订</el-button><el-button size="small" :icon="Tickets" @click="readHistory">读取修订历史</el-button></div>
         <el-timeline v-if="history" class="history" aria-label="不可变修订历史">

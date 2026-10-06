@@ -174,7 +174,13 @@ async def test_profile_concurrent_updates_and_duplicate_selection(api, headers, 
 async def test_profile_roles_preserve_old_grants(
     role, write, select_allowed, api, headers, tenants, admin_engine
 ):
-    from app.services.auth import ROLE_SCOPES
+    from app.services.auth import ROLE_SCOPES, SCOPES
+
+    requirement_scopes = {"req:confirm", "req:manual"}
+    assert ROLE_SCOPES[role] & requirement_scopes == (
+        requirement_scopes if role in {"admin", "bidder", "technical"} else set()
+    )
+    assert requirement_scopes.isdisjoint(SCOPES)
 
     old_expected = {
         "admin": {
@@ -280,6 +286,8 @@ async def test_profile_roles_preserve_old_grants(
             "memory:manage",
             "memory:eval:read",
             "memory:eval:review",
+            "req:confirm",
+            "req:manual",
         }
     } == old_expected[role]
     row, task_id = await profile(api, headers[0]), await task(api, headers[0])

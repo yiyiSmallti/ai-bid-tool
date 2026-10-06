@@ -42,6 +42,7 @@ from app.providers.llm import AnthropicExtractor
 from conftest import PASSWORD, FakeQueue, credential_app
 from docx import Document
 from sqlalchemy import text
+from task_fixtures import confirm_requirements_async
 from test_llm_providers import Vendor, anthropic_reply
 
 SYNTHETIC_KEY = "synthetic-citation-repair-key-not-real"
@@ -339,7 +340,7 @@ def assert_hashes_and_ids_only(value) -> None:
             assert_hashes_and_ids_only(item)
         return
     if isinstance(value, str):
-        if value == "session":
+        if value in {"session", "system"}:
             return
         try:
             UUID(value)
@@ -417,6 +418,13 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
         assert word_requirement["source"]["quote"] == WORD_SOURCE_QUOTE
         assert word_requirement["model_quote"] == WORD_MODEL_QUOTE
 
+        async with word_app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session,
+                tenants["orgs"][0],
+                UUID(word_task),
+                settings=word_app.state.processor.settings,
+            )
         word_card = await create_commitment_card(
             word_api,
             header,
@@ -447,6 +455,10 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         )
         assert status["result"]["created"] == 7
         requirements = {row["source"]["page"]: row for row in listed}
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session, tenants["orgs"][0], UUID(task_id), settings=app.state.processor.settings
+            )
 
         foreign_task_id, _, foreign_job_id, _, _ = await extract_fixture(
             api, app, foreign_header, tmp_path, "foreign"
@@ -751,6 +763,13 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         # and chunk/card changes above. Citation repair itself must preserve it.
         before = requirement_rows(admin_engine, task_id)
         with admin_engine.connect() as connection:
+            audit_ids_before_execute = set(
+                connection.scalars(
+                    text(
+                        "SELECT id::text FROM audit_logs WHERE action='requirement.repair_citation'"
+                    )
+                )
+            )
             revision_before = connection.scalar(
                 text("SELECT count(*) FROM response_card_revisions")
             )
@@ -795,7 +814,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 dict(row)
                 for row in connection.execute(
                     text(
-                        "SELECT object_id::text, details FROM audit_logs "
+                        "SELECT id::text, object_id::text, actor_kind, actor_user_id::text, details FROM audit_logs "
                         "WHERE action = 'requirement.repair_citation' ORDER BY object_id"
                     )
                 ).mappings()
@@ -804,14 +823,43 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 connection.scalar(text("SELECT count(*) FROM response_card_revisions"))
                 == revision_before
             )
-        assert len(audits) - audit_before == 4
-        repair_audits = audits[-4:]
+        committed_audits = [row for row in audits if row["id"] not in audit_ids_before_execute]
+        repair_audits = [row for row in committed_audits if row["actor_kind"] == "session"]
+        invalidation_audits = [row for row in committed_audits if row["actor_kind"] == "system"]
+        # Four explicit repairs include one model_quote-only change. Only the
+        # other three quote changes append B02 source-repair invalidation events.
+        assert len(repair_audits) == 4
+        assert len(invalidation_audits) == len(REPAIRED_QUOTES) == 3
+        assert len(committed_audits) == 7
         assert {row["object_id"] for row in repair_audits} == {
             requirements[page]["id"] for page in (1, *REPAIRED_QUOTES)
         }
-        for row in repair_audits:
+        assert {row["object_id"] for row in invalidation_audits} == {
+            requirements[page]["id"] for page in REPAIRED_QUOTES
+        }
+        assert len({row["details"]["correlation_id"] for row in repair_audits}) == 1
+        assert all(row["details"]["preview_hash"] == fresh["preview_hash"] for row in repair_audits)
+        with admin_engine.connect() as connection:
+            for row in invalidation_audits:
+                assert row["actor_user_id"] is None
+                recorded = connection.execute(
+                    text(
+                        "SELECT org_id::text, task_id::text, requirement_id::text, revision, action, state_after "
+                        "FROM requirement_review_events WHERE id=:id"
+                    ),
+                    {"id": UUID(row["details"]["event_id"])},
+                ).one()
+                assert tuple(recorded) == (
+                    str(tenants["orgs"][0]),
+                    task_id,
+                    row["object_id"],
+                    row["details"]["revision"],
+                    "source_repair",
+                    "invalidated",
+                )
+        for row in committed_audits:
             assert_hashes_and_ids_only(row)
-        audit_json = json.dumps(repair_audits, ensure_ascii=False)
+        audit_json = json.dumps(committed_audits, ensure_ascii=False)
         assert reason not in audit_json
         assert all(
             quote not in audit_json
@@ -855,7 +903,13 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
 
         invalid = (await api.get(f"/cards/{unlocatable['id']}", headers=header)).json()["data"]
         assert invalid["state"] == "pending_review"
-        assert invalid["eligibility"] == "invalid_citation"
+        assert invalid["eligibility"] == "needs_reconfirmation"
+        invalid_source = await api.get(
+            f"/v4/requirements/{requirements[5]['id']}/review", headers=header
+        )
+        assert invalid_source.status_code == 200, invalid_source.text
+        assert invalid_source.json()["data"]["requirement"]["state"] == "invalidated"
+        assert invalid_source.json()["data"]["requirement"]["citation_valid"] is False
         normalized_after = (await api.get(f"/cards/{normalized['id']}", headers=header)).json()[
             "data"
         ]
@@ -866,7 +920,17 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         assert normalized_after["revision_id"] == normalized["revision_id"]
         strict_gate = await card_action(api, reviewer, invalid, "confirm", reviewed_evidence_ids=[])
         assert strict_gate.status_code == 409
-        assert strict_gate.json()["data"]["error"]["code"] == "invalid_citation"
+        assert strict_gate.json()["data"]["error"]["code"] == "requirement_invalidated"
+        # Reaccept only currently locatable sources; this never approves response
+        # cards or overrides the unresolved legacy citations on pages 5 and 6.
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session,
+                tenants["orgs"][0],
+                UUID(task_id),
+                [UUID(requirements[page]["id"]) for page in (1, 2, 3, 4, 7)],
+                settings=app.state.processor.settings,
+            )
         pending_stale_confirm = await card_action(
             api, reviewer, changed_cards[3], "confirm", reviewed_evidence_ids=[]
         )
