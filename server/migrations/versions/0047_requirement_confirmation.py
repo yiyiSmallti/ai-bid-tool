@@ -7,8 +7,8 @@ from uuid import uuid4
 from alembic import op
 from sqlalchemy import text
 
-revision = "0046"
-down_revision = "0045"
+revision = "0047"
+down_revision = "0046"
 branch_labels = None
 depends_on = None
 

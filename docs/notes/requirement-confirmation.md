@@ -92,7 +92,7 @@ transaction; audit payloads contain IDs and hashes, never reasons or quotations.
 ## Code
 
 - [Runtime contracts](../../server/app/schemas/requirement_confirmation.py),
-  [migration](../../server/migrations/versions/0046_requirement_confirmation.py),
+  [migration](../../server/migrations/versions/0047_requirement_confirmation.py),
   [models](../../server/app/models/requirement_confirmation.py).
 - [Review/manual services](../../server/app/services/requirement_confirmation.py),
   [source pins](../../server/app/services/requirement_source.py),
