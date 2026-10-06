@@ -139,6 +139,16 @@ Mixed legacy disposition batches preflight every requirement and reject atomical
 when any needs multiple domains. Existing single-domain confirmation commands use a
 real one-domain round for newly submitted cards, retaining their Result shape.
 
+The round summary describes valid signature coverage, independently of the final
+card decision. During the last signing transaction, an empty pending-domain set
+already means `complete`; the card remains ineligible until its final confirmation
+or disposition revision is applied. Final rechecks may read that intermediate
+state, but the transaction must commit both the signature and the final decision
+or neither. Consumption continues to require `team_cosign_card_approved`, not the
+summary label alone. The last signer's granted professional domain authorizes only
+that exact completed-round finalization; reject, needs-material and reopen retain
+the primary-domain rule.
+
 Revisions, policy changes, citation/material changes and loss of an actual signer's
 grants append `card_review_invalidations`. Re-adding a signer never restores a
 retired round; unrelated assignment, discussion or member edits do not retire it.

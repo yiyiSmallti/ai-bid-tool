@@ -284,11 +284,15 @@ async def projections(session, org_id, card_ids):
             if row["valid"]
             else []
         )
+        pending = [domain for domain in required if domain not in signed]
+        # The last signature is flushed before final content/Evidence rechecks.
+        # Its valid round is complete already, while card consumption remains
+        # blocked by the independent approved predicate until finalization.
         status = (
             "invalidated"
             if persisted and not row["valid"]
             else "complete"
-            if persisted and row["approved"]
+            if persisted and not pending
             else "partial"
             if signed
             else "pending"
@@ -300,7 +304,7 @@ async def projections(session, org_id, card_ids):
             round_revision=row["round_revision"] if persisted else 0,
             required_domains=required,
             signed_domains=signed,
-            pending_domains=[domain for domain in required if domain not in signed],
+            pending_domains=pending,
         )
         output[row["id"]] = {
             "approved": row["approved"],

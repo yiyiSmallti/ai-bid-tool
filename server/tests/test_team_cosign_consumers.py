@@ -353,3 +353,120 @@ async def test_single_domain_disposition_after_reopen_preserves_board_and_draft(
     )
     assert preview.status_code == 200, preview.text
     assert preview.json()["data"]["comply_only_requirements"] == 1
+
+
+@pytest.mark.parametrize(
+    "order", [("technical",), ("commercial", "technical"), ("technical", "commercial")]
+)
+@pytest.mark.parametrize("fail_after_final_signature", [False, True])
+async def test_final_signature_round_summary_precedes_consumption_approval_atomically(
+    api,
+    application,
+    headers,
+    tenants,
+    admin_engine,
+    tmp_path,
+    monkeypatch,
+    order,
+    fail_after_final_signature,
+):
+    """A full signature set is complete during final recheck, but not consumable.
+
+    Failure inventory: the final in-transaction recheck mislabels a full set as
+    partial; using round completion alone admits still-unconfirmed response or
+    Evidence; a failed final recheck commits its signature or confirmation.
+    Exercise the real API/DB transaction for one domain and both signing orders.
+    """
+    from app.core.errors import ServiceError
+    from app.services import drafts, response_cards, task_cosign
+    from test_team_cosign_acceptance import attach_material
+
+    scope = await cosign_scope(api, headers, tenants, admin_engine, required=len(order) == 2)
+    await attach_material(api, headers[0], scope, tmp_path)
+    await submit(api, headers[0], scope)
+    pending = scope["card"]
+    assert pending["evidence"] and all(row["confirmed_by"] is None for row in pending["evidence"])
+    validate = response_cards.validate_confirmation
+    observations = []
+
+    async def observe_final_recheck(session, actor, card, revision, requirement, body, storage):
+        await validate(session, actor, card, revision, requirement, body, storage)
+        projection = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
+        summary = projection["summary"]
+        if summary["pending_domains"]:
+            assert summary["status"] == ("partial" if summary["signed_domains"] else "pending")
+            return
+        assert summary["status"] == "complete"
+        assert set(summary["signed_domains"]) == set(order)
+        assert projection["approved"] is False
+        assert revision.state == "pending_review" and card.current_revision_id == revision.id
+        evidence = await response_cards.linked_evidence(session, revision.id)
+        assert all(row.confirmed_by is None and row.confirmed_at is None for row in evidence)
+        _, items, _, _, _ = await drafts.assemble(
+            session, actor, card.task_id, card.extraction_job_id, storage
+        )
+        assert len(items) == 1 and items[0]["kind"] == "gap"
+        assert "cosign_required" in items[0]["gap_reasons"]
+        assert "response_text" not in items[0]
+        observations.append({"summary": summary, "approved": False, "partition": "gap"})
+        if fail_after_final_signature:
+            raise ServiceError(
+                "synthetic_final_review_failure", "Synthetic final review interruption", 409, 2
+            )
+
+    monkeypatch.setattr(response_cards, "validate_confirmation", observe_final_recheck)
+    for domain in order[:-1]:
+        first = await signature(api, scope, domain)
+        assert first.status_code == 200, first.text
+        assert first.json()["data"]["summary"]["status"] == "partial"
+    final = await signature(api, scope, order[-1])
+    assert len(observations) == 1
+    history = await api.get(f"/cards/{pending['id']}/signoffs", headers=headers[0])
+    current = await api.get(f"/cards/{pending['id']}", headers=headers[0])
+    assert history.status_code == current.status_code == 200
+    card = current.json()["data"]
+    async with application.state.db.transaction(scope["org_id"]) as session:
+        from uuid import UUID
+
+        approved = (await task_cosign.projections(session, scope["org_id"], [UUID(card["id"])]))[
+            UUID(card["id"])
+        ]["approved"]
+    if fail_after_final_signature:
+        assert final.status_code == 409, final.text
+        assert final.json()["data"]["error"]["code"] == "synthetic_final_review_failure"
+        assert card["revision"] == pending["revision"] and card["state"] == "pending_review"
+        assert all(row["confirmed_by"] is None for row in card["evidence"])
+        assert len(history.json()["items"]) == len(order) - 1
+        assert history.json()["data"]["summary"]["status"] == (
+            "partial" if len(order) == 2 else "pending"
+        )
+        assert approved is False
+    else:
+        assert final.status_code == 200, final.text
+        assert card["revision"] == pending["revision"] + 1 and card["state"] == "confirmed"
+        assert card["confirmed_by"] == str(scope["members"][order[-1]]["user"])
+        assert all(row["confirmed_by"] == card["confirmed_by"] for row in card["evidence"])
+        assert len(history.json()["items"]) == len(order)
+        assert history.json()["data"]["summary"]["status"] == "complete"
+        assert approved is True
+    target = ARTIFACT_ROOT / "final-signature-boundary"
+    target.mkdir(parents=True, exist_ok=True)
+    (
+        target
+        / ("-".join(order) + ("-rollback" if fail_after_final_signature else "-commit") + ".json")
+    ).write_text(
+        json.dumps(
+            {
+                "command": "uv run pytest -q server/tests/test_team_cosign_consumers.py -k final_signature_round_summary",
+                "observations": observations,
+                "final_http_status": final.status_code,
+                "final_summary": history.json()["data"]["summary"],
+                "approved": approved,
+                "confirmed_evidence": sum(
+                    row["confirmed_by"] is not None for row in card["evidence"]
+                ),
+            },
+            indent=2,
+        )
+        + "\n"
+    )

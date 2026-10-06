@@ -545,10 +545,46 @@ END $$;
 -- Keep the mature response gates, replacing only their primary-domain finalizer
 -- checks. Reject/reopen/needs-material still use response_require_human directly.
 DO $$ DECLARE definition text; updated text; BEGIN
+ SELECT pg_get_functiondef('public.task_human_content_guard()'::regprocedure) INTO definition;
+ updated:=pg_temp.team_cosign_replace(definition,
+  '   domain_value:=CASE WHEN decision THEN NEW.review_domain ELSE NULL END;',
+  $patch$
+   domain_value:=CASE WHEN decision THEN NEW.review_domain ELSE NULL END;
+   IF NEW.state='confirmed' THEN
+    PERFORM public.task_write_authority(NEW.org_id,tid,'evidence:confirm',NULL,true,true);
+    PERFORM public.team_cosign_finalizer(NEW.org_id,NEW.review_domain,NEW.card_id);
+    domain_value:=CASE actor_role WHEN 'bidder' THEN 'commercial' WHEN 'technical' THEN 'technical' END;
+   ELSIF NEW.state=previous.state AND NEW.state IN ('draft','rejected','needs_material')
+    AND NEW.disposition IS NOT NULL AND (NEW.disposition,NEW.disposition_by,NEW.disposition_at)
+     IS DISTINCT FROM (previous.disposition,previous.disposition_by,previous.disposition_at) THEN
+    PERFORM public.task_write_authority(NEW.org_id,tid,'evidence:confirm',NULL,true,true);
+    PERFORM public.team_cosign_disposition_human(NEW.org_id,NEW.review_domain,NEW.card_id);
+    decision:=true;
+    domain_value:=CASE actor_role WHEN 'bidder' THEN 'commercial' WHEN 'technical' THEN 'technical' END;
+   END IF;
+$patch$);
+ updated:=pg_temp.team_cosign_replace(updated,
+  E'   scope_value:=''evidence:confirm'';\n ELSIF TG_TABLE_NAME=''check_decisions'' THEN',
+  $patch$
+   PERFORM public.task_write_authority(NEW.org_id,tid,'evidence:confirm',NULL,true,true);
+   PERFORM public.team_cosign_finalizer(NEW.org_id,domain_value,NEW.card_id);
+   domain_value:=CASE actor_role WHEN 'bidder' THEN 'commercial' WHEN 'technical' THEN 'technical' END;
+   scope_value:='evidence:confirm';
+ ELSIF TG_TABLE_NAME='check_decisions' THEN
+$patch$);
+ EXECUTE updated;
  SELECT pg_get_functiondef('public.response_revision_gate()'::regprocedure) INTO definition;
  updated:=pg_temp.team_cosign_replace(definition,
   'PERFORM public.response_require_human(NEW.org_id,NEW.review_domain);',
-  'IF NEW.state=''confirmed'' THEN PERFORM public.team_cosign_finalizer(NEW.org_id,NEW.review_domain,NEW.card_id); ELSE PERFORM public.response_require_human(NEW.org_id,NEW.review_domain); END IF;');
+  $patch$
+  IF NEW.state='confirmed' THEN
+   PERFORM public.team_cosign_finalizer(NEW.org_id,NEW.review_domain,NEW.card_id);
+  ELSIF NEW.state=previous.state AND NEW.state IN ('draft','rejected','needs_material')
+   AND NEW.disposition IS NOT NULL AND (NEW.disposition,NEW.disposition_by,NEW.disposition_at)
+    IS DISTINCT FROM (previous.disposition,previous.disposition_by,previous.disposition_at) THEN
+   PERFORM public.team_cosign_disposition_human(NEW.org_id,NEW.review_domain,NEW.card_id);
+  ELSE PERFORM public.response_require_human(NEW.org_id,NEW.review_domain); END IF;
+$patch$);
  updated:=pg_temp.team_cosign_replace(updated,
   'actor := public.response_require_human(NEW.org_id,NEW.review_domain);',
   'actor := public.team_cosign_finalizer(NEW.org_id,NEW.review_domain,NEW.card_id);');

@@ -323,11 +323,26 @@ async def test_constructed_nonhuman_service_identity_cannot_sign(
     assert after["items"] == [] and after["data"]["summary"]["status"] == "pending"
 
 
+@pytest.mark.parametrize("order", [("commercial", "technical"), ("technical", "commercial")])
+@pytest.mark.parametrize("initial_state", ["draft", "rejected", "needs_material"])
 async def test_disposition_rounds_both_directions_do_not_confirm_evidence(
-    api, headers, tenants, admin_engine, tmp_path
+    api, headers, tenants, admin_engine, tmp_path, order, initial_state
 ):
     scope = await cosign_scope(api, headers, tenants, admin_engine)
     await attach_material(api, headers[0], scope, tmp_path)
+    if initial_state != "draft":
+        await submit(api, headers[0], scope)
+        changed = await api.post(
+            f"/cards/{scope['card']['id']}/actions",
+            headers=scope["members"]["technical"]["headers"],
+            json={
+                "expected_revision": scope["card"]["revision"],
+                "action": "reject" if initial_state == "rejected" else "needs_material",
+                "reason": "Synthetic primary-domain material decision",
+            },
+        )
+        assert changed.status_code == 200, changed.text
+        scope["card"] = changed.json()["data"]
     receipts = []
     for intended in ("comply_only", "respond"):
         card = scope["card"]
@@ -345,7 +360,7 @@ async def test_disposition_rounds_both_directions_do_not_confirm_evidence(
         review = opened.json()["data"]["round"]
         assert review["purpose"] == "disposition" and review["intended_disposition"] == intended
         assert review["disposition_reason"] == f"Synthetic intended {intended}"
-        for index, domain in enumerate(("technical", "commercial")):
+        for index, domain in enumerate(order):
             signed = await api.post(
                 f"/cards/{card['id']}/signoffs",
                 headers=scope["members"][domain]["headers"],
@@ -369,7 +384,11 @@ async def test_disposition_rounds_both_directions_do_not_confirm_evidence(
             assert all(e["confirmed_by"] is None for e in current["evidence"])
             assert data["signature"]["reviewed_evidence_ids"] == []
             receipts.append(data)
-    artifact("disposition-directions", receipts=receipts, final=scope["card"])
+    artifact(
+        "disposition-directions-" + initial_state + "-" + "-".join(order),
+        receipts=receipts,
+        final=scope["card"],
+    )
 
 
 @pytest.mark.parametrize("mutation", ["policy", "member"])

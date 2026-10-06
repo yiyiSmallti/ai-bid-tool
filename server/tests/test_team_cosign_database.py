@@ -8,6 +8,7 @@ workers, admins and wrong-domain/removed humans cannot sign. Every signer review
 all exact evidence and warnings, and one person cannot fill both domains. Partial
 signatures never confirm evidence or authorize response/disposition consumption.
 Finalization must occur atomically with the last signature, under its human actor.
+The other required domain may finalize but cannot reject, reopen or request material.
 Reopen, policy/input change or loss of any actual signer's authority permanently
 retires a round; unrelated membership/assignment changes preserve it. Historical
 single-domain decisions remain usable without synthetic signatures. Events contain
@@ -446,6 +447,39 @@ async def test_platform_org_reactivation_does_not_resurrect_signature(
                         "WHERE sig.round_id=:round"
                     ),
                     {"round": scope["round"]["id"]},
+                )
+    finally:
+        await db.engine.dispose()
+
+
+@pytest.mark.parametrize("state", ["rejected", "needs_material", "draft"])
+async def test_secondary_signer_cannot_take_primary_domain_actions(
+    api, headers, tenants, admin_engine, state
+):
+    scope = await review_scope(api, headers, tenants, admin_engine)
+    signed = await signature(api, scope, "commercial")
+    assert signed.status_code == 200, signed.text
+    if state == "draft":
+        signed = await signature(api, scope, "technical")
+        assert signed.status_code == 200, signed.text
+    db = Database(Settings())
+    try:
+        with pytest.raises(DBAPIError, match="task review domain not granted"):
+            async with db.transaction(scope["org_id"]) as session:
+                user = scope["members"]["commercial"]["user"]
+                await context(session, user, role="bidder")
+                await session.execute(
+                    text("""
+                    INSERT INTO response_card_revisions SELECT (jsonb_populate_record(NULL::response_card_revisions,
+                      to_jsonb(v)||jsonb_build_object('id',gen_random_uuid(),'revision',v.revision+1,
+                       'state',CAST(:state AS text),'confirmed_by',NULL,'confirmed_at',NULL,
+                       'actor_user_id',CAST(:user AS uuid),'actor_token_id',NULL,
+                       'actor_kind','session','origin','human',
+                       'reason','Synthetic secondary-domain primary-action probe'))).* FROM response_card_revisions v
+                      JOIN response_cards c ON (c.org_id,c.current_revision_id)=(v.org_id,v.id)
+                      WHERE c.id=:card
+                    """),
+                    {"state": state, "user": user, "card": scope["card"]["id"]},
                 )
     finally:
         await db.engine.dispose()

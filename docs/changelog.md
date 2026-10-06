@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Co-sign final-signature state and domain gates
+
+- Derive completed round summaries from the valid required-domain signature set,
+  including the final signing transaction's recheck before the card decision is
+  applied. Keep the independent consumption predicate and strict partial-round
+  invariant; failed final checks roll back the last signature and confirmation.
+- Allow either authorized required-domain human to finalize the exact complete
+  round through the legacy task-content trigger, including Evidence and independent
+  disposition decisions. Retain primary-domain authorization for reject,
+  needs-material and reopen; see [Team workflow](notes/team-workflow.md#how-it-works).
+
 ## 2026-10-05: Co-sign validation and fixture compatibility
 
 - Granted only the review-round column update privilege needed for PostgreSQL
