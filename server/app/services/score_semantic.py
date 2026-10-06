@@ -17,7 +17,7 @@ from app.schemas.score_contracts import (
     ScoreRange,
 )
 from app.services import check_semantic, redaction
-from app.services.extraction import locate_quote, locate_span
+from app.services.extraction import locate_quote, locate_source_citation_span
 
 SCORING_RULE_VERSION = "score-rules-v1"
 SCORE_QUANTUM = Decimal("0.00000001")
@@ -405,13 +405,14 @@ def _verify_citation(citation, item_id: str, batch, outbound: dict, draft_id: UU
     original_quote, reason = locate_quote(binding["original"], citation.quote)
     if original_quote is None:
         return None, reason
-    location = binding.get("location_original", binding["original"])
-    if locate_span(location, original_quote)[0] is None:
-        return None, locate_span(location, original_quote)[1]
+    span, reason = locate_source_citation_span(
+        binding.get("location_original", binding["original"]), binding["original"], original_quote
+    )
+    if span is None:
+        return None, reason
     for text, quote in (
         (binding["sent"], sent_quote),
         (binding["original"], original_quote),
-        (location, original_quote),
     ):
         first = text.find(quote)
         if first < 0:

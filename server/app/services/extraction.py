@@ -81,6 +81,32 @@ def locate_span(text: str, quote: str) -> tuple[tuple[int, int] | None, str | No
     return locate_spans(text, (quote,))[quote]
 
 
+def locate_source_citation_span(
+    text: str, source_quote: str, citation_quote: str
+) -> tuple[tuple[int, int] | None, str | None]:
+    """Locate a citation inside its pinned Source, returning page/block offsets.
+
+    Resolve the full Source with extraction's normalization and boundary preference.
+    Resolve the citation only in that original slice, retaining the exact-uniqueness
+    gate even when a repeated literal is inside a longer token. Never search outside
+    the Source to repair a missing or ambiguous citation.
+    """
+    source_span, reason = locate_span(text, source_quote)
+    if source_span is None:
+        return None, reason
+    source_start, source_end = source_span
+    original = text[source_start:source_end]
+    citation_span, reason = locate_span(original, citation_quote)
+    if citation_span is None:
+        return None, reason
+    start, end = citation_span
+    original_quote = original[start:end]
+    first = original.find(original_quote)
+    if original.find(original_quote, first + 1) >= 0:
+        return None, "ambiguous_quote"
+    return (source_start + start, source_start + end), None
+
+
 class _SpanCandidates:
     """Keep only the counts and spans needed for the legacy ambiguity rule."""
 

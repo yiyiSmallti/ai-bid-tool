@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Model citations within pinned Source spans
+
+- Resolve rubric, check and score model citations inside the verified Requirement Source span,
+  preserving extraction's boundary preference when locating the full Source. Repeated text elsewhere
+  on the same PDF page or Word block no longer rejects an otherwise unique citation; missing or
+  ambiguous Sources and citations outside or ambiguous within the Source retain their rejection
+  reasons. See [scoring pitfalls](notes/score.md#pitfalls) and [checking pitfalls](notes/check.md#pitfalls).
+
 ## 2026-10-05: Reviewable rubric normalization failures
 
 - Separate rubric Provider wire shape from normalized confirmation rules. Preserve model-declared
