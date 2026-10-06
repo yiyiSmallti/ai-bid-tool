@@ -176,8 +176,20 @@ item writes as well as service actions. All review history uses org/task composi
 keys, FORCE RLS and immutable records, with metadata-only audit and durable events. A narrow column-level update grant permits
 review-round row locks; history triggers still reject every actual update/delete.
 
-Drafts turn incomplete or invalidated approval into explicit `cosign_required` gaps
-and bind policy, round, signature IDs and hashes in their input manifest. Untouched
+Drafts bind policy, round, signature IDs and hashes in their input manifest and
+turn incomplete or invalidated approval into gaps. `cosign_required` applies only
+when the effective policy requires both domains. For a single-domain review,
+`stale_material`, `invalid_citation` or an existing `needs_reconfirmation` already
+explains why the round cannot be consumed; retirement adds no duplicate reason.
+When a single-domain approval alone is lost, use `needs_reconfirmation`. A valid
+single-domain pending round remains `unconfirmed`.
+
+The database response-item gate and the shared assembly/stale-draft projection use
+this same vocabulary. Check and score copy the persisted gap reasons; export
+retains the current draft's cause and blocks stale input without describing a
+single-domain review as co-sign. The board keeps `refresh_material` for withdrawn
+images and `confirm` for ordinary single-domain review; co-sign blockers and actions
+are reserved for policies requiring both domains. Untouched
 legacy single-domain inputs keep their original manifest shape. Draft freshness,
 check and score input assembly, export preview/admission/publication/release/download
 revalidate current approval. An old draft read omits revoked response text and

@@ -433,11 +433,17 @@ def row_projection(
         )
     ]
     if co_sign and co_sign["status"] in {"pending", "partial"}:
-        blockers.append("pending_cosign")
+        if len(required_domains) > 1:
+            blockers.append("pending_cosign")
         if view and view.get("co_sign_purpose") == "disposition":
             bucket = "pending_review"
     elif co_sign and co_sign["status"] == "invalidated":
-        blockers.append("invalidated_cosign")
+        if len(required_domains) > 1:
+            blockers.append("invalidated_cosign")
+        elif not {"stale_material", "invalid_citation", "needs_reconfirmation"}.intersection(
+            blockers
+        ):
+            blockers.append("needs_reconfirmation")
         bucket = "gap"
     if view:
         blockers.extend(view.get("blockers", []))
@@ -494,6 +500,7 @@ def row_projection(
             and actor.user_id in eligible
             else "cosign"
             if bucket == "pending_review"
+            and len(required_domains) > 1
             and co_sign is not None
             and co_sign["status"] in {"pending", "partial"}
             and signer_domains

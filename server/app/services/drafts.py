@@ -56,6 +56,36 @@ def evidence_dependency(row: dict) -> dict:
     return fixed
 
 
+def gap_reasons(view, review, *, valid_citation, quote_current=True, generation_stale=False):
+    """Share the actionable gap vocabulary between assembly and stale reads."""
+    reasons = []
+    if view is None:
+        reasons.append("missing_card")
+    else:
+        if view["state"] != "confirmed":
+            reasons.append(
+                view["state"] if view["state"] in {"rejected", "needs_material"} else "unconfirmed"
+            )
+        if view["review_domain"] is None:
+            reasons.append("unclassified")
+        if (
+            view["eligibility"] == "stale_material"
+            or generation_stale
+            or any(not material["active_selection"] for material in view["evidence"])
+        ):
+            reasons.append("stale_material")
+        if valid_citation and not quote_current:
+            reasons.append("needs_reconfirmation")
+    if not valid_citation:
+        reasons.append("invalid_citation")
+    return task_cosign.review_gap_reasons(
+        reasons,
+        review,
+        state=view["state"] if view else None,
+        disposition=view["disposition"] if view else None,
+    )
+
+
 async def assemble(
     session: AsyncSession,
     actor: Identity,
@@ -116,41 +146,18 @@ async def assemble(
             }
             negatives += entry["deviation"] == "negative"
         else:
-            reasons = []
-            if not view:
-                reasons.append("missing_card")
-            else:
-                if view["state"] != "confirmed":
-                    reasons.append(
-                        view["state"]
-                        if view["state"] in {"rejected", "needs_material"}
-                        else "unconfirmed"
-                    )
-                if view["review_domain"] is None:
-                    reasons.append("unclassified")
-                if (
-                    eligibility == "stale_material"
-                    or await cards.generation_materials_stale(session, actor, revision)
-                    or any(not material["active_selection"] for material in view["evidence"])
-                ):
-                    reasons.append("stale_material")
-                if valid_citation and cards.revision_quote_hash(
-                    revision, requirement
-                ) != cards.quote_hash(requirement.quote):
-                    reasons.append("needs_reconfirmation")
-            if not valid_citation:
-                reasons.append("invalid_citation")
-            if (
-                card is not None
-                and not cosign[card.id]["approved"]
-                and (
-                    cosign[card.id]["summary"]["round_revision"] > 0
-                    or len(cosign[card.id]["summary"]["required_domains"]) > 1
-                    or view
-                    and (view["state"] == "confirmed" or view["disposition"] == "comply_only")
-                )
-            ):
-                reasons.append("cosign_required")
+            reasons = gap_reasons(
+                view,
+                cosign[card.id] if card else None,
+                valid_citation=valid_citation,
+                quote_current=cards.revision_quote_hash(revision, requirement)
+                == cards.quote_hash(requirement.quote)
+                if card
+                else True,
+                generation_stale=await cards.generation_materials_stale(session, actor, revision)
+                if card and view and view["eligibility"] != "stale_material"
+                else False,
+            )
             entry |= {"kind": "gap", "gap_reasons": reasons}
         items.append(entry)
         manifest.append(
@@ -531,7 +538,18 @@ def draft_view(
             "location_label": item.location_label,
         }
         if card is not None and item.kind != "gap" and not batch.cosign[card.id]["approved"]:
-            entry["reasons"] = ["cosign_required"]
+            current_revision = batch.revisions.get(card.current_revision_id)
+            if current_revision is None:
+                raise not_found()
+            current_view = batch.card_view(card, current_revision, requirement)
+            entry["reasons"] = gap_reasons(
+                current_view,
+                batch.cosign[card.id],
+                valid_citation=batch.citation_valid(requirement),
+                quote_current=cards.revision_quote_hash(current_revision, requirement)
+                == cards.quote_hash(requirement.quote),
+                generation_stale=batch.generation_materials_stale(current_revision),
+            )
             gaps.append(entry)
             continue
         if item.kind == "row":

@@ -31,8 +31,10 @@ service implementation.  Tests use synthetic local bytes and fake providers;
 they do not call a real vendor.
 """
 
+import json
 import os
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
@@ -45,12 +47,15 @@ from test_response_cards import (  # pyright: ignore[reportMissingImports]
     create_tender,
     phase_one_client,
     require_action,
+    sanitized_artifact,
     set_role,
 )
 from test_screenshot_renderer import (  # pyright: ignore[reportMissingImports]
     ScreenshotRenderer,
     _rgb_png,
 )
+
+ARTIFACT_ROOT = Path(__file__).resolve().parents[2] / "data/work/team-workflow-acceptance/cosign"
 
 
 def image_input(**changes):
@@ -295,6 +300,20 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
         assert preview.status_code == 200, preview.text
         assert preview.json()["data"]["gap_reasons"]["unconfirmed"] == 1
         assert preview.json()["data"]["response_requirements"] == 0
+        assert "cosign_required" not in preview.json()["data"]["gap_reasons"]
+        pending_board = await api.get(
+            f"/tasks/{task_id}/board",
+            headers=header,
+            params={"extraction_job_id": extraction_id},
+        )
+        assert pending_board.status_code == 200, pending_board.text
+        pending_row = next(
+            item
+            for item in pending_board.json()["items"]
+            if item["requirement_id"] == requirements[2]["id"]
+        )
+        assert not {"pending_cosign", "invalidated_cosign"} & set(pending_row["blockers"])
+        assert [action["code"] for action in pending_row["next_actions"]] == ["confirm"]
         missing_review = await api.post(
             f"/cards/{pending['id']}/actions",
             headers=header,
@@ -335,11 +354,52 @@ async def test_image_card_confirmation_draft_and_withdrawal_revalidation(
         assert withdrawn.status_code == 200, withdrawn.text
         stale = await api.get(f"/drafts/{first['id']}", headers=header)
         assert stale.status_code == 200, stale.text
-        assert stale.json()["data"]["validity"] == "stale"
-        assert requirements[2]["id"] in stale.json()["data"]["invalidated_requirements"]
+        stale_view = stale.json()["data"]
+        assert stale_view["validity"] == "stale"
+        assert requirements[2]["id"] in stale_view["invalidated_requirements"]
+        assert all(not rows for rows in stale_view["tables"].values())
+        old_gap = next(
+            item for item in stale_view["gaps"] if item["requirement_id"] == requirements[2]["id"]
+        )
+        assert old_gap["reasons"] == ["stale_material"]
+        assert not {"response_text", "deviation_note", "evidence"} & old_gap.keys()
+
+        board = await api.get(
+            f"/tasks/{task_id}/board",
+            headers=header,
+            params={"extraction_job_id": extraction_id},
+        )
+        assert board.status_code == 200, board.text
+        board_row = next(
+            item
+            for item in board.json()["items"]
+            if item["requirement_id"] == requirements[2]["id"]
+        )
+        assert board_row["bucket"] == "gap" and board_row["eligibility"] == "stale_material"
+        assert "stale_material" in board_row["blockers"]
+        assert not {"pending_cosign", "invalidated_cosign"} & set(board_row["blockers"])
+        assert [action["code"] for action in board_row["next_actions"]] == ["refresh_material"]
 
         second = await run_draft(api, app, header, task_id, extraction_id)
         gap = next(
             item for item in second["gaps"] if item["requirement_id"] == requirements[2]["id"]
         )
         assert gap["reasons"] == ["stale_material"]
+        assert all(not rows for rows in second["tables"].values())
+        assert not {"response_text", "deviation_note", "evidence"} & gap.keys()
+        ARTIFACT_ROOT.mkdir(parents=True, exist_ok=True)
+        (ARTIFACT_ROOT / "single-domain-image-withdrawal.json").write_text(
+            json.dumps(
+                sanitized_artifact(
+                    {
+                        "case": "single-domain-image-withdrawal",
+                        "pending_board": pending_row,
+                        "withdrawn_board": board_row,
+                        "original_draft": stale_view,
+                        "new_draft": second,
+                        "command": "uv run pytest -q server/tests/test_screenshot_cards.py -k withdrawal",
+                    }
+                ),
+                indent=2,
+            )
+        )

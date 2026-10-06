@@ -97,7 +97,8 @@ const gapLabels = {
   unclassified: "响应职责尚未分类",
   stale_material: "所选材料已变化",
   invalid_citation: "招标原文引用无效",
-  needs_reconfirmation: "引用修复后需要重新确认",
+  needs_reconfirmation: "当前要求需要重新核对并确认",
+  cosign_required: "需要完成全部必需职责会签",
 };
 
 function reviewHref(requirementId) {

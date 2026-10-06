@@ -406,7 +406,9 @@ async def test_final_signature_round_summary_precedes_consumption_approval_atomi
             session, actor, card.task_id, card.extraction_job_id, storage
         )
         assert len(items) == 1 and items[0]["kind"] == "gap"
-        assert "cosign_required" in items[0]["gap_reasons"]
+        assert items[0]["gap_reasons"] == (
+            ["unconfirmed"] if len(order) == 1 else ["unconfirmed", "cosign_required"]
+        )
         assert "response_text" not in items[0]
         observations.append({"summary": summary, "approved": False, "partition": "gap"})
         if fail_after_final_signature:

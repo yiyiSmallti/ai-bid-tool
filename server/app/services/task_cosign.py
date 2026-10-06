@@ -339,6 +339,26 @@ def manifest_fields(projection):
     return {"co_sign": manifest}
 
 
+def review_gap_reasons(reasons, review, *, state, disposition):
+    """Name a missing review without calling a single-domain review co-sign.
+
+    Input failures already tell the reviewer what must be repaired. They also
+    retire a round, but that consequence is not a second single-domain cause.
+    """
+    reasons = list(reasons)
+    if review is None or review["approved"]:
+        return reasons
+    summary = review["summary"]
+    if len(summary["required_domains"]) > 1:
+        if "cosign_required" not in reasons:
+            reasons.append("cosign_required")
+    elif (
+        summary["status"] == "invalidated" or state == "confirmed" or disposition == "comply_only"
+    ) and not {"stale_material", "invalid_citation", "needs_reconfirmation"}.intersection(reasons):
+        reasons.append("needs_reconfirmation")
+    return reasons
+
+
 def apply_eligibility(view, projection):
     if not projection["approved"] and view["eligibility"] in {"eligible", "comply_only"}:
         view["eligibility"] = "needs_reconfirmation"

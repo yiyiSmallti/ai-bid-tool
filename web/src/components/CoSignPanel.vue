@@ -34,7 +34,7 @@ const signBlocker = computed(() => {
   if (!signableDomains.value.includes(selectedDomain.value)) return "请明确选择本人负责且尚未签署的职责";
   return round.value?.purpose === "disposition" ? dispositionBlocker.value : props.confirmBlocker;
 });
-const statusLabels = { not_required: "尚无会签轮次", pending: "等待签署", partial: "部分已签署", complete: "全部已签署", invalidated: "会签已失效" };
+const statusLabels = computed(() => ({ not_required: "尚无审阅轮次", pending: multi.value ? "等待签署" : "等待确认", partial: "部分已签署", complete: multi.value ? "全部已签署" : "审阅已完成", invalidated: multi.value ? "会签已失效" : "审阅已失效" }));
 const scope = value => value.org_id === orgSession.get()?.orgId && value.task_id === props.taskId;
 function clear() { selectedDomain.value = ""; emit("clear-review"); }
 async function load(resetPage = true) {
@@ -120,11 +120,11 @@ defineExpose({ refresh: () => { clear(); return load(); } });
     </template>
     <div v-if="review" data-testid="cosign-current" class="status-box" role="status" aria-live="polite">
       <p><strong>{{label(statusLabels,review.summary.status)}}</strong> · 当前轮次 {{review.summary.round_revision || '尚未建立'}}</p>
-      <p v-if="round">{{round.purpose === 'disposition' ? '处置会签' : '响应会签'}} · {{label(dispositions,round.intended_disposition)}} · 快照卡片修订 {{round.card_revision}}</p>
+      <p v-if="round">{{round.purpose === 'disposition' ? (multi ? '处置会签' : '处置审阅') : (multi ? '响应会签' : '响应审阅')}} · {{label(dispositions,round.intended_disposition)}} · 快照卡片修订 {{round.card_revision}}</p>
       <p v-if="round?.purpose === 'disposition'" class="quote">共同处置原因：{{round.disposition_reason ?? '处置原因尚未读取，不能签署'}}</p>
       <p>待签署：{{review.summary.pending_domains.map(domain => label(domains,domain)).join('、') || '无'}}</p>
       <ul class="domain-signatures"><li v-for="domain in requiredDomains" :key="domain"><strong>{{label(domains,domain)}}</strong>：{{review.summary.signed_domains.includes(domain) ? '已签署' : '待签署'}}<span v-if="review.summary.signed_domains.includes(domain) && signedBy(domain)"> · 签署人 {{signedBy(domain).signer_user_id}} · {{formatTime(signedBy(domain).created_at)}} · 轮次 {{round.round_revision}}</span></li></ul>
-      <p v-if="['pending','partial'].includes(review.summary.status)" class="hint">全部必需职责完成前，响应不会被确认为可用；处置会签不会改变当前处置。</p>
+      <p v-if="['pending','partial'].includes(review.summary.status)" class="hint">当前审阅完成前，响应不可进入初稿；处置审阅完成前保留当前处置。</p>
       <p v-if="review.summary.status === 'invalidated'" class="notice warning">该轮次已失效，历史签署不能算作当前审批。</p>
     </div>
     <template v-if="editableDisposition">

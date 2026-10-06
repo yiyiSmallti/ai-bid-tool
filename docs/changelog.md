@@ -6,6 +6,16 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Actionable single-domain review gap reasons
+
+- Preserve `stale_material` as the sole input reason when screenshot withdrawal
+  retires a single-domain response review. Use `needs_reconfirmation` when only
+  that approval is lost, and reserve `cosign_required` for multi-domain policies.
+- Align database response-item reasons, new and stale draft projections, export
+  readiness and board actions without changing approval or Evidence gates. Keep
+  the screenshot regression's exact reason assertion and add cross-consumer
+  reason checks; see [Team workflow](notes/team-workflow.md).
+
 ## 2026-10-05: Co-sign consumer and citation batching compatibility
 
 - Reuse a review round's immutable, already-validated citation inputs during

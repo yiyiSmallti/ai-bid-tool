@@ -38,7 +38,7 @@ from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.compatibility import legacy_projection
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import DraftView
-from app.services import drafts
+from app.services import drafts, task_cosign
 from app.services import response_cards as cards
 from app.services.agent_tools import provenance
 from app.services.auth import ROLE_SCOPES, Identity
@@ -119,8 +119,8 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             "tender_clause": item.source,
             "location_label": item.location_label,
         }
-        # Retain the independent slow reference while enforcing the newly
-        # approved complete-round requirement on its current table projection.
+        # The slow reference keeps its own reads and consumption gate; only
+        # reason precedence is shared with the production projection.
         if (
             card is not None
             and item.kind != "gap"
@@ -128,7 +128,23 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
                 select(func.team_cosign_card_approved(actor.org_id, card.id))
             )
         ):
-            entry["reasons"] = ["cosign_required"]
+            current_revision = await session.get(ResponseCardRevision, card.current_revision_id)
+            if current_revision is None:
+                raise not_found()
+            current_view = await cards.card_view(
+                session, actor, card, current_revision, requirement
+            )
+            review = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
+            entry["reasons"] = drafts.gap_reasons(
+                current_view,
+                review,
+                valid_citation=await cards.citation_valid(session, requirement),
+                quote_current=cards.revision_quote_hash(current_revision, requirement)
+                == cards.quote_hash(requirement.quote),
+                generation_stale=await cards.generation_materials_stale(
+                    session, actor, current_revision
+                ),
+            )
             gaps.append(entry)
             continue
         if item.kind == "row":

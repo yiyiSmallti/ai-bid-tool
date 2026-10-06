@@ -648,7 +648,24 @@ $patch$);
  updated:=pg_temp.team_cosign_replace(updated,'IF citation_ok AND quote_current AND (revision.disposition=',
   'IF cosign_ok AND citation_ok AND quote_current AND (revision.disposition=');
  updated:=pg_temp.team_cosign_replace(updated,'IF NEW.gap_reasons IS DISTINCT FROM expected_reasons THEN',
-  E'IF NEW.card_id IS NOT NULL AND NOT cosign_ok AND (jsonb_array_length(public.team_cosign_domains(NEW.org_id,NEW.card_id))>1 OR revision.state=''confirmed'' OR revision.disposition=''comply_only'' OR EXISTS(SELECT 1 FROM public.requirement_workflows rw JOIN public.response_cards c ON (c.org_id,c.task_id,c.extraction_job_id,c.requirement_id)=(rw.org_id,rw.task_id,rw.extraction_job_id,rw.requirement_id) WHERE c.org_id=NEW.org_id AND c.id=NEW.card_id AND rw.current_round_id IS NOT NULL)) THEN expected_reasons := expected_reasons || ''["cosign_required"]''::jsonb; END IF;\n        IF NEW.gap_reasons IS DISTINCT FROM expected_reasons THEN');
+  $patch$
+        IF NEW.card_id IS NOT NULL AND NOT cosign_ok THEN
+          IF jsonb_array_length(public.team_cosign_domains(NEW.org_id,NEW.card_id))>1 THEN
+            expected_reasons := expected_reasons || '["cosign_required"]'::jsonb;
+          ELSIF (revision.state='confirmed' OR revision.disposition='comply_only'
+            OR EXISTS(SELECT 1 FROM public.requirement_workflows rw JOIN public.response_cards c
+              ON (c.org_id,c.task_id,c.extraction_job_id,c.requirement_id)=
+                (rw.org_id,rw.task_id,rw.extraction_job_id,rw.requirement_id)
+              WHERE c.org_id=NEW.org_id AND c.id=NEW.card_id AND rw.current_round_id IS NOT NULL
+                AND NOT public.team_cosign_round_valid(NEW.org_id,rw.current_round_id)))
+            AND NOT (expected_reasons ?| ARRAY['stale_material','invalid_citation','needs_reconfirmation']) THEN
+            -- Single-domain input failures already explain the retired review.
+            -- Add the existing approval-loss reason only when none is specific.
+            expected_reasons := expected_reasons || '["needs_reconfirmation"]'::jsonb;
+          END IF;
+        END IF;
+        IF NEW.gap_reasons IS DISTINCT FROM expected_reasons THEN
+$patch$);
  IF updated=definition THEN RAISE EXCEPTION 'response item gate source changed'; END IF;
  EXECUTE updated;
  SELECT pg_get_functiondef('public.score_inputs_current(uuid,uuid,uuid,integer)'::regprocedure) INTO definition;
