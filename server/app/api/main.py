@@ -67,6 +67,14 @@ RESOURCE_MANAGEMENT_READS = {
     "resource_feature_show",
     "resource_feature_history",
     "resource_feature_lifecycle_history",
+    "resource_certificate_browse",
+    "resource_certificate_show",
+    "resource_certificate_history",
+    "resource_certificate_lifecycle_history",
+    "resource_profile_browse",
+    "resource_profile_show",
+    "resource_profile_history",
+    "resource_profile_lifecycle_history",
 }
 
 
@@ -578,6 +586,13 @@ def create_app(
     from app.api.management_features import create_router as create_management_feature_router
 
     app.include_router(create_management_feature_router(context, settings))
+    from app.api.management_certificates import (
+        create_router as create_management_certificate_router,
+    )
+    from app.api.management_profiles import create_router as create_management_profile_router
+
+    app.include_router(create_management_certificate_router(context, settings))
+    app.include_router(create_management_profile_router(context, settings))
     app.include_router(create_confidential_router(context, settings))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))

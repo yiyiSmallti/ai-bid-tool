@@ -6,6 +6,24 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Certificate and org-profile management slice
+
+- Extended profile and certificate management with bounded prefix browse/search,
+  exact revision details, separate content/lifecycle history, complete declaration
+  editing and explicit authorized task pins. Certificate originals remain bound to
+  their upload revision, with ordered parts/rotation, signed same-org inspection,
+  explicit date advisories and a metadata-only no-original state.
+- Added certificate/profile lifecycle arms, exactly-one-root and org composite
+  constraints, indexed page-revision authors, task selection guards and human-only
+  bidder/admin lifecycle scopes in migration `0052`. RLS and composite keys reject
+  forged relationships before business guards; existing pins and source archives
+  remain intact. See [management mechanisms](notes/management-pages.md).
+- Added v4 CLI browse/show/history/lifecycle commands and schema snapshots without
+  changing legacy command output. Added API/service, storage, role/token, isolation,
+  fixed-scale and mocked Playwright acceptance coverage with artifacts under
+  `data/work`. Database, Chromium and measured scale acceptance remain for the main
+  integration environment, as tracked in the [contract](plan/management-pages.md).
+
 ## 2026-10-06: Bounded product and feature revision authors
 
 - Resolve product and feature authors with explicit page-revision filters on a

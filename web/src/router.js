@@ -54,6 +54,8 @@ export const router = createRouter({
     { path: "/org/features", component: () => import("./views/OrgFeatures.vue"), meta: { area: "org", title: "功能库", nav: "features" } },
     { path: "/org/features/:featureId", component: () => import("./views/OrgFeature.vue"), meta: { area: "org", title: "功能详情", nav: "features" } },
     { path: "/org/profiles", component: OrgProfiles, meta: { area: "org", title: "单位资料", nav: "profiles" } },
+    { path: "/org/profiles/:resourceId", component: () => import("./views/OrgQualification.vue"), meta: { area: "org", title: "资料详情", nav: "profiles", resourceKind: "profiles" } },
+    { path: "/org/certificates/:resourceId", component: () => import("./views/OrgQualification.vue"), meta: { area: "org", title: "证照详情", nav: "profiles", resourceKind: "certificates" } },
     { path: "/org/confidential", component: OrgConfidential, meta: { area: "org", title: "保密字段", nav: "confidential" } },
     { path: "/org/billing", component: OrgBilling, meta: { area: "org", admin: true, title: "余额与充值", nav: "billing" } },
     { path: "/:rest(.*)", redirect: "/org/tasks" },
