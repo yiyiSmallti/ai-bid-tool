@@ -218,9 +218,13 @@ test.describe("rules check acceptance", () => {
   test("rules date edit invalidates preview and delayed source is discarded on org exit", async ({ page }) => {
     const state = await fixture(page);
     await page.goto(workspace);
+    await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toBeEnabled();
+    const preview = state.requests.find((row) => row.method === "POST" && row.body?.dry_run === true).body;
+    expect(preview.assessment_date).toBe("2026-10-05");
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-06");
+    await expect(page.getByLabel("评估日期", { exact: true })).toHaveValue("2026-10-06");
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toHaveCount(0);
     expect(state.submissions).toBe(0);
     let release;

@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Rubric revision regression fixture corrections
+
+- Deep-copy the read report in the shared rubric replacement test helper before constructing
+  requests. Nested range edits previously mutated the expected baseline before the HTTP request,
+  falsely reporting candidate changes after rejection. Retain full report equality checks.
+- Set an explicit initial assessment date before previewing in the console date-invalidation
+  regression, then edit to a distinct date so the test is independent of the current day.
+
 ## 2026-10-06: Rubric revision across domains with normalization errors
 
 - Fix the dev real-model rubric v2 deadlock observed after #21: generation retained 8 sections,

@@ -91,6 +91,8 @@ async def confirm_contents(case, report=None):
 
 
 def replacement(report):
+    """Detach nested request values so edits cannot mutate the original read baseline."""
+    report = copy.deepcopy(report)
     section_keys = {section["id"]: section["key"] for section in report["sections"]}
     section_fields = (
         "key",
