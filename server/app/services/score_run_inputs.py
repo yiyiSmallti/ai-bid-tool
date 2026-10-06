@@ -140,6 +140,11 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
         if require_current
         else {}
     )
+    from app.services import task_cosign
+
+    cosign = await task_cosign.projections(
+        session, actor.org_id, [row.card_id for row in rows if row.card_id]
+    )
     secret_items, manifest_items = [], []
     citations = cards.citation_validity_batch(
         (requirement for requirement, _ in located), {chunk.id: chunk for _, chunk in located}
@@ -201,6 +206,14 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
                 stale()
             if entry["source_hash"] != drafts.digest(cards.source(requirement)):
                 stale()
+        if row.card_id is not None:
+            approval = cosign[row.card_id]
+            if row.kind != "gap" and not approval["approved"]:
+                stale()
+            if require_current and entry.get("co_sign") != task_cosign.manifest_fields(
+                approval
+            ).get("co_sign"):
+                stale()
         dependencies = []
         if revision is not None:
             for evidence in await cards.linked_evidence(session, revision.id):
@@ -256,6 +269,7 @@ async def fixed_rows(session, actor, draft, *, require_current: bool):
                 "partition": item["partition"],
                 "content_sha256": drafts.digest(item),
                 "evidence": dependencies,
+                **(task_cosign.manifest_fields(cosign[row.card_id]) if row.card_id else {}),
             }
         )
     return secret_items, manifest_items

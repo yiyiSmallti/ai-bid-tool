@@ -24,6 +24,7 @@ import pytest
 from app.models.entities import AuditLog, Job, UsageRecord
 from docx import Document
 from sqlalchemy import func, select
+from task_fixtures import reviewer_header
 from test_response_cards import (
     CERTIFICATE_PAGE,
     create_card,
@@ -439,11 +440,18 @@ async def complete_inputs(
         reviewed[index] = card
     for role, indices in (("technical", (0, 2, 4)), ("bidder", (1,))):
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], role)
+        _, review_header = await reviewer_header(
+            api,
+            admin_engine,
+            tenants["orgs"][0],
+            UUID(task),
+            "technical" if role == "technical" else "commercial",
+        )
         for index in indices:
-            submitted = await require_action(api, header, reviewed[index], "submit")
+            submitted = await require_action(api, review_header, reviewed[index], "submit")
             reviewed[index] = await require_action(
                 api,
-                header,
+                review_header,
                 submitted,
                 "confirm",
                 reviewed_evidence_ids=[e["id"] for e in submitted["evidence"]],

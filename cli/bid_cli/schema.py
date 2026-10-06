@@ -206,11 +206,19 @@ from app.schemas.team_workflow import (
     CommentReplyCreate,
     CommentThreadCreate,
     CommentThreadView,
+    CoSignData,
+    CoSignOpen,
+    CoSignPolicyData,
+    CoSignSignatureView,
+    CoSignSignRequest,
     EventReplayData,
     EventReplayQuery,
     MemberCandidateView,
     PageQuery,
     RequirementAssignmentSet,
+    RequirementCoSignPolicySet,
+    ReviewRoundData,
+    SignoffsData,
     TaskEventView,
     TaskMemberData,
     TaskMemberSet,
@@ -218,6 +226,8 @@ from app.schemas.team_workflow import (
     TaskOwnerHandover,
     TaskProgressData,
     TaskProgressQuery,
+    TaskRuleData,
+    TaskRuleSet,
     TaskWorkflowData,
     ThreadCreatedData,
     WorkflowMutation,
@@ -546,6 +556,13 @@ WORKFLOW_COMMANDS = {
     "card thread create": CommentThreadCreate,
     "card comment list": PageQuery,
     "card comment add": CommentReplyCreate,
+    "task review-rule show": None,
+    "task review-rule set": TaskRuleSet,
+    "card policy show": None,
+    "card policy set": RequirementCoSignPolicySet,
+    "card signoff list": PageQuery,
+    "card review-round open": CoSignOpen,
+    "card signoff add": CoSignSignRequest,
 }
 COMMANDS.update(WORKFLOW_COMMANDS)
 OUTPUTS.update(
@@ -567,6 +584,13 @@ OUTPUTS.update(
         "card thread create": TypeAdapter(ThreadCreatedData),
         "card comment list": TypeAdapter(WorkflowPageData),
         "card comment add": TypeAdapter(CommentData),
+        "task review-rule show": TypeAdapter(TaskRuleData),
+        "task review-rule set": TypeAdapter(TaskRuleData),
+        "card policy show": TypeAdapter(CoSignPolicyData),
+        "card policy set": TypeAdapter(CoSignPolicyData),
+        "card signoff list": TypeAdapter(SignoffsData),
+        "card review-round open": TypeAdapter(ReviewRoundData),
+        "card signoff add": TypeAdapter(CoSignData),
     }
 )
 
@@ -786,7 +810,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         "result": (LegacyResult if version == "3.0" else Result).model_json_schema(),
         "commands": {
             name: {
-                "input": model.model_json_schema() if model else None,
+                "input": TypeAdapter(model).json_schema() if model else None,
                 "cli_parameters": parameters.get(name, []),
                 **({"output": outputs[name].json_schema()} if name in outputs else {}),
                 **(
@@ -836,6 +860,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         "task member candidates": MemberCandidateView,
         "card thread list": CommentThreadView,
         "card comment list": CommentMessageView,
+        "card signoff list": CoSignSignatureView,
     }
     for name, model in workflow_items.items():
         if name in schema["commands"]:

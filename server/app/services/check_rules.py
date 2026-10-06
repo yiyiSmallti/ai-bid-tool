@@ -14,6 +14,7 @@ REASONS = {
 }
 UNCONFIRMED = {
     "unconfirmed",
+    "cosign_required",
     "needs_reconfirmation",
     "rejected",
     "needs_material",

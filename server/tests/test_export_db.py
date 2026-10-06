@@ -34,6 +34,7 @@ from app.models.response_cards import (
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_fixtures import reviewer_header
 from test_response_cards import (
     PRODUCT_DATA,
     create_card,
@@ -138,6 +139,14 @@ def run_rows(
             select(ResponseItem).where(ResponseItem.draft_id == draft.id).order_by(ResponseItem.id)
         )
     )
+    from app.services import task_cosign
+    from task_fixtures import ServiceSession, service_call
+
+    approvals = service_call(
+        task_cosign.projections(
+            ServiceSession(session), org, [item.card_id for item in items if item.card_id]
+        )
+    )
     manifest_items = []
     for ordinal, item in enumerate(items):
         entry = {
@@ -153,6 +162,8 @@ def run_rows(
             "starred": item.starred,
             "evidence": [],
         }
+        if item.card_id is not None:
+            entry.update(task_cosign.manifest_fields(approvals[item.card_id]))
         if item.kind == "row":
             reviewed = session.get(ResponseCardRevision, item.card_revision_id)
             assert reviewed is not None
@@ -292,17 +303,18 @@ async def exports_seeded(tenants, tmp_path, admin_engine):
                     ],
                 },
             )
-            set_role(admin_engine, org, user, "technical")
+            _, technical_header = await reviewer_header(
+                api, admin_engine, org, UUID(task), "technical"
+            )
             card = await require_action(api, header, card, "submit")
             await require_action(
                 api,
-                header,
+                technical_header,
                 card,
                 "confirm",
                 reviewed_evidence_ids=[e["id"] for e in card["evidence"]],
                 reviewed_warning_codes=card["warning_codes"],
             )
-            set_role(admin_engine, org, user, "admin")
             submitted = await api.post(
                 f"/tasks/{task}/drafts", headers=header, json={"extraction_job_id": extraction}
             )

@@ -751,6 +751,91 @@ def test_requirement_batch_locates_distinct_actual_pairs_once(check_seeded, admi
         )
 
 
+@pytest.mark.parametrize("mutation", ["source_missing", "source_ambiguous", "requirement_quote"])
+def test_cosign_snapshot_rejects_citation_change_before_invalidation(
+    check_seeded, admin_engine, tmp_path, mutation
+):
+    org = check_seeded["orgs"][0]
+    with admin_engine.connect() as connection:
+        transaction = connection.begin()
+        try:
+            connection.execute(
+                text("SELECT set_config('app.current_org',:org,true)"), {"org": str(org)}
+            )
+            requirement, chunk, review_round = connection.execute(
+                text("""
+                SELECT q.id,q.chunk_id,r.id FROM requirements q
+                JOIN requirement_workflows w ON (w.org_id,w.requirement_id)=(q.org_id,q.id)
+                JOIN card_review_rounds r ON (r.org_id,r.id)=(w.org_id,w.current_round_id)
+                WHERE q.org_id=:org
+                """),
+                {"org": org},
+            ).one()
+            assert connection.scalar(
+                text("SELECT team_cosign_round_valid(:org,:round)"),
+                {"org": org, "round": review_round},
+            )
+            connection.execute(
+                text("""
+                CREATE TEMP TABLE citation_round_probe(
+                  org_id uuid,round_id uuid,is_valid boolean,invalidation_count bigint
+                ) ON COMMIT DROP
+                """)
+            )
+            connection.execute(
+                text("INSERT INTO citation_round_probe(org_id,round_id) VALUES(:org,:round)"),
+                {"org": org, "round": review_round},
+            )
+            connection.execute(
+                text("""
+                CREATE FUNCTION pg_temp.probe_citation_round() RETURNS trigger
+                LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+                BEGIN
+                  UPDATE pg_temp.citation_round_probe probe SET
+                    is_valid=public.team_cosign_round_valid(probe.org_id,probe.round_id),
+                    invalidation_count=(SELECT count(*) FROM public.card_review_invalidations inv
+                      WHERE inv.org_id=probe.org_id AND inv.round_id=probe.round_id);
+                  RETURN NULL;
+                END $$
+                """)
+            )
+            table = "requirements" if mutation == "requirement_quote" else "chunks"
+            # Alphabetical trigger order observes the changed row before the
+            # production invalidation trigger, which remains enabled throughout.
+            connection.execute(
+                text(
+                    f"CREATE TRIGGER aaa_citation_round_probe AFTER UPDATE ON public.{table} "
+                    "FOR EACH ROW EXECUTE FUNCTION pg_temp.probe_citation_round()"
+                )
+            )
+            statement = {
+                "source_missing": "UPDATE chunks SET text='Synthetic changed source' WHERE id=:id",
+                "source_ambiguous": "UPDATE chunks SET text=text||'；'||text WHERE id=:id",
+                "requirement_quote": "UPDATE requirements SET quote='Synthetic changed quote' WHERE id=:id",
+            }[mutation]
+            connection.execute(
+                text(statement), {"id": requirement if mutation == "requirement_quote" else chunk}
+            )
+            valid, invalidations = connection.execute(
+                text("SELECT is_valid,invalidation_count FROM citation_round_probe")
+            ).one()
+            assert valid is False and invalidations == 0
+            (tmp_path / f"cosign-citation-snapshot-{mutation}.json").write_text(
+                json.dumps(
+                    {
+                        "mutation": mutation,
+                        "round_valid_before_invalidation": valid,
+                        "materialized_invalidations_before_probe": invalidations,
+                        "production_triggers_enabled": True,
+                        "probe_rolled_back": True,
+                    },
+                    indent=2,
+                )
+            )
+        finally:
+            transaction.rollback()
+
+
 def test_check_publish_locates_requirement_once_across_all_gates(
     check_seeded, admin_engine, tmp_path
 ):

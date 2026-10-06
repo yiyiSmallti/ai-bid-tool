@@ -1,5 +1,6 @@
 """Bounded, noninteractive task workflow commands over the shared authenticated API."""
 
+import json
 from pathlib import Path
 from typing import Annotated
 from uuid import UUID
@@ -10,13 +11,17 @@ from app.schemas.team_workflow import (
     BoardQuery,
     CommentReplyCreate,
     CommentThreadCreate,
+    CoSignOpen,
+    CoSignSignRequest,
     PageQuery,
     RequirementAssignmentSet,
+    RequirementCoSignPolicySet,
     TaskMemberSet,
     TaskOwnerHandover,
+    TaskRuleSet,
     WorkflowMutation,
 )
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 
 
 def _body(model, **values):
@@ -41,6 +46,119 @@ def register(task_app: typer.Typer, card_app: typer.Typer):
     comment_app = typer.Typer()
     card_app.add_typer(thread_app, name="thread")
     card_app.add_typer(comment_app, name="comment")
+    rule_app = typer.Typer()
+    policy_app = typer.Typer()
+    signoff_app = typer.Typer()
+    round_app = typer.Typer()
+    task_app.add_typer(rule_app, name="review-rule")
+    card_app.add_typer(policy_app, name="policy")
+    card_app.add_typer(signoff_app, name="signoff")
+    card_app.add_typer(round_app, name="review-round")
+
+    @rule_app.command("show")
+    def review_rule_show(
+        task: Annotated[UUID, typer.Option()], json_output: cli.JsonOption = False
+    ):
+        cli.emit(
+            cli.call("GET", f"/tasks/{task}/review-rule"), "task review-rule show", json_output
+        )
+
+    @rule_app.command("set")
+    def review_rule_set(
+        task: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        dry_run: Annotated[bool, typer.Option()] = False,
+        json_output: cli.JsonOption = False,
+    ):
+        body = cli.input_contract(input, TaskRuleSet)
+        if dry_run:
+            body["dry_run"] = True
+        cli.emit(
+            cli.call("PUT", f"/tasks/{task}/review-rule", json=body),
+            "task review-rule set",
+            json_output,
+        )
+
+    @policy_app.command("show")
+    def policy_show(
+        task: Annotated[UUID, typer.Option()],
+        requirement: Annotated[UUID, typer.Option()],
+        job: Annotated[UUID, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call(
+                "GET",
+                f"/tasks/{task}/requirements/{requirement}/review-policy",
+                params={"extraction_job_id": str(job)},
+            ),
+            "card policy show",
+            json_output,
+        )
+
+    @policy_app.command("set")
+    def policy_set(
+        task: Annotated[UUID, typer.Option()],
+        requirement: Annotated[UUID, typer.Option()],
+        job: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call(
+                "PUT",
+                f"/tasks/{task}/requirements/{requirement}/review-policy",
+                params={"extraction_job_id": str(job)},
+                json=cli.input_contract(input, RequirementCoSignPolicySet),
+            ),
+            "card policy set",
+            json_output,
+        )
+
+    @signoff_app.command("list")
+    def signoff_list(
+        card: Annotated[UUID, typer.Option()],
+        cursor: Annotated[str | None, typer.Option()] = None,
+        limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call("GET", f"/cards/{card}/signoffs", params=_page(cursor, limit)),
+            "card signoff list",
+            json_output,
+        )
+
+    @round_app.command("open")
+    def review_round_open(
+        card: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call(
+                "POST", f"/cards/{card}/review-rounds", json=cli.input_contract(input, CoSignOpen)
+            ),
+            "card review-round open",
+            json_output,
+        )
+
+    @signoff_app.command("add")
+    def signoff_add(
+        card: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        if input.stat().st_size > 128 * 1024:
+            raise ServiceError("input_too_large", "JSON input exceeds the command limit", 400, 2)
+        adapter = TypeAdapter(CoSignSignRequest)
+        body = adapter.dump_python(
+            adapter.validate_python(json.loads(input.read_text(encoding="utf-8"))), mode="json"
+        )
+        cli.emit(
+            cli.call("POST", f"/cards/{card}/signoffs", json=body),
+            "card signoff add",
+            json_output,
+        )
 
     @card_app.command("assign")
     def assign(

@@ -13491,6 +13491,348 @@
             "type": "object"
           }
         },
+        "card policy set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "requirement",
+              "options": [
+                "--requirement"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "co_sign_required": {
+                "title": "Co Sign Required",
+                "type": "boolean"
+              },
+              "expected_policy_revision": {
+                "minimum": 0,
+                "title": "Expected Policy Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              }
+            },
+            "required": [
+              "expected_policy_revision",
+              "co_sign_required",
+              "reason"
+            ],
+            "title": "RequirementCoSignPolicySet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "RequirementCoSignPolicyView": {
+                "additionalProperties": false,
+                "properties": {
+                  "co_sign_required": {
+                    "title": "Co Sign Required",
+                    "type": "boolean"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "primary_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "required_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 0,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "starred": {
+                    "title": "Starred",
+                    "type": "boolean"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "task_rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "extraction_job_id",
+                  "requirement_id",
+                  "revision",
+                  "primary_domain",
+                  "co_sign_required",
+                  "starred",
+                  "co_sign_starred",
+                  "task_rule_revision",
+                  "required_domains"
+                ],
+                "title": "RequirementCoSignPolicyView",
+                "type": "object"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "policy": {
+                "$ref": "#/$defs/RequirementCoSignPolicyView"
+              }
+            },
+            "required": [
+              "policy"
+            ],
+            "title": "CoSignPolicyData",
+            "type": "object"
+          }
+        },
+        "card policy show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "requirement",
+              "options": [
+                "--requirement"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "RequirementCoSignPolicyView": {
+                "additionalProperties": false,
+                "properties": {
+                  "co_sign_required": {
+                    "title": "Co Sign Required",
+                    "type": "boolean"
+                  },
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "primary_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "required_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 0,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "starred": {
+                    "title": "Starred",
+                    "type": "boolean"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "task_rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "extraction_job_id",
+                  "requirement_id",
+                  "revision",
+                  "primary_domain",
+                  "co_sign_required",
+                  "starred",
+                  "co_sign_starred",
+                  "task_rule_revision",
+                  "required_domains"
+                ],
+                "title": "RequirementCoSignPolicyView",
+                "type": "object"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "policy": {
+                "$ref": "#/$defs/RequirementCoSignPolicyView"
+              }
+            },
+            "required": [
+              "policy"
+            ],
+            "title": "CoSignPolicyData",
+            "type": "object"
+          }
+        },
         "card reject": {
           "cli_parameters": [
             {
@@ -13697,6 +14039,285 @@
             "type": "object"
           }
         },
+        "card review-round open": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card",
+              "options": [
+                "--card"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Bind a card revision; respond/comply-only waits for signatures before disposition.",
+            "properties": {
+              "client_request_id": {
+                "format": "uuid",
+                "title": "Client Request Id",
+                "type": "string"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "intended_disposition": {
+                "enum": [
+                  "respond",
+                  "comply_only"
+                ],
+                "title": "Intended Disposition",
+                "type": "string"
+              },
+              "purpose": {
+                "const": "disposition",
+                "default": "disposition",
+                "title": "Purpose",
+                "type": "string"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "reason",
+              "intended_disposition",
+              "client_request_id"
+            ],
+            "title": "CoSignOpen",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CardState": {
+                "enum": [
+                  "draft",
+                  "pending_review",
+                  "confirmed",
+                  "rejected",
+                  "needs_material"
+                ],
+                "type": "string"
+              },
+              "CoSignRoundView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "card_id": {
+                    "format": "uuid",
+                    "title": "Card Id",
+                    "type": "string"
+                  },
+                  "card_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "card_revision_id": {
+                    "format": "uuid",
+                    "title": "Card Revision Id",
+                    "type": "string"
+                  },
+                  "citation_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "content_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "disposition_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Reason"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "evidence_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "intended_disposition": {
+                    "enum": [
+                      "respond",
+                      "comply_only"
+                    ],
+                    "title": "Intended Disposition",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "policy_revision": {
+                    "minimum": 0,
+                    "title": "Policy Revision",
+                    "type": "integer"
+                  },
+                  "prior_card_state": {
+                    "$ref": "#/$defs/CardState"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "response",
+                      "disposition"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "required_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "requirement_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "round_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "enum": [
+                      "open",
+                      "complete",
+                      "invalidated"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "task_rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "card_id",
+                  "extraction_job_id",
+                  "requirement_id",
+                  "round_revision",
+                  "card_revision",
+                  "card_revision_id",
+                  "policy_revision",
+                  "task_rule_revision",
+                  "access_epoch",
+                  "evidence_sha256",
+                  "requirement_sha256",
+                  "citation_sha256",
+                  "content_sha256",
+                  "required_domains",
+                  "purpose",
+                  "intended_disposition",
+                  "prior_card_state",
+                  "state",
+                  "created_at"
+                ],
+                "title": "CoSignRoundView",
+                "type": "object"
+              },
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "type": "array"
+              },
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "round": {
+                "$ref": "#/$defs/CoSignRoundView"
+              }
+            },
+            "required": [
+              "round"
+            ],
+            "title": "ReviewRoundData",
+            "type": "object"
+          }
+        },
         "card show": {
           "cli_parameters": [
             {
@@ -13749,6 +14370,903 @@
               "id"
             ],
             "title": "CardShowArguments",
+            "type": "object"
+          }
+        },
+        "card signoff add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card",
+              "options": [
+                "--card"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "CoSignConfirm": {
+                "additionalProperties": false,
+                "description": "expected_revision is the exact card revision; partial signatures do not advance it.",
+                "properties": {
+                  "action": {
+                    "const": "confirm",
+                    "default": "confirm",
+                    "title": "Action",
+                    "type": "string"
+                  },
+                  "client_request_id": {
+                    "format": "uuid",
+                    "title": "Client Request Id",
+                    "type": "string"
+                  },
+                  "expected_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "expected_round": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "purpose": {
+                    "const": "response",
+                    "default": "response",
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "maxLength": 10000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reason"
+                  },
+                  "reviewed_evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Reviewed Evidence Ids",
+                    "type": "array"
+                  },
+                  "reviewed_warning_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Reviewed Warning Codes",
+                    "type": "array"
+                  },
+                  "selected_domain": {
+                    "$ref": "#/$defs/ReviewDomain"
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "selected_domain",
+                  "expected_round",
+                  "client_request_id"
+                ],
+                "title": "CoSignConfirm",
+                "type": "object"
+              },
+              "CoSignDispositionSign": {
+                "additionalProperties": false,
+                "description": "Disposition acknowledgment never confirms Evidence or creates a response row.",
+                "properties": {
+                  "client_request_id": {
+                    "format": "uuid",
+                    "title": "Client Request Id",
+                    "type": "string"
+                  },
+                  "expected_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "expected_round": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "purpose": {
+                    "const": "disposition",
+                    "default": "disposition",
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "reason": {
+                    "$ref": "#/$defs/Reason"
+                  },
+                  "reviewed_warning_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Reviewed Warning Codes",
+                    "type": "array"
+                  },
+                  "selected_domain": {
+                    "$ref": "#/$defs/ReviewDomain"
+                  }
+                },
+                "required": [
+                  "expected_revision",
+                  "expected_round",
+                  "selected_domain",
+                  "reason",
+                  "client_request_id"
+                ],
+                "title": "CoSignDispositionSign",
+                "type": "object"
+              },
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "discriminator": {
+              "mapping": {
+                "disposition": "#/$defs/CoSignDispositionSign",
+                "response": "#/$defs/CoSignConfirm"
+              },
+              "propertyName": "purpose"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/CoSignConfirm"
+              },
+              {
+                "$ref": "#/$defs/CoSignDispositionSign"
+              }
+            ]
+          },
+          "output": {
+            "$defs": {
+              "CoSignSignatureView": {
+                "additionalProperties": false,
+                "properties": {
+                  "card_id": {
+                    "format": "uuid",
+                    "title": "Card Id",
+                    "type": "string"
+                  },
+                  "client_request_id": {
+                    "format": "uuid",
+                    "title": "Client Request Id",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "domain": {
+                    "$ref": "#/$defs/ReviewDomain"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "response",
+                      "disposition"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "reason_sha256": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Sha256"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "reviewed_evidence_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Reviewed Evidence Ids",
+                    "type": "array"
+                  },
+                  "reviewed_warning_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Reviewed Warning Codes",
+                    "type": "array"
+                  },
+                  "round_id": {
+                    "format": "uuid",
+                    "title": "Round Id",
+                    "type": "string"
+                  },
+                  "signer_org_role": {
+                    "enum": [
+                      "bidder",
+                      "technical"
+                    ],
+                    "title": "Signer Org Role",
+                    "type": "string"
+                  },
+                  "signer_user_id": {
+                    "format": "uuid",
+                    "title": "Signer User Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "card_id",
+                  "round_id",
+                  "purpose",
+                  "domain",
+                  "signer_user_id",
+                  "signer_org_role",
+                  "reviewed_evidence_ids",
+                  "reviewed_warning_codes",
+                  "reason_sha256",
+                  "client_request_id",
+                  "created_at"
+                ],
+                "title": "CoSignSignatureView",
+                "type": "object"
+              },
+              "CoSignSummary": {
+                "additionalProperties": false,
+                "properties": {
+                  "pending_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "required_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "round_revision": {
+                    "minimum": 0,
+                    "title": "Round Revision",
+                    "type": "integer"
+                  },
+                  "signed_domains": {
+                    "$ref": "#/$defs/Domains"
+                  },
+                  "status": {
+                    "enum": [
+                      "not_required",
+                      "pending",
+                      "partial",
+                      "complete",
+                      "invalidated"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "round_revision",
+                  "required_domains"
+                ],
+                "title": "CoSignSummary",
+                "type": "object"
+              },
+              "Domains": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "current_card_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "current_card_revision_id": {
+                "format": "uuid",
+                "title": "Current Card Revision Id",
+                "type": "string"
+              },
+              "signature": {
+                "$ref": "#/$defs/CoSignSignatureView"
+              },
+              "summary": {
+                "$ref": "#/$defs/CoSignSummary"
+              }
+            },
+            "required": [
+              "summary",
+              "signature",
+              "current_card_revision",
+              "current_card_revision_id"
+            ],
+            "title": "CoSignData",
+            "type": "object"
+          }
+        },
+        "card signoff list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card",
+              "options": [
+                "--card"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "format": "uuid",
+                "title": "Card Id",
+                "type": "string"
+              },
+              "client_request_id": {
+                "format": "uuid",
+                "title": "Client Request Id",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "purpose": {
+                "enum": [
+                  "response",
+                  "disposition"
+                ],
+                "title": "Purpose",
+                "type": "string"
+              },
+              "reason_sha256": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "reviewed_evidence_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Evidence Ids",
+                "type": "array"
+              },
+              "reviewed_warning_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Reviewed Warning Codes",
+                "type": "array"
+              },
+              "round_id": {
+                "format": "uuid",
+                "title": "Round Id",
+                "type": "string"
+              },
+              "signer_org_role": {
+                "enum": [
+                  "bidder",
+                  "technical"
+                ],
+                "title": "Signer Org Role",
+                "type": "string"
+              },
+              "signer_user_id": {
+                "format": "uuid",
+                "title": "Signer User Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "card_id",
+              "round_id",
+              "purpose",
+              "domain",
+              "signer_user_id",
+              "signer_org_role",
+              "reviewed_evidence_ids",
+              "reviewed_warning_codes",
+              "reason_sha256",
+              "client_request_id",
+              "created_at"
+            ],
+            "title": "CoSignSignatureView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CardState": {
+                "enum": [
+                  "draft",
+                  "pending_review",
+                  "confirmed",
+                  "rejected",
+                  "needs_material"
+                ],
+                "type": "string"
+              },
+              "CoSignRoundView": {
+                "additionalProperties": false,
+                "properties": {
+                  "access_epoch": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "card_id": {
+                    "format": "uuid",
+                    "title": "Card Id",
+                    "type": "string"
+                  },
+                  "card_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "card_revision_id": {
+                    "format": "uuid",
+                    "title": "Card Revision Id",
+                    "type": "string"
+                  },
+                  "citation_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "content_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "disposition_reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Reason"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "evidence_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "intended_disposition": {
+                    "enum": [
+                      "respond",
+                      "comply_only"
+                    ],
+                    "title": "Intended Disposition",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "policy_revision": {
+                    "minimum": 0,
+                    "title": "Policy Revision",
+                    "type": "integer"
+                  },
+                  "prior_card_state": {
+                    "$ref": "#/$defs/CardState"
+                  },
+                  "purpose": {
+                    "enum": [
+                      "response",
+                      "disposition"
+                    ],
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "required_domains": {
+                    "$ref": "#/$defs/app__schemas__team_workflow__Domains__2"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "requirement_sha256": {
+                    "$ref": "#/$defs/Sha256"
+                  },
+                  "round_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "state": {
+                    "enum": [
+                      "open",
+                      "complete",
+                      "invalidated"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "task_rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "card_id",
+                  "extraction_job_id",
+                  "requirement_id",
+                  "round_revision",
+                  "card_revision",
+                  "card_revision_id",
+                  "policy_revision",
+                  "task_rule_revision",
+                  "access_epoch",
+                  "evidence_sha256",
+                  "requirement_sha256",
+                  "citation_sha256",
+                  "content_sha256",
+                  "required_domains",
+                  "purpose",
+                  "intended_disposition",
+                  "prior_card_state",
+                  "state",
+                  "created_at"
+                ],
+                "title": "CoSignRoundView",
+                "type": "object"
+              },
+              "CoSignSummary": {
+                "additionalProperties": false,
+                "properties": {
+                  "pending_domains": {
+                    "$ref": "#/$defs/app__schemas__team_workflow__Domains__1"
+                  },
+                  "required_domains": {
+                    "$ref": "#/$defs/app__schemas__team_workflow__Domains__1"
+                  },
+                  "round_revision": {
+                    "minimum": 0,
+                    "title": "Round Revision",
+                    "type": "integer"
+                  },
+                  "signed_domains": {
+                    "$ref": "#/$defs/app__schemas__team_workflow__Domains__1"
+                  },
+                  "status": {
+                    "enum": [
+                      "not_required",
+                      "pending",
+                      "partial",
+                      "complete",
+                      "invalidated"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status",
+                  "round_revision",
+                  "required_domains"
+                ],
+                "title": "CoSignSummary",
+                "type": "object"
+              },
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "app__schemas__team_workflow__Domains__1": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "type": "array"
+              },
+              "app__schemas__team_workflow__Domains__2": {
+                "items": {
+                  "$ref": "#/$defs/ReviewDomain"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "type": "array"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Card Id"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "round": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/CoSignRoundView"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "summary": {
+                "$ref": "#/$defs/CoSignSummary"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "thread_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Thread Id"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "next_cursor",
+              "returned",
+              "has_more",
+              "round",
+              "summary"
+            ],
+            "title": "SignoffsData",
             "type": "object"
           }
         },
@@ -57748,6 +59266,241 @@
             }
           ],
           "input": null
+        },
+        "task review-rule set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "co_sign_starred": {
+                "title": "Co Sign Starred",
+                "type": "boolean"
+              },
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "reason",
+              "co_sign_starred"
+            ],
+            "title": "TaskRuleSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskRuleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "workflow_revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "workflow_revision",
+                  "rule_revision",
+                  "co_sign_starred"
+                ],
+                "title": "TaskRuleView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "affected_requirements": {
+                "minimum": 0,
+                "title": "Affected Requirements",
+                "type": "integer"
+              },
+              "dry_run": {
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "rule": {
+                "$ref": "#/$defs/TaskRuleView"
+              }
+            },
+            "required": [
+              "rule",
+              "dry_run",
+              "affected_requirements"
+            ],
+            "title": "TaskRuleData",
+            "type": "object"
+          }
+        },
+        "task review-rule show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TaskRuleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "co_sign_starred": {
+                    "title": "Co Sign Starred",
+                    "type": "boolean"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "rule_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "workflow_revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "workflow_revision",
+                  "rule_revision",
+                  "co_sign_starred"
+                ],
+                "title": "TaskRuleView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "affected_requirements": {
+                "minimum": 0,
+                "title": "Affected Requirements",
+                "type": "integer"
+              },
+              "dry_run": {
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "rule": {
+                "$ref": "#/$defs/TaskRuleView"
+              }
+            },
+            "required": [
+              "rule",
+              "dry_run",
+              "affected_requirements"
+            ],
+            "title": "TaskRuleData",
+            "type": "object"
+          }
         },
         "task template add": {
           "cli_parameters": [

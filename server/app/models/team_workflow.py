@@ -38,6 +38,7 @@ class TaskWorkflow(Tenant, Base):
     access_epoch: Mapped[int] = mapped_column(Integer, default=1)
     co_sign_starred: Mapped[bool] = mapped_column(Boolean, default=False)
     rule_revision: Mapped[int] = mapped_column(Integer, default=1)
+    rule_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     archived_by_user_id: Mapped[UUID | None] = mapped_column()
     __table_args__ = (
@@ -113,6 +114,13 @@ class RequirementWorkflow(Tenant, Base):
     requirement_id: Mapped[UUID] = mapped_column()
     assignee_user_id: Mapped[UUID | None] = mapped_column()
     assignment_revision: Mapped[int] = mapped_column(Integer, default=0)
+    co_sign_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    policy_revision: Mapped[int] = mapped_column(Integer, default=0)
+    current_round_id: Mapped[UUID | None] = mapped_column()
+    policy_reason_ciphertext: Mapped[str | None] = mapped_column(Text)
+    policy_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    policy_changed_by_user_id: Mapped[UUID | None] = mapped_column()
+
     changed_by_user_id: Mapped[UUID | None] = mapped_column()
     changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_reason_ciphertext: Mapped[str | None] = mapped_column(Text)
@@ -135,6 +143,21 @@ class RequirementWorkflow(Tenant, Base):
         ),
         member_fk("changed_by_user_id"),
         member_fk("assignee_user_id"),
+        member_fk("policy_changed_by_user_id"),
+        ForeignKeyConstraint(
+            ["org_id", "task_id", "extraction_job_id", "requirement_id", "current_round_id"],
+            [
+                "card_review_rounds.org_id",
+                "card_review_rounds.task_id",
+                "card_review_rounds.extraction_job_id",
+                "card_review_rounds.requirement_id",
+                "card_review_rounds.id",
+            ],
+            deferrable=True,
+            initially="DEFERRED",
+            use_alter=True,
+            name="requirement_current_review_round",
+        ),
     )
 
 
@@ -226,5 +249,137 @@ class CardCommentMention(Tenant, Base):
         ForeignKeyConstraint(
             ["org_id", "task_id", "user_id"],
             ["task_members.org_id", "task_members.task_id", "task_members.user_id"],
+        ),
+    )
+
+
+class CardReviewRound(Tenant, Base):
+    """Immutable pinned inputs; completion derives from signatures and card history."""
+
+    __tablename__ = "card_review_rounds"
+    task_id: Mapped[UUID] = mapped_column()
+    card_id: Mapped[UUID] = mapped_column()
+    extraction_job_id: Mapped[UUID] = mapped_column()
+    requirement_id: Mapped[UUID] = mapped_column()
+    card_revision_id: Mapped[UUID] = mapped_column()
+    card_revision: Mapped[int] = mapped_column(Integer)
+    round_revision: Mapped[int] = mapped_column(Integer, default=1)
+    policy_revision: Mapped[int] = mapped_column(Integer, default=0)
+    task_rule_revision: Mapped[int] = mapped_column(Integer, default=1)
+    access_epoch: Mapped[int] = mapped_column(Integer, default=1)
+    required_domains: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    purpose: Mapped[str] = mapped_column(String(20))
+    intended_disposition: Mapped[str] = mapped_column(String(20))
+    prior_card_state: Mapped[str] = mapped_column(String(30), default="pending_review")
+    evidence_sha256: Mapped[str] = mapped_column(String(64), default="0" * 64)
+    requirement_sha256: Mapped[str] = mapped_column(String(64), default="0" * 64)
+    citation_sha256: Mapped[str] = mapped_column(String(64), default="0" * 64)
+    content_sha256: Mapped[str] = mapped_column(String(64), default="0" * 64)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict)
+    reason_ciphertext: Mapped[str | None] = mapped_column(Text)
+    reason_sha256: Mapped[str | None] = mapped_column(String(64))
+    created_by_user_id: Mapped[UUID] = mapped_column()
+    client_request_id: Mapped[UUID | None] = mapped_column()
+    request_sha256: Mapped[str | None] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "task_id", "card_id", "id"),
+        UniqueConstraint("org_id", "task_id", "extraction_job_id", "requirement_id", "id"),
+        UniqueConstraint("org_id", "card_id", "round_revision"),
+        UniqueConstraint("org_id", "task_id", "created_by_user_id", "client_request_id"),
+        task_fk(),
+        member_fk("created_by_user_id"),
+        ForeignKeyConstraint(
+            ["org_id", "card_id", "task_id"],
+            ["response_cards.org_id", "response_cards.id", "response_cards.task_id"],
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "requirement_id", "task_id", "extraction_job_id"],
+            [
+                "requirements.org_id",
+                "requirements.id",
+                "requirements.task_id",
+                "requirements.job_id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "card_id", "card_revision_id", "card_revision"],
+            [
+                "response_card_revisions.org_id",
+                "response_card_revisions.card_id",
+                "response_card_revisions.id",
+                "response_card_revisions.revision",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "task_id", "created_by_user_id"],
+            ["task_members.org_id", "task_members.task_id", "task_members.user_id"],
+        ),
+    )
+
+
+class CardReviewSignature(Tenant, Base):
+    __tablename__ = "card_review_signatures"
+    task_id: Mapped[UUID] = mapped_column()
+    card_id: Mapped[UUID] = mapped_column()
+    round_id: Mapped[UUID] = mapped_column()
+    purpose: Mapped[str] = mapped_column(String(20))
+    domain: Mapped[str] = mapped_column(String(20))
+    ordinal: Mapped[int] = mapped_column(Integer, default=1)
+    signer_user_id: Mapped[UUID] = mapped_column()
+    signer_user_epoch: Mapped[int] = mapped_column(BigInteger, default=1)
+    signer_org_epoch: Mapped[int] = mapped_column(BigInteger, default=1)
+    signer_org_role: Mapped[str] = mapped_column(String(20))
+    reviewed_evidence_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    reviewed_warning_codes: Mapped[list[str]] = mapped_column(JSONB, default=list)
+    reason_ciphertext: Mapped[str | None] = mapped_column(Text)
+    reason_sha256: Mapped[str | None] = mapped_column(String(64))
+    client_request_id: Mapped[UUID] = mapped_column()
+    request_sha256: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "round_id", "ordinal"),
+        UniqueConstraint("org_id", "round_id", "domain"),
+        UniqueConstraint("org_id", "round_id", "signer_user_id"),
+        UniqueConstraint("org_id", "task_id", "signer_user_id", "client_request_id"),
+        task_fk(),
+        member_fk("signer_user_id"),
+        ForeignKeyConstraint(
+            ["org_id", "task_id", "card_id", "round_id"],
+            [
+                "card_review_rounds.org_id",
+                "card_review_rounds.task_id",
+                "card_review_rounds.card_id",
+                "card_review_rounds.id",
+            ],
+        ),
+        ForeignKeyConstraint(
+            ["org_id", "task_id", "signer_user_id"],
+            ["task_members.org_id", "task_members.task_id", "task_members.user_id"],
+        ),
+    )
+
+
+class CardReviewInvalidation(Tenant, Base):
+    __tablename__ = "card_review_invalidations"
+    task_id: Mapped[UUID] = mapped_column()
+    card_id: Mapped[UUID] = mapped_column()
+    round_id: Mapped[UUID] = mapped_column()
+    cause: Mapped[str] = mapped_column(String(40))
+    source_id: Mapped[UUID] = mapped_column()
+    actor_user_id: Mapped[UUID | None] = mapped_column()
+    __table_args__ = (
+        UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "round_id", "cause", "source_id"),
+        task_fk(),
+        member_fk("actor_user_id"),
+        ForeignKeyConstraint(
+            ["org_id", "task_id", "card_id", "round_id"],
+            [
+                "card_review_rounds.org_id",
+                "card_review_rounds.task_id",
+                "card_review_rounds.card_id",
+                "card_review_rounds.id",
+            ],
         ),
     )

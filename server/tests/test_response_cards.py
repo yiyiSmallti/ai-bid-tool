@@ -60,6 +60,7 @@ from app.schemas.contracts import (
 from conftest import PASSWORD, FakeQueue
 from fakes import FakeLLM, source_for
 from sqlalchemy import select, text
+from task_fixtures import reviewer_header
 from task_fixtures import set_role as set_task_actor_role
 
 TENDER_LINES = [
@@ -421,6 +422,9 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         # The technical reviewer owns both the technical response and the
         # separate procedural disposition decision.
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+        _, review_header = await reviewer_header(
+            api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
+        )
         disposition = await api.post(
             f"/tasks/{task}/cards/dispositions",
             headers=header,
@@ -442,17 +446,17 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         assert comply_card["confirmed_by"] is None
 
         for card in (substantive, commitment):
-            submitted = await require_action(api, header, card, "submit")
+            submitted = await require_action(api, review_header, card, "submit")
             reviewed = [row["id"] for row in submitted["evidence"]]
             if reviewed:
                 mismatch = await card_action(
-                    api, header, submitted, "confirm", reviewed_evidence_ids=[]
+                    api, review_header, submitted, "confirm", reviewed_evidence_ids=[]
                 )
                 assert mismatch.status_code == 400
                 assert mismatch.json()["data"]["error"]["code"] == "review_mismatch"
             confirmed = await require_action(
                 api,
-                header,
+                review_header,
                 submitted,
                 "confirm",
                 reviewed_evidence_ids=reviewed,
@@ -465,10 +469,13 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         substantive = confirmed if confirmed["id"] == substantive["id"] else substantive
 
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
-        commercial = await require_action(api, header, commercial, "submit")
+        _, review_header = await reviewer_header(
+            api, admin_engine, tenants["orgs"][0], UUID(task), "commercial"
+        )
+        commercial = await require_action(api, review_header, commercial, "submit")
         warning_missing = await card_action(
             api,
-            header,
+            review_header,
             commercial,
             "confirm",
             reviewed_evidence_ids=[row["id"] for row in commercial["evidence"]],
@@ -477,7 +484,7 @@ async def test_full_review_chain_and_draft_partition(tenants, tmp_path, admin_en
         assert warning_missing.json()["data"]["error"]["code"] == "warning_review_required"
         commercial = await require_action(
             api,
-            header,
+            review_header,
             commercial,
             "confirm",
             reviewed_evidence_ids=[row["id"] for row in commercial["evidence"]],

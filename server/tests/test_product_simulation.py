@@ -34,6 +34,7 @@ from app.providers.llm import OpenAICompatibleExtractor
 from conftest import FakeQueue, credential_app
 from docx import Document
 from sqlalchemy import select
+from task_fixtures import reviewer_header
 from test_exports import draft, setup_template
 from test_llm_providers import settings_for
 from test_response_cards import login, run_document_job, set_role
@@ -533,7 +534,9 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         )
         assert card.status_code == 200, card.text
         card = card.json()["data"]
-        set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
+        _, technical_header = await reviewer_header(
+            api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
+        )
         for action, extra in (("submit", {}), ("confirm", None)):
             body = {"expected_revision": card["revision"], "action": action}
             if extra is None:
@@ -542,14 +545,16 @@ async def test_simulation_records_only_verbatim_marked_parameters(
                     "reviewed_warning_codes": card["warning_codes"],
                     "reason": "合成审阅。" if card["warning_codes"] else None,
                 }
-            response = await api.post(f"/cards/{card['id']}/actions", headers=header, json=body)
+            response = await api.post(
+                f"/cards/{card['id']}/actions", headers=technical_header, json=body
+            )
             assert response.status_code == 200, response.text
             card = response.json()["data"]
         assert card["state"] == "confirmed"
         # Complete the unrelated requirements so only the simulation gate can block.
         disposed = await api.post(
             f"/tasks/{task}/cards/dispositions",
-            headers=header,
+            headers=technical_header,
             json={
                 "extraction_job_id": extraction,
                 "items": [

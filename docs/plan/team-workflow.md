@@ -4,15 +4,17 @@ kind: plan
 
 # Team workflow: task membership, dashboard, live progress, and co-sign
 
-Status: **approved; slices 1 and 2 implemented**. Covers [roadmap](roadmap.md) F06,
+Status: **approved; slices 1–3 implemented**. Covers [roadmap](roadmap.md) F06,
 U01, U02, and B07. The owner approved every default in [Decisions](#decisions),
 including the co-sign amendment to [ADR 0005](../adr/0005-human-confirmed-responses.md).
 Slice 1 supplies task membership, archival, the read board and durable progress.
 Slice 2 supplies requirement assignment and immutable card discussion with in-task
-mentions. Slice 3 remains approved and unimplemented; co-sign write handlers are
-not registered. The [contract module](team-workflow/team_workflow_contracts.py)
+mentions. Slice 3 supplies co-sign policy, input-bound human review rounds and
+complete-round database, service and consumer gates. The [contract module](team-workflow/team_workflow_contracts.py)
 records the approved interfaces; [runtime schemas](../../server/app/schemas/team_workflow.py)
-implement the slices 1 and 2 subset with the shared Result 4.0 budget types.
+implement the approved workflow interfaces with the shared Result 4.0 budget types.
+The runtime round view additionally exposes the authorized `disposition_reason`
+from its encrypted record so every signer can inspect the same intended decision.
 See [Team workflow](../notes/team-workflow.md) for the mechanism and cutover procedure.
 
 ## Goal and boundary
@@ -39,8 +41,8 @@ input automatically. Budget enforcement belongs to [budget.md](budget.md).
 
 ## Code basis and differences from the design
 
-These are integration boundaries. Membership, assignment and discussion are
-implemented; co-sign rows describe the approved remaining slice.
+These are integration boundaries; their implementation mechanisms are described
+in [Team workflow](../notes/team-workflow.md#how-it-works).
 
 | Basis | Integration contract |
 | --- | --- |

@@ -20,6 +20,7 @@ from app.models.entities import AuditLog, Job, UsageRecord, VendorCall
 from app.models.score import ScoreReport
 from app.schemas.score_contracts import ScorePreview, ScoreReportData
 from sqlalchemy import func, select
+from task_fixtures import reviewer_header
 from test_check import LiveCheckClient, invoke_live_cli, publish_draft
 from test_check_combined import platform_llm, seed_platform, semantic_llm
 from test_response_cards import create_card, require_action, set_role
@@ -105,7 +106,13 @@ async def score_case(rubric_case, monkeypatch):
     case["rubric"] = await show(case)
     # A different confirmed requirement supplies the actual bid-side support;
     # the scoring requirement's own anchor remains a gap.
-    role(case, "technical")
+    _, technical_header = await reviewer_header(
+        case["api"],
+        case["admin_engine"],
+        case["tenants"]["orgs"][0],
+        UUID(case["task"]),
+        "technical",
+    )
     card = await create_card(
         case["api"],
         case["header"],
@@ -122,7 +129,7 @@ async def score_case(rubric_case, monkeypatch):
     )
     card = await require_action(case["api"], case["header"], card, "submit")
     card = await require_action(
-        case["api"], case["header"], card, "confirm", reviewed_evidence_ids=[]
+        case["api"], technical_header, card, "confirm", reviewed_evidence_ids=[]
     )
     await create_card(
         case["api"],

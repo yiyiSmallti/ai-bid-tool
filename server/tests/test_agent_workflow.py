@@ -18,13 +18,13 @@ from app.models.agent import AgentJobLink, AgentMessage, AgentSession, AgentStep
 from app.models.entities import AuditLog, Job, VendorCall
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
+from task_fixtures import reviewer_header
 from test_card_generation import DraftVendor, drafting_client, slots
 from test_response_cards import (
     create_tender,
     require_action,
     sanitized_artifact,
     select_real_materials,
-    set_role,
 )
 
 SCOPES = (
@@ -249,21 +249,21 @@ async def test_proposals_human_review_and_confirmed_draft(
             assert all(row.content_enc != row.content for row in messages)
             controls = (await db.scalars(select(Job).where(Job.kind == "agent"))).all()
             assert all(row.status == "succeeded" and row.lease_until is None for row in controls)
-        for index, row in enumerate(cards):
-            set_role(
-                admin_engine,
-                tenants["orgs"][0],
-                tenants["users"][0],
-                "bidder" if index == 1 else "technical",
+        review_headers = {}
+        for domain in ("technical", "commercial"):
+            _, review_headers[domain] = await reviewer_header(
+                api, admin_engine, tenants["orgs"][0], UUID(task), domain
             )
-            pending = await require_action(api, header, row["card"], "submit")
+        for row in cards:
+            review_header = review_headers[row["card"]["review_domain"]]
+            pending = await require_action(api, review_header, row["card"], "submit")
             extra = {"reviewed_evidence_ids": [e["id"] for e in pending["evidence"]]}
             if pending["warning_codes"]:
                 extra |= {
                     "reviewed_warning_codes": pending["warning_codes"],
                     "reason": "Reviewed synthetic source.",
                 }
-            await require_action(api, header, pending, "confirm", **extra)
+            await require_action(api, review_header, pending, "confirm", **extra)
         resumed = await api.post(
             f"/v4/agent-sessions/{session_id}/resume",
             headers=header,

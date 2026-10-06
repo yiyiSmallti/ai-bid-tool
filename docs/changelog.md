@@ -34,6 +34,59 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Add synthetic two-stage Provider, persisted review/confirmation, tenant-isolation and mocked browser
   regressions for multiple sources, invalid second citations, joined text and source removal.
 
+## 2026-10-05: Team workflow co-sign review and consumption gates
+
+- Implemented requirement co-sign policy and the starred-task rule, immutable
+  input-bound response/disposition rounds, distinct professional domain signatures,
+  replay receipts and permanent retirement after input or actual signer-authority
+  changes. Completed the approved [ADR 0005 amendment](adr/0005-human-confirmed-responses.md).
+- Added FORCE RLS review history and complete-round database/service gates. Only
+  the final authorized human request confirms Evidence and appends a confirmed
+  response; tokens, workers and agents cannot sign. Legacy single-domain records
+  retain their real human decisions without fabricated signatures.
+- Bound draft/export/check/score consumption and freshness to policy, round and
+  signatures. Incomplete approvals remain gaps; existing Evidence confirmation,
+  negative-deviation and prototype/final-export gates remain enforced.
+- Added co-sign board projections, Chinese console controls, API/CLI commands,
+  schema discovery and intended Result snapshots. See
+  [Team workflow](notes/team-workflow.md) for the mechanism and recovery boundaries.
+- Preserve `stale_material` as the sole input reason when screenshot withdrawal
+  retires a single-domain response review. Use `needs_reconfirmation` when only
+  that approval is lost, and reserve `cosign_required` for multi-domain policies.
+- Align database response-item reasons, new and stale draft projections, export
+  readiness and board actions without changing approval or Evidence gates. Keep
+  the screenshot regression's exact reason assertion and add cross-consumer
+  reason checks; see [Team workflow](notes/team-workflow.md).
+- Reuse a review round's immutable, already-validated citation inputs during
+  approval checks, retaining the check/score shared citation batch and strict
+  changed-source gates without repeated per-card location work.
+- Preserve specific legacy confirmation input errors and the completed
+  single-domain memory-after-review behavior. Pending and multi-domain review,
+  material, citation and signer invalidation remain strict.
+- Use independent professional reviewers in generated-card, simulation and agent
+  acceptance flows; require real renewed review after changing a pinned
+  requirement. Align stale-export acceptance with the existing blocked-preflight
+  response. See [Team workflow](notes/team-workflow.md).
+- Derive completed round summaries from the valid required-domain signature set,
+  including the final signing transaction's recheck before the card decision is
+  applied. Keep the independent consumption predicate and strict partial-round
+  invariant; failed final checks roll back the last signature and confirmation.
+- Allow either authorized required-domain human to finalize the exact complete
+  round through the legacy task-content trigger, including Evidence and independent
+  disposition decisions. Retain primary-domain authorization for reject,
+  needs-material and reopen; see [Team workflow](notes/team-workflow.md#how-it-works).
+- Granted only the review-round column update privilege needed for PostgreSQL
+  row locks; immutable-history triggers still reject updates. Unit deactivation
+  uses an authorization epoch without granting platform functions business-table
+  access, and task rule changes advance the existing access epoch.
+- Preserved the [new single-domain review contract](plan/team-workflow.md#co-sign-policy-rounds-and-consumption-gates):
+  successful fixture preparation now submits and confirms through the real service,
+  while direct SQL denial cases retain their triggers. Independent professional
+  fixture reviewers keep unrelated actor-role changes from retiring their reviews.
+- Gave required co-sign reason fields explicit accessible names. Browser scenarios
+  wait for all material controls before reviewing them, and their API fixture
+  includes the existing read-only extraction reasoning preview.
+
 ## 2026-10-05: Model citations within the sent tender-source segment
 
 - Verify rubric citations against the redacted tender-source segment retained for each ref,

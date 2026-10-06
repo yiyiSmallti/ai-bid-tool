@@ -650,29 +650,32 @@ def screenshot_rows(seeded, admin_engine):
                 visual_observation="The synthetic region shows a workflow control.",
             )
             session.add(evidence)
-            pending = clone_revision(
+            draft_revision = clone_revision(
                 previous,
                 user,
-                state="pending_review",
+                state="draft",
                 confirmed_by=None,
                 confirmed_at=None,
                 disposition=None,
                 disposition_by=None,
                 disposition_at=None,
             )
-            session.add(pending)
+            session.add(draft_revision)
             session.flush()
             session.add(
                 CardEvidenceLink(
                     id=uuid4(),
                     org_id=org,
                     card_id=card.id,
-                    revision_id=pending.id,
+                    revision_id=draft_revision.id,
                     evidence_id=evidence.id,
                 )
             )
-            card.current_revision_id, card.revision = pending.id, pending.revision
+            card.current_revision_id, card.revision = draft_revision.id, draft_revision.revision
             session.flush()
+            from task_fixtures import review_card
+
+            review_card(session, org, user, card.id, action="submit")
             session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
             session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
 
@@ -712,40 +715,9 @@ def screenshot_rows(seeded, admin_engine):
             card = session.get(ResponseCard, chain["card"])
             evidence = session.get(Evidence, chain["evidence"])
             assert card is not None and evidence is not None
-            pending = session.get(ResponseCardRevision, card.current_revision_id)
-            assert pending is not None
-            now = datetime.now(UTC)
-            evidence.confirmed_by = user
-            evidence.confirmed_at = now
-            evidence.quote_check = "human_image_review"
-            confirmed = clone_revision(
-                pending,
-                user,
-                state="confirmed",
-                disposition="respond",
-                disposition_by=user,
-                disposition_at=now,
-                confirmed_by=user,
-                confirmed_at=now,
-                reviewed_warning_codes=[
-                    "image_visible_scope_only",
-                    "prototype_delivery_obligation",
-                    "image_crop_review",  # the fixture rendition is cropped
-                ],
-                reason="Reviewed synthetic prototype obligations and visible scope.",
-            )
-            session.add(confirmed)
-            session.flush()
-            session.add(
-                CardEvidenceLink(
-                    id=uuid4(),
-                    org_id=org,
-                    card_id=card.id,
-                    revision_id=confirmed.id,
-                    evidence_id=evidence.id,
-                )
-            )
-            card.current_revision_id, card.revision = confirmed.id, confirmed.revision
+            from task_fixtures import review_card
+
+            confirmed = review_card(session, org, user, card.id, action="confirm")
             session.flush()
             session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
             session.execute(text("SET CONSTRAINTS ALL DEFERRED"))

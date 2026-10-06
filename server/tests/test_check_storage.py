@@ -77,38 +77,39 @@ def confirmed_certificate_draft(session, org, user, ids, selection, certificate_
     )
     session.add(evidence)
     session.flush()
-    now = datetime.now(UTC)
-    for state in ("draft", "pending_review", "confirmed"):
-        previous = session.get(ResponseCardRevision, card.current_revision_id)
-        values = {c.name: getattr(previous, c.name) for c in ResponseCardRevision.__table__.columns}
-        values.update(
-            id=uuid4(),
-            revision=previous.revision + 1,
-            state=state,
-            actor_user_id=user,
-            actor_kind="session",
+    from app.services import drafts
+    from task_fixtures import ServiceSession, actor_context, review_card, service_call
+
+    previous = session.get(ResponseCardRevision, card.current_revision_id)
+    values = {c.name: getattr(previous, c.name) for c in ResponseCardRevision.__table__.columns}
+    values.update(
+        id=uuid4(),
+        revision=previous.revision + 1,
+        state="draft",
+        actor_user_id=user,
+        actor_kind="session",
+    )
+    revision = ResponseCardRevision(**values)
+    session.add(revision)
+    session.flush()
+    card.current_revision_id, card.revision = revision.id, revision.revision
+    session.flush()
+    session.add(
+        CardEvidenceLink(
+            org_id=org, card_id=card.id, revision_id=revision.id, evidence_id=evidence.id
         )
-        if state == "confirmed":
-            evidence.confirmed_by, evidence.confirmed_at = user, now
-            session.flush()
-            values.update(
-                confirmed_by=user,
-                confirmed_at=now,
-                disposition="respond",
-                disposition_by=user,
-                disposition_at=now,
-            )
-        revision = ResponseCardRevision(**values)
-        session.add(revision)
-        session.flush()
-        card.current_revision_id, card.revision = revision.id, revision.revision
-        session.flush()
-        session.add(
-            CardEvidenceLink(
-                org_id=org, card_id=card.id, revision_id=revision.id, evidence_id=evidence.id
-            )
+    )
+    session.flush()
+    review_card(session, org, user, card.id, action="submit")
+    revision = review_card(session, org, user, card.id, action="confirm")
+    _, _, draft_manifest, draft_hash, _ = service_call(
+        drafts.assemble(
+            ServiceSession(session),
+            actor_context(session, org, user),
+            card.task_id,
+            card.extraction_job_id,
         )
-        session.flush()
+    )
     original_draft = session.get(DraftRun, ids["draft"])
     draft_job = Job(
         id=uuid4(),
@@ -129,10 +130,10 @@ def confirmed_certificate_draft(session, org, user, ids, selection, certificate_
         extraction_job_id=original_draft.extraction_job_id,
         generation_job_id=draft_job.id,
         generation_run_id=draft_job.run_id,
-        input_hash=uuid4().hex * 2,
+        input_hash=draft_hash,
         actor_user_id=user,
         actor_kind="session",
-        input_manifest={"requirements": [str(old.requirement_id)]},
+        input_manifest=draft_manifest,
         completion="complete",
         summary={"rows": 1},
     )
