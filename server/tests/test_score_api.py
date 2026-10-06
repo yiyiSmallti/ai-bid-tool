@@ -453,12 +453,42 @@ async def test_rubric_short_citation_repeated_outside_pinned_source_completes(
     assert shown.status_code == 200, shown.text
     report = shown.json()["data"]
     RubricReportData.model_validate(report)
-    assert report["rubric"]["completeness"]["normalization_errors"] == []
     assert report["rubric"]["state"] == "candidate"
     for kind in ("sections", "items", "coverage"):
         assert len(report[kind]) == 1
-        assert report[kind][0]["requirement_id"] == requirement_id
         assert report[kind][0]["source"] == source
+    # Sections carry only their Source; items and coverage also bind the Requirement.
+    for kind in ("items", "coverage"):
+        assert report[kind][0]["requirement_id"] == requirement_id
+    # Generation binds every item, but only a human can map its coverage.
+    pending_report = report
+    coverage = report["coverage"][0]
+    assert coverage["disposition"] == "pending" and coverage["rubric_item_ids"] == []
+    assert report["rubric"]["completeness"]["normalization_errors"] == ["unmapped_item"]
+    mapped = await case["api"].post(
+        f"{path}/coverage/{requirement_id}/decisions",
+        headers=case["header"],
+        json={
+            "expected_revision": coverage["revision"],
+            "expected_input_hash": report["rubric"]["input_hash"],
+            "action": "mapped",
+            "rubric_item_ids": [report["items"][0]["id"]],
+            "reason": "Synthetic human coverage review of the generated scoring item",
+        },
+    )
+    assert mapped.status_code == 200, mapped.text
+    shown = await case["api"].get(path, headers=case["header"])
+    assert shown.status_code == 200, shown.text
+    report = shown.json()["data"]
+    RubricReportData.model_validate(report)
+    assert report["rubric"]["state"] == "candidate"
+    assert report["sections"] == pending_report["sections"]
+    assert report["items"] == pending_report["items"]
+    assert report["coverage"][0]["source"] == source
+    assert report["coverage"][0]["disposition"] == "mapped"
+    assert report["coverage"][0]["rubric_item_ids"] == [report["items"][0]["id"]]
+    assert report["rubric"]["completeness"]["pending_requirement_ids"] == []
+    assert report["rubric"]["completeness"]["normalization_errors"] == []
     assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
 
     async with case["app"].state.db.transaction(org) as session:
@@ -482,6 +512,8 @@ async def test_rubric_short_citation_repeated_outside_pinned_source_completes(
                 "provider_quote": quote,
                 "preview": preview,
                 "job": terminal,
+                "pending_report": pending_report,
+                "coverage_decision": mapped.json()["data"],
                 "report": report,
                 "structure": structure,
                 "requests": vendor.requests,
