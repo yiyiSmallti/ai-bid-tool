@@ -342,7 +342,7 @@ async def test_complete_replacement_normalization_errors_block_set_confirmation(
         "dangling_section",
     ],
 )
-async def test_invalid_replacement_contract_has_no_new_version(rubric_case, change):
+async def test_replacement_distinguishes_semantic_errors_from_malformed_input(rubric_case, change):
     case = rubric_case
     report = await classify_all(case)
     body = replacement(report)
@@ -363,9 +363,32 @@ async def test_invalid_replacement_contract_has_no_new_version(rubric_case, chan
     elif change == "dangling_section":
         body["items"][0]["section_key"] = "absent"
     response = await case["api"].post(base(case) + "/revisions", headers=case["header"], json=body)
-    assert response.status_code == 422, response.text
+    semantic_errors = {
+        "missing_cap": "missing_cap",
+        "unexpected_cap": "unexpected_cap",
+        "negative_cap": "invalid_cap",
+        "negative_bounds": "invalid_score_bounds",
+        "inverted_bounds": "invalid_score_bounds",
+        "invalid_weight": "invalid_weight",
+    }
+    if change in semantic_errors:
+        assert response.status_code == 200, response.text
+        revised = response.json()["data"]
+        assert revised["rubric"]["state"] == "candidate"
+        assert semantic_errors[change] in revised["rubric"]["completeness"]["normalization_errors"]
+        assert not revised["rubric"]["completeness"]["complete"]
+        denied = await case["api"].post(
+            base(case, revised) + "/decisions",
+            headers=case["header"],
+            json=decision(revised, revised["rubric"]),
+        )
+        assert denied.status_code == 409, denied.text
+        assert denied.json()["data"]["error"]["code"] == "rubric_incomplete"
+    else:
+        assert response.status_code == 422, response.text
     listing = await case["api"].get(f"/tasks/{case['task']}/score-rubrics", headers=case["header"])
-    assert listing.status_code == 200 and len(listing.json()["items"]) == 1
+    assert listing.status_code == 200
+    assert len(listing.json()["items"]) == (2 if change in semantic_errors else 1)
 
 
 async def test_rubric_every_route_hides_other_org(rubric_case):
@@ -672,11 +695,9 @@ async def test_additional_normalization_failures_are_reviewable(rubric_case, fai
     response = await case["api"].post(base(case) + "/revisions", headers=case["header"], json=body)
     if failure == "duplicate_item_fingerprint":
         assert response.status_code == 409 and response.json()["data"]["error"]["code"] == failure
-    elif failure == "missing_aggregation_rule_text":
-        assert response.status_code == 422
     else:
         assert response.status_code == 200, response.text
-        if failure == "missing_aggregation_limitation":
+        if failure in {"missing_aggregation_limitation", "missing_aggregation_rule_text"}:
             revised = await classify_all(case, response.json()["data"])
             section = revised["sections"][0]
             denied = await case["api"].post(
