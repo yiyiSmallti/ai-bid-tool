@@ -264,7 +264,7 @@ entry. The existing table's FORCE RLS, org/task composite keys, runtime grants a
 trigger apply to the new column. Database insertion/publication and confirmation gates independently
 resolve every list entry against the same rubric's pinned scoring Requirements and original Sources;
 JSON IDs alone are not treated as relational constraints. Migration
-[`0045_score_section_sources.py`](../../server/migrations/versions/0045_score_section_sources.py)
+[`0046_score_section_sources.py`](../../server/migrations/versions/0046_score_section_sources.py)
 retains history on downgrade and requires forward repair.
 
 These rubric tables belong to stage A. Report tables belong to stage B:

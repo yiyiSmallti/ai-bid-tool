@@ -125,7 +125,7 @@ Every citation is checked against the sent source segment, original text and pin
 stage 2. A bad citation fails the whole structure; a single quotation joining two Requirements is
 still invalid. Item citations must all bind the same single Requirement.
 
-Migration [`0045_score_section_sources.py`](../../server/migrations/versions/0045_score_section_sources.py)
+Migration [`0046_score_section_sources.py`](../../server/migrations/versions/0046_score_section_sources.py)
 adds the list to the existing immutable, FORCE-RLS section table. Old NULL lists read as one legacy
 source without rewriting history. Confirmation and report reads resolve every source again. Human
 replacement selects verified `{requirement_id, quote}` pairs, keeps at least one, and never supplies
