@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Rubric section-source regression corrections
+
+- Authorize citation-window tasks before validating query fields or section source selectors.
+  Nonmembers and cross-org callers retain 404 responses even for malformed queries; authorized
+  callers retain normal input validation. See [task authority](plan/team-workflow.md#membership-ownership-and-authorization).
+- Keep section binding checks separate from expensive citation location during score publication.
+  The existing shared draft/rubric batch verifies each distinct Source pair once; insertion still
+  verifies every new section quotation strictly. See [scoring pitfalls](notes/score.md#pitfalls).
+- Correct the historical-report fixture to supply the required card-reopen reason, and align
+  source-drift regression checks with the existing immutable-input 404 behavior for both anchor
+  and additional section sources, as specified in [scoring citations](plan/score.md#citations-outbound-calls-and-confidentiality).
+
 ## 2026-10-05: Multiple verified sources per rubric section
 
 - Apply owner-approved option A after the dev real-model rubric run reached `invalid_section_citation`

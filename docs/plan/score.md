@@ -145,6 +145,15 @@ Models return only `ModelEvidenceRef`. The service resolves refs against the cur
 
 The rubric Provider receives only redacted tender-text refs. Each score Provider item must explicitly receive `tender_ref`, confirmed `rule_ref`, and candidate `draft_refs` from all confirmed responses in that DraftRun. `rule_ref` is human-normalized reasoning text and cannot generate `TenderCitation`; real tender quotations come only from `tender_ref`. Before publishing assessed results, services separately validate tender/rule/draft refs and require nonempty model tender and draft citations. Rubric/historical-report reads re-resolve every Source, DraftRun, ResponseItem, and Card revision parent under current org/task scope. Unauthorized/missing objects uniformly return 404; invalid dependencies make reports stale and block new scoring. Saved Source JSON cannot bypass current read permissions. Original-source verification reads only the referenced chunk/block, never scanning the full document or producing new Requirements.
 
+Rubric reads and confirmation use the saved-input identity check in
+[`score_inputs.require_dependencies`](../../server/app/services/score_inputs.py).
+If a pinned Requirement, Source or chunk fingerprint has changed, that immutable
+input no longer resolves and the check returns `404 not_found`, equally for a
+single-source anchor and any additional section source. This preserves the existing
+single-source behavior; review revision/hash conflicts on an otherwise accessible
+input retain their 409 responses. Historical score-report freshness follows the
+separate stale-report rules above.
+
 Actual confidential values never enter score snapshots, prompts, Provider errors, Job results, UsageRecord, audit, or reports. Disabling redaction remains an existing human org-admin, revision-checked, audited task setting, but B10 is stricter than drafting: rubric/score dry-run returns `admission_blocker=redaction_required` when disabled; submission rejects it and request parameters cannot override it. Settings revision changes stop later calls and require fresh preview/submit. Allowing org-owned/local models with disabled redaction requires separate approval.
 
 ## Providers, jobs, and prepaid billing

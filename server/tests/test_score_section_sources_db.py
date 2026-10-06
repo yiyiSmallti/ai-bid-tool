@@ -111,22 +111,30 @@ async def test_multi_sources_persist_read_isolate_and_revise(rubric_case):
     assert json.loads(artifact.read_text(encoding="utf-8"))["revision"] == current
 
 
-async def test_second_source_drift_refuses_read_and_confirmation(rubric_case):
+@pytest.mark.parametrize("source_index", [0, 1], ids=["anchor-reference", "second-source"])
+async def test_second_source_drift_refuses_read_and_confirmation(rubric_case, source_index):
     case = rubric_case
     report = await classify_all(case)
     section = report["sections"][0]
     async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
-        requirement = await session.get(Requirement, UUID(section["sources"][1]["requirement_id"]))
+        requirement = await session.get(
+            Requirement, UUID(section["sources"][source_index]["requirement_id"])
+        )
         assert requirement is not None
         requirement.quote = "Synthetic changed second pinned source"
+    # A changed pinned Source no longer resolves the immutable input identity.
+    # score_inputs.require_dependencies masks that with 404 for both the legacy
+    # anchor and additional sources, before the review-conflict gates run.
     response = await case["api"].get(base(case), headers=case["header"])
-    assert response.status_code == 409
+    assert response.status_code == 404
+    assert response.json()["data"]["error"]["code"] == "not_found"
     denied = await case["api"].post(
         f"{base(case)}/sections/{section['id']}/decisions",
         headers=case["header"],
         json=decision(report, section),
     )
-    assert denied.status_code == 409
+    assert denied.status_code == 404
+    assert denied.json()["data"]["error"] == response.json()["data"]["error"]
     async with case["app"].state.db.transaction(case["tenants"]["orgs"][0]) as session:
         assert (
             await session.scalar(

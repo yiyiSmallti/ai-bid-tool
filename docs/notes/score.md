@@ -132,6 +132,12 @@ replacement selects verified `{requirement_id, quote}` pairs, keeps at least one
 Source JSON. The console displays all entries and opens each saved citation by index. The wire and
 preview identity change requires old queued jobs to be resubmitted; no stale preview is reused.
 
+Database section insertion verifies each distinct quoted span and its live Requirement citation.
+Publication rechecks the immutable section bindings and exact quotation spans against the pinned
+Source, while the shared Requirement batch locates live source text once per distinct text/quote
+pair across draft and rubric inputs. Binding checks do not repeat that source lookup; fixed-input
+hashes and the final live batch still reject source drift, without caching validity across calls.
+
 A complete rubric means that it covers the scoring requirements saved by the specified extraction.
 It does not prove that extraction found every scoring rule in the tender. Generation never scans the
 document or adjacent chunks to discover missing requirements.

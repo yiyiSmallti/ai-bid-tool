@@ -277,7 +277,13 @@ async def test_rubric_and_score_source_windows_bind_exact_parent_graph(score_cas
     from test_score_review import role
 
     role(case, "technical")
-    await require_action(case["api"], case["header"], case["support_card"], "reopen")
+    await require_action(
+        case["api"],
+        case["header"],
+        case["support_card"],
+        "reopen",
+        reason="Synthetic support review reopened to exercise historical source authorization",
+    )
     role(case, "bidder")
     report_path = f"/v4/tasks/{case['task']}/scores/{report}"
     stale = await case["api"].get(report_path, headers=case["header"])

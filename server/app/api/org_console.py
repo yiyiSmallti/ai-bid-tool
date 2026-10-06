@@ -175,6 +175,11 @@ def create_router(
             Result(ok=True, command="assessment inputs", data=data.model_dump(mode="json"))
         )
 
+    async def citation_context(task_id: UUID, ctx=Depends(context, scope="function")):
+        # Mask inaccessible tasks before FastAPI fields and citation combinations are validated.
+        await task_access(ctx[0], ctx[1], task_id)
+        return ctx
+
     @router.get(
         "/tasks/{task_id}/assessment-citation", name="assessment_citation", response_model=Result
     )
@@ -189,7 +194,7 @@ def create_router(
         text: Literal["quote", "context"] = "context",
         offset: int = Query(0, ge=0),
         limit: int = Query(4000, ge=1, le=8000),
-        ctx=Depends(context, scope="function"),
+        ctx=Depends(citation_context, scope="function"),
     ):
         query = query_model(
             CitationRequest,

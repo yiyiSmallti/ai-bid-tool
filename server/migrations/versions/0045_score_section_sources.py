@@ -30,7 +30,7 @@ LANGUAGE sql IMMUTABLE SECURITY INVOKER SET search_path=pg_catalog AS $$
   'requirement_id',(section_row).requirement_id,'source',(section_row).source,'quote',(section_row).source->>'quote')));
 $$;
 
-CREATE FUNCTION public.rubric_section_sources_valid(p_org uuid,p_rubric uuid,p_sources jsonb) RETURNS boolean
+CREATE FUNCTION public.rubric_section_source_bindings_valid(p_org uuid,p_rubric uuid,p_sources jsonb) RETURNS boolean
 LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
 DECLARE set_row public.score_rubric_sets%ROWTYPE; req public.requirements%ROWTYPE;
  entry jsonb; expected_source jsonb;
@@ -54,12 +54,29 @@ BEGIN
   expected_source:=jsonb_build_object('document_id',req.document_id,'chunk_id',req.chunk_id,
    'page',req.page,'location',req.location,'quote',req.quote);
   IF entry->'source' IS DISTINCT FROM expected_source
-   OR public.response_locate_quote(req.quote,entry->>'quote') IS DISTINCT FROM entry->>'quote'
+   OR position(entry->>'quote' in req.quote)=0
    OR position(entry->>'quote' in substring(req.quote from position(entry->>'quote' in req.quote)+1))>0
-   OR public.response_citation_valid(p_org,req.id) IS DISTINCT FROM true THEN RETURN false; END IF;
+   THEN RETURN false; END IF;
  END LOOP;
  RETURN true;
 EXCEPTION WHEN invalid_text_representation THEN RETURN false;
+END $$;
+
+CREATE FUNCTION public.rubric_section_sources_valid(p_org uuid,p_rubric uuid,p_sources jsonb) RETURNS boolean
+LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
+BEGIN
+ IF public.rubric_section_source_bindings_valid(p_org,p_rubric,p_sources) IS DISTINCT FROM true THEN RETURN false; END IF;
+ -- New citations still require normalized span verification. Publication checks
+ -- their immutable bindings, then verifies all pinned Sources in one shared batch.
+ IF EXISTS(WITH citations AS MATERIALIZED (
+   SELECT DISTINCT req.quote COLLATE "C" AS source_text,(entry->>'quote') COLLATE "C" AS quote
+   FROM jsonb_array_elements(p_sources) entry
+   JOIN public.requirements req ON req.org_id=p_org AND req.id=(entry->>'requirement_id')::uuid
+  ) SELECT 1 FROM citations WHERE public.response_locate_quote(citations.source_text,citations.quote)
+   IS DISTINCT FROM citations.quote) THEN RETURN false; END IF;
+ RETURN NOT EXISTS(SELECT 1 FROM public.response_requirement_citations_valid(p_org,
+  ARRAY(SELECT (entry->>'requirement_id')::uuid FROM jsonb_array_elements(p_sources) entry)) verified
+  WHERE verified.is_valid IS DISTINCT FROM true);
 END $$;
 
 CREATE FUNCTION public.rubric_section_bindings_current(p_org uuid,p_rubric uuid) RETURNS boolean
@@ -69,7 +86,7 @@ LANGUAGE sql SECURITY INVOKER SET search_path=pg_catalog AS $$
   WHERE section.org_id=p_org AND section.rubric_id=p_rubric
    AND (section.requirement_id::text IS DISTINCT FROM public.rubric_section_sources(section)->0->>'requirement_id'
     OR section.source IS DISTINCT FROM public.rubric_section_sources(section)->0->'source'
-    OR public.rubric_section_sources_valid(p_org,p_rubric,public.rubric_section_sources(section)) IS DISTINCT FROM true));
+    OR public.rubric_section_source_bindings_valid(p_org,p_rubric,public.rubric_section_sources(section)) IS DISTINCT FROM true));
 $$;
 
 CREATE FUNCTION public.rubric_section_sources_gate() RETURNS trigger
@@ -87,9 +104,11 @@ END $$;
 CREATE TRIGGER rubric_section_sources_gate BEFORE INSERT ON public.score_rubric_sections
  FOR EACH ROW EXECUTE FUNCTION public.rubric_section_sources_gate();
 REVOKE ALL ON FUNCTION public.rubric_section_sources(public.score_rubric_sections),
+ public.rubric_section_source_bindings_valid(uuid,uuid,jsonb),
  public.rubric_section_sources_valid(uuid,uuid,jsonb),public.rubric_section_bindings_current(uuid,uuid),
  public.rubric_section_sources_gate() FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.rubric_section_sources(public.score_rubric_sections),
+ public.rubric_section_source_bindings_valid(uuid,uuid,jsonb),
  public.rubric_section_sources_valid(uuid,uuid,jsonb),public.rubric_section_bindings_current(uuid,uuid) TO bid_app;
 """
 

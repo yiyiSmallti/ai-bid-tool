@@ -23,6 +23,7 @@ from test_console_assessments_cli import check_summary, rubric_summary, score_su
 
 @pytest.fixture
 def assessment_interface(monkeypatch):
+    from app.api import org_console
     from app.services import assessment_reads, assessment_rubrics, assessment_scores
 
     calls = []
@@ -37,6 +38,9 @@ def assessment_interface(monkeypatch):
 
     async def context():
         yield Session(), actor
+
+    async def task_access(session, identity, task):
+        pass
 
     async def checking(session, identity, parent, storage, settings):
         calls.append(("check_summary", parent))
@@ -92,6 +96,7 @@ def assessment_interface(monkeypatch):
         )
 
     monkeypatch.setattr(assessment_reads, "check_summary", checking)
+    monkeypatch.setattr(org_console, "task_access", task_access)
     monkeypatch.setattr(assessment_reads, "check_page", check_page)
     monkeypatch.setattr(assessment_reads, "citation", citation)
     monkeypatch.setattr(assessment_rubrics, "summary", rubrics)
@@ -218,10 +223,55 @@ async def test_rubric_section_context_accepts_indexed_sources_only(assessment_in
         assert indexed.status_code == 200, indexed.text
         assert calls[-1][1]["origin"] == "sources"
         assert calls[-1][1]["citation_index"] == 1
-        for suffix in ("&origin=source", "&origin=citations", "&origin=sources&citation_index=-1"):
+        for suffix in (
+            "",
+            "&origin=source",
+            "&origin=citations",
+            "&origin=sources&citation_index=-1",
+        ):
             assert (await client.get(path + suffix)).status_code == 422
         item = await client.get(
             path.replace("part=rubric_section", "part=rubric_item") + "&origin=sources"
         )
         assert item.status_code == 422
     assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    "suffix",
+    [
+        "",
+        "&origin=source",
+        "&origin=citations",
+        "&origin=sources&citation_index=1",
+        "&origin=sources&citation_index=-1",
+        "&origin=sources&citation_index=invalid",
+        "&origin=invalid",
+        "&limit=8001",
+    ],
+)
+async def test_citation_task_access_precedes_query_validation(
+    assessment_interface, monkeypatch, suffix
+):
+    # Nonmembers must not reach either model-level or FastAPI field validation.
+    from app.api import org_console
+    from app.core.errors import not_found
+
+    app, calls = assessment_interface
+    task, parent, entry = uuid4(), uuid4(), uuid4()
+    checked = []
+
+    async def deny_task(session, identity, task_id):
+        checked.append(task_id)
+        raise not_found()
+
+    monkeypatch.setattr(org_console, "task_access", deny_task)
+    path = f"/tasks/{task}/assessment-citation?parent_kind=rubric&parent_id={parent}&part=rubric_section&entry_id={entry}"
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(path + suffix)
+    assert response.status_code == 404, response.text
+    assert response.json() == {"code": "not_found"}
+    assert checked == [task]
+    assert calls == []
