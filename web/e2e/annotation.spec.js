@@ -65,10 +65,38 @@ for(const taskRole of ["reviewer","observer"])test(`${taskRole} reads without an
 test("B02 and partial co-sign remain distinct from rendering and release",async({page})=>{const state=await annotationFixture(page,{requirementState:"unconfirmed",cosign:"partial"});await page.goto(path);await expect(page.getByTestId("annotation-requirement-state")).toContainText("要求尚未确认");await expect(page.getByTestId("annotation-cosign-state")).toContainText("待签署：commercial");await expect(page.getByTestId("annotation-release-state")).toContainText("未生成确认图");await artifact(page,state,"independent-gates");});
 for(const status of ["failed","cancelled"])test(`${status} job exposes no attachable material`,async({page})=>{const state=await annotationFixture(page,{jobStatus:status});await page.goto(path);await select(page);await page.getByRole("button",{name:"预览标注",exact:true}).click();await page.getByRole("checkbox",{name:"已核对原页与标注范围",exact:true}).check();await page.getByRole("button",{name:"生成标注材料",exact:true}).click();await expect(page.getByTestId("annotation-job-state")).toContainText(status);await expect(page.getByRole("button",{name:"用于此响应卡",exact:true})).toHaveCount(0);await artifact(page,state,`job-${status}`);});
 test("org reset cancels source reads and clears active editor input",async({page})=>{const state=await annotationFixture(page);await page.goto(path);await select(page);await page.evaluate(()=>window.dispatchEvent(new Event("bid:org-reset")));await expect(page.getByAltText("证书来源原页")).toHaveCount(0);await expect(page.getByLabel("裁剪宽度",{exact:true})).toHaveCount(0);expect(await page.evaluate(()=>JSON.stringify({...localStorage,...sessionStorage}))).not.toContain("visual_observation");await artifact(page,state,"org-reset");});
-test("initiator explicitly cancels running annotation without material publication",async({page})=>{const state=await annotationFixture(page,{jobStatus:"running"});await page.goto(path);await select(page);await page.getByRole("button",{name:"预览标注",exact:true}).click();await page.getByRole("checkbox",{name:"已核对原页与标注范围",exact:true}).check();await page.getByRole("button",{name:"生成标注材料",exact:true}).click();await expect(page.getByTestId("annotation-job-state")).toContainText("running");await page.getByRole("button",{name:"取消标注作业",exact:true}).click();await expect(page.getByTestId("annotation-job-state")).toContainText("cancelled");await expect(page.getByAltText("实际标注候选图")).toHaveCount(0);expect(state.cancels).toBe(1);await artifact(page,state,"explicit-cancel");});
+test("initiator explicitly cancels running annotation without material publication",async({page})=>{
+  const state=await annotationFixture(page,{jobStatus:"running"});
+  await page.goto(path);
+  await select(page);
+  await page.getByRole("button",{name:"预览标注",exact:true}).click();
+  await page.getByRole("checkbox",{name:"已核对原页与标注范围",exact:true}).check();
+  await page.getByRole("button",{name:"生成标注材料",exact:true}).click();
+  await expect(page.getByTestId("annotation-job-state")).toContainText("running");
+  await expect(page.getByAltText("实际标注候选图")).toHaveCount(0);
+  await page.getByRole("button",{name:"取消标注作业",exact:true}).click();
+  await expect(page.getByTestId("annotation-job-state")).toContainText("cancelled");
+  await expect(page.getByRole("button",{name:"取消标注作业",exact:true})).toBeDisabled();
+  await expect(page.getByAltText("实际标注候选图")).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"用于此响应卡",exact:true})).toHaveCount(0);
+  expect(state.submits).toBe(1);
+  expect(state.cancels).toBe(1);
+  expect(state.cardWrites).toBe(0);
+  expect(state.requests.filter(row=>row.path.startsWith("/annotations/")||row.path.startsWith("/annotation-releases/"))).toEqual([]);
+  await artifact(page,state,"explicit-cancel");
+});
 test("keyboard geometry edit invalidates reviewed preview",async({page})=>{const state=await annotationFixture(page);await page.goto(path);await select(page);await page.getByLabel("裁剪宽度",{exact:true}).fill("80");await page.getByRole("button",{name:"预览标注",exact:true}).click();await page.getByRole("checkbox",{name:"已核对原页与标注范围",exact:true}).check();const width=page.getByLabel("裁剪宽度",{exact:true});await width.focus();await width.press("ArrowUp");await expect(width).toHaveValue("81");await expect(page.getByRole("button",{name:"生成标注材料",exact:true})).toBeDisabled();expect(state.submits).toBe(0);await artifact(page,state,"keyboard-invalidates-preview");});
 test("failed release retry uses complete exact approval pin without new confirmation",async({page})=>{const state=await annotationFixture(page,{existingCandidate:true,failedRelease:true});await page.goto(path);await page.getByRole("button",{name:`核对标注图 ${ids.annotation}`,exact:true}).click();await expect(page.getByAltText("实际标注候选图")).toBeVisible();await page.getByRole("button",{name:"重试确认图生成",exact:true}).click();await expect.poll(()=>state.releaseRetries).toBe(1);expect(state.cardWrites).toBe(0);expect(state.requests.filter(row=>/actions|signoffs/.test(row.path)&&row.method==="POST")).toEqual([]);await artifact(page,state,"exact-release-retry");});
-test("stale confirmed release stays historical without preview or export fallback",async({page})=>{const state=await annotationFixture(page,{existingCandidate:true,staleRelease:true});await page.goto(path);await page.getByRole("button",{name:`核对标注图 ${ids.annotation}`,exact:true}).click();await expect(page.getByText("历史确认图不可用于导出",{exact:false})).toBeVisible();await expect(page.getByRole("button",{name:"核对确认图",exact:false})).toHaveCount(0);expect(state.requests.filter(row=>row.path.startsWith("/annotation-releases"))).toEqual([]);await artifact(page,state,"stale-release");});
+test("stale confirmed release stays historical without preview or export fallback",async({page})=>{
+  const state=await annotationFixture(page,{existingCandidate:true,staleRelease:true});
+  await page.goto(path);
+  await page.getByRole("button",{name:`核对标注图 ${ids.annotation}`,exact:true}).click();
+  await expect(page.getByText("历史确认图不可用于导出",{exact:false})).toBeVisible();
+  await expect(page.getByRole("button",{name:"核对确认图：已确认标注图",exact:true})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"重新核对确认图",exact:true})).toBeVisible();
+  expect(state.requests.filter(row=>row.path.startsWith("/annotation-releases"))).toEqual([]);
+  await artifact(page,state,"stale-release");
+});
 test("delayed source response cannot repaint after org reset",async({page})=>{const state=await annotationFixture(page,{sourceDelay:true});await page.goto(path);await page.getByRole("button",{name:"选择证书页：合成证书.pdf 第 1 页",exact:true}).click();await expect.poll(()=>state.images).toBe(1);await page.evaluate(()=>window.dispatchEvent(new Event("bid:org-reset")));await expect(page.getByAltText("证书来源原页")).toHaveCount(0);await expect.poll(()=>state.images).toBe(0);await expect(page.getByAltText("证书来源原页")).toHaveCount(0);await artifact(page,state,"delayed-source-reset");});
 
 test("release status outage preserves the inspected candidate and explicit attachment",async({page})=>{const state=await annotationFixture(page,{existingCandidate:true,releaseJobsUnavailable:true});await page.goto(path);await page.getByRole("button",{name:`核对标注图 ${ids.annotation}`,exact:true}).click();await expect(page.getByAltText("实际标注候选图")).toBeVisible();await expect(page.getByRole("alert").first()).toContainText("确认图状态暂时无法读取");await expect(page.getByRole("button",{name:"用于此响应卡",exact:true})).toBeEnabled();expect(state.cardWrites).toBe(0);await artifact(page,state,"auxiliary-job-read-failure");});

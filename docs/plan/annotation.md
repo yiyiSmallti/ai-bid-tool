@@ -575,10 +575,10 @@ visible focus and text errors make state understandable without color alone.
 | Unsupported/untrusted renderer | Explicit configuration failure; no Python or old-profile fallback |
 | UI read failure/org switch | Cancel old reads, remove stale images, require authorized refresh, retain unsent input only in the active context |
 
-Implementation acceptance must prove the full flow. DB-free CLI transport checks
-and the console build pass; mocked Playwright cases are collected but have not run
-in Chromium here. PostgreSQL isolation/migration and real API/worker publication
-acceptance remain pending; renderer-only checks do not establish that integrated path.
+Implementation acceptance must prove the full flow. PostgreSQL/API and mocked-browser
+regression cases require rerun after the approval-binding and fixture corrections.
+DB-free transport, collection and renderer-only checks do not establish the complete
+isolation, publication and browser path.
 
 | Area | Required acceptance and repeatable artifact |
 | --- | --- |

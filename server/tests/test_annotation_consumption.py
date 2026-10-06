@@ -26,7 +26,7 @@ from app.models.response_cards import Evidence
 from sqlalchemy import func, select, text
 from test_annotation_api import preview_submit, seed_annotation
 from test_check import publish_draft
-from test_export_images import commitment, confirm
+from test_export_images import commitment
 from test_exports import prepared, setup_template
 from test_response_cards import phase_one_client, require_action
 from test_team_cosign_consumers import signature, submit
@@ -117,17 +117,28 @@ async def test_cosign_release_exports_and_dependency_invalidation(
             if requirement["id"] == card["requirement_id"]:
                 continue
             other = await commitment(api, owner, task, extraction, requirement, index)
-            classified = await api.post(
-                f"/cards/{other['id']}/classification",
-                headers=owner,
-                json={
-                    "expected_revision": other["revision"],
-                    "review_domain": "commercial",
-                    "reason": "Commercial reviewer owns this synthetic commitment.",
-                },
+            if other["review_domain"] is None:
+                classified = await api.post(
+                    f"/cards/{other['id']}/classification",
+                    headers=owner,
+                    json={
+                        "expected_revision": other["revision"],
+                        "review_domain": "commercial",
+                        "reason": "Commercial reviewer owns this unclassified commitment.",
+                    },
+                )
+                assert classified.status_code == 200, classified.text
+                other = classified.json()["data"]
+            submitted = await require_action(api, owner, other, "submit")
+            await require_action(
+                api,
+                members[submitted["review_domain"]]["headers"],
+                submitted,
+                "confirm",
+                reviewed_evidence_ids=[],
+                reviewed_warning_codes=submitted["warning_codes"],
+                reason="The assigned domain reviewed this synthetic commitment.",
             )
-            assert classified.status_code == 200, classified.text
-            await confirm(api, bidder, classified.json()["data"])
         await submit(api, owner, scope)
         first = await signature(api, scope, "commercial")
         assert first.status_code == 200, first.text

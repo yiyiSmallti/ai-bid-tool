@@ -6,7 +6,7 @@ candidate binding; only an exact current human decision can resolve release byte
 
 import hashlib
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import NoReturn, cast, get_args
 from uuid import UUID, uuid4
 
@@ -697,7 +697,9 @@ async def approval_binding(session, actor, material, evidence_id, *, storage=Non
         card_revision=card.revision,
         card_revision_id=revision.id,
         confirmed_by=revision.confirmed_by,
-        confirmed_at=revision.confirmed_at,
+        # PostgreSQL may reload timestamptz with a connection-local offset; the
+        # approval hash must retain the confirming transaction's UTC representation.
+        confirmed_at=revision.confirmed_at.astimezone(UTC),
         candidate_annotation_id=material.id,
         candidate_rendition_id=material.rendition_id,
         candidate_image_sha256=candidate.rendering.image.sha256,

@@ -6,6 +6,20 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Annotation regression fixes
+
+- Normalized approval timestamps to UTC before hashing, retaining exact approval
+  comparisons across confirmation and worker transactions with different database
+  time zones. See [approval binding](notes/annotation.md#how-it-works).
+- Aligned role-preservation expectations with the approved human-only annotation
+  grant. Token and privacy-release fixtures now reach the intended authority gate
+  with valid inputs and distinct assets; existing token CHECKs remain cumulative.
+- Kept automatically classified response cards in their assigned domain during
+  export acceptance, submitting through a contributor and confirming through the
+  corresponding reviewer.
+- Corrected the annotation browser fixture's running-job Result envelope and the
+  stale-release button selector, retaining cancellation and no-preview assertions.
+
 ## 2026-10-06: Cloud certificate-page annotation slice
 
 - Added the approved B05 runtime contract and certificate-page API/CLI path:

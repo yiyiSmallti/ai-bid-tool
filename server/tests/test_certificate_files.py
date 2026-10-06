@@ -295,11 +295,11 @@ async def test_concurrent_old_version_only_one_file_write(
 async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tenants, admin_engine):
     from app.services.auth import SCOPES
 
-    requirement_scopes = {"req:confirm", "req:manual"}
-    assert ROLE_SCOPES[role] & requirement_scopes == (
-        requirement_scopes if role in {"admin", "bidder", "technical"} else set()
+    human_workflow_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
+    assert ROLE_SCOPES[role] & human_workflow_scopes == (
+        human_workflow_scopes if role in {"admin", "bidder", "technical"} else set()
     )
-    assert requirement_scopes.isdisjoint(SCOPES)
+    assert human_workflow_scopes.isdisjoint(SCOPES)
 
     row, task = await setup(api, headers[0])
     with Session(admin_engine) as session, session.begin():
@@ -317,6 +317,7 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
         "certificate:file:write",
         "evidence:source:read",
         "evidence:source:write",
+        "evidence:annotate",
         "billing:read",
         "billing:redeem",
         "provider:read",

@@ -85,6 +85,9 @@ Candidate pixels retain the fixed `UNCONFIRMED` footer. The worker does not atta
 materials, edit card text or create a human decision.
 
 Existing response-card actions and co-sign services supply the approval binding.
+The server normalizes the approval's `confirmed_at` to UTC before hashing; reloading
+the same PostgreSQL timestamp through another connection time zone must retain the
+same complete approval JSON and hash. The exact-approval comparison remains required.
 Release rendering removes the candidate footer and retains already marked content;
 it must not crop or draw boxes a second time. Only the fixed `CONFIRMED` footer may
 change. Content-pixel hashes, the candidate mapping, canonical Evidence identity,

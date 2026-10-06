@@ -64,7 +64,10 @@ export async function annotationFixture(page,options={}){
         else{state.submits++;expect(body.expected_input_hash).toBe(hash);expect(body.reviewed_source_png_sha256).toBe(hash);expect(body.request_id).toMatch(/^[a-f0-9-]{36}$/);if(options.conflict)return route.fulfill({status:409,json:result("evidence stamp",{error:{code:"annotation_input_changed",message:"Source changed",exit_code:2}},[],false)});response=result("evidence stamp",{job_id:ids.job,task_id:ids.task,card_id:ids.card,kind:"annotation_render",status:"queued",duplicate:false});}
       }
       else if(path===`/tasks/${ids.task}/annotations`){expect(url.searchParams.get("card_id")).toBe(ids.card);expect(url.searchParams.get("limit")).toBe("50");response=result("evidence annotation list",{task_id:ids.task,next_cursor:null},(state.submits&&!options.conflict||options.existingCandidate)?[candidate()]:[]);}
-      else if(path===`/jobs/${ids.job}`)response=result("job status",{id:ids.job,kind:"annotation_render",status:state.cancels?"cancelled":options.jobStatus??"succeeded",result:{annotation_id:ids.annotation},error:options.jobStatus==="failed"?{code:"renderer_unavailable",message:"Renderer unavailable",exit_code:4}:null},[],!options.jobStatus&&!state.cancels);
+      else if(path===`/jobs/${ids.job}`){
+        const status=state.cancels?"cancelled":options.jobStatus??"succeeded";
+        response=result("job status",{id:ids.job,kind:"annotation_render",status,result:status==="succeeded"?{annotation_id:ids.annotation}:{},error:status==="failed"?{code:"renderer_unavailable",message:"Renderer unavailable",exit_code:4}:null},[],!["failed","cancelled"].includes(status));
+      }
       else if(path===`/jobs/${ids.job}/cancel`){state.cancels++;response=result("job cancel",{id:ids.job,status:"cancelled"});}
       else if(path===`/jobs/${ids.releaseJob}`)response=result("job status",{id:ids.releaseJob,kind:"annotation_release",status:"failed",error:{code:"renderer_timeout",message:"Retry explicitly",exit_code:3},result:{annotation_id:ids.annotation,evidence_id:id(30),card_id:ids.card,expected_card_revision:1,expected_approval_binding_hash:hash}},[],false);
       else if(path===`/annotations/${ids.annotation}`)response=result("evidence annotation show",{candidate:candidate(),current:{validity:"current",active_selection:true,source_withdrawn:false,warning_codes:[]}});

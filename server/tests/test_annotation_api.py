@@ -11,12 +11,13 @@ or bypass the fixed status footer. Artifacts contain synthetic IDs/hashes only.
 
 import hashlib
 import json
+from contextlib import asynccontextmanager
 from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
 from app.models.entities import Job, UsageRecord, VendorCall
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from test_response_cards import (
     create_card,
     create_tender,
@@ -87,6 +88,19 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
 
     configure_renderer(monkeypatch, real=real_renderer)
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
+        original_transaction = app.state.db.transaction
+
+        @asynccontextmanager
+        async def non_utc_transaction(org_id=None):
+            # A new DB read must not change the pin created from the confirming
+            # session's UTC datetime, even when the connection returns local time.
+            async with original_transaction(org_id) as session:
+                await session.execute(
+                    text("SELECT set_config('TimeZone', 'America/Los_Angeles', true)")
+                )
+                yield session
+
+        monkeypatch.setattr(app.state.db, "transaction", non_utc_transaction)
         task, card, source, _, target = await seed_annotation(api, app, headers[0], tmp_path)
         preview, body, receipt = await preview_submit(api, headers[0], task, target)
         assert preview["budget_preflight"]["planned_calls"] == 0
@@ -156,12 +170,15 @@ async def test_annotation_candidate_human_review_release_and_invalidation(
             )
             assert release_job is not None
             release_job_id = str(release_job.id)
+            submitted_approval = release_job.result["submission"]["approval"]
+            assert submitted_approval["confirmed_at"].endswith("Z")
         await app.state.processor(str(tenants["orgs"][0]), release_job_id)
         release_status = await api.get(f"/v4/jobs/{release_job_id}", headers=headers[0])
         assert release_status.json()["data"]["status"] == "succeeded", release_status.text
         releases = await api.get(f"/v4/annotations/{ident}/releases", headers=headers[0])
         release = releases.json()["items"][0]
         assert release["releasable"] and release["decision_validity"] == "current"
+        assert release["approval"] == submitted_approval
         assert (
             release["rendering"]["content_pixel_sha256"]
             == candidate["rendering"]["content_pixel_sha256"]

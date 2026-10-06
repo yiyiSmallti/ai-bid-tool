@@ -505,6 +505,8 @@ async def test_annotation_create_task_role_matrix(
 async def test_tokens_cannot_request_human_annotation_scope_or_create(
     tenants, tmp_path, monkeypatch
 ):
+    from uuid import uuid4
+
     configure_renderer(monkeypatch)
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         task, _, _, _, target = await seed_annotation(api, app, headers[0], tmp_path)
@@ -530,13 +532,44 @@ async def test_tokens_cannot_request_human_annotation_scope_or_create(
         )
         assert issued.status_code == 200, issued.text
         token_headers = {**headers[0], "Authorization": "Bearer " + issued.json()["data"]["token"]}
+        preview = await api.post(
+            f"/v4/tasks/{task}/annotations",
+            headers=headers[0],
+            json={"dry_run": True, "input": target},
+        )
+        assert preview.status_code == 200, preview.text
+        value = preview.json()["data"]
+        submission = {
+            "input": target,
+            "request_id": str(uuid4()),
+            "expected_input_hash": value["input_hash"],
+            "reviewed_source_png_sha256": value["manifest"]["source"]["source_png"]["sha256"],
+        }
         before = await state_snapshot(app, tenants["orgs"][0])
-        for body in ({"dry_run": True, "input": target}, {"dry_run": False, "input": target}):
+        for body in ({"dry_run": True, "input": target}, submission):
             denied = await api.post(
                 f"/v4/tasks/{task}/annotations", headers=token_headers, json=body
             )
             assert denied.status_code == 403, denied.text
-        assert await state_snapshot(app, tenants["orgs"][0]) == before
+        # A02 rolls back the denied business transaction but preserves one
+        # command.failed security receipt for the non-dry token invocation.
+        assert await state_snapshot(app, tenants["orgs"][0]) == {
+            **before,
+            "audit_logs": before["audit_logs"] + 1,
+        }
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            receipts = list(
+                await session.scalars(
+                    select(AuditLog).where(
+                        AuditLog.actor_token_id == UUID(issued.json()["data"]["id"])
+                    )
+                )
+            )
+        assert len(receipts) == 1
+        receipt = receipts[0]
+        assert receipt.action == "command.failed" and receipt.actor_kind == "token"
+        assert receipt.actor_user_id == tenants["users"][0]
+        assert receipt.details == {"command": "evidence stamp", "reason_code": "forbidden"}
 
 
 async def test_same_org_foreign_task_card_source_and_filters_are_404(
