@@ -440,7 +440,13 @@ async def test_check_export_reject_old_draft_after_review_invalidation(
     blockers = {
         issue["code"] for issue in refused_preview["data"]["issues"] if issue["severity"] == "block"
     }
-    assert {"export_stale_draft", "export_cosign_required"} <= blockers
+    assert "export_stale_draft" in blockers
+    # Removing a signer keeps the two-domain policy, so co-sign is still required; the
+    # policy mutation leaves a single-domain policy, whose gap names the specific cause.
+    if mutation == "member":
+        assert "export_cosign_required" in blockers
+    else:
+        assert "export_cosign_required" not in blockers
     blocked = await api.post(
         f"/tasks/{scope['task_id']}/export-runs",
         headers=bidder,
