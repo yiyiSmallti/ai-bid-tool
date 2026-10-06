@@ -1151,7 +1151,8 @@ async def fail_fragment(processor, execution, error):
             last is not None
             and last.kind == "decision"
             and last.state in {"planned", "submitted"}
-            and code not in {"invalid_provider_output", "provider_refused"}
+            and code
+            not in {"invalid_provider_output", "provider_output_truncated", "provider_refused"}
         ):
             ambiguous = ambiguous or any(
                 call.job_id == last.created_by_job_id and call.state != "not_sent" for call in calls

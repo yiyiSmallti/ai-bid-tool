@@ -61,6 +61,20 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   schema discovery and intended Result snapshots. See
   [Team workflow](notes/team-workflow.md) for the mechanism and recovery boundaries.
 
+## 2026-10-05: Reviewable rubric normalization failures
+
+- Separate rubric Provider wire shape from normalized confirmation rules. Preserve model-declared
+  caps, weights, bounds, aggregation and rule text on candidates, and record semantic inconsistencies
+  with the existing normalization errors instead of discarding stage 1. Fixed section context reaches
+  item generation unchanged; malformed fields and invalid citations retain their rejection rules.
+- Add forward migration `0044` for candidate numeric declarations while retaining strict subject/set
+  confirmation gates, including direct SQL checks independent of stored error metadata. Existing
+  console blockers and complete human replacement revisions expose and resolve the errors.
+- Add `provider_output_truncated` for output-token exhaustion across shared Providers, preserve partial
+  result/accounting behavior, and give rubric jobs actionable reasoning/output-limit guidance.
+  Advance the rubric wire schema identity and CLI schema discovery for candidate values. See the
+  [score contract](plan/score.md#first-version-aggregation-algorithms) and [pitfalls](notes/score.md#pitfalls).
+
 ## 2026-10-05: Task stream snapshot recovery
 
 - Require a successful authorized snapshot and its cursor before opening or

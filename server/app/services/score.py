@@ -802,6 +802,23 @@ async def decide_subject(
         cards.fail(
             "unresolved_citation", "Revise unresolved candidate citations before confirming", 409
         )
+    if body.action == "confirm":
+        kind = "section" if section_id is not None else "item"
+        values = fields(
+            entry,
+            ("score_range", "weight", "ambiguity_reason")
+            + (
+                ("aggregation", "aggregation_rule_text", "cap")
+                if kind == "section"
+                else ("assessment_mode",)
+            ),
+        )
+        if score_normalization.subject_errors(kind, values):
+            cards.fail(
+                "rubric_incomplete",
+                "Revise the candidate's normalization errors before confirming it",
+                409,
+            )
     event = ScoreRubricDecision(
         **await review_values(session, actor, row, body),
         section_id=section_id,

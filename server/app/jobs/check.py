@@ -107,6 +107,7 @@ async def process(execution: JobExecution, storage: Storage) -> None:
                         "provider_refused",
                         "provider_quota_exhausted",
                         "invalid_provider_output",
+                        "provider_output_truncated",
                         "invalid_provider_model",
                     }
                 ):

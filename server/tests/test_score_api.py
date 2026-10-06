@@ -311,7 +311,7 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     assert preview["estimate_kind"] == "first_pass_upper_bound"
     assert preview["estimated_charge"] == "0"
     assert preview["prompt_version"] == "score-rubric-v3"
-    assert preview["schema_version"] == "score-rubric-wire-v2"
+    assert preview["schema_version"] == "score-rubric-wire-v3"
     assert preview["estimated_cost"]["llm_tokens"] >= 2 * case["llm"].settings.llm_max_output_tokens
 
     stale = await submit_rubric(case, preview, expected_input_hash="0" * 64)

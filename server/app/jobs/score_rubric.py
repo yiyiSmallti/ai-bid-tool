@@ -8,7 +8,7 @@ from cryptography.fernet import InvalidToken
 
 from app.core.security import Secrets
 from app.jobs.execution import JobExecution
-from app.providers.base import ProviderFailure
+from app.providers.base import OUTPUT_TRUNCATED_MESSAGE, ProviderFailure
 from app.providers.rubric import (
     ITEMS_PROMPT_VERSION,
     PROMPT_VERSION,
@@ -125,7 +125,9 @@ async def process(execution: JobExecution) -> None:
     if structure_output.failure or structure_output.output is None:
         failure = structure_output.failure
         raise ProviderFailure(
-            "Rubric structure generation failed; no item calls were made",
+            OUTPUT_TRUNCATED_MESSAGE
+            if failure and failure.code == "provider_output_truncated"
+            else "Rubric structure generation failed; no item calls were made",
             code=failure.code if failure else "invalid_provider_output",
             retryable=failure.retryable if failure else False,
             refused=failure.refused if failure else False,
@@ -213,6 +215,8 @@ async def process(execution: JobExecution) -> None:
             execution.settings,
             stop_reason,
         )
+        if any(failure.code == "provider_output_truncated" for failure in failures):
+            result["warnings"].append(OUTPUT_TRUNCATED_MESSAGE)
         if (
             execution.stopped is not None
             and execution.stopped.code not in score_generation.PARTIAL_STOPS
