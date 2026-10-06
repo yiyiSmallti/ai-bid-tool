@@ -1430,7 +1430,7 @@ platform_app.add_typer(platform_card_app, name="card")
 app.add_typer(billing_app, name="billing")
 
 register_budget_commands(task_app, billing_app)
-register_team_workflow_commands(task_app)
+register_team_workflow_commands(task_app, card_app)
 
 
 @platform_card_app.command("create")

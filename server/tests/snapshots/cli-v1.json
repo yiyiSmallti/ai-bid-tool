@@ -11816,6 +11816,192 @@
             "type": "object"
           }
         },
+        "card assign": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "requirement",
+              "options": [
+                "--requirement"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "job",
+              "options": [
+                "--job"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "assignee_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Assignee User Id"
+              },
+              "expected_assignment_revision": {
+                "minimum": 0,
+                "title": "Expected Assignment Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "$ref": "#/$defs/Reason"
+              }
+            },
+            "required": [
+              "expected_assignment_revision",
+              "assignee_user_id",
+              "reason"
+            ],
+            "title": "RequirementAssignmentSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "RequirementAssignmentView": {
+                "additionalProperties": false,
+                "properties": {
+                  "assignee_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Assignee User Id"
+                  },
+                  "changed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Changed At"
+                  },
+                  "changed_by_user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Changed By User Id"
+                  },
+                  "extraction_job_id": {
+                    "format": "uuid",
+                    "title": "Extraction Job Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "requirement_id": {
+                    "format": "uuid",
+                    "title": "Requirement Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 0,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "extraction_job_id",
+                  "requirement_id",
+                  "revision",
+                  "assignee_user_id",
+                  "changed_by_user_id",
+                  "changed_at"
+                ],
+                "title": "RequirementAssignmentView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "assignment": {
+                "$ref": "#/$defs/RequirementAssignmentView"
+              }
+            },
+            "required": [
+              "assignment"
+            ],
+            "title": "AssignmentData",
+            "type": "object"
+          }
+        },
         "card classify": {
           "cli_parameters": [
             {
@@ -11882,6 +12068,406 @@
               "reason"
             ],
             "title": "CardClassify",
+            "type": "object"
+          }
+        },
+        "card comment add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card",
+              "options": [
+                "--card"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "thread",
+              "options": [
+                "--thread"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "description": "Append-only reply: request UUID is the retry boundary, not a thread version.",
+            "properties": {
+              "body": {
+                "maxLength": 4000,
+                "minLength": 1,
+                "title": "Body",
+                "type": "string"
+              },
+              "client_request_id": {
+                "format": "uuid",
+                "title": "Client Request Id",
+                "type": "string"
+              },
+              "mentioned_user_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Mentioned User Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "body",
+              "client_request_id"
+            ],
+            "title": "CommentReplyCreate",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CommentMessageView": {
+                "additionalProperties": false,
+                "properties": {
+                  "author_user_id": {
+                    "format": "uuid",
+                    "title": "Author User Id",
+                    "type": "string"
+                  },
+                  "body": {
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "title": "Body",
+                    "type": "string"
+                  },
+                  "card_id": {
+                    "format": "uuid",
+                    "title": "Card Id",
+                    "type": "string"
+                  },
+                  "client_request_id": {
+                    "format": "uuid",
+                    "title": "Client Request Id",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "mentioned_user_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 20,
+                    "title": "Mentioned User Ids",
+                    "type": "array"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "thread_id": {
+                    "format": "uuid",
+                    "title": "Thread Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body",
+                  "client_request_id",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "card_id",
+                  "thread_id",
+                  "author_user_id",
+                  "created_at"
+                ],
+                "title": "CommentMessageView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "comment": {
+                "$ref": "#/$defs/CommentMessageView"
+              }
+            },
+            "required": [
+              "comment"
+            ],
+            "title": "CommentData",
+            "type": "object"
+          }
+        },
+        "card comment list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card",
+              "options": [
+                "--card"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "thread",
+              "options": [
+                "--thread"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "author_user_id": {
+                "format": "uuid",
+                "title": "Author User Id",
+                "type": "string"
+              },
+              "body": {
+                "maxLength": 4000,
+                "minLength": 1,
+                "title": "Body",
+                "type": "string"
+              },
+              "card_id": {
+                "format": "uuid",
+                "title": "Card Id",
+                "type": "string"
+              },
+              "client_request_id": {
+                "format": "uuid",
+                "title": "Client Request Id",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "mentioned_user_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Mentioned User Ids",
+                "type": "array"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "thread_id": {
+                "format": "uuid",
+                "title": "Thread Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "body",
+              "client_request_id",
+              "id",
+              "org_id",
+              "task_id",
+              "card_id",
+              "thread_id",
+              "author_user_id",
+              "created_at"
+            ],
+            "title": "CommentMessageView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Card Id"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "thread_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Thread Id"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "next_cursor",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
             "type": "object"
           }
         },
@@ -13256,6 +13842,470 @@
               "action"
             ],
             "title": "CardAction",
+            "type": "object"
+          }
+        },
+        "card thread create": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card",
+              "options": [
+                "--card"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "body": {
+                "maxLength": 4000,
+                "minLength": 1,
+                "title": "Body",
+                "type": "string"
+              },
+              "client_request_id": {
+                "format": "uuid",
+                "title": "Client Request Id",
+                "type": "string"
+              },
+              "expected_card_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "mentioned_user_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Mentioned User Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "body",
+              "client_request_id",
+              "expected_card_revision"
+            ],
+            "title": "CommentThreadCreate",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CommentMessageView": {
+                "additionalProperties": false,
+                "properties": {
+                  "author_user_id": {
+                    "format": "uuid",
+                    "title": "Author User Id",
+                    "type": "string"
+                  },
+                  "body": {
+                    "maxLength": 4000,
+                    "minLength": 1,
+                    "title": "Body",
+                    "type": "string"
+                  },
+                  "card_id": {
+                    "format": "uuid",
+                    "title": "Card Id",
+                    "type": "string"
+                  },
+                  "client_request_id": {
+                    "format": "uuid",
+                    "title": "Client Request Id",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "mentioned_user_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 20,
+                    "title": "Mentioned User Ids",
+                    "type": "array"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "thread_id": {
+                    "format": "uuid",
+                    "title": "Thread Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body",
+                  "client_request_id",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "card_id",
+                  "thread_id",
+                  "author_user_id",
+                  "created_at"
+                ],
+                "title": "CommentMessageView",
+                "type": "object"
+              },
+              "CommentThreadView": {
+                "additionalProperties": false,
+                "properties": {
+                  "card_id": {
+                    "format": "uuid",
+                    "title": "Card Id",
+                    "type": "string"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "created_by_user_id": {
+                    "format": "uuid",
+                    "title": "Created By User Id",
+                    "type": "string"
+                  },
+                  "created_card_revision_id": {
+                    "format": "uuid",
+                    "title": "Created Card Revision Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "last_message_at": {
+                    "format": "date-time",
+                    "title": "Last Message At",
+                    "type": "string"
+                  },
+                  "message_count": {
+                    "minimum": 1,
+                    "title": "Message Count",
+                    "type": "integer"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "card_id",
+                  "created_card_revision_id",
+                  "revision",
+                  "created_by_user_id",
+                  "created_at",
+                  "last_message_at",
+                  "message_count"
+                ],
+                "title": "CommentThreadView",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "first_comment": {
+                "$ref": "#/$defs/CommentMessageView"
+              },
+              "thread": {
+                "$ref": "#/$defs/CommentThreadView"
+              }
+            },
+            "required": [
+              "thread",
+              "first_comment"
+            ],
+            "title": "ThreadCreatedData",
+            "type": "object"
+          }
+        },
+        "card thread list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "card",
+              "options": [
+                "--card"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "format": "uuid",
+                "title": "Card Id",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by_user_id": {
+                "format": "uuid",
+                "title": "Created By User Id",
+                "type": "string"
+              },
+              "created_card_revision_id": {
+                "format": "uuid",
+                "title": "Created Card Revision Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "last_message_at": {
+                "format": "date-time",
+                "title": "Last Message At",
+                "type": "string"
+              },
+              "message_count": {
+                "minimum": 1,
+                "title": "Message Count",
+                "type": "integer"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "card_id",
+              "created_card_revision_id",
+              "revision",
+              "created_by_user_id",
+              "created_at",
+              "last_message_at",
+              "message_count"
+            ],
+            "title": "CommentThreadView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 1024,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "card_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Card Id"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "thread_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Thread Id"
+              }
+            },
+            "required": [
+              "org_id",
+              "task_id",
+              "next_cursor",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
             "type": "object"
           }
         },

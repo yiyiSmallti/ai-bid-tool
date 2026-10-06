@@ -195,15 +195,22 @@ from app.schemas.screenshot_contracts import (
 )
 from app.schemas.simulation_contracts import ProductSimulationInput
 from app.schemas.team_workflow import (
+    AssignmentData,
     BoardActivityView,
     BoardData,
     BoardJobView,
     BoardQuery,
     BoardRow,
+    CommentData,
+    CommentMessageView,
+    CommentReplyCreate,
+    CommentThreadCreate,
+    CommentThreadView,
     EventReplayData,
     EventReplayQuery,
     MemberCandidateView,
     PageQuery,
+    RequirementAssignmentSet,
     TaskEventView,
     TaskMemberData,
     TaskMemberSet,
@@ -212,6 +219,7 @@ from app.schemas.team_workflow import (
     TaskProgressData,
     TaskProgressQuery,
     TaskWorkflowData,
+    ThreadCreatedData,
     WorkflowMutation,
 )
 from app.schemas.team_workflow import PageData as WorkflowPageData
@@ -533,6 +541,11 @@ WORKFLOW_COMMANDS = {
     "task board": BoardQuery,
     "task activity": PageQuery,
     "task events": EventReplayQuery,
+    "card assign": RequirementAssignmentSet,
+    "card thread list": PageQuery,
+    "card thread create": CommentThreadCreate,
+    "card comment list": PageQuery,
+    "card comment add": CommentReplyCreate,
 }
 COMMANDS.update(WORKFLOW_COMMANDS)
 OUTPUTS.update(
@@ -549,6 +562,11 @@ OUTPUTS.update(
         "task board": TypeAdapter(BoardData),
         "task activity": TypeAdapter(WorkflowPageData),
         "task events": TypeAdapter(EventReplayData),
+        "card assign": TypeAdapter(AssignmentData),
+        "card thread list": TypeAdapter(WorkflowPageData),
+        "card thread create": TypeAdapter(ThreadCreatedData),
+        "card comment list": TypeAdapter(WorkflowPageData),
+        "card comment add": TypeAdapter(CommentData),
     }
 )
 
@@ -816,6 +834,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         "task events": TaskEventView,
         "task member list": TaskMemberView,
         "task member candidates": MemberCandidateView,
+        "card thread list": CommentThreadView,
+        "card comment list": CommentMessageView,
     }
     for name, model in workflow_items.items():
         if name in schema["commands"]:

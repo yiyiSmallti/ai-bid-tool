@@ -1,17 +1,19 @@
 <script setup>
 import { computed, onMounted, ref, watch } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { onBeforeRouteLeave, onBeforeRouteUpdate, useRoute, useRouter } from "vue-router";
 import { orgSession } from "../api.js";
 import { categories, domains, errorText, formatTime, label, orgRequest } from "../org.js";
 import { buckets, blockers, actions, activityActions } from "../task-labels.js";
 import { useTaskLive } from "../task-live.js";
 import TaskNavigation from "../components/TaskNavigation.vue";
 import TaskJobList from "../components/TaskJobList.vue";
+import TaskCollaboration from "../components/TaskCollaboration.vue";
 const route=useRoute(),router=useRouter(),taskId=String(route.params.taskId);
 const history=ref([]),data=ref(null),rows=ref([]),error=ref(""),loading=ref(false),cursor=ref(null),prior=ref([]),requestGeneration=ref(0);
+const selectedRow=ref(null),collaboration=ref(null),selectedThread=ref(null);
 const job=computed(()=>String(route.query.job??""));
 const filters=computed(()=>({bucket:String(route.query.bucket??""),category:String(route.query.category??""),review_domain:String(route.query.domain??""),blocker:String(route.query.blocker??""),owner_user_id:String(route.query.owner??""),starred:route.query.starred==="1",unassigned:route.query.unassigned==="1",mine:route.query.mine==="1",limit:[25,50,100].includes(Number(route.query.limit))?Number(route.query.limit):50}));
-function clear(exc){requestGeneration.value++;data.value=null;rows.value=[];history.value=[];error.value=`任务不可访问：${errorText(exc)}`;}
+function clear(exc){requestGeneration.value++;selectedRow.value=null;selectedThread.value=null;data.value=null;rows.value=[];history.value=[];error.value=`任务不可访问：${errorText(exc)}`;}
 async function load(){
   if(!job.value){data.value=null;rows.value=[];return null;}
   if(!history.value.some(item=>item.job_id===job.value&&item.status==="succeeded"))throw new Error("请选择一个成功且可访问的抽取");
@@ -21,11 +23,16 @@ async function load(){
   if(cursor.value)params.set("cursor",cursor.value);
   try{const result=await orgRequest("GET",`/tasks/${taskId}/board?${params}`);if(epoch!==requestGeneration.value)return null;
     if(result.data.task_id!==taskId||result.data.org_id!==orgSession.get()?.orgId||result.data.extraction_job_id!==job.value||result.items.length>filters.value.limit)throw new Error("看板范围不符合契约");
-    data.value=result.data;rows.value=result.items;return result.data.event_cursor;
+    data.value=result.data;rows.value=result.items;if(selectedRow.value){const fresh=result.items.find(row=>row.requirement_id===selectedRow.value.requirement_id);if(fresh)selectedRow.value=fresh;}return result.data.event_cursor;
   }catch(exc){if(epoch===requestGeneration.value){data.value=null;rows.value=[];error.value=errorText(exc);if(["board_cursor_expired","invalid_board_cursor"].includes(exc.code)){cursor.value=null;prior.value=[];error.value+="；请重新读取首页。";}}throw exc;}
   finally{if(epoch===requestGeneration.value)loading.value=false;}
 }
 const live=useTaskLive(taskId,load,clear);
+async function discard(){return !selectedRow.value||!collaboration.value||await collaboration.value.discard();}
+async function openCollaboration(row,thread=null){if(await discard()){selectedThread.value=thread;selectedRow.value=row;}}
+async function closeCollaboration(done){if(await discard()){selectedRow.value=null;selectedThread.value=null;if(typeof done==='function')done();}}
+onBeforeRouteLeave(discard);
+onBeforeRouteUpdate(async(to)=>{if(JSON.stringify(to.query)!==JSON.stringify(route.query)&&!(await discard()))return false;selectedRow.value=null;return true;});
 async function update(key,value){if(key==='owner'&&value&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)){error.value="分配成员筛选需要有效的 UUID";return;}cursor.value=null;prior.value=[];const query={...route.query};if(value)query[key]=typeof value==="boolean"?"1":String(value);else delete query[key];if(key==="owner")delete query.unassigned;if(key==="unassigned")delete query.owner;await router.replace({query});}
 async function next(){if(!data.value?.next_cursor)return;prior.value.push(cursor.value);cursor.value=data.value.next_cursor;await live.refresh();}
 async function previous(){cursor.value=prior.value.pop()??null;await live.refresh();}
@@ -41,8 +48,12 @@ onMounted(async()=>{try{history.value=(await orgRequest("GET",`/tasks/${taskId}/
   <template v-if="data">
     <div class="buckets section" role="group" aria-label="看板状态"><el-button :type="!filters.bucket?'primary':'default'" @click="update('bucket','')">全部 {{data.counts.total}}</el-button><el-button v-for="(text,key) in buckets" :key="key" :data-testid="`bucket-${key}`" :type="filters.bucket===key?'primary':'default'" @click="update('bucket',key)">{{text}} {{data.counts[key]}}</el-button></div>
     <el-card class="section" shadow="never"><el-form class="filters" label-position="top"><el-form-item label="分类"><el-select :model-value="filters.category" clearable @update:model-value="update('category',$event)"><el-option v-for="(text,key) in categories" :key="key" :label="text" :value="key" /></el-select></el-form-item><el-form-item label="审阅职责"><el-select :model-value="filters.review_domain" clearable @update:model-value="update('domain',$event)"><el-option v-for="(text,key) in domains" :key="key" :label="text" :value="key" /></el-select></el-form-item><el-form-item label="阻塞原因"><el-select :model-value="filters.blocker" clearable @update:model-value="update('blocker',$event)"><el-option v-for="(text,key) in blockers" :key="key" :label="text" :value="key" /></el-select></el-form-item><el-form-item label="分配成员 ID"><el-input :model-value="filters.owner_user_id" placeholder="UUID" clearable @change="update('owner',$event)" /></el-form-item><el-form-item label="每页条数"><el-select :model-value="filters.limit" @update:model-value="update('limit',$event)"><el-option v-for="size in [25,50,100]" :key="size" :label="String(size)" :value="size" /></el-select></el-form-item></el-form><div class="actions"><el-checkbox :model-value="filters.starred" @update:model-value="update('starred',$event)">★ 条款</el-checkbox><el-checkbox :model-value="filters.mine" @update:model-value="update('mine',$event)">待我处理</el-checkbox><el-checkbox :model-value="filters.unassigned" @update:model-value="update('unassigned',$event)">未分配</el-checkbox></div></el-card>
-    <el-card class="section" shadow="never"><ul class="board-rows"><li v-for="row in rows" :key="row.requirement_id"><div><h3>{{row.starred?'★ ':''}}{{row.title}}</h3><p>{{label(categories,row.category)}} · {{label(buckets,row.bucket)}} · {{label(domains,row.review_domain,'待分类')}}</p><p class="hint" v-if="row.blockers.length">{{row.blockers.map(code=>label(blockers,code)).join('；')}}</p></div><RouterLink :to="actionPath(row,row.next_actions[0])" v-if="row.next_actions[0]&&actions[row.next_actions[0].code]">{{actions[row.next_actions[0].code]}}</RouterLink><RouterLink v-else :to="`/org/tasks/${taskId}/review?job=${job}&requirement=${row.requirement_id}`">查看</RouterLink></li><li v-if="!rows.length" class="empty">当前筛选没有要求。</li></ul><div class="actions"><el-button :disabled="!prior.length||loading" @click="previous">上一页</el-button><el-button :disabled="!data.next_cursor||loading" @click="next">下一页</el-button><span class="hint">本页 {{rows.length}} 项</span></div></el-card>
+    <el-card class="section" shadow="never"><ul class="board-rows"><li v-for="row in rows" :key="row.requirement_id"><div><h3>{{row.starred?'★ ':''}}{{row.title}}</h3><p>{{label(categories,row.category)}} · {{label(buckets,row.bucket)}} · {{label(domains,row.review_domain,'待分类')}}</p><p class="hint" v-if="row.blockers.length">{{row.blockers.map(code=>label(blockers,code)).join('；')}}</p></div><div class="actions"><el-button size="small" @click="openCollaboration(row)">分配与讨论</el-button><span class="hint">讨论 {{row.comment_thread_count}}</span><el-button v-if="row.next_actions[0]?.code==='assign'" @click="openCollaboration(row)">分配</el-button><el-button v-else-if="row.next_actions[0]?.code==='view'&&row.next_actions[0]?.target.kind==='thread'" @click="openCollaboration(row,row.next_actions[0].target.id)">查看</el-button><RouterLink :to="actionPath(row,row.next_actions[0])" v-else-if="row.next_actions[0]&&actions[row.next_actions[0].code]">{{actions[row.next_actions[0].code]}}</RouterLink><RouterLink v-else :to="`/org/tasks/${taskId}/review?job=${job}&requirement=${row.requirement_id}`">查看</RouterLink></div></li><li v-if="!rows.length" class="empty">当前筛选没有要求。</li></ul><div class="actions"><el-button :disabled="!prior.length||loading" @click="previous">上一页</el-button><el-button :disabled="!data.next_cursor||loading" @click="next">下一页</el-button><span class="hint">本页 {{rows.length}} 项</span></div></el-card>
     <div class="grid"><el-card class="section" shadow="never"><template #header><h3>作业进度</h3></template><TaskJobList :jobs="data.jobs" /></el-card><el-card class="section" shadow="never"><template #header><h3>最近活动</h3></template><ul class="activity"><li v-for="item in data.activity" :key="item.id">{{label(activityActions,item.action)}} · {{formatTime(item.created_at)}}</li><li v-if="!data.activity.length" class="empty">没有可见的活动。</li></ul></el-card></div>
   </template>
+  <el-drawer :model-value="Boolean(selectedRow)" title="分配与讨论" :size="'min(600px, 100vw)'" :close-on-click-modal="false" :show-close="false" :before-close="closeCollaboration" destroy-on-close>
+    <template #header><h2>分配与讨论</h2><el-button @click="closeCollaboration">关闭协作面板</el-button></template>
+    <template v-if="selectedRow"><h3>{{selectedRow.title}}</h3><RouterLink :to="`/org/tasks/${taskId}/review?job=${job}&requirement=${selectedRow.requirement_id}`">查看招标原文、材料与响应</RouterLink><TaskCollaboration :key="`${selectedRow.requirement_id}:${selectedThread??''}`" ref="collaboration" :task-id="taskId" :job-id="job" :row="selectedRow" :initial-thread="selectedThread" @changed="live.refresh" @denied="clear" /></template>
+  </el-drawer>
 </template>
 <style scoped>.buckets{display:flex;flex-wrap:wrap;gap:8px}.buckets .el-button{margin:0}.filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}.board-rows,.activity{padding:0;list-style:none}.board-rows li{display:flex;justify-content:space-between;align-items:center;gap:16px;padding:16px 0;border-bottom:1px solid var(--border)}.board-rows h3{margin:0}.board-rows p{margin:6px 0}.board-rows a{flex-shrink:0}.activity li{padding:10px 0}@media(max-width:760px){.filters{grid-template-columns:repeat(2,minmax(0,1fr))}.board-rows li{align-items:flex-start;flex-direction:column}}</style>

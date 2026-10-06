@@ -8,7 +8,10 @@ import typer
 from app.core.errors import ServiceError
 from app.schemas.team_workflow import (
     BoardQuery,
+    CommentReplyCreate,
+    CommentThreadCreate,
     PageQuery,
+    RequirementAssignmentSet,
     TaskMemberSet,
     TaskOwnerHandover,
     WorkflowMutation,
@@ -29,11 +32,96 @@ def _page(cursor, limit):
     return _body(PageQuery, cursor=cursor, limit=limit)
 
 
-def register(task_app: typer.Typer):
+def register(task_app: typer.Typer, card_app: typer.Typer):
     from bid_cli import main as cli
 
     member_app = typer.Typer()
     task_app.add_typer(member_app, name="member")
+    thread_app = typer.Typer()
+    comment_app = typer.Typer()
+    card_app.add_typer(thread_app, name="thread")
+    card_app.add_typer(comment_app, name="comment")
+
+    @card_app.command("assign")
+    def assign(
+        task: Annotated[UUID, typer.Option()],
+        requirement: Annotated[UUID, typer.Option()],
+        job: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call(
+                "PUT",
+                f"/tasks/{task}/requirements/{requirement}/assignment",
+                params={"extraction_job_id": str(job)},
+                json=cli.input_contract(input, RequirementAssignmentSet),
+            ),
+            "card assign",
+            json_output,
+        )
+
+    @thread_app.command("list")
+    def threads(
+        card: Annotated[UUID, typer.Option()],
+        cursor: Annotated[str | None, typer.Option()] = None,
+        limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call("GET", f"/cards/{card}/threads", params=_page(cursor, limit)),
+            "card thread list",
+            json_output,
+        )
+
+    @thread_app.command("create")
+    def thread_create(
+        card: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call(
+                "POST",
+                f"/cards/{card}/threads",
+                json=cli.input_contract(input, CommentThreadCreate),
+            ),
+            "card thread create",
+            json_output,
+        )
+
+    @comment_app.command("list")
+    def comments(
+        card: Annotated[UUID, typer.Option()],
+        thread: Annotated[UUID, typer.Option()],
+        cursor: Annotated[str | None, typer.Option()] = None,
+        limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call(
+                "GET", f"/cards/{card}/threads/{thread}/comments", params=_page(cursor, limit)
+            ),
+            "card comment list",
+            json_output,
+        )
+
+    @comment_app.command("add")
+    def comment_add(
+        card: Annotated[UUID, typer.Option()],
+        thread: Annotated[UUID, typer.Option()],
+        input: Annotated[Path, typer.Option()],
+        json_output: cli.JsonOption = False,
+    ):
+        cli.emit(
+            cli.call(
+                "POST",
+                f"/cards/{card}/threads/{thread}/comments",
+                json=cli.input_contract(input, CommentReplyCreate),
+            ),
+            "card comment add",
+            json_output,
+        )
 
     @task_app.command("workflow")
     def workflow(task: Annotated[UUID, typer.Option()], json_output: cli.JsonOption = False):

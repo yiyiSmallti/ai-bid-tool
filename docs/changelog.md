@@ -6,6 +6,28 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Task stream snapshot recovery
+
+- Require a successful authorized snapshot and its cursor before opening or
+  resuming console task streams. Failed discussion parent validation retries the
+  snapshot without opening a cursorless stream; org reset discards late snapshot
+  results and clears task content and unsaved discussion drafts. See the
+  [snapshot and reconnect contract](plan/team-workflow.md#durable-task-events-and-sse).
+
+## 2026-10-05: Team workflow assignment and discussion
+
+- Added requirement/extraction assignment with explicit revision and reason, active
+  owner/contributor targets and membership-change guards; assignment remains
+  metadata and never grants review authority or changes response-card content.
+- Added encrypted append-only card threads, replies and validated in-task mentions
+  for human task readers, including viewer observers. Request UUID replay returns
+  the original receipt; changed content conflicts. Archived tasks reject writes,
+  and comments preserve card revisions, evidence and existing human gates.
+- Added Chinese Element Plus assignment/discussion controls, shared authenticated
+  API/local/remote CLI paths, typed discovery and intentional zero-cost Result
+  snapshots. Audit and durable events contain metadata only; co-sign remains the
+  approved next slice. See [Team workflow](notes/team-workflow.md).
+
 ## 2026-10-05: Queued agent authority-loss cleanup
 
 - Persist a rejected controller Job as failed before clearing its transaction

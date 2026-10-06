@@ -2,7 +2,7 @@
 kind: reference
 ---
 
-# Task membership, archival and durable progress
+# Task membership, assignment, discussion and durable progress
 
 ## Problem
 
@@ -10,6 +10,8 @@ An org (organization/tenant; 单位) is the storage isolation boundary, but shar
 org membership must not disclose every bid task (任务). A dashboard (看板) must
 project committed requirements and current validity without becoming a second
 source of approval. Disconnects must not lose changes or expose private job data.
+Requirement ownership and card discussion must remain separate from response
+approval, and comments must not become evidence (证据) or model input.
 The approved boundaries are in [Team workflow](../plan/team-workflow.md).
 
 ## Usage
@@ -27,6 +29,24 @@ The console exposes `/app/org/tasks/:taskId/board?job=J` and
 returns one row per saved requirement in that extraction. `bid task events`
 returns one bounded Result for polling. Streaming clients use authenticated fetch
 with Bearer and `X-Org-Id`, and resume with `Last-Event-ID`.
+
+Assign requirement work with `bid card assign --task T --requirement R --job J
+--input FILE`. The JSON input carries `expected_assignment_revision`,
+`assignee_user_id` (or null to unassign), and a reason. A requirement can be assigned
+before a response card (响应卡) exists. The console offers assignment in the board
+row using active eligible task members; the task owner and a human org administrator
+can manage it.
+
+Use `bid card thread list --card C`, `bid card thread create --card C --input FILE`,
+`bid card comment list --card C --thread H` and `bid card comment add --card C
+--thread H --input FILE`. Thread creation requires `expected_card_revision`;
+both writes require a `client_request_id`, plain-text `body` and optional
+`mentioned_user_ids`. The console's discussion tab keeps the draft in memory,
+selects mentions from authorized current task members and renders messages as
+escaped text. Read pages use an opaque `--cursor` and default 50/max 100 entries.
+Retry an uncertain comment result only with the same UUID and unchanged input;
+changed content requires a new request UUID. An explicit revision conflict requires
+refreshing and reviewing the current state.
 
 For an existing deployment, drain old workers and stop admissions before enabling
 task ACL. The migration does not infer members from historical activity. Run
@@ -57,6 +77,27 @@ admin can read and recover membership without joining a task. This exception nev
 becomes a token or worker grant. Observers read; reviewers make authorized human
 decisions; contributors and the owner may perform permitted task operations.
 Ownership grants neither a new review domain nor export permission.
+
+Assignment metadata binds one saved requirement to its successful extraction and
+task. Writes serialize with task membership changes, compare the assignment revision
+and require an active owner/contributor with existing edit authority as the target.
+Removing or demoting an assigned member fails until their work is explicitly
+reassigned or unassigned. External org revocation still takes effect immediately;
+the board marks the unavailable assignee for the owner to resolve. Assignment
+changes neither card content nor review authority.
+
+Human task readers, including observers with org role `viewer`, may append comments
+through the session-only `card:comment` grant. Tokens and workers cannot obtain it.
+Archived tasks retain readable discussion but reject new writes. A thread pins the
+card revision that existed at creation; later comments never update card revisions,
+confirmation or evidence. Bodies are encrypted on the owning message, bounded to
+4,000 Unicode characters/16 KiB UTF-8, and mentions to 20 unique current task members.
+Request UUID receipts bind the authenticated actor, endpoint and input hash in the
+same transaction; identical replay returns the original receipt and a different
+input conflicts. Thread/comment pages use chronological keysets and encrypted
+cursors bound to org/task/card/thread and current reader authority. Audit records
+contain IDs and hashes; durable events contain bounded IDs only, so discussion text
+and member labels stay out of live frames and activity summaries.
 
 Archive takes the task/workflow lock and refuses queued/running jobs or
 pending/unknown vendor calls, including calls on terminal jobs. Archived tasks
@@ -100,9 +141,12 @@ and browser transport failures fall back to bounded polling.
 ## Pitfalls
 
 A task owner is escalation responsibility, not the assignee of every requirement.
-Assignment, discussions and co-sign writes belong to later slices. Approval of the
-[ADR amendment](../adr/0005-human-confirmed-responses.md) does not activate those
-handlers or weaken existing single-domain confirmation gates.
+An assignment or comment does not confirm a response, and mention text alone does
+not identify a person: only the validated mention ID list does. Discussion has no
+external notification, edit/delete operation, automatic memory or model ingestion.
+Approval of the [co-sign ADR amendment](../adr/0005-human-confirmed-responses.md)
+does not activate co-sign handlers or weaken existing single-domain confirmation
+gates; its implementation status is in the [team-workflow plan](../plan/team-workflow.md).
 
 An active stored task-member row cannot revive a disabled org member. Ownership
 recovery is an explicit admin operation. Reconnection never resubmits paid work.
@@ -118,8 +162,12 @@ must fail above the approved fan-out bound rather than lose invalidations.
   membership, handover and lifecycle service.
 - [task_authorization.py](../../server/app/services/task_authorization.py): declared
   task/stored-parent guards on existing service entries.
+- [task_discussion.py](../../server/app/services/task_discussion.py): revision-checked
+  assignment, immutable discussion, mention validation and replay receipts.
 - [0041_team_workflow.py](../../server/migrations/versions/0041_team_workflow.py):
   org tables, owner constraints, human-only scope exclusions and lifecycle gates.
+- [0043_team_workflow_assignment.py](../../server/migrations/versions/0043_team_workflow_assignment.py):
+  assignment/discussion RLS tables, immutable messages and membership-change guards.
 - [task_board.py](../../server/app/services/task_board.py): bounded read projections.
 - [task_events.py](../../server/app/services/task_events.py) and
   [task_event_sql.py](../../server/app/services/task_event_sql.py): encrypted replay
@@ -127,6 +175,8 @@ must fail above the approved fan-out bound rather than lose invalidations.
 - [task_board.py API](../../server/app/api/task_board.py): snapshots and streaming
   transactions; [task-live.js](../../web/src/task-live.js): reconnect and polling.
 - [team_workflow.py CLI](../../cli/bid_cli/team_workflow.py): shared API commands.
+- [Assignment/discussion CLI acceptance](../../server/tests/test_team_discussion_cli.py):
+  authenticated local/remote transport, bounded inputs, snapshots and discovery.
 - [Membership acceptance](../../server/tests/test_team_workflow_membership.py),
   [board/event acceptance](../../server/tests/test_team_board_events.py),
   [legacy route acceptance](../../server/tests/test_team_workflow_legacy.py) and

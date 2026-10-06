@@ -14,7 +14,8 @@ const filters = reactive({ category: "", state: "", domain: "", disposition: "",
 const page = ref(1), pageSize = ref(50), selected = ref([]), batch = ref([]), batchOpen = ref(false), batchBusy = ref(false), batchStale = ref(false), batchError = ref(""), materialRevision = ref(0);
 const title = ref(null), lastTrigger = ref(null), generationOpen = ref([]);
 let accessLost = false, readGeneration = 0;
-const authority = useTaskAuthority(taskId, (exc) => { accessLost = true; readGeneration++; rows.value = null; selectedRow.value = null; selected.value = []; batch.value = []; batchOpen.value = false; generationOpen.value = []; task.value = null; docs.value = []; job.value = null; error.value = errorText(exc); });
+function loseAccess(exc) { accessLost = true; readGeneration++; rows.value = null; selectedRow.value = null; selected.value = []; batch.value = []; batchOpen.value = false; generationOpen.value = []; task.value = null; docs.value = []; job.value = null; error.value = errorText(exc); }
+const authority = useTaskAuthority(taskId, loseAccess);
 const writable = computed(() => authority.canWrite.value && orgAccess.role && orgAccess.role !== "viewer");
 const reviewable = computed(() => ['commercial','technical'].some(domain => authority.canReview(domain) && mine(domain)));
 const isGap = (row) => !["eligible", "comply_only"].includes(row.card?.eligibility);
@@ -27,7 +28,7 @@ const visible = computed(() => filtered.value.slice((page.value - 1) * pageSize.
 const summary = computed(() => rows.value ? { total: rows.value.length, confirmed: rows.value.filter(r => r.card?.state === "confirmed").length, comply: rows.value.filter(r => r.card?.eligibility === "comply_only").length, gaps: rows.value.filter(isGap).length, negative: rows.value.filter(r => r.card?.content.deviation === "negative").length } : null);
 const documentName = (id) => docs.value.find(d => d.id === id)?.name;
 function batchAllowed(row) { return (authority.canReview(domainFor(row)) && mine(domainFor(row))) && !["pending_review", "confirmed"].includes(row.status); }
-async function discard() { return !dirty.value || !orgSession.get() || await confirmAction("有未保存的响应编辑。离开将丢弃这些编辑，继续？", "放弃未保存的编辑", "放弃编辑", true); }
+async function discard() { return !dirty.value || !orgSession.get() || await confirmAction("有未保存的响应编辑或评论。离开将丢弃这些内容，继续？", "放弃未保存的编辑", "放弃编辑", true); }
 onBeforeRouteLeave(discard);
 onBeforeRouteUpdate((to) => (to.query.job !== jobId || to.params.taskId !== taskId || String(to.query.requirement ?? "") !== (selectedRow.value?.id ?? "")) ? discard() : true);
 function storePosition() { remember(`review.${taskId}.${jobId}`, { requirementId: selectedRow.value?.id ?? null, page: page.value, pageSize: pageSize.value, category: filters.category, state: filters.state, domain: filters.domain, disposition: filters.disposition, starred: filters.starred, mine: filters.mine, gaps: filters.gaps }); }
@@ -86,7 +87,7 @@ async function nextMine() {
 function updateCard(card) {
   rows.value = rows.value.map(row => row.id === card.requirement_id ? { ...row, source: card.source, card, status: card.state } : row);
   // Keep the detail instance alive; it owns its freshly read revision.
-  dirty.value = false; materialRevision.value++;
+  materialRevision.value++;
 }
 async function selectForPreview(all = false) {
   const candidates = all ? filtered.value : visible.value;
@@ -205,7 +206,7 @@ onMounted(load);
         </table></div>
         <el-pagination v-model:current-page="page" v-model:page-size="pageSize" class="pager" background layout="total, sizes, prev, pager, next" :page-sizes="[25, 50, 100]" :total="filtered.length" />
       </section>
-      <CardEditor v-if="selectedRow" :key="selectedRow.id" :row="selectedRow" :task-id="taskId" :job-id="jobId" :document-name="documentName(selectedRow.source.document_id)" class="review-detail" @updated="updateCard" @dirty="dirty = $event" @next="nextMine" @close="close" @materials="materialsChanged" />
+      <CardEditor v-if="selectedRow" :key="selectedRow.id" :row="selectedRow" :task-id="taskId" :job-id="jobId" :document-name="documentName(selectedRow.source.document_id)" class="review-detail" @updated="updateCard" @dirty="dirty = $event" @next="nextMine" @close="close" @materials="materialsChanged" @denied="loseAccess" />
       <aside v-else class="review-empty"><el-empty description="从左侧列表打开一条要求进行审阅" :image-size="80"><p class="hint">可用 Tab、Enter 和空格完成筛选、翻页、编辑与逐项核对。</p></el-empty></aside>
     </div>
   </template>

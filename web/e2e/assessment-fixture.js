@@ -66,6 +66,14 @@ export async function fixture(page, options = {}) {
         response = result("task member list", { org_id: state.org, task_id: ids.task, next_cursor: null, returned: 1, has_more: false }, [{ org_id: state.org, task_id: ids.task, user_id: uuid(3), display_label: "合成成员", role, active: true, review_domains, revision: 1 }]);
       }
       else if (method === "GET" && path === `/tasks/${ids.task}/events`) return route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify({ type: "heartbeat", cursor: "opaque-snapshot", as_of: now })}\n\n` });
+      else if (method === "GET" && path === `/cards/${ids.card}/threads`) {
+        expect(Number(url.searchParams.get("limit"))).toBeLessThanOrEqual(100);
+        response = result("card thread list", { org_id: state.org, task_id: ids.task, card_id: ids.card, thread_id: null, next_cursor: null, returned: 0, has_more: false });
+      }
+      else if (method === "GET" && path.startsWith(`/cards/${ids.card}/threads/`) && path.endsWith("/comments")) {
+        expect(Number(url.searchParams.get("limit"))).toBeLessThanOrEqual(100);
+        response = result("card comment list", { org_id: state.org, task_id: ids.task, card_id: ids.card, thread_id: path.split("/")[4], next_cursor: null, returned: 0, has_more: false });
+      }
       else if (method === "GET" && path === `/tasks/${ids.task}/documents`) response = result("task document list", { task_id: ids.task }, [{ id: ids.document, task_id: ids.task, name: "合成招标文件.pdf", sha256: hash, media_type: "application/pdf", page_count: 5, status: "parsed", citation_mode: "page", created_at: now }]);
       else if (method === "GET" && path === `/tasks/${ids.task}/extractions`) response = result("req history", {}, [{ job_id: ids.extract, document_id: ids.document, reasoning: null, model: "synthetic-model", status: "succeeded", created_at: now, finished_at: now, saved: 1200, rejected: 0, tokens: 0, error: null, latest: true }]);
       else if (method === "GET" && ["/confidential-fields", "/confidential-values", `/tasks/${ids.task}/exports`].includes(path)) response = result(path.endsWith("exports") ? "export list" : "confidential list");

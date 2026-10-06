@@ -7,8 +7,13 @@ import DocumentPreview from "./DocumentPreview.vue";
 import MaterialPanel from "./MaterialPanel.vue";
 import SecretTextEditor from "./SecretTextEditor.vue";
 import SourcePreview from "./SourcePreview.vue";
+import TaskCollaboration from "./TaskCollaboration.vue";
 const props = defineProps({ row: Object, taskId: String, jobId: String, documentName: String });
-const emit = defineEmits(["updated", "dirty", "next", "close", "materials"]);
+const emit = defineEmits(["updated", "dirty", "next", "close", "materials", "denied"]);
+const tab = ref("response"), discussionOpened = ref(false), discussionDirty = ref(false);
+function reportDirty(){emit("dirty", dirty.value || discussionDirty.value);}
+watch(discussionDirty, reportDirty);
+watch(tab, value => {if(value === "discussion") discussionOpened.value = true;});
 const card = ref(null), content = ref(emptyContent()), baseline = ref(""), ready = ref(false), busy = ref(false), error = ref(""), notice = ref("");
 const reviewed = ref([]), warnings = ref([]), reason = ref(""), domain = ref("technical"), history = ref(null), sourceChunk = ref(null);
 const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kindKey = ref(0), marks = ref(new Set());
@@ -48,9 +53,9 @@ function install(value) {
   card.value = value; content.value = value ? JSON.parse(JSON.stringify(value.content)) : emptyContent();
   for (const key of ["response_text", "deviation_note"]) content.value[key] ??= "";
   content.value.response_kind ??= "commitment"; content.value.deviation ??= "none";
-  baseline.value = JSON.stringify(content.value); sourceChunk.value = null; clearReview(); reason.value = ""; history.value = null; ready.value = true; emit("dirty", false);
+  baseline.value = JSON.stringify(content.value); sourceChunk.value = null; clearReview(); reason.value = ""; history.value = null; ready.value = true; reportDirty();
 }
-function edit() { emit("dirty", dirty.value); clearReview(); }
+function edit() { reportDirty(); clearReview(); }
 async function kindChange(value) {
   if (value === content.value.response_kind) return;
   if (value === "commitment" && content.value.evidence.length && !(await confirmAction(`改为承诺将移除 ${content.value.evidence.length} 项候选材料。继续？`, "改为承诺", "确定", true))) { kindKey.value++; return; }
@@ -128,7 +133,7 @@ async function source() {
 async function download() { try { await downloadOriginal(`/documents/${displayedSource.value.document_id}/download-link`, props.documentName); } catch (exc) { error.value = errorText(exc); } }
 function useServer() { install(conflict.value); conflict.value = null; conflictOpen.value = false; error.value = ""; emit("updated", card.value); }
 function materialChanged() { clearReview(); emit("materials"); refresh(); }
-function beforeUnload(event) { if (dirty.value) { event.preventDefault(); event.returnValue = ""; } }
+function beforeUnload(event) { if (dirty.value || discussionDirty.value) { event.preventDefault(); event.returnValue = ""; } }
 function focus() { if (!document.hidden && ready.value && card.value && !busy.value && !conflict.value) refresh(); }
 window.addEventListener("beforeunload", beforeUnload);
 document.addEventListener("visibilitychange", focus);
@@ -147,6 +152,9 @@ onMounted(async () => {
       <div class="head-actions"><el-button size="small" :icon="Close" @click="emit('close')">返回要求列表</el-button><el-button size="small" type="primary" plain :icon="ArrowRight" @click="emit('next')">下一条待我审阅</el-button></div>
     </header>
     <div class="editor-body">
+      <el-tabs v-if="card" v-model="tab" aria-label="审阅详情内容"><el-tab-pane label="原文、材料与响应" name="response" /><el-tab-pane label="讨论" name="discussion" /></el-tabs>
+      <TaskCollaboration v-if="card && discussionOpened" v-show="tab === 'discussion'" :task-id="taskId" :job-id="jobId" :row="{requirement_id:row.id,card_id:card.id,card_revision:card.revision}" discussion-only @dirty="discussionDirty=$event" @denied="emit('denied',$event)" />
+      <div v-show="tab === 'response'">
       <p class="req-title">{{ props.row.text }}</p>
       <h4>招标原文</h4>
       <p class="hint">{{ locationLabel(displayedSource, documentName) }}</p>
@@ -237,6 +245,7 @@ onMounted(async () => {
           </el-timeline-item>
         </el-timeline>
       </template>
+      </div>
     </div>
     <el-dialog v-model="conflictOpen" title="修订冲突" width="860px" append-to-body>
       <template v-if="conflict">

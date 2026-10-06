@@ -8,12 +8,13 @@ uses current relational lineage and never loads response prose into its output.
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import literal, select, union_all
+from sqlalchemy import func, literal, select, union_all
 
 from app.core.errors import ServiceError
 from app.models.entities import (
     Chunk,
     EvidenceSource,
+    Requirement,
     TaskCertificate,
     TaskFeature,
     TaskOrgProfile,
@@ -35,8 +36,82 @@ from app.models.screenshots import (
     ScreenshotVendorArchive,
     ScreenshotWithdrawal,
 )
+from app.models.team_workflow import CardCommentMention, CardCommentThread, RequirementWorkflow
 from app.schemas.screenshot_contracts import ContentMapping, ImageEvidenceInput
 from app.services import response_cards
+
+
+async def requirements_with_collaboration(session, actor, task_id, extraction, *, limit, member):
+    """Load assignment, thread counts and personal mentions with the requirement query.
+
+    Grouping is task-scoped and indexed; no card/comment bodies are loaded for the
+    board. A mention only resolves for a current human member, never a recovery
+    admin or a token acting for that user.
+    """
+    threads = (
+        select(ResponseCard.requirement_id, func.count(CardCommentThread.id).label("count"))
+        .join(
+            CardCommentThread,
+            (CardCommentThread.org_id == ResponseCard.org_id)
+            & (CardCommentThread.task_id == ResponseCard.task_id)
+            & (CardCommentThread.card_id == ResponseCard.id),
+        )
+        .where(
+            ResponseCard.org_id == actor.org_id,
+            ResponseCard.task_id == task_id,
+            ResponseCard.extraction_job_id == extraction.id,
+        )
+        .group_by(ResponseCard.requirement_id)
+        .subquery()
+    )
+    mentions = (
+        select(ResponseCard.requirement_id, CardCommentMention.thread_id)
+        .join(
+            CardCommentMention,
+            (CardCommentMention.org_id == ResponseCard.org_id)
+            & (CardCommentMention.task_id == ResponseCard.task_id)
+            & (CardCommentMention.card_id == ResponseCard.id),
+        )
+        .where(
+            ResponseCard.org_id == actor.org_id,
+            ResponseCard.task_id == task_id,
+            ResponseCard.extraction_job_id == extraction.id,
+            CardCommentMention.user_id == actor.user_id,
+            literal(
+                member is not None and actor.actor_kind == "session" and actor.token_id is None
+            ),
+        )
+        .distinct(ResponseCard.requirement_id)
+        .order_by(ResponseCard.requirement_id, CardCommentMention.created_at, CardCommentMention.id)
+        .subquery()
+    )
+    return (
+        await session.execute(
+            select(
+                Requirement,
+                RequirementWorkflow,
+                func.coalesce(threads.c.count, 0),
+                mentions.c.thread_id,
+            )
+            .outerjoin(
+                RequirementWorkflow,
+                (RequirementWorkflow.org_id == Requirement.org_id)
+                & (RequirementWorkflow.task_id == Requirement.task_id)
+                & (RequirementWorkflow.extraction_job_id == Requirement.job_id)
+                & (RequirementWorkflow.requirement_id == Requirement.id),
+            )
+            .outerjoin(threads, threads.c.requirement_id == Requirement.id)
+            .outerjoin(mentions, mentions.c.requirement_id == Requirement.id)
+            .where(
+                Requirement.org_id == actor.org_id,
+                Requirement.task_id == task_id,
+                Requirement.job_id == extraction.id,
+                Requirement.document_id == extraction.document_id,
+            )
+            .order_by(Requirement.id)
+            .limit(limit)
+        )
+    ).all()
 
 
 async def load(session, actor, requirements, task_id, assessment_day):
