@@ -95,7 +95,10 @@ def create_router(
     @router.get("/tasks/{task_id}/jobs", name="task_job_list", response_model=Result)
     async def task_job_list(
         task_id: UUID,
-        kind: Literal["parse", "check", "score_rubric", "score"],
+        kind: Literal[
+            "parse", "check", "score_rubric", "score", "annotation_render", "annotation_release"
+        ],
+        annotation_id: UUID | None = None,
         extraction_job_id: UUID | None = None,
         cursor: str | None = None,
         limit: int = Query(50, ge=1, le=100),
@@ -104,6 +107,28 @@ def create_router(
     ):
         session, actor = ctx
         await task_access(session, actor, task_id)
+        if kind in {"annotation_render", "annotation_release"}:
+            from app.core.errors import ServiceError
+            from app.services.annotations import list_jobs
+
+            if document is not None:
+                raise ServiceError(
+                    "invalid_input", "Annotation jobs use their fixed extraction scope", 400, 2
+                )
+            data, items = await list_jobs(
+                session,
+                actor,
+                task_id,
+                kind,
+                settings,
+                annotation_id=annotation_id,
+                extraction_job_id=extraction_job_id,
+                cursor=cursor,
+                limit=min(limit, 20),
+            )
+            return _result("task job list", data, items)
+        if annotation_id is not None:
+            raise not_found()
         if kind != "parse":
             if document is not None:
                 from app.core.errors import ServiceError
@@ -113,8 +138,8 @@ def create_router(
                 session,
                 actor,
                 task_id,
-                AssessmentJobQuery(
-                    kind=kind, extraction_job_id=extraction_job_id, cursor=cursor, limit=limit
+                AssessmentJobQuery.model_validate(
+                    dict(kind=kind, extraction_job_id=extraction_job_id, cursor=cursor, limit=limit)
                 ),
                 storage,
                 settings,

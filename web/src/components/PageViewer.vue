@@ -10,14 +10,16 @@ const props = defineProps({
   startPage: { type: Number, default: 1 },
   // (page, zoom) => Promise<Blob> of image/png
   load: { type: Function, required: true },
+  maxConcurrent: { type: Number, default: 3 },
 });
 const emit = defineEmits(["update:modelValue"]);
 const scales = [100, 150, 200];
 const scale = ref(100), current = ref(1), jump = ref(1), pages = ref([]), scroller = ref(null);
 let observer = null, epoch = 0, active = 0;
-const waiting = [];
+const waiting = [], controllers = new Set();
 const zoomFor = () => (scale.value > 100 ? 2 : 1);
 function reset() {
+  for (const controller of controllers) controller.abort(); controllers.clear();
   epoch++; waiting.length = 0; active = 0;
   pages.value = Array.from({ length: props.pageCount }, (_, index) => ({ page: index + 1, src: null, error: "", zoom: 0 }));
 }
@@ -33,13 +35,14 @@ function request(entry) {
   waiting.push(entry); pump();
 }
 function pump() {
-  while (active < 3 && waiting.length) {
+  while (active < props.maxConcurrent && waiting.length) {
     const entry = waiting.shift(), zoom = zoomFor(), attempt = epoch;
     active++;
-    props.load(entry.page, zoom).then(readImage)
+    const controller = new AbortController(); controllers.add(controller);
+    props.load(entry.page, zoom, controller.signal).then(readImage)
       .then((src) => { if (attempt === epoch) { entry.src = src; entry.zoom = zoom; entry.error = ""; } })
       .catch((exc) => { if (attempt === epoch && exc.name !== "AbortError") entry.error = errorText(exc); })
-      .finally(() => { if (attempt === epoch) { active--; pump(); } });
+      .finally(() => { controllers.delete(controller); if (attempt === epoch) { active--; pump(); } });
   }
 }
 function observe() {

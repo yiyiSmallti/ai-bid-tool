@@ -54,6 +54,7 @@ from app.services.template_files import read_template
 from pydantic import ValidationError
 
 from bid_cli.agent import app as agent_app
+from bid_cli.annotation import register as register_annotation_commands
 from bid_cli.assessments import app as assessment_app
 from bid_cli.budget import register as register_budget_commands
 from bid_cli.check import app as check_app
@@ -1250,9 +1251,25 @@ def req_repair_citations(
     emit(response, "req repair-citations", json_output)
 
 
+def explicit_job_id(job_id: UUID | None, selected_id: UUID | None) -> UUID:
+    if (job_id is None) == (selected_id is None):
+        raise ServiceError(
+            "invalid_input", "Provide one job UUID, positionally or with --id", 400, 2
+        )
+    if job_id is not None:
+        return job_id
+    if selected_id is None:
+        raise ServiceError("invalid_input", "A job UUID is required", 400, 2)
+    return selected_id
+
+
 @job_app.command("status")
-def job_status(job_id: UUID, json_output: JsonOption = False):
-    body = call("GET", f"/jobs/{job_id}")
+def job_status(
+    job_id: Annotated[UUID | None, typer.Argument()] = None,
+    id: Annotated[UUID | None, typer.Option("--id")] = None,
+    json_output: JsonOption = False,
+):
+    body = call("GET", f"/jobs/{explicit_job_id(job_id, id)}")
     emit(
         body,
         "job status",
@@ -1268,17 +1285,22 @@ def job_status(job_id: UUID, json_output: JsonOption = False):
 
 @job_app.command("wait")
 def job_wait(
-    job_id: UUID,
+    job_id: Annotated[UUID | None, typer.Argument()] = None,
+    id: Annotated[UUID | None, typer.Option("--id")] = None,
     timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
     json_output: JsonOption = False,
 ):
-    body = asyncio.run(wait_for_job(job_id, timeout))
+    body = asyncio.run(wait_for_job(explicit_job_id(job_id, id), timeout))
     emit(body, "job wait", json_output, partial_completion_exit(body))
 
 
 @job_app.command("cancel")
-def job_cancel(job_id: UUID, json_output: JsonOption = False):
-    emit(call("POST", f"/jobs/{job_id}/cancel"), "job cancel", json_output)
+def job_cancel(
+    job_id: Annotated[UUID | None, typer.Argument()] = None,
+    id: Annotated[UUID | None, typer.Option("--id")] = None,
+    json_output: JsonOption = False,
+):
+    emit(call("POST", f"/jobs/{explicit_job_id(job_id, id)}/cancel"), "job cancel", json_output)
 
 
 @token_app.command("create")
@@ -1437,6 +1459,7 @@ register_team_workflow_commands(task_app, card_app)
 register_management_product_commands(product_app)
 register_management_feature_commands(feature_app)
 register_requirement_confirmation_commands(req_app)
+register_annotation_commands(evidence_app)
 
 
 @platform_card_app.command("create")
@@ -1633,6 +1656,8 @@ def main(args: list[str] | None = None):
             name = command_name(arguments)
             if (
                 name in NEW_COMMANDS
+                or name == "evidence stamp"
+                or name.startswith("evidence annotation ")
                 or name in MANAGEMENT_PRODUCT_COMMANDS
                 or name in MANAGEMENT_FEATURE_COMMANDS
                 or name.startswith("assessment ")

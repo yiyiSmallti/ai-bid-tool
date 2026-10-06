@@ -95,6 +95,11 @@ class Processor:
                 current.error = {
                     "code": error.code,
                     "message": "Submission authorization is no longer valid",
+                    "exit_code": error.exit_code
+                    if isinstance(error, ServiceError)
+                    else 3
+                    if error.retryable
+                    else 4,
                 }
                 current.finished_at = datetime.now(UTC)
                 return
@@ -145,6 +150,8 @@ class Processor:
                     "export_render",
                     "export_preview",
                     "product_simulation",
+                    "annotation_render",
+                    "annotation_release",
                     "screenshot_render",
                     "screenshot_analyze",
                     "prototype_generate",
@@ -221,6 +228,14 @@ class Processor:
 
                     converter = create_converter(self.settings, self.converter_transport)
                     await convert(execution, self.storage, converter, self.settings)
+                    return
+                if kind in {"annotation_render", "annotation_release"}:
+                    from app.services.annotation_jobs import process as process_annotation
+                    from app.services.annotations import renderer_for
+
+                    await process_annotation(
+                        execution, self.storage, renderer_for(self), self.queue
+                    )
                     return
                 if kind in {"screenshot_render", "screenshot_analyze"}:
                     from app.services.screenshot_jobs import process_analysis, process_render
@@ -341,7 +356,15 @@ class Processor:
                 async with self.db.transaction(org_id) as session:
                     current = await execution.owned_job(session)
                     await authorized_job(session, current)
-                    if current is None or current.status == "cancelled" or current.run_id != run_id:
+                    if (
+                        current is None
+                        or current.status == "cancelled"
+                        or current.run_id != run_id
+                        or (
+                            kind in {"annotation_render", "annotation_release"}
+                            and current.status == "succeeded"
+                        )
+                    ):
                         return
                     document = await session.get(Document, document_id)
                     if document is None:
@@ -489,7 +512,12 @@ class Processor:
                     error = {
                         "code": exc.code,
                         "message": str(exc),
-                        "exit_code": 3 if exc.retryable else 4,
+                        "exit_code": 2
+                        if kind in {"annotation_render", "annotation_release"}
+                        and exc.code == "output_limit_exceeded"
+                        else 3
+                        if exc.retryable
+                        else 4,
                     }
                     retryable = exc.retryable
                 else:

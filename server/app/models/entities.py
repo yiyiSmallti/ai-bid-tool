@@ -94,6 +94,9 @@ class ApiToken(Tenant, Base):
         ),
         CheckConstraint("NOT (scopes ? 'provider:write')", name="token_no_provider_write"),
         CheckConstraint("NOT (scopes ? 'token:create')", name="token_forbidden_creation_scope"),
+        CheckConstraint(
+            "NOT (scopes ? 'evidence:annotate')", name="token_forbidden_annotation_scope"
+        ),
         CheckConstraint("NOT (scopes ? 'check:decide')", name="token_forbidden_check_scopes"),
         CheckConstraint(
             "NOT (scopes ? 'score:rubric:review')", name="token_forbidden_score_scopes"
@@ -416,6 +419,10 @@ class Job(Tenant, Base):
     invocation_id: Mapped[UUID | None] = mapped_column()
     command: Mapped[str | None] = mapped_column(String(100))
     __table_args__ = (
+        CheckConstraint(
+            "kind NOT IN ('annotation_render','annotation_release') OR (task_id IS NOT NULL AND document_id IS NOT NULL AND actor_user_id IS NOT NULL AND actor_kind='session' AND actor_token_id IS NULL)",
+            name="annotation_job_kind",
+        ),
         *agent_origin_constraints("jobs"),
         UniqueConstraint("org_id", "agent_session_id", "id", name="agent_job_session"),
         ForeignKeyConstraint(
@@ -1084,6 +1091,16 @@ class EvidenceSource(Tenant, Base):
     eligible_for_draft_export: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint(
+            "org_id",
+            "id",
+            "task_id",
+            "task_certificate_id",
+            "certificate_id",
+            "certificate_revision_id",
+            "certificate_file_id",
+            name="annotation_certificate_source_scope",
+        ),
         UniqueConstraint("org_id", "task_certificate_id", "page", "render_profile"),
         ForeignKeyConstraint(
             [

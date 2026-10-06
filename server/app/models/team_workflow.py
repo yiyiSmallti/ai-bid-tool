@@ -338,6 +338,9 @@ class CardReviewSignature(Tenant, Base):
     request_sha256: Mapped[str] = mapped_column(String(64))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint(
+            "org_id", "task_id", "card_id", "round_id", "id", name="annotation_signature_scope"
+        ),
         UniqueConstraint("org_id", "round_id", "ordinal"),
         UniqueConstraint("org_id", "round_id", "domain"),
         UniqueConstraint("org_id", "round_id", "signer_user_id"),

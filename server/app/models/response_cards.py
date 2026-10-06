@@ -25,6 +25,14 @@ class ResponseCard(Tenant, Base):
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "id", "task_id"),
+        UniqueConstraint(
+            "org_id",
+            "id",
+            "task_id",
+            "extraction_job_id",
+            "requirement_id",
+            name="annotation_card_scope",
+        ),
         UniqueConstraint("org_id", "task_id", "extraction_job_id", "requirement_id"),
         tenant_fk("task_id", "tasks"),
         tenant_fk("extraction_job_id", "jobs"),
