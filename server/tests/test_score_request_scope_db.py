@@ -37,7 +37,6 @@ from test_score_run import (
     counts,
     finish_score,
     install_score_resolver,
-    preview_score,
     submit_score,
 )
 
@@ -176,8 +175,21 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
     assert llm.settings.llm_batch_chars == 8000
     assert llm.settings.score_batch_chars == 64000
     before = await counts(case)
-    preview = await preview_score(case)
-    ScorePreview.model_validate(preview)
+    # Planned-call accounting is part of the Result 4.0 preview, so read it from /v4.
+    response = await case["api"].post(
+        f"/v4/tasks/{case['task']}/scores/preview",
+        headers=case["header"],
+        json={
+            "draft_id": case["draft_id"],
+            "rubric_id": case["rubric"]["rubric"]["id"],
+            "assessment_date": "2026-10-05",
+            "dry_run": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    preview = response.json()["data"]
+    # Result 4.0 adds the shared budget preflight to the score preview fields.
+    ScorePreview.model_validate({k: v for k, v in preview.items() if k != "budget_preflight"})
     assert preview["admission_blocker"] is None
     assert preview["cost_basis"] == "known"
     assert len(preview["selected_item_ids"]) == 86
