@@ -218,9 +218,13 @@ test.describe("rules check acceptance", () => {
   test("rules date edit invalidates preview and delayed source is discarded on org exit", async ({ page }) => {
     const state = await fixture(page);
     await page.goto(workspace);
+    await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toBeEnabled();
+    const preview = state.requests.find((row) => row.method === "POST" && row.body?.dry_run === true).body;
+    expect(preview.assessment_date).toBe("2026-10-05");
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-06");
+    await expect(page.getByLabel("评估日期", { exact: true })).toHaveValue("2026-10-06");
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toHaveCount(0);
     expect(state.submissions).toBe(0);
     let release;
@@ -554,6 +558,76 @@ test.describe("rubric acceptance", () => {
     expect(state.writes).toBe(2);
     await artifact(page, state, "rubric-complete-replacement");
   });
+
+  for (const role of ["bidder", "technical"]) {
+    test(`rubric ${role} repairs own entries while preserving another domain's invalid declarations`, async ({ page }) => {
+      const state = await rubricFixture(page, { role });
+      const ownDomain = role === "bidder" ? "commercial" : "technical", otherDomain = role === "bidder" ? "technical" : "commercial";
+      for (const rows of [state.sections, state.rubricItems]) { rows[0].review_domain = ownDomain; rows[1].review_domain = otherDomain; }
+      Object.assign(state.sections[0], { weight: "35", score_range: { minimum: "12", maximum: "10" }, normalization_errors: ["invalid_score_bounds", "invalid_weight"] });
+      Object.assign(state.rubricItems[0], { score_range: null, normalization_errors: ["missing_score_bounds"] });
+      Object.assign(state.sections[1], { weight: "35", cap: "-2.12345678", score_range: { minimum: "12.12345678", maximum: "10.12345678" }, normalization_errors: ["invalid_cap", "invalid_score_bounds", "invalid_weight", "unexpected_cap"] });
+      Object.assign(state.rubricItems[1], { assessment_mode: "model_assessable", score_range: null, weight: "35.12345678", ambiguity_reason: null, normalization_errors: ["invalid_weight", "missing_score_bounds"] });
+      const lockedSection = structuredClone(state.sections[1]), lockedItem = structuredClone(state.rubricItems[1]);
+      state.nextNormalizationErrors = { sections: [[], lockedSection.normalization_errors], items: [[], lockedItem.normalization_errors] };
+      await page.goto(rubricReview);
+      await expect(page.getByTestId("rubric-normalization-errors")).toContainText("invalid_weight");
+      await page.getByRole("button", { name: "完整修订评分规则", exact: true }).click();
+      const dialog = page.getByRole("dialog", { name: "完整修订评分规则" });
+      await expect(dialog.getByRole("status")).toContainText("分节 2、条目 2、评分要求 2");
+      for (const part of ["sections", "items", "coverage"]) expect(state.requests.some(row => row.query.part === part && row.query.cursor === "second-page")).toBe(true);
+      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("invalid_score_bounds");
+      await expect(dialog.getByLabel("权重", { exact: true })).toHaveValue("35");
+      await dialog.getByLabel("权重", { exact: true }).fill("");
+      await dialog.getByLabel("最低分", { exact: true }).fill("0");
+      await dialog.getByRole("button", { name: "下一条修订", exact: true }).click();
+      await expect(dialog.getByLabel("标题", { exact: true })).toBeDisabled();
+      await expect(dialog.getByRole("button", { name: "移除当前项", exact: true })).toBeDisabled();
+      await expect(dialog.getByLabel("权重", { exact: true })).toBeDisabled();
+      await expect(dialog.getByLabel("权重", { exact: true })).toHaveValue("35");
+      await expect(dialog.getByLabel("最高分", { exact: true })).toHaveValue(lockedSection.score_range.maximum);
+      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("unexpected_cap");
+      await dialog.getByRole("tab", { name: "修订条目", exact: true }).click();
+      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("missing_score_bounds");
+      await dialog.getByRole("button", { name: "设置分值范围", exact: true }).click();
+      await dialog.getByLabel("最高分", { exact: true }).fill("10");
+      await dialog.getByRole("button", { name: "下一条修订", exact: true }).click();
+      await expect(dialog.getByLabel("权重", { exact: true })).toBeDisabled();
+      await expect(dialog.getByLabel("权重", { exact: true })).toHaveValue(lockedItem.weight);
+      await expect(dialog.getByRole("button", { name: "设置分值范围", exact: true })).toBeDisabled();
+      await expect(dialog.getByTestId("replacement-normalization-errors")).toContainText("missing_score_bounds");
+      if (role === "technical") {
+        await dialog.getByRole("tab", { name: "修订总分规则", exact: true }).click();
+        await expect(dialog.getByRole("combobox", { name: "总分合计规则", exact: true })).toBeDisabled();
+      }
+      await dialog.getByLabel("完整修订理由", { exact: true }).fill("仅修复当前职责的权重和分值范围，保留其他职责原始声明供后续审核。详细错误由服务器保存后重新核验。");
+      await dialog.getByRole("button", { name: "保存完整修订", exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`/score-rubrics/${uuid(23)}$`));
+      const replacement = state.replacements[0];
+      expect(replacement.sections[0]).toMatchObject({ weight: null, score_range: { minimum: "0", maximum: "10" } });
+      expect(replacement.items[0].score_range).toEqual({ minimum: "0", maximum: "10" });
+      expect(replacement.sections[1]).toMatchObject({ weight: lockedSection.weight, cap: lockedSection.cap, score_range: lockedSection.score_range });
+      expect(replacement.items[1]).toMatchObject({ weight: lockedItem.weight, score_range: null, ambiguity_reason: null });
+      for (const field of ["key", "title", "order", "aggregation", "aggregation_rule_text", "score_range", "weight", "cap", "included_in_overall_total", "ambiguity_reason"]) expect(replacement.sections[1][field]).toEqual(lockedSection[field]);
+      expect(replacement.sections[1].sources).toEqual(lockedSection.sources.map(({ requirement_id, quote }) => ({ requirement_id, quote })));
+      expect(replacement.sections[1].source_section_id).toBe(lockedSection.id);
+      for (const field of ["requirement_id", "key", "title", "rule_text", "order", "assessment_mode", "score_range", "weight", "ambiguity_reason"]) expect(replacement.items[1][field]).toEqual(lockedItem[field]);
+      expect(replacement.items[1].source_item_id).toBe(lockedItem.id); expect(replacement.items[1].section_key).toBe(lockedSection.key);
+      if (role === "technical") expect(replacement).toMatchObject({ overall_aggregation: "sum", overall_rule_text: null, overall_score_range: { minimum: "0", maximum: "10" }, overall_cap: null });
+      for (const part of ["sections", "items"]) for (const row of replacement[part]) { expect(row).not.toHaveProperty("normalization_errors"); expect(row).not.toHaveProperty("review_domain"); }
+      expect(state.sections[0].normalization_errors).toEqual([]); expect(state.rubricItems[0].normalization_errors).toEqual([]);
+      expect(state.rubricSummary().completeness.normalization_errors).toBeGreaterThan(0);
+      await expect(page.getByTestId("rubric-normalization-errors")).toHaveCount(0);
+      await page.getByRole("button", { name: "下一页", exact: true }).click();
+      await expect(page.getByTestId("rubric-normalization-errors")).toContainText("invalid_score_bounds");
+      await page.getByRole("tab", { name: "审核条目", exact: true }).click();
+      await page.getByRole("button", { name: "下一页", exact: true }).click();
+      await expect(page.getByTestId("rubric-normalization-errors")).toContainText("missing_score_bounds");
+      await expect(page.getByRole("button", { name: "确认整套评分规则", exact: true })).toBeDisabled();
+      expect(state.writes).toBe(1);
+      await artifact(page, state, `rubric-domain-repair-${role}`);
+    });
+  }
 
   for (const problem of ["mixedSnapshot", "missingPage"]) {
     test(`rubric ${problem} disables complete replacement save`, async ({ page }) => {

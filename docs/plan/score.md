@@ -77,6 +77,24 @@ remove or select these verified citations, retaining at least one; the service r
 Source rather than accepting Source JSON from the caller. Removing the first citation does not
 rebind or rewrite the remaining citations. Item revisions retain their single `requirement_id`. The service creates a new candidate version/new IDs, retaining `prior_rubric_id` and revision reason; old versions/decisions remain intact. New versions repeat classification, coverage, item, and set confirmation. Revision input accepts no `review_domain`; all new section/item domains reset to null and require admin reclassification, preventing inherited/self-assigned domains from bypassing gates. Decision, classification, coverage, and revision history are append-only and paginated through history GET.
 
+Replacement input uses the same finite decimal and range types as candidate storage. Both unchanged
+entries and entries edited within the reviewer's domain may retain the normalization errors in the
+[mapping table](#first-version-aggregation-algorithms); a revision saves a candidate, not a confirmation.
+This permits incremental repair when several domains have errors. Required keys, field types, enums,
+unique keys, snapshot references and the verified-source selection rules remain validation gates.
+Other domains' declarations, Requirement bindings, citations and section membership must match the
+stored prior candidate, without repairing or validating them as confirmed rules first. Stored JSON
+range declarations and text must remain exact; numeric columns compare decimal values. The technical reviewer must
+also preserve the stored overall rule. The service recomputes normalization for every new version
+and on reads, without inheriting obsolete errors from the prior version. The dev deadlock motivating
+this rule is recorded in the [revision changelog](../changelog.md#2026-10-06-rubric-revision-across-domains-with-normalization-errors).
+
+Section and item reads, including console pages, expose additive `normalization_errors` lists for
+their local invariants from `score_normalization.subject_errors`. These codes identify the entry to
+repair; they are read metadata, never accepted replacement fields. Errors involving multiple entries
+or the overall rule remain in `rubric.completeness.normalization_errors` and console blockers. The
+replacement editor displays the loaded errors until a save/reload obtains recomputed codes.
+
 A set becomes confirmed only when `completeness.complete=true`, no normalization errors exist, and all item gates are complete; score accepts only confirmed sets. `formula`/`non_additive` can enter a complete rubric as fully recorded, human-confirmed rules, but have `aggregation_assessable=false`; they are neither executed nor blockers to rubric completeness. Their section/overall scores always remain `unavailable`.
 
 ### First-version aggregation algorithms

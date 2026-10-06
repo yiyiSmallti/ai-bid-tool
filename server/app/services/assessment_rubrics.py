@@ -439,6 +439,9 @@ async def subject_view(session: AsyncSession, row: ScoreRubricSet, child: Any, p
         return ConsoleRubricSectionView.model_validate(
             {
                 **score.fields(child, fields),
+                "normalization_errors": sorted(
+                    score_normalization.subject_errors("section", score.fields(child, fields))
+                ),
                 "sources": score.section_sources(child),
                 "aggregation_assessable": child.aggregation
                 in {"sum", "weighted_sum", "capped_sum"},
@@ -464,7 +467,13 @@ async def subject_view(session: AsyncSession, row: ScoreRubricSet, child: Any, p
         "fingerprint",
     )
     return RubricItemView.model_validate(
-        {**score.fields(child, fields), **await score.review_state(session, row, item_id=child.id)}
+        {
+            **score.fields(child, fields),
+            "normalization_errors": sorted(
+                score_normalization.subject_errors("item", score.fields(child, fields))
+            ),
+            **await score.review_state(session, row, item_id=child.id),
+        }
     )
 
 

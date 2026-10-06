@@ -24,6 +24,12 @@ Replacement events retain the validated complete request, including proposed cov
 database-verified snapshot hash. Effective coverage in the new version starts pending and requires
 new coverage decisions; a proposal in a replacement request is not an inherited confirmation.
 
+For incremental domain repair, copy the complete candidate and edit only the responsible domain.
+Section/item `normalization_errors` locate local problems; completeness and console blockers retain
+aggregate problems. Other-domain errors may remain in the saved version. The next reviewer acts
+after the admin classifies the new IDs again; every required decision must still precede set
+confirmation. See the [replacement contract](../plan/score.md#rubric-versions-coverage-and-human-confirmation-人工确认).
+
 Complex inputs are UTF-8 JSON files. All commands return the seven-key `Result` envelope and never
 prompt. Generate submission can return immediately or wait for the rubric job; a retained partial
 result exits 5.
@@ -189,6 +195,14 @@ normalization errors. The same applies to unused weights, invalid weight sums an
 bounds; the [aggregation contract and error table](../plan/score.md#first-version-aggregation-algorithms)
 define the codes. Candidate storage and console reads preserve the declared values and verbatim
 rule text. Do not move cap into score bounds, relabel an aggregation, or fill missing weights.
+
+Replacement validation has the same candidate semantics, including partially repaired entries.
+Requiring all entries to satisfy confirmed-rule invariants before domain authorization can deadlock
+every reviewer when the untouched domain also has errors, as in the
+[dev revision incident](../changelog.md#2026-10-06-rubric-revision-across-domains-with-normalization-errors).
+`score.revise_rubric` compares other-domain fields against immutable stored declarations and
+preserves citation selectors and section membership. It recomputes completeness for the new version;
+the unchanged application and database confirmation gates reject remaining errors.
 Malformed types/keys/enums and invalid citations still fail their existing checks.
 
 Candidate numeric storage checks differ from confirmation checks. Migration
