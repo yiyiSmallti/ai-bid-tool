@@ -293,6 +293,8 @@ async def test_new_tables_fail_closed_and_reject_foreign_inserts(
                 == "NO"
             )
         row["id"] = uuid4()
+        # Generated columns cannot be written; leave them out so RLS answers the insert.
+        row = {key: value for key, value in row.items() if model.c[key].computed is None}
         with pytest.raises(DBAPIError) as error:
             async with db.transaction(org_a) as session:
                 await session.execute(model.insert().values(**row))
