@@ -17,6 +17,7 @@ from app.jobs.execution import JobExecution, job_cost
 from app.memory import retrieval as memory_retrieval
 from app.memory.safety import reject_sensitive, sanitize
 from app.models.entities import (
+    Chunk,
     EvidenceSource,
     Job,
     Requirement,
@@ -51,7 +52,7 @@ from app.schemas.response_card_contracts import (
     PageEvidenceInput,
     ResourceEvidenceInput,
 )
-from app.services import billing, confidential, redaction
+from app.services import billing, confidential, redaction, requirement_source
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.drafts import digest
@@ -163,6 +164,8 @@ async def snapshot(
     )
     fields = confidential.prompt_fields(registered)
     targets, selected, skipped, original_requirements = {}, [], {}, []
+    chunk_hashes = {}
+    generation_manifests = {}
     for requirement in requirements:
         key = str(requirement.id)
         card = await session.scalar(
@@ -176,14 +179,35 @@ async def snapshot(
         if reason:
             skipped[key] = reason
             continue
-        if not await cards.citation_valid(session, requirement):
+        chunk = await session.get(Chunk, requirement.chunk_id)
+        if not cards.citation_valid_in_chunk(requirement, chunk):
             skipped[key] = "invalid_citation"
             continue
+        assert chunk is not None
+        bind_chunk = card is None
+        if revision is not None and revision.origin == "model" and revision.model_job_id:
+            if revision.model_job_id not in generation_manifests:
+                prior = await session.scalar(
+                    select(CardGenerationRun).where(
+                        CardGenerationRun.generation_job_id == revision.model_job_id
+                    )
+                )
+                generation_manifests[revision.model_job_id] = prior.input_manifest if prior else {}
+            # A newly generated card keeps its original no-card identity so an
+            # unchanged retry can reuse the paid job. Legacy card keys stay intact.
+            bind_chunk = any(
+                entry["requirement_id"] == key and "chunk_sha256" in entry
+                for entry in generation_manifests[revision.model_job_id].get("requirements", [])
+            )
+        if bind_chunk and chunk.id not in chunk_hashes:
+            # Use the same complete chunk/block hash as the verified source pin.
+            chunk_hashes[chunk.id] = requirement_source.digest(requirement_source.chunk_data(chunk))
         selected.append(key)
         original_requirements.append(
             {
                 "requirement_id": key,
                 "quote": requirement.quote,
+                **({"chunk_sha256": chunk_hashes[chunk.id]} if bind_chunk else {}),
                 "location": {"page": requirement.page, "block": requirement.location},
             }
         )
@@ -258,6 +282,7 @@ async def snapshot(
                 "requirement_id": raw["requirement_id"],
                 "document_id": str(by_requirement[raw["requirement_id"]].document_id),
                 "chunk_id": str(by_requirement[raw["requirement_id"]].chunk_id),
+                **({"chunk_sha256": raw["chunk_sha256"]} if "chunk_sha256" in raw else {}),
                 "page": raw["location"]["page"],
                 "quote_sha256": cards.quote_hash(raw["quote"]),
                 "location_sha256": digest(raw["location"]),
