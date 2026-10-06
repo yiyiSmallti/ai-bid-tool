@@ -47,6 +47,19 @@ product and implementation state. Exact revision authors come from a unique matc
 association, or remain unknown. A root-level simulation marker applies to older
 revisions too.
 
+Product and feature authors use `AuditLog.resource_revision_id_text`, a stored text projection
+of the audit revision ID in [0050](../../server/migrations/versions/0050_feature_library.py).
+One audit query explicitly filters the authenticated org and only the loaded page's
+revision IDs, matching each kind's action partial index's leading columns. Fixed
+action literals preserve partial-index eligibility for prepared plans. Root and
+numeric revision checks still apply, and multiple exact audit matches leave the
+author unknown. The generated column inherits the audit table's FORCE RLS and does
+not introduce a writable author or revision identifier.
+
+Both fixed-scale suites bound visited immutable revision and audit rows, including
+rows discarded by filters and index rechecks. Recorded latency alone does not
+establish bounded history access.
+
 Product and feature read routes use the joined identity, active Membership and org lookup in
 [`authenticate`](../../server/app/services/auth.py). The service consumes that
 request's authenticated identity once; direct service calls revalidate authority.

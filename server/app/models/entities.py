@@ -7,6 +7,7 @@ from sqlalchemy import (
     BigInteger,
     Boolean,
     CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -542,6 +543,9 @@ class AuditLog(Tenant, Base):
     action: Mapped[str] = mapped_column(String(100))
     object_id: Mapped[UUID] = mapped_column()
     details: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    resource_revision_id_text: Mapped[str | None] = mapped_column(
+        Text, Computed("details->>'new_revision_id'", persisted=True)
+    )
     initiated_by: Mapped[str | None] = mapped_column(String(30))
     on_behalf_of_user_id: Mapped[UUID | None] = mapped_column()
     agent_principal_id: Mapped[UUID | None] = mapped_column()
@@ -554,6 +558,24 @@ class AuditLog(Tenant, Base):
     run_id: Mapped[UUID | None] = mapped_column()
     __table_args__ = (
         *agent_origin_constraints("audit_logs"),
+        Index(
+            "management_product_audit_author",
+            "org_id",
+            "resource_revision_id_text",
+            "object_id",
+            postgresql_where=text(
+                "action IN ('resource.product.create','resource.product.update')"
+            ),
+        ),
+        Index(
+            "management_feature_audit_author",
+            "org_id",
+            "resource_revision_id_text",
+            "object_id",
+            postgresql_where=text(
+                "action IN ('resource.feature.create','resource.feature.update')"
+            ),
+        ),
         ForeignKeyConstraint(
             ["org_id", "agent_session_id", "job_id"],
             ["jobs.org_id", "jobs.agent_session_id", "jobs.id"],

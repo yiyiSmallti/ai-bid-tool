@@ -77,7 +77,8 @@ def plan_work(node):
         "index": node.get("Index Name"),
         "rows": node.get("Actual Rows", 0),
         "loops": node.get("Actual Loops", 0),
-        "rows_removed": node.get("Rows Removed by Filter", 0),
+        "rows_removed": node.get("Rows Removed by Filter", 0)
+        + node.get("Rows Removed by Index Recheck", 0),
         "shared_hit_blocks": node.get("Shared Hit Blocks", 0),
         "shared_read_blocks": node.get("Shared Read Blocks", 0),
     }
@@ -216,9 +217,33 @@ async def test_fixed_scale_product_reads(api, headers, application, tenants, adm
                         "EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) " + statement, parameters
                     )
                     plan = explained.scalar_one()
+                    assert isinstance(plan, list) and len(plan) == 1
+                    assert isinstance(plan[0], dict) and isinstance(plan[0].get("Plan"), dict)
+                    assert "Execution Time" in plan[0] and "Actual Rows" in plan[0]["Plan"]
+                    work = plan_work(plan[0]["Plan"])
+                    assert work and all(row["loops"] >= 0 and row["rows"] >= 0 for row in work)
+                    visits = {}
+                    for row in work:
+                        relation = row["relation"]
+                        if relation in {"product_revisions", "audit_logs"}:
+                            visits[relation] = (
+                                visits.get(relation, 0)
+                                + (row["rows"] + row["rows_removed"]) * row["loops"]
+                            )
+                    # Prefix scans may touch all current roots, but immutable history
+                    # relations must not scale with the 100,000-row revision fixture.
+                    for relation, visited in visits.items():
+                        if visited > ROOTS * 2:
+                            failures.append(f"{name}: {relation} visited {visited} history rows")
                     plans.append(
-                        {"sql": statement, "plan": plan, "work": plan_work(plan[0]["Plan"])}
+                        {
+                            "sql": statement,
+                            "plan": plan,
+                            "work": work,
+                            "history_relation_visits": visits,
+                        }
                     )
+            assert plans, f"{name}: no real database plans captured"
             p95 = sorted(timings)[math.ceil(SAMPLES * 0.95) - 1]
             receipt["measurements"].append(
                 {
