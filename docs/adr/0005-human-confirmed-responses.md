@@ -26,7 +26,7 @@ Extracted requirements, material declarations, model responses (响应), and hum
 
 The approved amendment is implemented by the input-bound rounds and complete-round
 gates described in [Team workflow](../notes/team-workflow.md#how-it-works).
-[Migration 0044](../../server/migrations/versions/0044_team_workflow_cosign.py)
+[Migration 0044](../../server/migrations/versions/0045_team_workflow_cosign.py)
 extends the revision, signature, Evidence and response-item gates together with
 service, draft, export and assessment consumption checks. Existing historical
 single-domain decisions keep their actual human records; they receive no synthetic

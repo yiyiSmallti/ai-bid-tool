@@ -257,7 +257,7 @@ must fail above the approved fan-out bound rather than lose invalidations.
   assignment/discussion RLS tables, immutable messages and membership-change guards.
 - [task_cosign.py](../../server/app/services/task_cosign.py): policies, current approval,
   encrypted disposition reasons, signature receipts and atomic human completion.
-- [0044_team_workflow_cosign.py](../../server/migrations/versions/0044_team_workflow_cosign.py):
+- [0045_team_workflow_cosign.py](../../server/migrations/versions/0045_team_workflow_cosign.py):
   co-sign history, direct SQL gates, retirement and transactional producers.
 - [drafts.py](../../server/app/services/drafts.py),
   [exports.py](../../server/app/services/exports.py) and
