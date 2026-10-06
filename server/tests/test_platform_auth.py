@@ -74,8 +74,10 @@ async def test_operator_signs_in_with_password_and_totp(client):
 )
 async def test_failed_sign_ins_are_uniform_and_audited(case, client):
     if case == "replayed_code":
-        assert (await sign_in(client)).status_code == 200
-        response = await sign_in(client)
+        # Pin the counter: across a 30-second boundary the second code would be new.
+        counter = now_counter()
+        assert (await sign_in(client, counter=counter)).status_code == 200
+        response = await sign_in(client, counter=counter)
     elif case == "wrong_password":
         response = await sign_in(client, password="wrong-password")
     elif case == "wrong_code":
