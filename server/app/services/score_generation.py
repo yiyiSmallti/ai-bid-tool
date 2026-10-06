@@ -58,7 +58,7 @@ from app.schemas.score_contracts import (
 from app.services import confidential, drafts, redaction, score_inputs, score_normalization
 from app.services import response_cards as cards
 from app.services.auth import Identity
-from app.services.extraction import locate_quote, locate_span
+from app.services.extraction import locate_quote, locate_source_citation_span
 from app.services.score_inputs import RubricSnapshot
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
@@ -697,8 +697,11 @@ def _verified_requirement(
     original_quote, reason = locate_quote(binding["original"], citation.quote)
     if original_quote is None:
         return None, reason
-    if locate_span(binding["location_original"], original_quote)[0] is None:
-        return None, locate_span(binding["location_original"], original_quote)[1]
+    span, reason = locate_source_citation_span(
+        binding["location_original"], binding["original"], original_quote
+    )
+    if span is None:
+        return None, reason
     return binding["requirement_id"], None
 
 
