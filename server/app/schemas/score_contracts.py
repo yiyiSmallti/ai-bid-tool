@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Literal, Protocol, Self
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, model_validator
+from pydantic import AwareDatetime, Field, StringConstraints, model_validator
 
 from app.schemas.check_contracts import (
     AssessmentFailure,
@@ -43,6 +43,17 @@ type AssessmentMode = Literal[
 ]
 type AggregationRule = Literal["sum", "weighted_sum", "capped_sum", "formula", "non_additive"]
 type Weight = Annotated[Decimal, Field(gt=0, le=1, max_digits=18, decimal_places=8)]
+type CandidateScoreNumber = Annotated[
+    Decimal, Field(max_digits=18, decimal_places=8, allow_inf_nan=False)
+]
+type VerbatimRule = Annotated[str, StringConstraints(min_length=1, max_length=20000, pattern=r"\S")]
+
+
+class CandidateScoreRange(Contract):
+    """Typed model declarations; semantic bounds are checked during normalization."""
+
+    minimum: CandidateScoreNumber
+    maximum: CandidateScoreNumber
 
 
 class ScoreRange(Contract):
@@ -121,10 +132,10 @@ class RubricSectionView(Contract):
     order: int = Field(ge=1)
     aggregation: AggregationRule
     aggregation_assessable: bool
-    aggregation_rule_text: NonBlank | None = None
-    score_range: ScoreRange | None = None
-    weight: Weight | None = None
-    cap: Money | None = None
+    aggregation_rule_text: VerbatimRule | None = None
+    score_range: CandidateScoreRange | None = None
+    weight: CandidateScoreNumber | None = None
+    cap: CandidateScoreNumber | None = None
     included_in_overall_total: bool
     ambiguity_reason: NonBlank | None = None
     review_domain: ReviewDomain | None = None
@@ -139,10 +150,21 @@ class RubricSectionView(Contract):
         executable = self.aggregation in {"sum", "weighted_sum", "capped_sum"}
         if self.aggregation_assessable != executable:
             raise ValueError("aggregation_assessable must reflect the supported algorithms")
-        if self.aggregation in {"formula", "non_additive"} and self.aggregation_rule_text is None:
-            raise ValueError("unsupported aggregation rules require their fixed original wording")
-        if (self.aggregation == "capped_sum") != (self.cap is not None):
-            raise ValueError("only capped_sum requires a cap")
+        if self.state == "confirmed":
+            if self.score_range is not None:
+                ScoreRange.model_validate(self.score_range.model_dump())
+            if self.weight is not None and not 0 < self.weight <= 1:
+                raise ValueError("confirmed section weights must be in (0, 1]")
+            if self.cap is not None and self.cap < 0:
+                raise ValueError("confirmed section caps must be nonnegative")
+            if self.aggregation in {"formula", "non_additive"} and (
+                self.aggregation_rule_text is None or self.ambiguity_reason is None
+            ):
+                raise ValueError(
+                    "unsupported aggregation rules require fixed original wording and a limitation"
+                )
+            if (self.aggregation == "capped_sum") != (self.cap is not None):
+                raise ValueError("only capped_sum requires a cap")
         if (self.confirmed_by is None) != (self.confirmed_at is None):
             raise ValueError("rubric section confirmation actor and time must be paired")
         if self.state == "confirmed" and (self.confirmed_by is None or self.review_domain is None):
@@ -160,11 +182,11 @@ class RubricItemView(Contract):
     category: Literal[Category.scoring] = Category.scoring
     key: NonBlank
     title: NonBlank
-    rule_text: NonBlank
+    rule_text: VerbatimRule
     order: int = Field(ge=1)
     assessment_mode: AssessmentMode
-    score_range: ScoreRange | None = None
-    weight: Weight | None = None
+    score_range: CandidateScoreRange | None = None
+    weight: CandidateScoreNumber | None = None
     ambiguity_reason: NonBlank | None = None
     source: Source
     fingerprint: Sha256
@@ -176,10 +198,15 @@ class RubricItemView(Contract):
 
     @model_validator(mode="after")
     def rubric_item_is_coherent(self) -> Self:
-        if self.assessment_mode == "model_assessable" and self.score_range is None:
-            raise ValueError("model-assessable rubric items require score bounds")
-        if self.assessment_mode != "model_assessable" and self.ambiguity_reason is None:
-            raise ValueError("non-model assessment modes require an explicit reason")
+        if self.state == "confirmed":
+            if self.score_range is not None:
+                ScoreRange.model_validate(self.score_range.model_dump())
+            if self.weight is not None and not 0 < self.weight <= 1:
+                raise ValueError("confirmed item weights must be in (0, 1]")
+            if self.assessment_mode == "model_assessable" and self.score_range is None:
+                raise ValueError("model-assessable rubric items require score bounds")
+            if self.assessment_mode != "model_assessable" and self.ambiguity_reason is None:
+                raise ValueError("non-model assessment modes require an explicit reason")
         if (self.confirmed_by is None) != (self.confirmed_at is None):
             raise ValueError("rubric item confirmation actor and time must be paired")
         if self.state == "confirmed" and (self.confirmed_by is None or self.review_domain is None):
@@ -270,9 +297,9 @@ class RubricSetView(Contract):
     revision: int = Field(ge=1)
     overall_aggregation: AggregationRule
     overall_aggregation_assessable: bool
-    overall_rule_text: NonBlank | None = None
-    overall_score_range: ScoreRange | None = None
-    overall_cap: Money | None = None
+    overall_rule_text: VerbatimRule | None = None
+    overall_score_range: CandidateScoreRange | None = None
+    overall_cap: CandidateScoreNumber | None = None
     completeness: RubricCompletenessView
     confirmed_by: UUID | None = None
     confirmed_at: AwareDatetime | None = None
@@ -283,13 +310,20 @@ class RubricSetView(Contract):
         executable = self.overall_aggregation in {"sum", "weighted_sum", "capped_sum"}
         if self.overall_aggregation_assessable != executable:
             raise ValueError("overall aggregation assessability must use supported algorithms")
-        if (
-            self.overall_aggregation in {"formula", "non_additive"}
-            and self.overall_rule_text is None
-        ):
-            raise ValueError("unsupported overall aggregation requires its fixed original wording")
-        if (self.overall_aggregation == "capped_sum") != (self.overall_cap is not None):
-            raise ValueError("only capped_sum requires an overall cap")
+        if self.state == "confirmed":
+            if self.overall_score_range is not None:
+                ScoreRange.model_validate(self.overall_score_range.model_dump())
+            if self.overall_cap is not None and self.overall_cap < 0:
+                raise ValueError("confirmed overall caps must be nonnegative")
+            if (
+                self.overall_aggregation in {"formula", "non_additive"}
+                and self.overall_rule_text is None
+            ):
+                raise ValueError(
+                    "unsupported overall aggregation requires its fixed original wording"
+                )
+            if (self.overall_aggregation == "capped_sum") != (self.overall_cap is not None):
+                raise ValueError("only capped_sum requires an overall cap")
         if (self.confirmed_by is None) != (self.confirmed_at is None):
             raise ValueError("rubric set confirmation actor and time must be paired")
         if self.state == "confirmed" and (
@@ -313,7 +347,7 @@ class RubricSectionRevisionInput(Contract):
     title: NonBlank
     order: int = Field(ge=1)
     aggregation: AggregationRule
-    aggregation_rule_text: NonBlank | None = None
+    aggregation_rule_text: VerbatimRule | None = None
     score_range: ScoreRange | None = None
     weight: Weight | None = None
     cap: Money | None = None
@@ -335,7 +369,7 @@ class RubricItemRevisionInput(Contract):
     section_key: NonBlank
     key: NonBlank
     title: NonBlank
-    rule_text: NonBlank
+    rule_text: VerbatimRule
     order: int = Field(ge=1)
     assessment_mode: AssessmentMode
     score_range: ScoreRange | None = None
@@ -380,7 +414,7 @@ class RubricReviseRequest(Contract):
     items: list[RubricItemRevisionInput] = Field(min_length=1)
     coverage: list[RubricCoverageRevisionInput] = Field(min_length=1)
     overall_aggregation: AggregationRule
-    overall_rule_text: NonBlank | None = None
+    overall_rule_text: VerbatimRule | None = None
     overall_score_range: ScoreRange | None = None
     overall_cap: Money | None = None
     reason: NonBlank
@@ -748,25 +782,19 @@ class RubricProviderRequest(Contract):
 
 
 class RubricSectionContext(Contract):
+    """Unconfirmed structure copied verbatim into item requests and candidate storage."""
+
     key: NonBlank
     title: NonBlank
-    order: int = Field(ge=1)
+    order: int = Field(ge=1, strict=True)
     aggregation: AggregationRule
-    aggregation_rule_text: NonBlank | None = None
-    score_range: ScoreRange | None = None
-    weight: Weight | None = None
-    cap: Money | None = None
-    included_in_overall_total: bool
-    ambiguity_reason: NonBlank | None = None
-    review_domain: ReviewDomain | None = None
-
-    @model_validator(mode="after")
-    def cap_matches_aggregation(self) -> Self:
-        if (self.aggregation == "capped_sum") != (self.cap is not None):
-            raise ValueError("only capped_sum requires a cap")
-        if self.aggregation in {"formula", "non_additive"} and self.aggregation_rule_text is None:
-            raise ValueError("unsupported aggregation rules require their fixed original wording")
-        return self
+    aggregation_rule_text: VerbatimRule | None
+    score_range: CandidateScoreRange | None
+    weight: CandidateScoreNumber | None
+    cap: CandidateScoreNumber | None
+    included_in_overall_total: bool = Field(strict=True)
+    ambiguity_reason: NonBlank | None
+    review_domain: ReviewDomain | None
 
 
 class ProposedRubricSection(RubricSectionContext):
@@ -783,41 +811,22 @@ class ProposedRubricItem(Contract):
     section_key: NonBlank
     key: NonBlank
     title: NonBlank
-    rule_text: NonBlank
-    order: int = Field(ge=1)
+    rule_text: VerbatimRule
+    order: int = Field(ge=1, strict=True)
     assessment_mode: AssessmentMode
-    score_range: ScoreRange | None = None
-    weight: Weight | None = None
-    ambiguity_reason: NonBlank | None = None
+    score_range: CandidateScoreRange | None
+    weight: CandidateScoreNumber | None
+    ambiguity_reason: NonBlank | None
     citations: list[ModelEvidenceRef] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def proposal_is_explicit(self) -> Self:
-        if self.assessment_mode == "model_assessable" and self.score_range is None:
-            raise ValueError("model-assessable proposals require score bounds")
-        if self.assessment_mode != "model_assessable" and self.ambiguity_reason is None:
-            raise ValueError("non-model proposals require an explicit reason")
-        return self
 
 
 class RubricStructureOutput(Contract):
     sections: list[ProposedRubricSection] = Field(min_length=1)
     overall_aggregation: AggregationRule
-    overall_rule_text: NonBlank | None = None
-    overall_score_range: ScoreRange | None = None
-    overall_cap: Money | None = None
+    overall_rule_text: VerbatimRule | None
+    overall_score_range: CandidateScoreRange | None
+    overall_cap: CandidateScoreNumber | None
     overall_citations: list[ModelEvidenceRef] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def cap_matches_aggregation(self) -> Self:
-        if (self.overall_aggregation == "capped_sum") != (self.overall_cap is not None):
-            raise ValueError("only capped_sum requires an overall cap")
-        if (
-            self.overall_aggregation in {"formula", "non_additive"}
-            and self.overall_rule_text is None
-        ):
-            raise ValueError("unsupported overall aggregation requires its fixed original wording")
-        return self
 
 
 class RubricStructureResult(Contract):

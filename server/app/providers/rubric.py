@@ -31,7 +31,7 @@ if TYPE_CHECKING:
 
 RUBRIC_ADAPTER_VERSION = "http-score-rubric-v3"
 RUBRIC_PROMPT_VERSION = "score-rubric-v3"
-RUBRIC_SCHEMA_VERSION = "score-rubric-wire-v2"
+RUBRIC_SCHEMA_VERSION = "score-rubric-wire-v3"
 STRUCTURE_PROMPT_VERSION = "score-rubric-structure-v1"
 ITEMS_PROMPT_VERSION = "score-rubric-items-v2"
 ADAPTER_VERSION = RUBRIC_ADAPTER_VERSION

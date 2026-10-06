@@ -677,7 +677,18 @@ async def test_additional_normalization_failures_are_reviewable(rubric_case, fai
         assert response.status_code == 422
     else:
         assert response.status_code == 200, response.text
-        revised = await confirm_contents(case, response.json()["data"])
+        if failure == "missing_aggregation_limitation":
+            revised = await classify_all(case, response.json()["data"])
+            section = revised["sections"][0]
+            denied = await case["api"].post(
+                f"{base(case, revised)}/sections/{section['id']}/decisions",
+                headers=case["header"],
+                json=decision(revised, section),
+            )
+            assert denied.status_code == 409
+            assert denied.json()["data"]["error"]["code"] == "rubric_incomplete"
+        else:
+            revised = await confirm_contents(case, response.json()["data"])
         assert failure in revised["rubric"]["completeness"]["normalization_errors"]
         response = await case["api"].post(
             base(case, revised) + "/decisions",

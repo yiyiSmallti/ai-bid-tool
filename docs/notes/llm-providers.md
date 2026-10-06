@@ -122,7 +122,8 @@ actually answered.
 | Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; reset time and payer-specific guidance follow [provider-config.md](provider-config.md#quota-and-balance) |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
-| Truncated or malformed output on a single line | Failed, `invalid_provider_output` |
+| Output limit reached on an unsplittable batch | Failed, `provider_output_truncated`; lower the reasoning level or raise `BID_LLM_MAX_OUTPUT_TOKENS` |
+| Malformed output on an unsplittable batch | Failed, `invalid_provider_output` |
 | Some items have an empty quote or text, an unknown `ref`, no unique source match, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved |
 | No item passes | Failed, `invalid_citation`; nothing saved |
 | An unexpected error while assembling results | Failed, `processing_failed`; every finished call is still recorded, and the log holds the exception type and stack without its message |

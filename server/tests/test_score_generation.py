@@ -71,6 +71,7 @@ def candidate(*, quote: str = "内存 64 GB 得 5 分") -> dict:
                 "cap": None,
                 "included_in_overall_total": True,
                 "ambiguity_reason": None,
+                "review_domain": None,
                 "citations": [{"ref": "r1.tender", "quote": quote}],
             }
         ],

@@ -526,8 +526,12 @@ async def test_truncation_down_to_a_single_line_fails_and_bills_each_call(tenant
         _, document = await create_document(api, header, content)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
-        assert (status["status"], status["error"]["code"]) == ("failed", "invalid_provider_output")
-        assert "single line" in status["error"]["message"]
+        assert (status["status"], status["error"]["code"]) == (
+            "failed",
+            "provider_output_truncated",
+        )
+        assert "BID_LLM_MAX_OUTPUT_TOKENS" in status["error"]["message"]
+        assert "single line" not in status["error"]["message"]
         assert await requirement_rows(app, tenants) == []
         assert len(await usage_rows(app, tenants)) == len(requests)
 
