@@ -255,13 +255,20 @@ async def authors(session: AsyncSession, actor: Identity, revisions) -> dict[UUI
                 AuditLog,
                 (AuditLog.org_id == FeatureRevision.org_id)
                 & (AuditLog.object_id == FeatureRevision.feature_id)
-                & (AuditLog.details["new_revision_id"].astext == cast(FeatureRevision.id, String))
+                & (AuditLog.resource_revision_id_text == cast(FeatureRevision.id, String))
                 & (AuditLog.details["revision"] == func.to_jsonb(FeatureRevision.revision)),
             )
             .where(
                 FeatureRevision.org_id == actor.org_id,
                 FeatureRevision.id.in_(ids),
-                AuditLog.action.in_(("resource.feature.create", "resource.feature.update")),
+                # Constrain the audit relation itself to this authorized page.
+                # JSON extraction on protected rows was only a residual filter;
+                # stored base columns can use the composite index under RLS.
+                AuditLog.org_id == actor.org_id,
+                AuditLog.resource_revision_id_text.in_([str(identifier) for identifier in ids]),
+                # Fixed literals keep the partial-index predicate provable even
+                # when PostgreSQL reuses a generic prepared query plan.
+                text("audit_logs.action IN ('resource.feature.create','resource.feature.update')"),
             )
             .group_by(FeatureRevision.id)
         )

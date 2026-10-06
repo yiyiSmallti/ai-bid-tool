@@ -235,13 +235,19 @@ async def authors(session: AsyncSession, actor: Identity, revisions) -> dict[UUI
                 AuditLog,
                 (AuditLog.org_id == ProductRevision.org_id)
                 & (AuditLog.object_id == ProductRevision.product_id)
-                & (AuditLog.details["new_revision_id"].astext == cast(ProductRevision.id, String))
+                & (AuditLog.resource_revision_id_text == cast(ProductRevision.id, String))
                 & (AuditLog.details["revision"] == func.to_jsonb(ProductRevision.revision)),
             )
             .where(
                 ProductRevision.org_id == actor.org_id,
                 ProductRevision.id.in_(ids),
-                AuditLog.action.in_(("resource.product.create", "resource.product.update")),
+                # Constrain the audit relation itself to this authorized page.
+                # Stored base columns can use the composite index under RLS.
+                AuditLog.org_id == actor.org_id,
+                AuditLog.resource_revision_id_text.in_([str(identifier) for identifier in ids]),
+                # Fixed literals preserve partial-index eligibility for generic
+                # prepared plans as well as custom plans.
+                text("audit_logs.action IN ('resource.product.create','resource.product.update')"),
             )
             .group_by(ProductRevision.id)
         )

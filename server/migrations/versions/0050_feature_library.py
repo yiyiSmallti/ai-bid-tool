@@ -39,7 +39,16 @@ CREATE INDEX management_features_prefix ON public.features USING gin(search_vect
 CREATE INDEX management_feature_history ON public.feature_revisions(org_id,feature_id,revision DESC,id DESC);
 CREATE INDEX management_feature_parent ON public.feature_revisions(org_id,product_id,feature_id,revision);
 CREATE INDEX management_feature_status ON public.feature_revisions(org_id,(data->>'status'),feature_id,revision);
-CREATE INDEX management_feature_audit_author ON public.audit_logs(org_id,(details->>'new_revision_id'),object_id)
+-- A stored value permits page-ID index conditions under FORCE RLS; extracting
+-- JSON in the read predicate otherwise remains a post-visibility filter.
+-- TEXT preserves malformed/legacy IDs without introducing a fallible UUID cast.
+ALTER TABLE public.audit_logs ADD COLUMN resource_revision_id_text text
+ GENERATED ALWAYS AS (details->>'new_revision_id') STORED;
+-- Replace the merged product expression index here, without rewriting 0048.
+DROP INDEX public.management_product_audit_author;
+CREATE INDEX management_product_audit_author ON public.audit_logs(org_id,resource_revision_id_text,object_id)
+ WHERE action IN ('resource.product.create','resource.product.update');
+CREATE INDEX management_feature_audit_author ON public.audit_logs(org_id,resource_revision_id_text,object_id)
  WHERE action IN ('resource.feature.create','resource.feature.update');
 CREATE INDEX management_feature_lifecycle_audit ON public.audit_logs(org_id,object_id,(details->>'event_id'))
  WHERE action IN ('resource.feature.deactivate','resource.feature.restore');

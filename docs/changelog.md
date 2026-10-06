@@ -35,6 +35,18 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   [annotation plan](plan/annotation.md#failure-modes-and-test-plan).
   See the [mechanism note](notes/annotation.md).
 
+## 2026-10-06: Bounded product and feature revision authors
+
+- Resolve product and feature authors with explicit page-revision filters on a
+  stored audit revision ID, with separate action indexes on org, revision ID and
+  resource root in migration `0050`. Replace the product expression index there
+  without changing merged migrations `0048` or `0049`.
+- Preserve exact root/content revision association, ambiguous-author handling,
+  one query per page and the existing fixed-scale acceptance bounds. Add the
+  feature suite's history-row visit bound to the product suite, including rows
+  discarded by filters and index rechecks. See
+  [author lookup](notes/management-pages.md#how-it-works).
+
 ## 2026-10-06: Token scope and feature acceptance fixes
 
 - Added database rejection of `token:create` in migration `0051`, preserving the
