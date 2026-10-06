@@ -200,11 +200,20 @@ async def human_access(
 ) -> Identity:
     if actor.actor_kind != "session" or actor.token_id is not None:
         raise ServiceError("forbidden", "Human session required", 403, 4)
-    actor = await cards.access(
-        session,
-        actor,
-        "template:write" if binding == "write" else "template:read" if binding else "export",
+    # Management reads arrive with membership/user/org revalidated together by
+    # the request context. Reuse that one request-local authority snapshot only.
+    authenticated = (
+        session.info.pop("management_authenticated_actor", None) if binding == "read" else None
     )
+    if authenticated is actor:
+        actor.require("template:read")
+        actor.require("task:read")
+    else:
+        actor = await cards.access(
+            session,
+            actor,
+            "template:write" if binding == "write" else "template:read" if binding else "export",
+        )
     roles = {"admin"} if binding == "write" else {"admin", "bidder"} if binding else {"bidder"}
     if actor.role not in roles:
         raise ServiceError("forbidden", "Current role cannot perform this export action", 403, 4)
@@ -373,9 +382,14 @@ async def create_binding(
     )
     # Serialize duplicate bindings on the parent template: revisions are immutable and the
     # runtime role has no UPDATE privilege on them, which any row lock would require.
-    await session.scalar(
-        select(Template).where(Template.id == revision.template_id).with_for_update()
+    root = await session.scalar(
+        select(Template)
+        .where(Template.org_id == actor.org_id, Template.id == revision.template_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
     )
+    if root is None:
+        raise not_found()
     existing = await session.scalar(
         select(ExportTemplateBinding).where(
             ExportTemplateBinding.template_revision_id == revision.id,

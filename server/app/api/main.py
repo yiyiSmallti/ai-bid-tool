@@ -59,10 +59,16 @@ CONSOLE_HEADERS = {
 }
 
 RESOURCE_MANAGEMENT_READS = {
+    "export_binding_browse",
+    "export_binding_show",
     "resource_product_browse",
     "resource_product_show",
     "resource_product_history",
     "resource_product_lifecycle_history",
+    "resource_template_browse",
+    "resource_template_show",
+    "resource_template_history",
+    "resource_template_lifecycle_history",
     "resource_feature_browse",
     "resource_feature_show",
     "resource_feature_history",
@@ -153,7 +159,12 @@ def create_app(
         )
         credential_route = request.url.path.startswith("/platform/credentials")
         resource_management_route = request.method == "POST" and request.url.path.startswith(
-            ("/management/resources/products", "/management/resources/features")
+            (
+                "/management/resources/products",
+                "/management/resources/features",
+                "/management/resources/templates",
+                "/management/export-bindings",
+            )
         )
         if credential_route:
             from app.services.platform import identify
@@ -578,6 +589,11 @@ def create_app(
     from app.api.management_features import create_router as create_management_feature_router
 
     app.include_router(create_management_feature_router(context, settings))
+    from app.api.management_bindings import create_router as create_management_binding_router
+    from app.api.management_templates import create_router as create_management_template_router
+
+    app.include_router(create_management_template_router(context, settings))
+    app.include_router(create_management_binding_router(context, settings))
     app.include_router(create_confidential_router(context, settings))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))

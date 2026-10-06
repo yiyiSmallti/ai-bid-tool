@@ -293,7 +293,12 @@ async def test_concurrent_old_version_only_one_file_write(
 
 @pytest.mark.parametrize("role", ["admin", "bidder", "technical", "viewer"])
 async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tenants, admin_engine):
-    from app.services.auth import SCOPES
+    from app.services.auth import HUMAN_ONLY_SCOPES, SCOPES
+
+    # U01 permits every human org role to open originals, never API tokens.
+    assert "template:file:read" in ROLE_SCOPES[role]
+    assert "template:file:read" in HUMAN_ONLY_SCOPES
+    assert "template:file:read" not in SCOPES
 
     requirement_scopes = {"req:confirm", "req:manual"}
     assert ROLE_SCOPES[role] & requirement_scopes == (
@@ -313,6 +318,7 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
     ).status_code == 200
     old = OLD_ROLE_SCOPES
     assert ROLE_SCOPES[role] - {
+        "template:file:read",
         "certificate:file:read",
         "certificate:file:write",
         "evidence:source:read",

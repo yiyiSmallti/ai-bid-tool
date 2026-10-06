@@ -2,12 +2,12 @@
 kind: reference
 ---
 
-# Product and feature library management
+# Product, feature and template library management
 
 ## Problem
 
 An org (organization/tenant; 单位) library must expose manageable pages without
-loading every product or feature revision. Library maintenance must preserve the exact
+loading every product, feature or template revision. Library maintenance must preserve the exact
 version selected by each task (任务). Withdrawing a resource from future selection
 must retain its content, historical pins and auditable human action.
 
@@ -27,16 +27,39 @@ exact revision histories. The implemented state is a declaration that still need
 material. Revising it does not replace screenshots or confirm a prototype (原型).
 Product choices use bounded product queries rather than all-row library dumps.
 
-The corresponding commands are `bid resource <product|feature> browse --input QUERY.json`,
+The template list at `/app/org/templates` supports name-prefix search and lifecycle
+filters. Detail at `/app/org/templates/:id` separates declared chapters/project
+types, file validation, original inspection, binding inspection and task selection.
+Each create or revision requires its own real DOCX. Its stored hash and validation
+receipt establish file readability, not evidence authenticity or export approval.
+Human org administrators maintain templates; all org roles can inspect metadata
+and, through authenticated short-lived links, open originals.
+
+The exact revision's `/app/org/templates/:id/revisions/:revisionId/bindings` page
+lets human administrators configure the fixed sections and response columns from
+[ExportSectionBinding](../../server/app/schemas/export_contracts.py), preview the
+mapping, inspect static content in the original and explicitly create a binding.
+Changing the form invalidates the preview and review acknowledgement. Creation
+uses the template and static hashes returned by that exact preview. A hash conflict
+requires a fresh preview and deliberate review. Human bidders inspect bindings;
+technical/viewer users and tokens cannot invoke binding reads or writes. Existing
+bindings are immutable, and a legacy `current=false` binding remains unusable for
+export. There is no visual Word editor or automatic binding inheritance.
+
+The corresponding commands are `bid resource <product|feature|template> browse --input QUERY.json`,
 `show --id R [--revision N]`, `history --id R`, `lifecycle set --id R --input STATE.json`
 and `lifecycle history --id R`. Their payloads, bounds and seven-field Result envelope
 are defined in the [approved contract](../plan/management-pages.md#http-and-pydantic-interfaces).
 Existing `add`, `update`, `list` and task resource commands retain their contracts.
+`bid export binding browse --template-revision UUID` and
+`show --id UUID --template-revision UUID` use bounded human-authorized reads;
+existing binding `create/list` commands retain their shapes and gates.
 
 ## How it works
 
-The [product read service](../../server/app/services/management_products.py) and
-[feature read service](../../server/app/services/management_features.py) apply
+The [product read service](../../server/app/services/management_products.py),
+[feature read service](../../server/app/services/management_features.py) and
+[template read service](../../server/app/services/management_templates.py) apply
 org visibility and filters in SQL before `LIMIT limit+1`. Immutable root creation
 time and ID order the live list; revision and ID order each root's histories.
 Encrypted cursors bind the current actor, org, authority, parent, filters and
@@ -56,11 +79,11 @@ numeric revision checks still apply, and multiple exact audit matches leave the
 author unknown. The generated column inherits the audit table's FORCE RLS and does
 not introduce a writable author or revision identifier.
 
-Both fixed-scale suites bound visited immutable revision and audit rows, including
+The fixed-scale suites bound visited immutable revision and audit rows, including
 rows discarded by filters and index rechecks. Recorded latency alone does not
 establish bounded history access.
 
-Product and feature read routes use the joined identity, active Membership and org lookup in
+Product, feature and template read routes use the joined identity, active Membership and org lookup in
 [`authenticate`](../../server/app/services/auth.py). The service consumes that
 request's authenticated identity once; direct service calls revalidate authority.
 This removes duplicate reads without weakening the session/token checks. Scale
@@ -72,7 +95,7 @@ Content revision and lifecycle revision are independent. A transition requires
 both expected versions, a real human maintainer, a fixed reason code and the
 locked resource root. The event insertion changes the root and requires the audit
 in the same transaction. Tenant composite foreign keys, FORCE RLS and database
-guards protect event bindings and immutable history. Product and feature events
+guards protect event bindings and immutable history. Product, feature and template events
 share a table with exactly one non-null root arm. Each arm binds both its real root
 and immutable content revision through org composite keys; partial unique indexes
 protect each lifecycle sequence. Extending another kind requires its own migration.
@@ -101,9 +124,14 @@ locking; the feature archive check runs AFTER composite keys. Missing-parent loo
 shortcuts must not skip these checks, because FK visibility can differ from an
 earlier ordinary lookup during concurrent or same-statement writes.
 
-An inactive historical pin cannot be reactivated: the retained-history trigger in
+An inactive historical product, feature or certificate pin cannot be reactivated:
+the retained-history trigger in
 [0023](../../server/migrations/versions/0023_screenshots.py) rejects that update
-before lifecycle checks, even for an authorized actor. New pin inserts pass the
+before lifecycle checks, even for an authorized actor. Template pins enforce the
+same history rule in the AFTER selection guard in
+[0052](../../server/migrations/versions/0052_template_library.py), after RLS,
+composite foreign keys and CHECK constraints. Restoring a template permits a new
+selection; it never permits reactivating a retired row. New pin inserts pass the
 tenant, composite-key and authority checks before lifecycle rejection.
 
 Token issuance remains human-only in both the API and database. The additive
@@ -112,6 +140,33 @@ completes the existing domain-specific token scope checks; it validates existing
 rows without rewriting tokens. Lifecycle actions retain their separate human
 session gate and do not introduce an issuable lifecycle scope.
 
+The [template migration](../../server/migrations/versions/0052_template_library.py)
+extends lifecycle events with a template root/revision arm and independent unique
+sequence. Template lifecycle uses a human admin session, existing template write
+scope and content/lifecycle CAS. Selection locks task/workflow before the root;
+RLS and immediate composite keys reject invalid tenants and parents before the
+AFTER selection guard evaluates authority and active state. Only an exact existing
+active pin is an idempotent replay. Restoring or revising a template never replaces
+task selections. Recovery preserves lifecycle history and repairs forward.
+
+Template authors use the same stored audit revision projection, with a template
+action partial index and one explicitly org-filtered query restricted to the loaded
+page's revision IDs. Missing or ambiguous exact matches remain unknown. Template
+name-prefix and binding `(org_id, template_revision_id, reviewed_at, id)` indexes
+support bounded queries; binding reads validate the exact revision parent and use
+[exports.human_access](../../server/app/services/exports.py). Read projections do
+not retrieve file bytes or call providers.
+
+Original-file endpoints require both `template:read` and human-only
+`template:file:read`. The new scope is denied in `HUMAN_ONLY_SCOPES` and the
+API-token database check. The internal template reader remains available to the
+existing authorized export worker; the human gate belongs to original-download
+entry points. Upload keeps the existing `template:write` eligibility. Binding
+preview and creation reuse the existing DOCX inspector and immutable hash checks,
+with `export.binding_created` auditing explicit creation. File validation,
+lifecycle changes and binding review do not confirm evidence or bypass task export
+preflight/release and prototype decisions.
+
 ## Pitfalls
 
 - Library read/write scopes grant no task role. Observers, reviewers and admin
@@ -119,7 +174,7 @@ session gate and do not introduce an issuable lifecycle scope.
 - Historical inactive snapshots are not active duplicates. A different revision,
   root or normalized lot creates a distinct selection operation. Selecting another
   root does not remove the previous root.
-- Editing an inactive product or feature does not restore it. CAS conflicts require a fresh
+- Editing an inactive product, feature or template does not restore it. CAS conflicts require a fresh
   read and deliberate save; the browser retains only nonsecret unsaved edits.
 - Search text and form bodies stay out of URLs and persistent browser storage.
   Org changes cancel reads and discard late results. Legacy all-row lists are not
@@ -162,3 +217,16 @@ session gate and do not introduce an issuable lifecycle scope.
   [feature scale acceptance](../../server/tests/test_management_features_scale.py),
   [feature CLI snapshots](../../server/tests/test_management_features_cli.py) and
   [feature browser scenarios](../../web/e2e/feature-management.spec.js).
+
+- [Template routes](../../server/app/api/management_templates.py),
+  [binding routes](../../server/app/api/management_bindings.py) and
+  [binding projections](../../server/app/services/management_bindings.py).
+- [Template list](../../web/src/views/OrgTemplates.vue),
+  [detail](../../web/src/views/OrgTemplate.vue) and
+  [binding review](../../web/src/views/OrgTemplateBindings.vue).
+- [Template API acceptance](../../server/tests/test_management_templates.py),
+  [storage acceptance](../../server/tests/test_management_templates_storage.py),
+  [scale acceptance](../../server/tests/test_management_templates_scale.py),
+  [template CLI snapshots](../../server/tests/test_management_templates_cli.py),
+  [binding CLI snapshots](../../server/tests/test_management_bindings_cli.py) and
+  [browser scenarios](../../web/e2e/template-management.spec.js).

@@ -506,6 +506,7 @@ def create_router(
     )
     async def template_download_link(revision_id: UUID, ctx=Depends(context, scope="function")):
         session, actor = ctx
+        actor.require("template:file:read")
         await templates.require_revision(session, actor, revision_id)
         return result(
             "resource template download link",
@@ -526,6 +527,7 @@ def create_router(
         revision_id: UUID, signature: str, ctx=Depends(context, scope="function")
     ):
         session, actor = ctx
+        actor.require("template:file:read")
         await templates.require_revision(session, actor, revision_id)
         check_signature(
             crypto, signature, "template-download", actor.org_id, revision_id=revision_id

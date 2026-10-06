@@ -95,6 +95,9 @@ class ApiToken(Tenant, Base):
         ),
         CheckConstraint("NOT (scopes ? 'provider:write')", name="token_no_provider_write"),
         CheckConstraint("NOT (scopes ? 'token:create')", name="token_forbidden_creation_scope"),
+        CheckConstraint(
+            "NOT (scopes ? 'template:file:read')", name="token_forbidden_template_file_scope"
+        ),
         CheckConstraint("NOT (scopes ? 'check:decide')", name="token_forbidden_check_scopes"),
         CheckConstraint(
             "NOT (scopes ? 'score:rubric:review')", name="token_forbidden_score_scopes"
@@ -895,7 +898,17 @@ class Template(Tenant, Base):
     __tablename__ = "templates"
     created_by: Mapped[UUID] = mapped_column()
     current_revision: Mapped[int] = mapped_column(Integer, default=1)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(8), default="active", server_default="active"
+    )
+    lifecycle_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    search_vector: Mapped[str] = mapped_column(TSVECTOR, server_default=text("''::tsvector"))
     __table_args__ = (
+        CheckConstraint(
+            "lifecycle_state IN ('active','inactive') AND lifecycle_revision>=0 "
+            "AND (lifecycle_revision>0 OR lifecycle_state='active')",
+            name="template_lifecycle_valid",
+        ),
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
             ["org_id", "created_by"], ["memberships.org_id", "memberships.user_id"]

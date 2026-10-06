@@ -93,6 +93,7 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
     </div>
   </div>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
+  <p><RouterLink :to="{path:'/org/templates',query:{task:taskId}}">在模板库选择精确修订到此任务</RouterLink></p>
   <div class="task-layout">
     <div class="task-main">
       <el-card class="section" shadow="never">

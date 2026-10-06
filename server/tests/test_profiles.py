@@ -174,7 +174,12 @@ async def test_profile_concurrent_updates_and_duplicate_selection(api, headers, 
 async def test_profile_roles_preserve_old_grants(
     role, write, select_allowed, api, headers, tenants, admin_engine
 ):
-    from app.services.auth import ROLE_SCOPES, SCOPES
+    from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES
+
+    # U01 permits every human org role to open originals, never API tokens.
+    assert "template:file:read" in ROLE_SCOPES[role]
+    assert "template:file:read" in HUMAN_ONLY_SCOPES
+    assert "template:file:read" not in SCOPES
 
     requirement_scopes = {"req:confirm", "req:manual"}
     assert ROLE_SCOPES[role] & requirement_scopes == (
@@ -238,6 +243,7 @@ async def test_profile_roles_preserve_old_grants(
             "evidence:source:read",
             "evidence:source:write",
             "template:read",
+            "template:file:read",
             "template:write",
             "task:template",
             "billing:read",

@@ -1,4 +1,4 @@
-"""Retained product and feature lifecycle history with exclusive root arms."""
+"""Retained resource lifecycle history with exclusive product, feature and template arms."""
 
 from uuid import UUID
 
@@ -20,6 +20,7 @@ class ResourceLifecycleEvent(Tenant, Base):
     __tablename__ = "resource_lifecycle_events"
     product_id: Mapped[UUID | None] = mapped_column()
     feature_id: Mapped[UUID | None] = mapped_column()
+    template_id: Mapped[UUID | None] = mapped_column()
     revision: Mapped[int] = mapped_column(Integer)
     resource_revision: Mapped[int] = mapped_column(Integer)
     before_state: Mapped[str] = mapped_column(String(8))
@@ -45,7 +46,26 @@ class ResourceLifecycleEvent(Tenant, Base):
             unique=True,
             postgresql_where=text("feature_id IS NOT NULL"),
         ),
-        CheckConstraint("num_nonnulls(product_id,feature_id)=1", name="lifecycle_one_root"),
+        Index(
+            "lifecycle_template_sequence",
+            "org_id",
+            "template_id",
+            "revision",
+            unique=True,
+            postgresql_where=text("template_id IS NOT NULL"),
+        ),
+        ForeignKeyConstraint(["org_id", "template_id"], ["templates.org_id", "templates.id"]),
+        ForeignKeyConstraint(
+            ["org_id", "template_id", "resource_revision"],
+            [
+                "template_revisions.org_id",
+                "template_revisions.template_id",
+                "template_revisions.revision",
+            ],
+        ),
+        CheckConstraint(
+            "num_nonnulls(product_id,feature_id,template_id)=1", name="lifecycle_one_root"
+        ),
         ForeignKeyConstraint(["org_id", "feature_id"], ["features.org_id", "features.id"]),
         ForeignKeyConstraint(
             ["org_id", "feature_id", "resource_revision"],

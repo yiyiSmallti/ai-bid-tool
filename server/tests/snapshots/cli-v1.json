@@ -22654,6 +22654,391 @@
           ],
           "input": null
         },
+        "export binding browse": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "template_revision",
+              "options": [
+                "--template-revision"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_revision_id"
+            ],
+            "title": "BindingQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "requirement",
+                      "response",
+                      "compliance"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "ExportColumn",
+                "type": "object"
+              },
+              "ExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/ExportColumn"
+                    },
+                    "maxItems": 4,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "ExportSectionBinding",
+                "type": "object"
+              },
+              "LegacyExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "tender_clause",
+                      "source_location",
+                      "response",
+                      "deviation",
+                      "deviation_note",
+                      "evidence"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "LegacyExportColumn",
+                "type": "object"
+              },
+              "LegacyExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/LegacyExportColumn"
+                    },
+                    "maxItems": 7,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "LegacyExportSectionBinding",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "adapter_version": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Adapter Version",
+                "type": "string"
+              },
+              "binding_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Binding Hash",
+                "type": "string"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reviewed_at": {
+                "format": "date-time",
+                "title": "Reviewed At",
+                "type": "string"
+              },
+              "reviewed_by": {
+                "format": "uuid",
+                "title": "Reviewed By",
+                "type": "string"
+              },
+              "sections": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ExportSectionBinding"
+                    },
+                    {
+                      "$ref": "#/$defs/LegacyExportSectionBinding"
+                    }
+                  ]
+                },
+                "maxItems": 6,
+                "minItems": 6,
+                "title": "Sections",
+                "type": "array"
+              },
+              "static_content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Static Content Hash",
+                "type": "string"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              },
+              "template_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Template Sha256",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "template_revision_id",
+              "template_sha256",
+              "binding_hash",
+              "static_content_hash",
+              "adapter_version",
+              "sections",
+              "current",
+              "reviewed_by",
+              "reviewed_at"
+            ],
+            "title": "ExportBindingView",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
         "export binding create": {
           "cli_parameters": [
             {
@@ -23239,6 +23624,304 @@
             }
           ],
           "input": null,
+          "output": {
+            "$defs": {
+              "ExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "requirement",
+                      "response",
+                      "compliance"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "ExportColumn",
+                "type": "object"
+              },
+              "ExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/ExportColumn"
+                    },
+                    "maxItems": 4,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "ExportSectionBinding",
+                "type": "object"
+              },
+              "LegacyExportColumn": {
+                "additionalProperties": false,
+                "properties": {
+                  "key": {
+                    "enum": [
+                      "ordinal",
+                      "tender_clause",
+                      "source_location",
+                      "response",
+                      "deviation",
+                      "deviation_note",
+                      "evidence"
+                    ],
+                    "title": "Key",
+                    "type": "string"
+                  },
+                  "width_percent": {
+                    "anyOf": [
+                      {
+                        "exclusiveMinimum": 0.0,
+                        "maximum": 100.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Width Percent"
+                  }
+                },
+                "required": [
+                  "key",
+                  "width_percent"
+                ],
+                "title": "LegacyExportColumn",
+                "type": "object"
+              },
+              "LegacyExportSectionBinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "columns": {
+                    "items": {
+                      "$ref": "#/$defs/LegacyExportColumn"
+                    },
+                    "maxItems": 7,
+                    "title": "Columns",
+                    "type": "array"
+                  },
+                  "heading_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Heading Style Id",
+                    "type": "string"
+                  },
+                  "section": {
+                    "enum": [
+                      "substantive",
+                      "commercial",
+                      "technical",
+                      "comply_only",
+                      "gaps",
+                      "evidence_appendix"
+                    ],
+                    "title": "Section",
+                    "type": "string"
+                  },
+                  "table_style_id": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Table Style Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "section",
+                  "heading_style_id",
+                  "table_style_id"
+                ],
+                "title": "LegacyExportSectionBinding",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "adapter_version": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Adapter Version",
+                "type": "string"
+              },
+              "binding_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Binding Hash",
+                "type": "string"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reviewed_at": {
+                "format": "date-time",
+                "title": "Reviewed At",
+                "type": "string"
+              },
+              "reviewed_by": {
+                "format": "uuid",
+                "title": "Reviewed By",
+                "type": "string"
+              },
+              "sections": {
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/ExportSectionBinding"
+                    },
+                    {
+                      "$ref": "#/$defs/LegacyExportSectionBinding"
+                    }
+                  ]
+                },
+                "maxItems": 6,
+                "minItems": 6,
+                "title": "Sections",
+                "type": "array"
+              },
+              "static_content_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Static Content Hash",
+                "type": "string"
+              },
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              },
+              "template_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Template Sha256",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "template_revision_id",
+              "template_sha256",
+              "binding_hash",
+              "static_content_hash",
+              "adapter_version",
+              "sections",
+              "current",
+              "reviewed_by",
+              "reviewed_at"
+            ],
+            "title": "ExportBindingView",
+            "type": "object"
+          }
+        },
+        "export binding show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "template_revision",
+              "options": [
+                "--template-revision"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "template_revision_id": {
+                "format": "uuid",
+                "title": "Template Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "template_revision_id"
+            ],
+            "title": "BindingDetailQuery",
+            "type": "object"
+          },
           "output": {
             "$defs": {
               "ExportColumn": {
@@ -46578,6 +47261,380 @@
             "type": "object"
           }
         },
+        "resource template browse": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "implementation_status": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "implemented",
+                      "developing",
+                      "planned"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Implementation Status"
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "product_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Product Id"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  {
+                    "const": "all",
+                    "type": "string"
+                  }
+                ],
+                "default": "active",
+                "title": "State"
+              }
+            },
+            "title": "ResourceQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TemplateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "templates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "TemplateRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "const": "declared",
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/TemplateRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "name",
+              "revision_id",
+              "revision",
+              "lifecycle",
+              "provenance",
+              "created_at",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "TemplateRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
         "resource template download": {
           "cli_parameters": [
             {
@@ -46613,6 +47670,698 @@
           ],
           "input": null
         },
+        "resource template history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TemplateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "templates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "TemplateRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Created By"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "has_file": {
+                "title": "Has File",
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/TemplateRef"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "revision_id",
+              "revision",
+              "name",
+              "created_at",
+              "created_by",
+              "current",
+              "has_file"
+            ],
+            "title": "TemplateHistoryRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource template lifecycle history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TemplateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "templates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "TemplateRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "actor_user_id": {
+                "format": "uuid",
+                "title": "Actor User Id",
+                "type": "string"
+              },
+              "after": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "before": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "ref": {
+                "$ref": "#/$defs/TemplateRef"
+              },
+              "resource_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "ref",
+              "revision",
+              "resource_revision",
+              "before",
+              "after",
+              "reason_code",
+              "actor_user_id",
+              "created_at"
+            ],
+            "title": "TemplateLifecycleEvent",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource template lifecycle set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_lifecycle_revision": {
+                "$ref": "#/$defs/LifecycleRevision"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "state": {
+                "$ref": "#/$defs/LifecycleState"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_lifecycle_revision",
+              "state",
+              "reason_code"
+            ],
+            "title": "ResourceLifecycleSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TemplateLifecycleEvent": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "const": "session",
+                    "default": "session",
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_user_id": {
+                    "format": "uuid",
+                    "title": "Actor User Id",
+                    "type": "string"
+                  },
+                  "after": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "before": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reason_code": {
+                    "$ref": "#/$defs/ReasonCode"
+                  },
+                  "ref": {
+                    "$ref": "#/$defs/TemplateRef"
+                  },
+                  "resource_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "ref",
+                  "revision",
+                  "resource_revision",
+                  "before",
+                  "after",
+                  "reason_code",
+                  "actor_user_id",
+                  "created_at"
+                ],
+                "title": "TemplateLifecycleEvent",
+                "type": "object"
+              },
+              "TemplateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "templates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "TemplateRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "event": {
+                "$ref": "#/$defs/TemplateLifecycleEvent"
+              },
+              "existing_selections": {
+                "const": "preserved",
+                "default": "preserved",
+                "title": "Existing Selections",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              }
+            },
+            "required": [
+              "event",
+              "lifecycle"
+            ],
+            "title": "TemplateLifecycleData",
+            "type": "object"
+          }
+        },
         "resource template list": {
           "cli_parameters": [
             {
@@ -46647,6 +48396,439 @@
             }
           ],
           "input": null
+        },
+        "resource template show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision",
+              "options": [
+                "--revision"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision_id",
+              "options": [
+                "--revision-id"
+              ],
+              "required": false,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "revision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "revision_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision Id"
+              }
+            },
+            "title": "TemplateDetailQuery",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "TemplateChapter": {
+                "additionalProperties": false,
+                "properties": {
+                  "children": {
+                    "items": {
+                      "$ref": "#/$defs/TemplateChapter"
+                    },
+                    "maxItems": 100,
+                    "title": "Children",
+                    "type": "array"
+                  },
+                  "title": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "title"
+                ],
+                "title": "TemplateChapter",
+                "type": "object"
+              },
+              "TemplateData": {
+                "additionalProperties": false,
+                "properties": {
+                  "chapters": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "$ref": "#/$defs/TemplateChapter"
+                        },
+                        "maxItems": 100,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Chapters"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "project_types": {
+                    "anyOf": [
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "maxItems": 100,
+                        "type": "array"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Project Types"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "TemplateData",
+                "type": "object"
+              },
+              "TemplateDetail": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "templates",
+                    "default": "templates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/TemplateRevision"
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "title": "TemplateDetail",
+                "type": "object"
+              },
+              "TemplateFile": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "const": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "default": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 41943040,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "TemplateFile",
+                "type": "object"
+              },
+              "TemplateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "templates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "TemplateRef",
+                "type": "object"
+              },
+              "TemplateRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "$ref": "#/$defs/TemplateData"
+                  },
+                  "file": {
+                    "$ref": "#/$defs/TemplateFile"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "template_id": {
+                    "format": "uuid",
+                    "title": "Template Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "template_id",
+                  "revision",
+                  "data",
+                  "file"
+                ],
+                "title": "TemplateRevision",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "current_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "detail": {
+                "$ref": "#/$defs/TemplateDetail"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "const": "declared",
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/TemplateRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "current_revision",
+              "lifecycle",
+              "provenance",
+              "detail",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "TemplateDetailData",
+            "type": "object"
+          }
         },
         "resource template update": {
           "cli_parameters": [
