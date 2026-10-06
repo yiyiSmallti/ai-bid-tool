@@ -1,29 +1,2702 @@
 {
   "status": "review_only_pending_human_approval",
   "runtime_registered": false,
-  "command": "evidence source annotate",
-  "arguments": {
-    "id": "UUID",
-    "input": "bounded plan JSON path",
-    "output": "new PNG path"
+  "contract_version": "4.0",
+  "limits": {
+    "http_input_bytes": 131072,
+    "renderer_json_bytes": 65536,
+    "png_bytes": 41943040,
+    "png_pixels": 20000000,
+    "png_side_px": 8192,
+    "boxes": 20
   },
-  "output": {
-    "contract_version": "1.0",
-    "data": "SourceAnnotationReceipt",
-    "items": []
+  "scope": {
+    "write": "human-only evidence:annotate; immutable server candidates and separately gated releases",
+    "confirmation": [
+      "#/schemas/CardAction",
+      "#/schemas/CoSignConfirm"
+    ],
+    "read": "existing source/screenshot/card scopes and same-org task membership",
+    "vendor_sources": "typed but blocked with vendor_source_not_enabled in first certificate slice",
+    "preparation": "unconfirmed/legacy_unconfirmed/confirmed/invalidated ReviewState pins can be rendered; release requires current confirmed requirement source binding",
+    "release_retry": "explicit existing job retry; delivery recovery only; cannot confirm evidence or alter approval",
+    "source_privacy_review": "submit reviewed_source_png_sha256 must equal server manifest source.source_png.sha256; checked by AnnotationService before job admission",
+    "single_domain": "Retain every actual one-domain complete response review round; only genuine historical decisions may omit a round."
+  },
+  "renderer_protocol": {
+    "request": "#/schemas/AnnotationRenderRequest",
+    "response": "#/schemas/AnnotationRendering",
+    "framing": "existing 8-byte big-endian JSON length followed by bounded UTF-8 JSON and PNG bytes; no filesystem paths",
+    "profiles": [
+      "annotation-candidate-v1",
+      "annotation-release-v1"
+    ],
+    "release_content": "already marked candidate PNG content with footer removed; original crop and boxes are provenance references only and are never applied a second time",
+    "receipt": "exact renderer protocol/profile/version/binary/font identity, plan SHA256, provenance SHA256, complete PNG descriptor, content pixel hash and root mapping hash",
+    "content_hash": "SHA256 of ASCII annotation-rgb-v1 followed by newline, big-endian uint32 width and height, then row-major RGB8 content bytes."
+  },
+  "commands": {
+    "evidence stamp --dry-run": {
+      "arguments": {
+        "task": "UUID",
+        "input": "AnnotationInput JSON file; <=128 KiB",
+        "dry_run": true
+      },
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "data": "#/schemas/AnnotationPreflight",
+      "items": [],
+      "cost_basis": "zero"
+    },
+    "evidence stamp": {
+      "arguments": {
+        "task": "UUID",
+        "input": "AnnotationInput JSON file; <=128 KiB",
+        "expected_input_hash": "Sha256",
+        "request_id": "UUID",
+        "retry": "optional bool",
+        "wait": "optional bool",
+        "reviewed_source_png_sha256": "Sha256; explicit human privacy review of exact source PNG"
+      },
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "data": "#/schemas/AnnotationJobAccepted",
+      "items": [],
+      "cost_basis": "zero on admission; actual zero on completed job",
+      "wait_data": "#/schemas/AnnotationCandidateView"
+    },
+    "evidence annotation list": {
+      "arguments": {
+        "task": "UUID",
+        "cursor": "optional opaque cursor; 1..4096 characters",
+        "limit": "integer 1..100; default 50",
+        "card": "optional UUID"
+      },
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "data": "#/schemas/AnnotationListData",
+      "items": "#/schemas/AnnotationCandidateView",
+      "cost_basis": "zero"
+    },
+    "evidence annotation show": {
+      "arguments": {
+        "id": "UUID"
+      },
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "data": "#/schemas/AnnotationShowData",
+      "items": [],
+      "cost_basis": "zero"
+    },
+    "evidence annotation preview": {
+      "arguments": {
+        "id": "UUID"
+      },
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "data": "#/schemas/AnnotationPreviewLink",
+      "items": [],
+      "cost_basis": "zero"
+    },
+    "evidence annotation release retry": {
+      "arguments": {
+        "id": "UUID",
+        "input": "AnnotationReleaseRetry JSON file; <=128 KiB"
+      },
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "data": "#/schemas/AnnotationJobAccepted",
+      "items": [],
+      "cost_basis": "zero on admission; actual zero on completed job"
+    },
+    "evidence annotation releases": {
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "cost_basis": "zero",
+      "data": "#/schemas/AnnotationReleaseListData",
+      "items": "#/schemas/AnnotationReleaseView",
+      "arguments": {
+        "id": "UUID",
+        "cursor": "optional opaque cursor; 1..4096 characters",
+        "limit": "integer 1..100; default 50"
+      }
+    },
+    "evidence annotation release preview": {
+      "supports_json": true,
+      "result_envelope": "#/schemas/Result",
+      "cost_basis": "zero",
+      "data": "#/schemas/AnnotationPreviewLink",
+      "items": [],
+      "arguments": {
+        "id": "release UUID"
+      }
+    }
+  },
+  "http_models": {
+    "dry_run": "#/schemas/AnnotationPreflightRequest",
+    "submit": "#/schemas/AnnotationSubmit",
+    "release_retry": "#/schemas/AnnotationReleaseRetry",
+    "list_query": "#/schemas/AnnotationListQuery"
   },
   "schemas": {
+    "AnnotationApprovalBinding": {
+      "additionalProperties": false,
+      "description": "Server decision pin; a release worker never creates or changes approval.",
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "card_id": {
+          "format": "uuid",
+          "title": "Card Id",
+          "type": "string"
+        },
+        "card_revision": {
+          "minimum": 1,
+          "title": "Card Revision",
+          "type": "integer"
+        },
+        "card_revision_id": {
+          "format": "uuid",
+          "title": "Card Revision Id",
+          "type": "string"
+        },
+        "confirmed_by": {
+          "format": "uuid",
+          "title": "Confirmed By",
+          "type": "string"
+        },
+        "confirmed_at": {
+          "format": "date-time",
+          "title": "Confirmed At",
+          "type": "string"
+        },
+        "candidate_annotation_id": {
+          "format": "uuid",
+          "title": "Candidate Annotation Id",
+          "type": "string"
+        },
+        "candidate_rendition_id": {
+          "format": "uuid",
+          "title": "Candidate Rendition Id",
+          "type": "string"
+        },
+        "candidate_image_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Candidate Image Sha256",
+          "type": "string"
+        },
+        "candidate_plan_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Candidate Plan Sha256",
+          "type": "string"
+        },
+        "candidate_content_mapping": {
+          "$ref": "#/schemas/ContentMapping"
+        },
+        "content_pixel_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Pixel Sha256",
+          "type": "string"
+        },
+        "root_mapping_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Root Mapping Sha256",
+          "type": "string"
+        },
+        "reviewed_region": {
+          "$ref": "#/schemas/PixelRect"
+        },
+        "requirement": {
+          "$ref": "#/schemas/AnnotationRequirementPin"
+        },
+        "decision_kind": {
+          "enum": [
+            "single_domain",
+            "cosign"
+          ],
+          "title": "Decision Kind",
+          "type": "string"
+        },
+        "review_domain": {
+          "$ref": "#/schemas/ReviewDomain"
+        },
+        "co_sign": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/AnnotationCoSignManifest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "card_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Card Content Sha256",
+          "type": "string"
+        },
+        "evidence_binding_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Binding Sha256",
+          "type": "string"
+        },
+        "approval_binding_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Approval Binding Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "card_id",
+        "card_revision",
+        "card_revision_id",
+        "confirmed_by",
+        "confirmed_at",
+        "candidate_annotation_id",
+        "candidate_rendition_id",
+        "candidate_image_sha256",
+        "candidate_plan_sha256",
+        "candidate_content_mapping",
+        "content_pixel_sha256",
+        "root_mapping_sha256",
+        "reviewed_region",
+        "requirement",
+        "decision_kind",
+        "review_domain",
+        "co_sign",
+        "card_content_sha256",
+        "evidence_binding_sha256",
+        "approval_binding_sha256"
+      ],
+      "title": "AnnotationApprovalBinding",
+      "type": "object"
+    },
+    "AnnotationCandidateView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "manifest": {
+          "$ref": "#/schemas/AnnotationInputManifest"
+        },
+        "asset_id": {
+          "format": "uuid",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "rendition_id": {
+          "format": "uuid",
+          "title": "Rendition Id",
+          "type": "string"
+        },
+        "rendering": {
+          "$ref": "#/schemas/AnnotationRendering"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "status": {
+          "const": "unconfirmed_material",
+          "default": "unconfirmed_material",
+          "title": "Status",
+          "type": "string"
+        },
+        "confirmed_by": {
+          "const": null,
+          "default": null,
+          "title": "Confirmed By",
+          "type": "null"
+        },
+        "eligible_for_draft_export": {
+          "const": false,
+          "default": false,
+          "title": "Eligible For Draft Export",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "org_id",
+        "task_id",
+        "job_id",
+        "input_hash",
+        "manifest",
+        "asset_id",
+        "rendition_id",
+        "rendering",
+        "created_at"
+      ],
+      "title": "AnnotationCandidateView",
+      "type": "object"
+    },
+    "AnnotationCanvas": {
+      "additionalProperties": false,
+      "properties": {
+        "width_px": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Width Px",
+          "type": "integer"
+        },
+        "height_px": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Height Px",
+          "type": "integer"
+        },
+        "maximum_png_bytes": {
+          "const": 41943040,
+          "default": 41943040,
+          "title": "Maximum Png Bytes",
+          "type": "integer"
+        },
+        "mapping": {
+          "$ref": "#/schemas/ContentMapping"
+        }
+      },
+      "required": [
+        "width_px",
+        "height_px",
+        "mapping"
+      ],
+      "title": "AnnotationCanvas",
+      "type": "object"
+    },
+    "AnnotationCoSignManifest": {
+      "additionalProperties": false,
+      "description": "Exact co_sign shape emitted by task_cosign.manifest_fields.",
+      "properties": {
+        "policy_revision": {
+          "minimum": 0,
+          "title": "Policy Revision",
+          "type": "integer"
+        },
+        "task_rule_revision": {
+          "minimum": 1,
+          "title": "Task Rule Revision",
+          "type": "integer"
+        },
+        "round_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Round Id"
+        },
+        "round_revision": {
+          "minimum": 0,
+          "title": "Round Revision",
+          "type": "integer"
+        },
+        "purpose": {
+          "anyOf": [
+            {
+              "enum": [
+                "response",
+                "disposition"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Purpose"
+        },
+        "required_domains": {
+          "items": {
+            "$ref": "#/schemas/ReviewDomain"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Required Domains",
+          "type": "array"
+        },
+        "status": {
+          "enum": [
+            "not_required",
+            "pending",
+            "partial",
+            "complete",
+            "invalidated"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "evidence_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Evidence Sha256"
+        },
+        "requirement_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Requirement Sha256"
+        },
+        "citation_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Citation Sha256"
+        },
+        "content_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Content Sha256"
+        },
+        "signatures": {
+          "items": {
+            "$ref": "#/schemas/AnnotationSignaturePin"
+          },
+          "maxItems": 2,
+          "title": "Signatures",
+          "type": "array"
+        }
+      },
+      "required": [
+        "policy_revision",
+        "task_rule_revision",
+        "round_id",
+        "round_revision",
+        "purpose",
+        "required_domains",
+        "status",
+        "evidence_sha256",
+        "requirement_sha256",
+        "citation_sha256",
+        "content_sha256",
+        "signatures"
+      ],
+      "title": "AnnotationCoSignManifest",
+      "type": "object"
+    },
+    "AnnotationCurrentStatus": {
+      "additionalProperties": false,
+      "properties": {
+        "validity": {
+          "enum": [
+            "current",
+            "stale"
+          ],
+          "title": "Validity",
+          "type": "string"
+        },
+        "active_selection": {
+          "title": "Active Selection",
+          "type": "boolean"
+        },
+        "source_withdrawn": {
+          "title": "Source Withdrawn",
+          "type": "boolean"
+        },
+        "warning_codes": {
+          "items": {
+            "enum": [
+              "source_inactive",
+              "source_withdrawn",
+              "source_integrity_failure",
+              "vendor_source_not_enabled",
+              "card_revision_changed",
+              "card_not_editable",
+              "requirement_review_not_current",
+              "privacy_lineage_invalid",
+              "renderer_unavailable",
+              "output_limit_exceeded",
+              "approval_not_complete",
+              "approval_stale",
+              "release_binding_changed"
+            ],
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Warning Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "validity",
+        "active_selection",
+        "source_withdrawn"
+      ],
+      "title": "AnnotationCurrentStatus",
+      "type": "object"
+    },
+    "AnnotationInput": {
+      "additionalProperties": false,
+      "description": "The human-authored file has no org, actor, storage key, path or gate flags.",
+      "properties": {
+        "extraction_job_id": {
+          "format": "uuid",
+          "title": "Extraction Job Id",
+          "type": "string"
+        },
+        "card_id": {
+          "format": "uuid",
+          "title": "Card Id",
+          "type": "string"
+        },
+        "expected_card_revision": {
+          "minimum": 1,
+          "title": "Expected Card Revision",
+          "type": "integer"
+        },
+        "source": {
+          "discriminator": {
+            "mapping": {
+              "certificate_page": "#/schemas/CertificateAnnotationSource",
+              "vendor_rendition": "#/schemas/VendorAnnotationSource"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/schemas/CertificateAnnotationSource"
+            },
+            {
+              "$ref": "#/schemas/VendorAnnotationSource"
+            }
+          ],
+          "title": "Source"
+        },
+        "plan": {
+          "$ref": "#/schemas/AnnotationPlan"
+        }
+      },
+      "required": [
+        "extraction_job_id",
+        "card_id",
+        "expected_card_revision",
+        "source",
+        "plan"
+      ],
+      "title": "AnnotationInput",
+      "type": "object"
+    },
+    "AnnotationInputManifest": {
+      "additionalProperties": false,
+      "properties": {
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/schemas/AnnotationInput"
+        },
+        "card_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Card Content Sha256",
+          "type": "string"
+        },
+        "requirement": {
+          "$ref": "#/schemas/AnnotationRequirementPin"
+        },
+        "source": {
+          "discriminator": {
+            "mapping": {
+              "certificate_page": "#/schemas/CertificatePageBinding",
+              "vendor_rendition": "#/schemas/VendorRenditionBinding"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/schemas/CertificatePageBinding"
+            },
+            {
+              "$ref": "#/schemas/VendorRenditionBinding"
+            }
+          ],
+          "title": "Source"
+        },
+        "plan_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Sha256",
+          "type": "string"
+        },
+        "renderer": {
+          "$ref": "#/schemas/AnnotationRendererIdentity"
+        },
+        "policy_version": {
+          "const": "annotation-binding-v1",
+          "default": "annotation-binding-v1",
+          "title": "Policy Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "org_id",
+        "task_id",
+        "target",
+        "card_content_sha256",
+        "requirement",
+        "source",
+        "plan_sha256",
+        "renderer"
+      ],
+      "title": "AnnotationInputManifest",
+      "type": "object"
+    },
+    "AnnotationJobAccepted": {
+      "additionalProperties": false,
+      "properties": {
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "card_id": {
+          "format": "uuid",
+          "title": "Card Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "annotation_render",
+            "annotation_release"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "queued",
+            "running",
+            "succeeded",
+            "failed",
+            "cancelled"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "duplicate": {
+          "title": "Duplicate",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "job_id",
+        "task_id",
+        "card_id",
+        "kind",
+        "status",
+        "duplicate"
+      ],
+      "title": "AnnotationJobAccepted",
+      "type": "object"
+    },
+    "AnnotationListData": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Cursor"
+        },
+        "returned": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Returned",
+          "type": "integer"
+        },
+        "has_more": {
+          "title": "Has More",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "task_id",
+        "next_cursor",
+        "returned",
+        "has_more"
+      ],
+      "title": "AnnotationListData",
+      "type": "object"
+    },
+    "AnnotationListQuery": {
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cursor"
+        },
+        "limit": {
+          "default": 50,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "card_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Card Id"
+        }
+      },
+      "title": "AnnotationListQuery",
+      "type": "object"
+    },
+    "AnnotationPlan": {
+      "additionalProperties": false,
+      "description": "Coordinates belong to authorized source content; generated footers are excluded.",
+      "properties": {
+        "crop": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/PixelRect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "boxes": {
+          "items": {
+            "$ref": "#/schemas/PixelRect"
+          },
+          "maxItems": 20,
+          "title": "Boxes",
+          "type": "array"
+        }
+      },
+      "title": "AnnotationPlan",
+      "type": "object"
+    },
+    "AnnotationPreflight": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "const": true,
+          "default": true,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "manifest": {
+          "$ref": "#/schemas/AnnotationInputManifest"
+        },
+        "predicted_output": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/AnnotationCanvas"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "budget_preflight": {
+          "$ref": "#/schemas/BudgetPreflightData"
+        },
+        "blocker_codes": {
+          "items": {
+            "enum": [
+              "source_inactive",
+              "source_withdrawn",
+              "source_integrity_failure",
+              "vendor_source_not_enabled",
+              "card_revision_changed",
+              "card_not_editable",
+              "requirement_review_not_current",
+              "privacy_lineage_invalid",
+              "renderer_unavailable",
+              "output_limit_exceeded",
+              "approval_not_complete",
+              "approval_stale",
+              "release_binding_changed"
+            ],
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Blocker Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "input_hash",
+        "manifest",
+        "predicted_output",
+        "budget_preflight"
+      ],
+      "title": "AnnotationPreflight",
+      "type": "object"
+    },
+    "AnnotationPreflightRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "$ref": "#/schemas/AnnotationInput"
+        },
+        "dry_run": {
+          "const": true,
+          "default": true,
+          "title": "Dry Run",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "input"
+      ],
+      "title": "AnnotationPreflightRequest",
+      "type": "object"
+    },
+    "AnnotationPreviewLink": {
+      "additionalProperties": false,
+      "properties": {
+        "annotation_id": {
+          "format": "uuid",
+          "title": "Annotation Id",
+          "type": "string"
+        },
+        "rendition_id": {
+          "format": "uuid",
+          "title": "Rendition Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "candidate",
+            "release"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "url": {
+          "minLength": 1,
+          "title": "Url",
+          "type": "string"
+        },
+        "expires_in": {
+          "const": 300,
+          "default": 300,
+          "title": "Expires In",
+          "type": "integer"
+        },
+        "image": {
+          "$ref": "#/schemas/PNGDescriptor"
+        },
+        "mapping": {
+          "$ref": "#/schemas/ContentMapping"
+        }
+      },
+      "required": [
+        "annotation_id",
+        "rendition_id",
+        "kind",
+        "url",
+        "image",
+        "mapping"
+      ],
+      "title": "AnnotationPreviewLink",
+      "type": "object"
+    },
+    "AnnotationReleaseInput": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "card_id": {
+          "format": "uuid",
+          "title": "Card Id",
+          "type": "string"
+        },
+        "expected_card_revision": {
+          "minimum": 1,
+          "title": "Expected Card Revision",
+          "type": "integer"
+        },
+        "expected_approval_binding_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Approval Binding Hash",
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "title": "Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "card_id",
+        "expected_card_revision",
+        "expected_approval_binding_hash",
+        "request_id"
+      ],
+      "title": "AnnotationReleaseInput",
+      "type": "object"
+    },
+    "AnnotationReleaseListData": {
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "maxLength": 4096,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Next Cursor"
+        },
+        "returned": {
+          "maximum": 100,
+          "minimum": 0,
+          "title": "Returned",
+          "type": "integer"
+        },
+        "has_more": {
+          "title": "Has More",
+          "type": "boolean"
+        },
+        "annotation_id": {
+          "format": "uuid",
+          "title": "Annotation Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "task_id",
+        "next_cursor",
+        "returned",
+        "has_more",
+        "annotation_id"
+      ],
+      "title": "AnnotationReleaseListData",
+      "type": "object"
+    },
+    "AnnotationReleaseRetry": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_id": {
+          "format": "uuid",
+          "title": "Evidence Id",
+          "type": "string"
+        },
+        "card_id": {
+          "format": "uuid",
+          "title": "Card Id",
+          "type": "string"
+        },
+        "expected_card_revision": {
+          "minimum": 1,
+          "title": "Expected Card Revision",
+          "type": "integer"
+        },
+        "expected_approval_binding_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Approval Binding Hash",
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "retry": {
+          "const": true,
+          "default": true,
+          "title": "Retry",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "evidence_id",
+        "card_id",
+        "expected_card_revision",
+        "expected_approval_binding_hash",
+        "request_id",
+        "job_id"
+      ],
+      "title": "AnnotationReleaseRetry",
+      "type": "object"
+    },
+    "AnnotationReleaseView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "annotation_id": {
+          "format": "uuid",
+          "title": "Annotation Id",
+          "type": "string"
+        },
+        "job_id": {
+          "format": "uuid",
+          "title": "Job Id",
+          "type": "string"
+        },
+        "asset_id": {
+          "format": "uuid",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "rendition_id": {
+          "format": "uuid",
+          "title": "Rendition Id",
+          "type": "string"
+        },
+        "approval": {
+          "$ref": "#/schemas/AnnotationApprovalBinding"
+        },
+        "renderer": {
+          "$ref": "#/schemas/AnnotationRendererIdentity"
+        },
+        "rendering": {
+          "$ref": "#/schemas/AnnotationRendering"
+        },
+        "created_at": {
+          "format": "date-time",
+          "title": "Created At",
+          "type": "string"
+        },
+        "status": {
+          "const": "confirmed_release",
+          "default": "confirmed_release",
+          "title": "Status",
+          "type": "string"
+        },
+        "decision_validity": {
+          "enum": [
+            "current",
+            "stale"
+          ],
+          "title": "Decision Validity",
+          "type": "string"
+        },
+        "releasable": {
+          "title": "Releasable",
+          "type": "boolean"
+        },
+        "blocker_codes": {
+          "items": {
+            "enum": [
+              "source_inactive",
+              "source_withdrawn",
+              "source_integrity_failure",
+              "vendor_source_not_enabled",
+              "card_revision_changed",
+              "card_not_editable",
+              "requirement_review_not_current",
+              "privacy_lineage_invalid",
+              "renderer_unavailable",
+              "output_limit_exceeded",
+              "approval_not_complete",
+              "approval_stale",
+              "release_binding_changed"
+            ],
+            "type": "string"
+          },
+          "maxItems": 20,
+          "title": "Blocker Codes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "annotation_id",
+        "job_id",
+        "asset_id",
+        "rendition_id",
+        "approval",
+        "renderer",
+        "rendering",
+        "created_at",
+        "decision_validity",
+        "releasable"
+      ],
+      "title": "AnnotationReleaseView",
+      "type": "object"
+    },
+    "AnnotationRenderRequest": {
+      "additionalProperties": false,
+      "description": "Candidate input is source PNG. Release input is already marked candidate\ncontent with its footer removed: never crop or draw boxes a second time.\nThe original plan is retained solely for hash/provenance validation on release.",
+      "properties": {
+        "protocol": {
+          "const": "annotation-render-v1",
+          "default": "annotation-render-v1",
+          "title": "Protocol",
+          "type": "string"
+        },
+        "source": {
+          "discriminator": {
+            "mapping": {
+              "certificate_page": "#/schemas/CertificatePageBinding",
+              "vendor_rendition": "#/schemas/VendorRenditionBinding"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/schemas/CertificatePageBinding"
+            },
+            {
+              "$ref": "#/schemas/VendorRenditionBinding"
+            }
+          ],
+          "title": "Source"
+        },
+        "plan": {
+          "$ref": "#/schemas/AnnotationPlan"
+        },
+        "plan_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Sha256",
+          "type": "string"
+        },
+        "renderer": {
+          "$ref": "#/schemas/AnnotationRendererIdentity"
+        },
+        "content_mode": {
+          "enum": [
+            "source_png",
+            "marked_candidate_content"
+          ],
+          "title": "Content Mode",
+          "type": "string"
+        },
+        "input_content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Content Sha256",
+          "type": "string"
+        },
+        "provenance_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Provenance Sha256",
+          "type": "string"
+        },
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/AnnotationApprovalBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "source",
+        "plan",
+        "plan_sha256",
+        "renderer",
+        "content_mode",
+        "input_content_sha256",
+        "provenance_sha256"
+      ],
+      "title": "AnnotationRenderRequest",
+      "type": "object"
+    },
+    "AnnotationRendererIdentity": {
+      "additionalProperties": false,
+      "properties": {
+        "protocol_version": {
+          "const": "annotation-render-v1",
+          "default": "annotation-render-v1",
+          "title": "Protocol Version",
+          "type": "string"
+        },
+        "profile": {
+          "enum": [
+            "annotation-candidate-v1",
+            "annotation-release-v1"
+          ],
+          "title": "Profile",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "binary_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Binary Sha256",
+          "type": "string"
+        },
+        "font_bundle_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Font Bundle Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "profile",
+        "version",
+        "binary_sha256",
+        "font_bundle_sha256"
+      ],
+      "title": "AnnotationRendererIdentity",
+      "type": "object"
+    },
+    "AnnotationRendering": {
+      "additionalProperties": false,
+      "properties": {
+        "renderer": {
+          "$ref": "#/schemas/AnnotationRendererIdentity"
+        },
+        "plan_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Plan Sha256",
+          "type": "string"
+        },
+        "provenance_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Provenance Sha256",
+          "type": "string"
+        },
+        "image": {
+          "$ref": "#/schemas/PNGDescriptor"
+        },
+        "canvas": {
+          "$ref": "#/schemas/AnnotationCanvas"
+        },
+        "content_pixel_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Pixel Sha256",
+          "type": "string"
+        },
+        "root_mapping_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Root Mapping Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "renderer",
+        "plan_sha256",
+        "provenance_sha256",
+        "image",
+        "canvas",
+        "content_pixel_sha256",
+        "root_mapping_sha256"
+      ],
+      "title": "AnnotationRendering",
+      "type": "object"
+    },
+    "AnnotationRequirementPin": {
+      "additionalProperties": false,
+      "properties": {
+        "requirement_id": {
+          "format": "uuid",
+          "title": "Requirement Id",
+          "type": "string"
+        },
+        "review_revision": {
+          "minimum": 1,
+          "title": "Review Revision",
+          "type": "integer"
+        },
+        "review_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Review Hash",
+          "type": "string"
+        },
+        "state": {
+          "$ref": "#/schemas/ReviewState"
+        },
+        "source_binding_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Source Binding Sha256"
+        }
+      },
+      "required": [
+        "requirement_id",
+        "review_revision",
+        "review_hash",
+        "state",
+        "source_binding_sha256"
+      ],
+      "title": "AnnotationRequirementPin",
+      "type": "object"
+    },
+    "AnnotationShowData": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate": {
+          "$ref": "#/schemas/AnnotationCandidateView"
+        },
+        "current": {
+          "$ref": "#/schemas/AnnotationCurrentStatus"
+        }
+      },
+      "required": [
+        "candidate",
+        "current"
+      ],
+      "title": "AnnotationShowData",
+      "type": "object"
+    },
+    "AnnotationSignaturePin": {
+      "additionalProperties": false,
+      "description": "Exact signature keys emitted by task_cosign.projections.",
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "domain": {
+          "$ref": "#/schemas/ReviewDomain"
+        },
+        "signer_user_id": {
+          "format": "uuid",
+          "title": "Signer User Id",
+          "type": "string"
+        },
+        "request_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Sha256",
+          "type": "string"
+        },
+        "reason_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reason Sha256"
+        }
+      },
+      "required": [
+        "id",
+        "domain",
+        "signer_user_id",
+        "request_sha256",
+        "reason_sha256"
+      ],
+      "title": "AnnotationSignaturePin",
+      "type": "object"
+    },
+    "AnnotationSubmit": {
+      "additionalProperties": false,
+      "properties": {
+        "input": {
+          "$ref": "#/schemas/AnnotationInput"
+        },
+        "dry_run": {
+          "const": false,
+          "default": false,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "reviewed_source_png_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Reviewed Source Png Sha256",
+          "type": "string"
+        },
+        "expected_input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Input Hash",
+          "type": "string"
+        },
+        "request_id": {
+          "format": "uuid",
+          "title": "Request Id",
+          "type": "string"
+        },
+        "retry": {
+          "default": false,
+          "title": "Retry",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "input",
+        "reviewed_source_png_sha256",
+        "expected_input_hash",
+        "request_id"
+      ],
+      "title": "AnnotationSubmit",
+      "type": "object"
+    },
+    "ArchiveDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "media_type": {
+          "enum": [
+            "application/pdf",
+            "application/zip",
+            "text/html"
+          ],
+          "title": "Media Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "size_bytes",
+        "media_type"
+      ],
+      "title": "ArchiveDescriptor",
+      "type": "object"
+    },
+    "BudgetCallQuote": {
+      "additionalProperties": false,
+      "properties": {
+        "capability": {
+          "enum": [
+            "llm",
+            "vision",
+            "ocr",
+            "search",
+            "embedding",
+            "browser"
+          ],
+          "title": "Capability",
+          "type": "string"
+        },
+        "payer": {
+          "enum": [
+            "org_platform",
+            "org_direct",
+            "platform_absorbed",
+            "local_free"
+          ],
+          "title": "Payer",
+          "type": "string"
+        },
+        "provider": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Provider",
+          "type": "string"
+        },
+        "model": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Model",
+          "type": "string"
+        },
+        "version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Version",
+          "type": "string"
+        },
+        "provider_config_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Provider Config Id"
+        },
+        "platform_model_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Platform Model Id"
+        },
+        "price_revision": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Price Revision",
+          "type": "string"
+        },
+        "request_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Request Sha256",
+          "type": "string"
+        },
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "reserved_charge": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            }
+          ],
+          "title": "Reserved Charge"
+        },
+        "reserved_task_amount": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Reserved Task Amount"
+        },
+        "vendor_usd_upper_bound": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Vendor Usd Upper Bound"
+        },
+        "input_tokens_upper_bound": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Input Tokens Upper Bound",
+          "type": "integer"
+        },
+        "output_tokens_upper_bound": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Output Tokens Upper Bound",
+          "type": "integer"
+        },
+        "ocr_pages_upper_bound": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Ocr Pages Upper Bound",
+          "type": "integer"
+        },
+        "search_requests": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Search Requests",
+          "type": "integer"
+        },
+        "image_count": {
+          "default": 0,
+          "maximum": 20,
+          "minimum": 0,
+          "title": "Image Count",
+          "type": "integer"
+        },
+        "image_price_revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Image Price Revision"
+        },
+        "unknown_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "missing_price",
+                "currency_conversion_required",
+                "unbounded"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unknown Reason"
+        }
+      },
+      "required": [
+        "capability",
+        "payer",
+        "provider",
+        "model",
+        "version",
+        "price_revision",
+        "request_sha256",
+        "currency",
+        "reserved_charge",
+        "reserved_task_amount",
+        "vendor_usd_upper_bound"
+      ],
+      "title": "BudgetCallQuote",
+      "type": "object"
+    },
+    "BudgetCost": {
+      "additionalProperties": false,
+      "properties": {
+        "llm_tokens": {
+          "default": 0,
+          "title": "Llm Tokens",
+          "type": "integer"
+        },
+        "ocr_pages": {
+          "default": 0,
+          "title": "Ocr Pages",
+          "type": "integer"
+        },
+        "usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.0,
+          "title": "Usd"
+        },
+        "basis": {
+          "enum": [
+            "actual",
+            "first_pass_upper_bound",
+            "unknown",
+            "zero",
+            "cache_hit"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "charge": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Charge"
+        },
+        "billing_currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Billing Currency",
+          "type": "string"
+        },
+        "task_amount": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Task Amount"
+        },
+        "unpriced_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unpriced Calls",
+          "type": "integer"
+        },
+        "unresolved_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unresolved Calls",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "basis",
+        "charge",
+        "billing_currency",
+        "task_amount"
+      ],
+      "title": "BudgetCost",
+      "type": "object"
+    },
+    "BudgetPreflightData": {
+      "additionalProperties": false,
+      "properties": {
+        "dry_run": {
+          "const": true,
+          "default": true,
+          "title": "Dry Run",
+          "type": "boolean"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "task_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Task Id"
+        },
+        "input_hash": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Hash",
+          "type": "string"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
+        },
+        "task_budget": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/TaskBudgetView"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "planned_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Planned Calls"
+        },
+        "maximum_calls": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Maximum Calls"
+        },
+        "estimate": {
+          "$ref": "#/schemas/BudgetCost"
+        },
+        "next_call": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/BudgetCallQuote"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "admission_blocker": {
+          "anyOf": [
+            {
+              "enum": [
+                "task_budget_exceeded",
+                "task_budget_unpriced",
+                "task_budget_currency_review_required",
+                "insufficient_balance",
+                "job_charge_limit_exceeded",
+                "job_call_limit_exceeded",
+                "spend_cap_reached",
+                "billing_price_unavailable",
+                "billing_currency_mismatch",
+                "provider_unavailable"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Admission Blocker"
+        },
+        "first_pass_fits": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "First Pass Fits"
+        },
+        "full_run_guaranteed": {
+          "const": false,
+          "default": false,
+          "title": "Full Run Guaranteed",
+          "type": "boolean"
+        },
+        "cached_job_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cached Job Id"
+        },
+        "cached_result_cost": {
+          "anyOf": [
+            {
+              "$ref": "#/schemas/Cost"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "estimated_duration_ms": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Estimated Duration Ms"
+        },
+        "duration_basis": {
+          "default": "unknown",
+          "enum": [
+            "unknown",
+            "measured_profile"
+          ],
+          "title": "Duration Basis",
+          "type": "string"
+        },
+        "uncertainty": {
+          "items": {
+            "enum": [
+              "retry_or_split",
+              "dynamic_search",
+              "unknown_price",
+              "currency_conversion",
+              "history_incomplete",
+              "concurrent_spending",
+              "unresolved_usage"
+            ],
+            "type": "string"
+          },
+          "title": "Uncertainty",
+          "type": "array"
+        }
+      },
+      "required": [
+        "command",
+        "task_id",
+        "input_hash",
+        "as_of",
+        "task_budget",
+        "planned_calls",
+        "estimate",
+        "next_call",
+        "admission_blocker",
+        "first_pass_fits"
+      ],
+      "title": "BudgetPreflightData",
+      "type": "object"
+    },
+    "CardAction": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_revision": {
+          "minimum": 1,
+          "title": "Expected Revision",
+          "type": "integer"
+        },
+        "action": {
+          "enum": [
+            "submit",
+            "withdraw",
+            "confirm",
+            "reject",
+            "needs_material",
+            "reopen"
+          ],
+          "title": "Action",
+          "type": "string"
+        },
+        "reviewed_evidence_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Reviewed Evidence Ids",
+          "type": "array"
+        },
+        "reviewed_warning_codes": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Reviewed Warning Codes",
+          "type": "array"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "expected_revision",
+        "action"
+      ],
+      "title": "CardAction",
+      "type": "object"
+    },
+    "CertificateAnnotationSource": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "certificate_page",
+          "title": "Kind",
+          "type": "string"
+        },
+        "evidence_source_id": {
+          "format": "uuid",
+          "title": "Evidence Source Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "evidence_source_id"
+      ],
+      "title": "CertificateAnnotationSource",
+      "type": "object"
+    },
+    "CertificatePageBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "certificate_page",
+          "default": "certificate_page",
+          "title": "Kind",
+          "type": "string"
+        },
+        "archive": {
+          "$ref": "#/schemas/EvidenceSourceArchive"
+        },
+        "source_png": {
+          "$ref": "#/schemas/PNGDescriptor"
+        },
+        "page_kind": {
+          "const": "pdf_page",
+          "default": "pdf_page",
+          "title": "Page Kind",
+          "type": "string"
+        },
+        "source_time_kind": {
+          "const": "server_page_rendered_at",
+          "default": "server_page_rendered_at",
+          "title": "Source Time Kind",
+          "type": "string"
+        },
+        "source_time": {
+          "format": "date-time",
+          "title": "Source Time",
+          "type": "string"
+        },
+        "original_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Original Sha256",
+          "type": "string"
+        },
+        "selection_id": {
+          "format": "uuid",
+          "title": "Selection Id",
+          "type": "string"
+        },
+        "resource_revision_id": {
+          "format": "uuid",
+          "title": "Resource Revision Id",
+          "type": "string"
+        },
+        "authorized_content": {
+          "$ref": "#/schemas/PixelRect"
+        }
+      },
+      "required": [
+        "archive",
+        "source_png",
+        "source_time",
+        "original_sha256",
+        "selection_id",
+        "resource_revision_id",
+        "authorized_content"
+      ],
+      "title": "CertificatePageBinding",
+      "type": "object"
+    },
+    "CertificateScanFile": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "maximum": 41943040,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "media_type": {
+          "const": "application/pdf",
+          "default": "application/pdf",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "page_count": {
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Page Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "sha256",
+        "size_bytes",
+        "page_count"
+      ],
+      "title": "CertificateScanFile",
+      "type": "object"
+    },
+    "CoSignConfirm": {
+      "additionalProperties": false,
+      "description": "expected_revision is the exact card revision; partial signatures do not advance it.",
+      "properties": {
+        "expected_revision": {
+          "$ref": "#/schemas/Revision"
+        },
+        "action": {
+          "const": "confirm",
+          "default": "confirm",
+          "title": "Action",
+          "type": "string"
+        },
+        "reviewed_evidence_ids": {
+          "items": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Reviewed Evidence Ids",
+          "type": "array"
+        },
+        "reviewed_warning_codes": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Reviewed Warning Codes",
+          "type": "array"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 10000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "purpose": {
+          "const": "response",
+          "default": "response",
+          "title": "Purpose",
+          "type": "string"
+        },
+        "selected_domain": {
+          "$ref": "#/schemas/ReviewDomain"
+        },
+        "expected_round": {
+          "$ref": "#/schemas/Revision"
+        },
+        "client_request_id": {
+          "format": "uuid",
+          "title": "Client Request Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "expected_revision",
+        "selected_domain",
+        "expected_round",
+        "client_request_id"
+      ],
+      "title": "CoSignConfirm",
+      "type": "object"
+    },
+    "ContentMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "crop": {
+          "$ref": "#/schemas/PixelRect"
+        },
+        "content_offset_x": {
+          "minimum": 0,
+          "title": "Content Offset X",
+          "type": "integer"
+        },
+        "content_offset_y": {
+          "minimum": 0,
+          "title": "Content Offset Y",
+          "type": "integer"
+        },
+        "content_width": {
+          "minimum": 1,
+          "title": "Content Width",
+          "type": "integer"
+        },
+        "content_height": {
+          "minimum": 1,
+          "title": "Content Height",
+          "type": "integer"
+        },
+        "footer_height": {
+          "minimum": 0,
+          "title": "Footer Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "crop",
+        "content_offset_x",
+        "content_offset_y",
+        "content_width",
+        "content_height",
+        "footer_height"
+      ],
+      "title": "ContentMapping",
+      "type": "object"
+    },
+    "Cost": {
+      "additionalProperties": false,
+      "properties": {
+        "llm_tokens": {
+          "default": 0,
+          "title": "Llm Tokens",
+          "type": "integer"
+        },
+        "ocr_pages": {
+          "default": 0,
+          "title": "Ocr Pages",
+          "type": "integer"
+        },
+        "usd": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": 0.0,
+          "title": "Usd"
+        },
+        "basis": {
+          "default": "zero",
+          "enum": [
+            "actual",
+            "first_pass_upper_bound",
+            "unknown",
+            "zero",
+            "cache_hit"
+          ],
+          "title": "Basis",
+          "type": "string"
+        },
+        "charge": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "0",
+          "title": "Charge"
+        },
+        "billing_currency": {
+          "default": "USD",
+          "pattern": "^[A-Z]{3}$",
+          "title": "Billing Currency",
+          "type": "string"
+        },
+        "task_amount": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": "0",
+          "title": "Task Amount"
+        },
+        "unpriced_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unpriced Calls",
+          "type": "integer"
+        },
+        "unresolved_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unresolved Calls",
+          "type": "integer"
+        }
+      },
+      "title": "Cost",
+      "type": "object"
+    },
+    "EvidenceSourceArchive": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "task_certificate_id": {
+          "format": "uuid",
+          "title": "Task Certificate Id",
+          "type": "string"
+        },
+        "certificate_id": {
+          "format": "uuid",
+          "title": "Certificate Id",
+          "type": "string"
+        },
+        "certificate_revision_id": {
+          "format": "uuid",
+          "title": "Certificate Revision Id",
+          "type": "string"
+        },
+        "certificate_file_id": {
+          "format": "uuid",
+          "title": "Certificate File Id",
+          "type": "string"
+        },
+        "source_kind": {
+          "const": "user_supplied_certificate_pdf",
+          "default": "user_supplied_certificate_pdf",
+          "title": "Source Kind",
+          "type": "string"
+        },
+        "original": {
+          "$ref": "#/schemas/CertificateScanFile"
+        },
+        "page": {
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "render_profile": {
+          "const": "pdf-page-preview-v1",
+          "default": "pdf-page-preview-v1",
+          "title": "Render Profile",
+          "type": "string"
+        },
+        "dpi": {
+          "const": 150,
+          "default": 150,
+          "title": "Dpi",
+          "type": "integer"
+        },
+        "preview": {
+          "$ref": "#/schemas/EvidenceSourcePreview"
+        },
+        "rendered_at": {
+          "format": "date-time",
+          "title": "Rendered At",
+          "type": "string"
+        },
+        "created_by": {
+          "format": "uuid",
+          "title": "Created By",
+          "type": "string"
+        },
+        "active_selection": {
+          "title": "Active Selection",
+          "type": "boolean"
+        },
+        "status": {
+          "const": "unconfirmed_source",
+          "default": "unconfirmed_source",
+          "title": "Status",
+          "type": "string"
+        },
+        "confirmed_by": {
+          "const": null,
+          "default": null,
+          "title": "Confirmed By",
+          "type": "null"
+        },
+        "eligible_for_draft_export": {
+          "const": false,
+          "default": false,
+          "title": "Eligible For Draft Export",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "org_id",
+        "task_id",
+        "task_certificate_id",
+        "certificate_id",
+        "certificate_revision_id",
+        "certificate_file_id",
+        "original",
+        "page",
+        "preview",
+        "rendered_at",
+        "created_by",
+        "active_selection"
+      ],
+      "title": "EvidenceSourceArchive",
+      "type": "object"
+    },
+    "EvidenceSourcePreview": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "maximum": 41943040,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "media_type": {
+          "const": "image/png",
+          "default": "image/png",
+          "title": "Media Type",
+          "type": "string"
+        },
+        "width_px": {
+          "exclusiveMinimum": 0,
+          "maximum": 8192,
+          "title": "Width Px",
+          "type": "integer"
+        },
+        "height_px": {
+          "exclusiveMinimum": 0,
+          "maximum": 8192,
+          "title": "Height Px",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "sha256",
+        "size_bytes",
+        "width_px",
+        "height_px"
+      ],
+      "title": "EvidenceSourcePreview",
+      "type": "object"
+    },
+    "PNGDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "exclusiveMinimum": 0,
+          "maximum": 41943040,
+          "title": "Size Bytes",
+          "type": "integer"
+        },
+        "width_px": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Width Px",
+          "type": "integer"
+        },
+        "height_px": {
+          "maximum": 8192,
+          "minimum": 1,
+          "title": "Height Px",
+          "type": "integer"
+        },
+        "media_type": {
+          "const": "image/png",
+          "default": "image/png",
+          "title": "Media Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "sha256",
+        "size_bytes",
+        "width_px",
+        "height_px"
+      ],
+      "title": "PNGDescriptor",
+      "type": "object"
+    },
     "PixelRect": {
       "additionalProperties": false,
       "properties": {
         "x": {
-          "maximum": 8191,
+          "maximum": 8192,
           "minimum": 0,
           "title": "X",
           "type": "integer"
         },
         "y": {
-          "maximum": 8191,
+          "maximum": 8192,
           "minimum": 0,
           "title": "Y",
           "type": "integer"
@@ -50,666 +2723,528 @@
       "title": "PixelRect",
       "type": "object"
     },
-    "SourceAnnotationPlan": {
-      "$defs": {
-        "PixelRect": {
-          "additionalProperties": false,
-          "properties": {
-            "x": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "X",
-              "type": "integer"
-            },
-            "y": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "Y",
-              "type": "integer"
-            },
-            "width": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Width",
-              "type": "integer"
-            },
-            "height": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Height",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "x",
-            "y",
-            "width",
-            "height"
-          ],
-          "title": "PixelRect",
-          "type": "object"
-        }
-      },
+    "Result": {
       "additionalProperties": false,
       "properties": {
-        "crop": {
+        "ok": {
+          "title": "Ok",
+          "type": "boolean"
+        },
+        "command": {
+          "title": "Command",
+          "type": "string"
+        },
+        "data": {
+          "additionalProperties": true,
+          "title": "Data",
+          "type": "object"
+        },
+        "items": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "cost": {
+          "$ref": "#/schemas/Cost"
+        },
+        "duration_ms": {
+          "default": 0,
+          "title": "Duration Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "ok",
+        "command"
+      ],
+      "title": "Result",
+      "type": "object"
+    },
+    "ReviewDomain": {
+      "enum": [
+        "commercial",
+        "technical"
+      ],
+      "type": "string"
+    },
+    "ReviewState": {
+      "enum": [
+        "unconfirmed",
+        "legacy_unconfirmed",
+        "confirmed",
+        "invalidated"
+      ],
+      "type": "string"
+    },
+    "Revision": {
+      "minimum": 1,
+      "type": "integer"
+    },
+    "TaskBudgetView": {
+      "additionalProperties": false,
+      "properties": {
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "revision": {
+          "minimum": 1,
+          "title": "Revision",
+          "type": "integer"
+        },
+        "limit": {
           "anyOf": [
             {
-              "$ref": "#/$defs/PixelRect"
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
             },
             {
               "type": "null"
             }
           ],
-          "default": null
+          "title": "Limit"
         },
-        "boxes": {
-          "items": {
-            "$ref": "#/$defs/PixelRect"
-          },
-          "maxItems": 20,
-          "title": "Boxes",
-          "type": "array"
-        }
-      },
-      "title": "SourceAnnotationPlan",
-      "type": "object"
-    },
-    "SourceAnnotationMapping": {
-      "$defs": {
-        "PixelRect": {
-          "additionalProperties": false,
-          "properties": {
-            "x": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "X",
-              "type": "integer"
-            },
-            "y": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "Y",
-              "type": "integer"
-            },
-            "width": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Width",
-              "type": "integer"
-            },
-            "height": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Height",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "x",
-            "y",
-            "width",
-            "height"
-          ],
-          "title": "PixelRect",
-          "type": "object"
-        }
-      },
-      "additionalProperties": false,
-      "properties": {
-        "original_crop": {
-          "$ref": "#/$defs/PixelRect"
-        },
-        "content_offset_x": {
-          "maximum": 8192,
-          "minimum": 0,
-          "title": "Content Offset X",
-          "type": "integer"
-        },
-        "content_offset_y": {
-          "const": 0,
-          "default": 0,
-          "title": "Content Offset Y",
-          "type": "integer"
-        },
-        "footer_height_px": {
-          "maximum": 8192,
-          "minimum": 1,
-          "title": "Footer Height Px",
-          "type": "integer"
-        }
-      },
-      "required": [
-        "original_crop",
-        "content_offset_x",
-        "footer_height_px"
-      ],
-      "title": "SourceAnnotationMapping",
-      "type": "object"
-    },
-    "SourceAnnotationRendering": {
-      "$defs": {
-        "EvidenceSourcePreview": {
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "maxLength": 200,
-              "minLength": 1,
-              "title": "Name",
-              "type": "string"
-            },
-            "sha256": {
-              "pattern": "^[0-9a-f]{64}$",
-              "title": "Sha256",
-              "type": "string"
-            },
-            "size_bytes": {
-              "exclusiveMinimum": 0,
-              "maximum": 41943040,
-              "title": "Size Bytes",
-              "type": "integer"
-            },
-            "media_type": {
-              "const": "image/png",
-              "default": "image/png",
-              "title": "Media Type",
-              "type": "string"
-            },
-            "width_px": {
-              "exclusiveMinimum": 0,
-              "maximum": 8192,
-              "title": "Width Px",
-              "type": "integer"
-            },
-            "height_px": {
-              "exclusiveMinimum": 0,
-              "maximum": 8192,
-              "title": "Height Px",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "name",
-            "sha256",
-            "size_bytes",
-            "width_px",
-            "height_px"
-          ],
-          "title": "EvidenceSourcePreview",
-          "type": "object"
-        },
-        "PixelRect": {
-          "additionalProperties": false,
-          "properties": {
-            "x": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "X",
-              "type": "integer"
-            },
-            "y": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "Y",
-              "type": "integer"
-            },
-            "width": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Width",
-              "type": "integer"
-            },
-            "height": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Height",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "x",
-            "y",
-            "width",
-            "height"
-          ],
-          "title": "PixelRect",
-          "type": "object"
-        },
-        "SourceAnnotationMapping": {
-          "additionalProperties": false,
-          "properties": {
-            "original_crop": {
-              "$ref": "#/$defs/PixelRect"
-            },
-            "content_offset_x": {
-              "maximum": 8192,
-              "minimum": 0,
-              "title": "Content Offset X",
-              "type": "integer"
-            },
-            "content_offset_y": {
-              "const": 0,
-              "default": 0,
-              "title": "Content Offset Y",
-              "type": "integer"
-            },
-            "footer_height_px": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Footer Height Px",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "original_crop",
-            "content_offset_x",
-            "footer_height_px"
-          ],
-          "title": "SourceAnnotationMapping",
-          "type": "object"
-        }
-      },
-      "additionalProperties": false,
-      "properties": {
-        "annotation_profile": {
-          "const": "source-markup-v1",
-          "default": "source-markup-v1",
-          "title": "Annotation Profile",
+        "currency": {
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
           "type": "string"
         },
-        "plan_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Plan Sha256",
+        "state": {
+          "enum": [
+            "active",
+            "currency_review_required"
+          ],
+          "title": "State",
           "type": "string"
         },
-        "file": {
-          "$ref": "#/$defs/EvidenceSourcePreview"
-        },
-        "mapping": {
-          "$ref": "#/$defs/SourceAnnotationMapping"
-        }
-      },
-      "required": [
-        "plan_sha256",
-        "file",
-        "mapping"
-      ],
-      "title": "SourceAnnotationRendering",
-      "type": "object"
-    },
-    "SourceAnnotationReceipt": {
-      "$defs": {
-        "CertificateScanFile": {
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "maxLength": 200,
-              "minLength": 1,
-              "title": "Name",
+        "spent": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
               "type": "string"
-            },
-            "sha256": {
-              "pattern": "^[0-9a-f]{64}$",
-              "title": "Sha256",
-              "type": "string"
-            },
-            "size_bytes": {
-              "exclusiveMinimum": 0,
-              "maximum": 41943040,
-              "title": "Size Bytes",
-              "type": "integer"
-            },
-            "media_type": {
-              "const": "application/pdf",
-              "default": "application/pdf",
-              "title": "Media Type",
-              "type": "string"
-            },
-            "page_count": {
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Page Count",
-              "type": "integer"
             }
-          },
-          "required": [
-            "name",
-            "sha256",
-            "size_bytes",
-            "page_count"
           ],
-          "title": "CertificateScanFile",
-          "type": "object"
+          "title": "Spent"
         },
-        "EvidenceSourceArchive": {
-          "additionalProperties": false,
-          "properties": {
-            "id": {
-              "format": "uuid",
-              "title": "Id",
+        "reserved": {
+          "anyOf": [
+            {
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+              "type": "string"
+            }
+          ],
+          "title": "Reserved"
+        },
+        "available": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
               "type": "string"
             },
-            "org_id": {
-              "format": "uuid",
-              "title": "Org Id",
-              "type": "string"
-            },
-            "task_id": {
-              "format": "uuid",
-              "title": "Task Id",
-              "type": "string"
-            },
-            "task_certificate_id": {
-              "format": "uuid",
-              "title": "Task Certificate Id",
-              "type": "string"
-            },
-            "certificate_id": {
-              "format": "uuid",
-              "title": "Certificate Id",
-              "type": "string"
-            },
-            "certificate_revision_id": {
-              "format": "uuid",
-              "title": "Certificate Revision Id",
-              "type": "string"
-            },
-            "certificate_file_id": {
-              "format": "uuid",
-              "title": "Certificate File Id",
-              "type": "string"
-            },
-            "source_kind": {
-              "const": "user_supplied_certificate_pdf",
-              "default": "user_supplied_certificate_pdf",
-              "title": "Source Kind",
-              "type": "string"
-            },
-            "original": {
-              "$ref": "#/$defs/CertificateScanFile"
-            },
-            "page": {
-              "maximum": 200,
-              "minimum": 1,
-              "title": "Page",
-              "type": "integer"
-            },
-            "render_profile": {
-              "const": "pdf-page-preview-v1",
-              "default": "pdf-page-preview-v1",
-              "title": "Render Profile",
-              "type": "string"
-            },
-            "dpi": {
-              "const": 150,
-              "default": 150,
-              "title": "Dpi",
-              "type": "integer"
-            },
-            "preview": {
-              "$ref": "#/$defs/EvidenceSourcePreview"
-            },
-            "rendered_at": {
-              "format": "date-time",
-              "title": "Rendered At",
-              "type": "string"
-            },
-            "created_by": {
-              "format": "uuid",
-              "title": "Created By",
-              "type": "string"
-            },
-            "active_selection": {
-              "title": "Active Selection",
-              "type": "boolean"
-            },
-            "status": {
-              "const": "unconfirmed_source",
-              "default": "unconfirmed_source",
-              "title": "Status",
-              "type": "string"
-            },
-            "confirmed_by": {
-              "const": null,
-              "default": null,
-              "title": "Confirmed By",
+            {
               "type": "null"
-            },
-            "eligible_for_draft_export": {
-              "const": false,
-              "default": false,
-              "title": "Eligible For Draft Export",
-              "type": "boolean"
             }
-          },
-          "required": [
-            "id",
-            "org_id",
-            "task_id",
-            "task_certificate_id",
-            "certificate_id",
-            "certificate_revision_id",
-            "certificate_file_id",
-            "original",
-            "page",
-            "preview",
-            "rendered_at",
-            "created_by",
-            "active_selection"
           ],
-          "title": "EvidenceSourceArchive",
-          "type": "object"
+          "title": "Available"
         },
-        "EvidenceSourcePreview": {
-          "additionalProperties": false,
-          "properties": {
-            "name": {
-              "maxLength": 200,
-              "minLength": 1,
-              "title": "Name",
-              "type": "string"
-            },
-            "sha256": {
-              "pattern": "^[0-9a-f]{64}$",
-              "title": "Sha256",
-              "type": "string"
-            },
-            "size_bytes": {
-              "exclusiveMinimum": 0,
-              "maximum": 41943040,
-              "title": "Size Bytes",
-              "type": "integer"
-            },
-            "media_type": {
-              "const": "image/png",
-              "default": "image/png",
-              "title": "Media Type",
-              "type": "string"
-            },
-            "width_px": {
-              "exclusiveMinimum": 0,
-              "maximum": 8192,
-              "title": "Width Px",
-              "type": "integer"
-            },
-            "height_px": {
-              "exclusiveMinimum": 0,
-              "maximum": 8192,
-              "title": "Height Px",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "name",
-            "sha256",
-            "size_bytes",
-            "width_px",
-            "height_px"
-          ],
-          "title": "EvidenceSourcePreview",
-          "type": "object"
+        "unpriced_calls": {
+          "minimum": 0,
+          "title": "Unpriced Calls",
+          "type": "integer"
         },
-        "PixelRect": {
-          "additionalProperties": false,
-          "properties": {
-            "x": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "X",
-              "type": "integer"
-            },
-            "y": {
-              "maximum": 8191,
-              "minimum": 0,
-              "title": "Y",
-              "type": "integer"
-            },
-            "width": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Width",
-              "type": "integer"
-            },
-            "height": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Height",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "x",
-            "y",
-            "width",
-            "height"
-          ],
-          "title": "PixelRect",
-          "type": "object"
+        "unresolved_calls": {
+          "minimum": 0,
+          "title": "Unresolved Calls",
+          "type": "integer"
         },
-        "SourceAnnotationMapping": {
-          "additionalProperties": false,
-          "properties": {
-            "original_crop": {
-              "$ref": "#/$defs/PixelRect"
-            },
-            "content_offset_x": {
-              "maximum": 8192,
-              "minimum": 0,
-              "title": "Content Offset X",
-              "type": "integer"
-            },
-            "content_offset_y": {
-              "const": 0,
-              "default": 0,
-              "title": "Content Offset Y",
-              "type": "integer"
-            },
-            "footer_height_px": {
-              "maximum": 8192,
-              "minimum": 1,
-              "title": "Footer Height Px",
-              "type": "integer"
-            }
-          },
-          "required": [
-            "original_crop",
-            "content_offset_x",
-            "footer_height_px"
-          ],
-          "title": "SourceAnnotationMapping",
-          "type": "object"
-        },
-        "SourceAnnotationPlan": {
-          "additionalProperties": false,
-          "properties": {
-            "crop": {
-              "anyOf": [
-                {
-                  "$ref": "#/$defs/PixelRect"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null
-            },
-            "boxes": {
-              "items": {
-                "$ref": "#/$defs/PixelRect"
-              },
-              "maxItems": 20,
-              "title": "Boxes",
-              "type": "array"
-            }
-          },
-          "title": "SourceAnnotationPlan",
-          "type": "object"
-        }
-      },
-      "additionalProperties": false,
-      "properties": {
-        "annotation_profile": {
-          "const": "source-markup-v1",
-          "default": "source-markup-v1",
-          "title": "Annotation Profile",
-          "type": "string"
-        },
-        "plan_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Plan Sha256",
-          "type": "string"
-        },
-        "file": {
-          "$ref": "#/$defs/EvidenceSourcePreview"
-        },
-        "mapping": {
-          "$ref": "#/$defs/SourceAnnotationMapping"
-        },
-        "source": {
-          "$ref": "#/$defs/EvidenceSourceArchive"
-        },
-        "plan": {
-          "$ref": "#/$defs/SourceAnnotationPlan"
-        },
-        "annotated_at": {
-          "format": "date-time",
-          "title": "Annotated At",
-          "type": "string"
-        },
-        "output_path": {
-          "minLength": 1,
-          "title": "Output Path",
-          "type": "string"
-        },
-        "status": {
-          "const": "unconfirmed_source",
-          "default": "unconfirmed_source",
-          "title": "Status",
-          "type": "string"
-        },
-        "confirmed_by": {
-          "const": null,
-          "default": null,
-          "title": "Confirmed By",
-          "type": "null"
-        },
-        "eligible_for_draft_export": {
-          "const": false,
-          "default": false,
-          "title": "Eligible For Draft Export",
+        "history_complete": {
+          "title": "History Complete",
           "type": "boolean"
+        },
+        "as_of": {
+          "format": "date-time",
+          "title": "As Of",
+          "type": "string"
         }
       },
       "required": [
-        "plan_sha256",
-        "file",
-        "mapping",
-        "source",
-        "plan",
-        "annotated_at",
-        "output_path"
+        "org_id",
+        "task_id",
+        "revision",
+        "limit",
+        "currency",
+        "state",
+        "spent",
+        "reserved",
+        "available",
+        "unpriced_calls",
+        "unresolved_calls",
+        "history_complete",
+        "as_of"
       ],
-      "title": "SourceAnnotationReceipt",
+      "title": "TaskBudgetView",
+      "type": "object"
+    },
+    "VendorAnnotationSource": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "vendor_rendition",
+          "title": "Kind",
+          "type": "string"
+        },
+        "asset_id": {
+          "format": "uuid",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "rendition_id": {
+          "format": "uuid",
+          "title": "Rendition Id",
+          "type": "string"
+        },
+        "expected_image_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Expected Image Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "asset_id",
+        "rendition_id",
+        "expected_image_sha256"
+      ],
+      "title": "VendorAnnotationSource",
+      "type": "object"
+    },
+    "VendorArchiveView": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "format": "uuid",
+          "title": "Id",
+          "type": "string"
+        },
+        "sandbox_run_id": {
+          "format": "uuid",
+          "title": "Sandbox Run Id",
+          "type": "string"
+        },
+        "task_resource_id": {
+          "format": "uuid",
+          "title": "Task Resource Id",
+          "type": "string"
+        },
+        "product_revision_id": {
+          "format": "uuid",
+          "title": "Product Revision Id",
+          "type": "string"
+        },
+        "format": {
+          "enum": [
+            "web",
+            "pdf"
+          ],
+          "title": "Format",
+          "type": "string"
+        },
+        "source_field": {
+          "enum": [
+            "official_url",
+            "whitepaper_url"
+          ],
+          "title": "Source Field",
+          "type": "string"
+        },
+        "source_url_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Url Sha256",
+          "type": "string"
+        },
+        "final_url_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Final Url Sha256",
+          "type": "string"
+        },
+        "final_origin": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Final Origin",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "content_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "archive": {
+          "$ref": "#/schemas/ArchiveDescriptor"
+        },
+        "policy_revision": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Policy Revision",
+          "type": "string"
+        },
+        "incomplete": {
+          "title": "Incomplete",
+          "type": "boolean"
+        },
+        "failed_request_count": {
+          "minimum": 0,
+          "title": "Failed Request Count",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "sandbox_run_id",
+        "task_resource_id",
+        "product_revision_id",
+        "format",
+        "source_field",
+        "source_url_sha256",
+        "final_url_sha256",
+        "final_origin",
+        "captured_at",
+        "content_sha256",
+        "archive",
+        "policy_revision",
+        "incomplete",
+        "failed_request_count"
+      ],
+      "title": "VendorArchiveView",
+      "type": "object"
+    },
+    "VendorPDFPage": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "pdf_page",
+          "default": "pdf_page",
+          "title": "Kind",
+          "type": "string"
+        },
+        "page": {
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "page"
+      ],
+      "title": "VendorPDFPage",
+      "type": "object"
+    },
+    "VendorRenditionBinding": {
+      "additionalProperties": false,
+      "description": "Server-normalized lineage; no raw URLs, storage keys or local paths.",
+      "properties": {
+        "kind": {
+          "const": "vendor_rendition",
+          "default": "vendor_rendition",
+          "title": "Kind",
+          "type": "string"
+        },
+        "org_id": {
+          "format": "uuid",
+          "title": "Org Id",
+          "type": "string"
+        },
+        "task_id": {
+          "format": "uuid",
+          "title": "Task Id",
+          "type": "string"
+        },
+        "extraction_job_id": {
+          "format": "uuid",
+          "title": "Extraction Job Id",
+          "type": "string"
+        },
+        "asset_id": {
+          "format": "uuid",
+          "title": "Asset Id",
+          "type": "string"
+        },
+        "parent_rendition_id": {
+          "format": "uuid",
+          "title": "Parent Rendition Id",
+          "type": "string"
+        },
+        "archive": {
+          "$ref": "#/schemas/VendorArchiveView"
+        },
+        "page": {
+          "discriminator": {
+            "mapping": {
+              "pdf_page": "#/schemas/VendorPDFPage",
+              "web_page": "#/schemas/VendorWebPage"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/schemas/VendorWebPage"
+            },
+            {
+              "$ref": "#/schemas/VendorPDFPage"
+            }
+          ],
+          "title": "Page"
+        },
+        "source_time_kind": {
+          "const": "vendor_captured_at",
+          "default": "vendor_captured_at",
+          "title": "Source Time Kind",
+          "type": "string"
+        },
+        "source_time": {
+          "format": "date-time",
+          "title": "Source Time",
+          "type": "string"
+        },
+        "original_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Original Sha256",
+          "type": "string"
+        },
+        "source_png": {
+          "$ref": "#/schemas/PNGDescriptor"
+        },
+        "root_source_png_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Root Source Png Sha256",
+          "type": "string"
+        },
+        "selection_id": {
+          "format": "uuid",
+          "title": "Selection Id",
+          "type": "string"
+        },
+        "resource_revision_id": {
+          "format": "uuid",
+          "title": "Resource Revision Id",
+          "type": "string"
+        },
+        "authorized_content": {
+          "$ref": "#/schemas/PixelRect"
+        },
+        "source_crop_mapping": {
+          "$ref": "#/schemas/ContentMapping"
+        },
+        "source_profile": {
+          "const": "screenshot-markup-v1",
+          "default": "screenshot-markup-v1",
+          "title": "Source Profile",
+          "type": "string"
+        },
+        "privacy_review_id": {
+          "format": "uuid",
+          "title": "Privacy Review Id",
+          "type": "string"
+        },
+        "privacy_lineage_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Privacy Lineage Sha256",
+          "type": "string"
+        },
+        "root_mapping_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Root Mapping Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "org_id",
+        "task_id",
+        "extraction_job_id",
+        "asset_id",
+        "parent_rendition_id",
+        "archive",
+        "page",
+        "source_time",
+        "original_sha256",
+        "source_png",
+        "root_source_png_sha256",
+        "selection_id",
+        "resource_revision_id",
+        "authorized_content",
+        "source_crop_mapping",
+        "privacy_review_id",
+        "privacy_lineage_sha256",
+        "root_mapping_sha256"
+      ],
+      "title": "VendorRenditionBinding",
+      "type": "object"
+    },
+    "VendorWebPage": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "web_page",
+          "default": "web_page",
+          "title": "Kind",
+          "type": "string"
+        },
+        "page": {
+          "const": 1,
+          "default": 1,
+          "title": "Page",
+          "type": "integer"
+        }
+      },
+      "title": "VendorWebPage",
       "type": "object"
     }
   }
