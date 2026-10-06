@@ -21,7 +21,7 @@ from app.providers.scoring import HTTPScoreProvider
 from app.schemas.score_contracts import ScorePreview, ScoreProviderRequest, ScoreReportData
 from sqlalchemy import select, update
 from sqlalchemy.exc import DBAPIError
-from task_fixtures import reviewer_header
+from task_fixtures import confirm_requirements_async, reviewer_header
 from test_check import publish_draft
 from test_check_combined import semantic_llm
 from test_response_cards import create_card, require_action
@@ -87,6 +87,11 @@ async def large_score_case(rubric_input_case, monkeypatch):
         session.add_all(chunks)
         await session.flush()
         session.add_all(added)
+        await session.flush()
+        # B02: rubric and score inputs accept only confirmed requirements.
+        await confirm_requirements_async(
+            session, org, UUID(case["task"]), settings=case["app"].state.processor.settings
+        )
     preview = await preview_rubric(case)
     assert len(preview["scoring_requirement_ids"]) == 86
     accepted = await submit_rubric(case, preview)
