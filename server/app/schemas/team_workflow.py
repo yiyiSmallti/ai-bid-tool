@@ -1,13 +1,13 @@
-"""Approved slice-one task access, board and durable event contracts.
+"""Approved task access, board, assignment and discussion contracts.
 
-Transport uses the current shared Result/Cost contract. No collaboration or
-co-sign mutation routes are registered by these models.
+Transport uses the current shared Result/Cost contract. Co-sign writes remain
+outside the implemented slices.
 """
 
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import AwareDatetime, Field, StringConstraints, model_validator
+from pydantic import AwareDatetime, Field, StringConstraints, field_validator, model_validator
 
 from app.schemas.budget_contracts import TaskBudgetView
 from app.schemas.contracts import Category, Contract
@@ -198,6 +198,104 @@ class TaskAccessView(Contract):
         ):
             raise ValueError("task access must refer to one org and task")
         _unique(self.allowed_actions, "allowed_actions")
+        return self
+
+
+class RequirementAssignmentSet(Contract):
+    expected_assignment_revision: int = Field(strict=True, ge=0)
+    assignee_user_id: UUID | None
+    reason: Reason
+
+
+class RequirementAssignmentView(Contract):
+    org_id: UUID
+    task_id: UUID
+    extraction_job_id: UUID
+    requirement_id: UUID
+    revision: int = Field(strict=True, ge=0)
+    assignee_user_id: UUID | None
+    changed_by_user_id: UUID | None
+    changed_at: AwareDatetime | None
+
+    @model_validator(mode="after")
+    def assignment_metadata(self):
+        changed = self.revision > 0
+        if changed != (self.changed_by_user_id is not None) or changed != (
+            self.changed_at is not None
+        ):
+            raise ValueError("persisted assignments require actor and time")
+        if not changed and self.assignee_user_id is not None:
+            raise ValueError("an initial unassigned slot cannot have an assignee")
+        return self
+
+
+class CommentContent(Contract):
+    # Plain text, counted in Unicode code points; render as escaped text, not HTML.
+    body: str = Field(min_length=1, max_length=4000)
+    mentioned_user_ids: list[UUID] = Field(default_factory=list, max_length=20)
+    client_request_id: UUID
+
+    @field_validator("body")
+    @classmethod
+    def meaningful_body(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("comment body cannot be blank")
+        if len(value.encode("utf-8")) > 16384:
+            raise ValueError("comment body exceeds 16 KiB UTF-8")
+        return value
+
+    @field_validator("mentioned_user_ids")
+    @classmethod
+    def unique_mentions(cls, value: list[UUID]) -> list[UUID]:
+        _unique(value, "mentioned_user_ids")
+        return value
+
+
+class CommentThreadCreate(CommentContent):
+    expected_card_revision: Revision
+
+
+class CommentReplyCreate(CommentContent):
+    """Append-only reply: request UUID is the retry boundary, not a thread version."""
+
+
+class CommentMessageView(CommentContent):
+    id: UUID
+    org_id: UUID
+    task_id: UUID
+    card_id: UUID
+    thread_id: UUID
+    author_user_id: UUID
+    created_at: AwareDatetime
+
+
+class CommentThreadView(Contract):
+    id: UUID
+    org_id: UUID
+    task_id: UUID
+    card_id: UUID
+    created_card_revision_id: UUID
+    revision: Revision
+    created_by_user_id: UUID
+    created_at: AwareDatetime
+    last_message_at: AwareDatetime
+    message_count: int = Field(ge=1)
+
+
+class CommentThreadDetail(Contract):
+    thread: CommentThreadView
+    messages: list[CommentMessageView] = Field(max_length=100)
+    next_cursor: Cursor | None = None
+
+    @model_validator(mode="after")
+    def messages_belong_to_thread(self):
+        _unique([message.id for message in self.messages], "messages")
+        if any(
+            (message.org_id, message.task_id, message.card_id, message.thread_id)
+            != (self.thread.org_id, self.thread.task_id, self.thread.card_id, self.thread.id)
+            for message in self.messages
+        ):
+            raise ValueError("thread detail cannot contain messages from another thread")
         return self
 
 
@@ -644,3 +742,16 @@ class TaskRuleData(Contract):
     rule: TaskRuleView
     dry_run: bool
     affected_requirements: int = Field(strict=True, ge=0)
+
+
+class AssignmentData(Contract):
+    assignment: RequirementAssignmentView
+
+
+class CommentData(Contract):
+    comment: CommentMessageView
+
+
+class ThreadCreatedData(Contract):
+    thread: CommentThreadView
+    first_comment: CommentMessageView

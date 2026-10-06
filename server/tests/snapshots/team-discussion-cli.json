@@ -1,0 +1,894 @@
+{
+  "remote:assign": {
+    "ok": true,
+    "command": "card assign",
+    "data": {
+      "assignment": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "requirement_id": "00000000-0000-0000-0000-000000000002",
+        "revision": 1,
+        "assignee_user_id": "00000000-0000-0000-0000-000000000002",
+        "changed_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "changed_at": "2026-10-05T00:00:00Z"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:thread list": {
+    "ok": true,
+    "command": "card thread list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "created_card_revision_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "created_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z",
+        "last_message_at": "2026-10-05T00:00:00Z",
+        "message_count": 1
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:thread create": {
+    "ok": true,
+    "command": "card thread create",
+    "data": {
+      "thread": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "created_card_revision_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "created_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z",
+        "last_message_at": "2026-10-05T00:00:00Z",
+        "message_count": 1
+      },
+      "first_comment": {
+        "body": "Synthetic plain text <script> and @member",
+        "mentioned_user_ids": [
+          "00000000-0000-0000-0000-000000000002"
+        ],
+        "client_request_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "thread_id": "00000000-0000-0000-0000-000000000002",
+        "author_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:comment list": {
+    "ok": true,
+    "command": "card comment list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": "00000000-0000-0000-0000-000000000002",
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "body": "Synthetic plain text <script> and @member",
+        "mentioned_user_ids": [
+          "00000000-0000-0000-0000-000000000002"
+        ],
+        "client_request_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "thread_id": "00000000-0000-0000-0000-000000000002",
+        "author_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:comment add": {
+    "ok": true,
+    "command": "card comment add",
+    "data": {
+      "comment": {
+        "body": "Synthetic plain text <script> and @member",
+        "mentioned_user_ids": [
+          "00000000-0000-0000-0000-000000000002"
+        ],
+        "client_request_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "thread_id": "00000000-0000-0000-0000-000000000002",
+        "author_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:thread list": {
+    "ok": true,
+    "command": "card thread list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:comment list": {
+    "ok": true,
+    "command": "card comment list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": "00000000-0000-0000-0000-000000000002",
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:invalid_session": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "invalid_session",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:forbidden": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "forbidden",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:not_found": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:revision_conflict": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:idempotency_conflict": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "idempotency_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:task_archived": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "task_archived",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:rate_limited": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "rate_limited",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:unavailable": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:assign": {
+    "ok": true,
+    "command": "card assign",
+    "data": {
+      "assignment": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "requirement_id": "00000000-0000-0000-0000-000000000002",
+        "revision": 1,
+        "assignee_user_id": "00000000-0000-0000-0000-000000000002",
+        "changed_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "changed_at": "2026-10-05T00:00:00Z"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:thread list": {
+    "ok": true,
+    "command": "card thread list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "created_card_revision_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "created_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z",
+        "last_message_at": "2026-10-05T00:00:00Z",
+        "message_count": 1
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:thread create": {
+    "ok": true,
+    "command": "card thread create",
+    "data": {
+      "thread": {
+        "id": "00000000-0000-0000-0000-000000000002",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "created_card_revision_id": "00000000-0000-0000-0000-000000000001",
+        "revision": 1,
+        "created_by_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z",
+        "last_message_at": "2026-10-05T00:00:00Z",
+        "message_count": 1
+      },
+      "first_comment": {
+        "body": "Synthetic plain text <script> and @member",
+        "mentioned_user_ids": [
+          "00000000-0000-0000-0000-000000000002"
+        ],
+        "client_request_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "thread_id": "00000000-0000-0000-0000-000000000002",
+        "author_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:comment list": {
+    "ok": true,
+    "command": "card comment list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": "00000000-0000-0000-0000-000000000002",
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "body": "Synthetic plain text <script> and @member",
+        "mentioned_user_ids": [
+          "00000000-0000-0000-0000-000000000002"
+        ],
+        "client_request_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "thread_id": "00000000-0000-0000-0000-000000000002",
+        "author_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:comment add": {
+    "ok": true,
+    "command": "card comment add",
+    "data": {
+      "comment": {
+        "body": "Synthetic plain text <script> and @member",
+        "mentioned_user_ids": [
+          "00000000-0000-0000-0000-000000000002"
+        ],
+        "client_request_id": "00000000-0000-0000-0000-000000000001",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "card_id": "00000000-0000-0000-0000-000000000001",
+        "thread_id": "00000000-0000-0000-0000-000000000002",
+        "author_user_id": "00000000-0000-0000-0000-000000000001",
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:thread list": {
+    "ok": true,
+    "command": "card thread list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": null,
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:comment list": {
+    "ok": true,
+    "command": "card comment list",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "card_id": "00000000-0000-0000-0000-000000000001",
+      "thread_id": "00000000-0000-0000-0000-000000000002",
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:invalid_session": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "invalid_session",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:forbidden": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "forbidden",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:not_found": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:revision_conflict": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:idempotency_conflict": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "idempotency_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:task_archived": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "task_archived",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:rate_limited": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "rate_limited",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:unavailable": {
+    "ok": false,
+    "command": "card comment add",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  }
+}

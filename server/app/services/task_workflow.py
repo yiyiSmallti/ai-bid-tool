@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets
 from app.models.entities import ApiToken, Job, Membership, Org, Task, User, VendorCall
-from app.models.team_workflow import TaskEventHead, TaskMember, TaskWorkflow
+from app.models.team_workflow import RequirementWorkflow, TaskEventHead, TaskMember, TaskWorkflow
 from app.schemas.team_workflow import (
     BoardNextAction,
     MemberCandidateView,
@@ -129,7 +129,9 @@ async def access(
         .execution_options(populate_existing=True)
     )
     recovery = live.actor_kind == "session" and live.token_id is None and live.role == "admin"
-    if workflow is None or (member is None and (require_member or not recovery)):
+    if workflow is None or (
+        member is None and (require_member or scope == "card:comment" or not recovery)
+    ):
         raise not_found()
     # A visible object is established before scope errors reveal which action was denied.
     live.require("task:read")
@@ -139,7 +141,7 @@ async def access(
     if management:
         if not recovery and (member is None or member.role != "owner"):
             fail("forbidden", "Task owner required", 403, 4)
-    elif write:
+    elif write and scope != "card:comment":
         if (
             member is None
             or member.role == "observer"
@@ -354,6 +356,18 @@ def expected(workflow, revision):
         fail("revision_conflict", "Workflow changed; refresh before retrying")
 
 
+async def require_no_assignments(session, task_id, user_id):
+    assigned = await session.scalar(
+        select(RequirementWorkflow.id)
+        .where(
+            RequirementWorkflow.task_id == task_id, RequirementWorkflow.assignee_user_id == user_id
+        )
+        .limit(1)
+    )
+    if assigned is not None:
+        fail("member_has_assignments", "Unassign or reassign this member's work first")
+
+
 def changed(session, actor, workflow, action, reason, user_id=None, **metadata):
     workflow.revision += 1
     workflow.access_epoch += 1
@@ -384,6 +398,8 @@ async def set_member(session, actor, task_id, user_id, body, settings):
     )
     if user_id == workflow.owner_user_id:
         fail("owner_handover_required", "Change the owner through handover")
+    if member is not None and body.role != "contributor":
+        await require_no_assignments(session, task_id, user_id)
     before_role = member.role if member else None
     before_domains = list(member.review_domains) if member else []
     before_active = member.active if member else False
@@ -442,6 +458,7 @@ async def remove_member(session, actor, task_id, user_id, body, settings):
         raise not_found()
     if user_id == workflow.owner_user_id:
         fail("owner_handover_required", "The task owner cannot be removed")
+    await require_no_assignments(session, task_id, user_id)
     member.last_reason_ciphertext = Secrets.for_data(settings).encrypt(body.reason)
     member.active = False
     member.revision += 1
@@ -490,6 +507,8 @@ async def handover(session, actor, task_id, body, settings):
     # demotion would autoflush an active member whose org membership is disabled.
     old_user = await session.get(User, previous.user_id)
     previous_active = bool(old_org.active and old_user and old_user.active)
+    if body.previous_owner_role != "contributor" or not previous_active:
+        await require_no_assignments(session, task_id, previous.user_id)
     previous.last_reason_ciphertext = Secrets.for_data(settings).encrypt(body.reason)
     previous.role, previous.review_domains = (
         body.previous_owner_role,

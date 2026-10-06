@@ -29,6 +29,7 @@ from app.api.response_cards import create_router as create_response_router
 from app.api.sandbox import create_router as create_sandbox_router
 from app.api.score import create_router as create_score_router
 from app.api.task_board import create_router as create_task_board_router
+from app.api.task_discussion import create_router as create_task_discussion_router
 from app.api.task_workflow import create_router as create_task_workflow_router
 from app.api.tenders import create_router as create_tender_router
 from app.core.config import Settings
@@ -492,6 +493,7 @@ def create_app(
     app.include_router(create_budget_router(context, settings))
     app.include_router(create_org_console_router(context, storage, settings))
     app.include_router(create_task_workflow_router(context, settings))
+    app.include_router(create_task_discussion_router(context, settings))
     task_board_router = create_task_board_router(context, db, storage, queue, settings)
     app.state.workflow_stream_caps = task_board_router.stream_caps
     app.include_router(task_board_router)

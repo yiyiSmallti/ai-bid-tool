@@ -4,14 +4,15 @@ kind: plan
 
 # Team workflow: task membership, dashboard, live progress, and co-sign
 
-Status: **approved; slice 1 implemented**. Covers [roadmap](roadmap.md) F06,
+Status: **approved; slices 1 and 2 implemented**. Covers [roadmap](roadmap.md) F06,
 U01, U02, and B07. The owner approved every default in [Decisions](#decisions),
 including the co-sign amendment to [ADR 0005](../adr/0005-human-confirmed-responses.md).
 Slice 1 supplies task membership, archival, the read board and durable progress.
-Slices 2 and 3 remain approved and unimplemented; no assignment, comment or
-co-sign write handlers are registered. The [contract module](team-workflow/team_workflow_contracts.py)
+Slice 2 supplies requirement assignment and immutable card discussion with in-task
+mentions. Slice 3 remains approved and unimplemented; co-sign write handlers are
+not registered. The [contract module](team-workflow/team_workflow_contracts.py)
 records the approved interfaces; [runtime schemas](../../server/app/schemas/team_workflow.py)
-implement the slice 1 subset with the shared Result 4.0 budget types.
+implement the slices 1 and 2 subset with the shared Result 4.0 budget types.
 See [Team workflow](../notes/team-workflow.md) for the mechanism and cutover procedure.
 
 ## Goal and boundary
@@ -38,8 +39,8 @@ input automatically. Budget enforcement belongs to [budget.md](budget.md).
 
 ## Code basis and differences from the design
 
-These are integration boundaries. Slice 1 is implemented; assignment, discussion
-and co-sign rows describe the approved later slices.
+These are integration boundaries. Membership, assignment and discussion are
+implemented; co-sign rows describe the approved remaining slice.
 
 | Basis | Integration contract |
 | --- | --- |
@@ -55,8 +56,8 @@ and co-sign rows describe the approved later slices.
 | [org-console.md](org-console.md), [api.js](../../web/src/api.js), [router.js](../../web/src/router.js), [JobPanel.vue](../../web/src/components/JobPanel.vue) | Console currently polls jobs and derives review responsibility from org role. Add real task ownership and SSE; retain separate platform/org sessions and authenticated previews. |
 
 The [design](../design.md#multi-tenancy-and-permissions) promises that a read-only
-reviewer can comment, but the implemented console gives `viewer` no comment entry.
-Slice 2 reserves a human-only comment grant. The design also describes members,
+reviewer can comment; the human-only `card:comment` grant supplies that discussion
+entry to active task readers, including org `viewer` observers. The design also describes members,
 archival, and SSE without their persistence/authorization contracts. Its sample
 Result lacks `ocr_pages`, which exists in runtime Cost. Only `commercial` (商务)
 and `technical` (技术) are runtime ReviewDomain values; qualification (资格) maps
@@ -717,8 +718,9 @@ fixture seed IDs, JUnit/CLI snapshots, redacted browser trace/screenshots and
 | CLI contract | Snapshot success, empty lists, every new command, invalid input, 404, 409, 429/503, both modes, schema discovery, exactly seven Result keys/current Cost; bounded `task events` produces one JSON document; existing job exit 5 remains unchanged. |
 | Browser e2e | Owner creates/adds member, separate authorized member sees correct next action, second browser observes real job/card changes, refresh/reconnect/expired cursor works, role denial/org switch clears data, archive becomes read-only, assign/comment/mention, both-domain partial/final review, mobile/keyboard flow. Save verifiable redacted artifacts against a real API. |
 
-Run the slice 1 API/PostgreSQL acceptance suites and the mocked-API Playwright
-board/member scenarios. Ruff, format, pyright and CLI contract checks complement
+Run the membership, board/event and assignment/discussion API/PostgreSQL acceptance
+suites and the mocked-API Playwright board/member/discussion scenarios.
+Ruff, format, pyright and CLI contract checks complement
 those suites; they do not establish PostgreSQL isolation or streaming behavior.
 The integrating session runs the database acceptance tests when the implementation
 workspace cannot reach PostgreSQL. Test artifacts remain outside `docs/`.

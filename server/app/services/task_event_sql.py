@@ -334,3 +334,108 @@ def install(op):
             op.execute(
                 f"CREATE TRIGGER task_event_{operation.lower()} AFTER {operation} ON public.{name} REFERENCING {transition} FOR EACH STATEMENT EXECUTE FUNCTION public.produce_task_events({params})"
             )
+
+
+# Slice 1 may still be installed before discussion tables exist on a fresh DB.
+# Upgrade the same append function only once slice 2's composite parents exist.
+COLLABORATION_APPEND_SQL = APPEND_SQL.replace(
+    "   OR p_payload->>'thread_id' IS NOT NULL OR p_payload->>'comment_id' IS NOT NULL THEN",
+    """   THEN""",
+).replace(
+    " END IF;\n INSERT INTO public.task_event_heads",
+    """  IF p_payload->>'thread_id' IS NOT NULL AND NOT EXISTS(
+    SELECT 1 FROM public.card_comment_threads t JOIN public.response_cards c ON c.org_id=t.org_id AND c.id=t.card_id
+     WHERE t.org_id=p_org AND t.task_id=p_task AND t.id=(p_payload->>'thread_id')::uuid
+      AND p_payload->'card_ids' ? t.card_id::text
+      AND (p_payload->>'extraction_job_id' IS NULL OR c.extraction_job_id=(p_payload->>'extraction_job_id')::uuid)) THEN
+   RAISE EXCEPTION 'Invalid event thread binding' USING ERRCODE='23514';
+  END IF;
+  IF p_payload->>'comment_id' IS NOT NULL AND NOT EXISTS(
+    SELECT 1 FROM public.card_comments m JOIN public.response_cards c ON c.org_id=m.org_id AND c.id=m.card_id
+     WHERE m.org_id=p_org AND m.task_id=p_task AND m.id=(p_payload->>'comment_id')::uuid
+      AND m.thread_id=(p_payload->>'thread_id')::uuid AND p_payload->'card_ids' ? m.card_id::text
+      AND (p_payload->>'extraction_job_id' IS NULL OR c.extraction_job_id=(p_payload->>'extraction_job_id')::uuid)) THEN
+   RAISE EXCEPTION 'Invalid event comment binding' USING ERRCODE='23514';
+  END IF;
+ END IF;
+ INSERT INTO public.task_event_heads""",
+)
+
+COLLABORATION_EVENT_GRANTS_SQL = r"""
+GRANT SELECT(org_id,task_id,card_id,id) ON public.card_comment_threads TO bid_task_event_writer;
+GRANT SELECT(org_id,task_id,card_id,thread_id,id) ON public.card_comments TO bid_task_event_writer;
+"""
+
+COLLABORATION_PRODUCER_SQL = r"""
+CREATE OR REPLACE FUNCTION public.produce_task_collaboration_events() RETURNS trigger
+LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+DECLARE changed_row record; q text; j jsonb; payload jsonb; source uuid; total integer;
+        previous_org text:=current_setting('app.current_org',true); derive_org boolean;
+BEGIN
+ SELECT nullif(previous_org,'') IS NULL AND (r.rolsuper OR r.rolbypassrls)
+  INTO derive_org FROM pg_catalog.pg_roles r WHERE r.rolname=current_user;
+ IF TG_OP='UPDATE' THEN
+  -- Owner-only encryption rewrap is metadata-preserving and produces no business event.
+  q='SELECT to_jsonb(n) AS value FROM new_rows n JOIN old_rows o ON n.id=o.id WHERE '
+    ||'(to_jsonb(n)-ARRAY[''last_reason_ciphertext'',''body_ciphertext'']) IS DISTINCT FROM '
+    ||'(to_jsonb(o)-ARRAY[''last_reason_ciphertext'',''body_ciphertext''])';
+ ELSE q='SELECT to_jsonb(n) AS value FROM new_rows n'; END IF;
+ EXECUTE 'SELECT count(DISTINCT (value->>''task_id'')::uuid) FROM ('||q||') x' INTO total;
+ IF total>100 THEN RAISE EXCEPTION 'affected_task_limit' USING ERRCODE='54000'; END IF;
+ FOR changed_row IN EXECUTE 'SELECT value FROM ('||q||') x ORDER BY value->>''task_id'',value->>''id''' LOOP
+  j=changed_row.value;
+  IF TG_TABLE_NAME='requirement_workflows' THEN
+   source=(j->>'extraction_job_id')::uuid;
+   payload=jsonb_build_object('type','board_changed','invalidate_all',false,
+     'extraction_job_id',source,'requirement_ids',jsonb_build_array(j->>'requirement_id'),'card_ids','[]'::jsonb);
+   -- A requirement may be assigned before its card exists. Include only a saved matching card.
+   SELECT jsonb_set(payload,'{card_ids}',coalesce(jsonb_agg(c.id),'[]'::jsonb)) INTO payload
+    FROM public.response_cards c WHERE c.org_id=(j->>'org_id')::uuid AND c.task_id=(j->>'task_id')::uuid
+     AND c.extraction_job_id=source AND c.requirement_id=(j->>'requirement_id')::uuid;
+  ELSE
+   SELECT extraction_job_id INTO source FROM public.response_cards
+    WHERE org_id=(j->>'org_id')::uuid AND task_id=(j->>'task_id')::uuid AND id=(j->>'card_id')::uuid;
+   payload=jsonb_build_object('type','board_changed','invalidate_all',false,'extraction_job_id',source,
+    'requirement_ids','[]'::jsonb,'card_ids',jsonb_build_array(j->>'card_id'),
+    'thread_id',CASE WHEN TG_TABLE_NAME='card_comment_threads' THEN j->>'id' ELSE j->>'thread_id' END);
+   IF TG_TABLE_NAME IN ('card_comments','card_comment_mentions') THEN
+    payload=jsonb_set(payload,'{comment_id}',to_jsonb(CASE WHEN TG_TABLE_NAME='card_comments' THEN j->>'id' ELSE j->>'comment_id' END));
+   END IF;
+  END IF;
+  IF derive_org THEN PERFORM set_config('app.current_org',j->>'org_id',true); END IF;
+  PERFORM public.append_task_event((j->>'org_id')::uuid,(j->>'task_id')::uuid,'board_changed',payload,source);
+  IF derive_org THEN PERFORM set_config('app.current_org',coalesce(previous_org,''),true); END IF;
+ END LOOP;
+ RETURN NULL;
+END $$;
+REVOKE ALL ON FUNCTION public.produce_task_collaboration_events() FROM PUBLIC;
+"""
+
+
+def install_collaboration(op):
+    """Bind slice 2 changes to the existing transactional event head and replay store."""
+    op.execute(COLLABORATION_EVENT_GRANTS_SQL)
+    op.execute(COLLABORATION_APPEND_SQL)
+    op.execute(COLLABORATION_PRODUCER_SQL)
+    for name in (
+        "requirement_workflows",
+        "card_comment_threads",
+        "card_comments",
+        "card_comment_mentions",
+    ):
+        operations = (
+            ("INSERT", "UPDATE")
+            if name in {"requirement_workflows", "card_comments"}
+            else ("INSERT",)
+        )
+        for operation in operations:
+            transition = (
+                "OLD TABLE AS old_rows NEW TABLE AS new_rows"
+                if operation == "UPDATE"
+                else "NEW TABLE AS new_rows"
+            )
+            op.execute(
+                f"CREATE TRIGGER task_event_{operation.lower()} AFTER {operation} ON public.{name} "
+                f"REFERENCING {transition} FOR EACH STATEMENT "
+                "EXECUTE FUNCTION public.produce_task_collaboration_events()"
+            )

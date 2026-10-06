@@ -2,8 +2,8 @@
 
 Failure scenarios: invalid filters/bounds or member input sends a request; revision
 conflict triggers an automatic retry; task events emits JSON-lines; local mode
-changes the authenticated route; schema omits slice-one commands or advertises
-slice-two/three writes. Every Result retains its seven keys and actual zero Cost.
+changes the authenticated route; schema omits workflow commands or advertises
+slice-three writes. Every Result retains its seven keys and actual zero Cost.
 """
 
 import json
@@ -442,7 +442,7 @@ def test_workflow_schema_discovery(capsys):
             "events",
         )
     )
-    assert "card assign" not in names and "card signoff add" not in names
+    assert "card assign" in names and "card signoff add" not in names
     # Both slices call their envelope PageData; discovery must keep each contract.
     assert names["task member list"]["output"] == WorkflowPageData.model_json_schema()
     assert (
