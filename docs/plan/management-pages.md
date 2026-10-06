@@ -4,11 +4,16 @@ kind: plan
 
 # Contract: U01 org management pages
 
-Status: **approved with all recommended defaults, not implemented**. This contract covers the remaining
+Status: **approved; first slice implemented**. This contract covers the remaining
 management-page scope of [roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
-Existing services and pages cited below are foundations, not delivery of this contract.
-The proposed [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
-are approval artifacts only; importing them registers no application behavior.
+The product slice supplies bounded browse/search, creation, exact revision detail,
+revision history, human deactivate/restore with independent lifecycle events, and
+explicit task pinning. Other resource kinds and settings remain later slices.
+The [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
+remain approval artifacts; [runtime product contracts](../../server/app/schemas/management_pages.py)
+and the [mechanism note](../notes/management-pages.md) define the implemented path.
+Database, real-browser and fixed-scale acceptance require execution in the main
+integration environment; static checks and mocked fixtures do not establish that acceptance.
 
 ## Goal and boundary
 
@@ -88,6 +93,11 @@ Resolve authors for only the page's revision IDs through one indexed audit query
 Do not invent an assigned person or derive ownership from the last editor. Task
 owners/assignees remain in team workflow.
 
+The implemented product detail projection adds `revised_at` and nullable
+`revised_by` for the exact viewed revision. This avoids walking content-history
+pages to find a historical author; the existing `ProductRevision` write receipts
+and legacy list outputs remain unchanged.
+
 | Page | Flows and next-step cues | Deactivation/history behavior |
 | --- | --- | --- |
 | `/app/org/products`, `/:id` | Current products; name/vendor/model search; create; detail; revise full `ProductData`; exact model/version and source URLs; link to task selection only in an authorized task context | Proposed root deactivate/restore. Distinguish declared from simulated proposal (模拟拟投) provenance through the root-level `SimulatedResource` marker, including old revisions |
@@ -129,21 +139,23 @@ fetch for short-lived file links; a signature alone is not authorization. Preser
 
 ### First vertical slice
 
-First implement **product list → create → exact revision detail → revise → history
-→ explicit task selection** using the product read projection and existing writes.
+The implemented first slice is **product list → create → exact revision detail → revise → history
+→ explicit task selection**, including product deactivate/restore and lifecycle
+history, using the product read projection and existing content/selection writes.
 The completion example is two tasks selecting revision 1, creation of revision 2,
 then explicit replacement in one task: the other still uses revision 1. Show the
 current maintainer role, real author/time, selected revision and next action at
 each step. Test with human technical/admin writers, bidder/viewer readers, a task
 observer, an archived task and another org.
 
-This slice needs bounded read indexes and a read projection, not lifecycle storage,
-provider calls or a new UI framework. Before lifecycle migrations, a read projection
-may explicitly report the uniform baseline `active/revision=0`; deactivate/restore
-must be absent, not shown as working buttons. After approval, implement lifecycle
-as the next complete slice, then features, existing certificate/profile page
-integration, templates/bindings, providers, and memory. Each slice must complete
-its API/CLI/browser and isolation acceptance before its page is enabled.
+This slice includes bounded read indexes and product lifecycle storage. Existing
+products start at `active/revision=0` without fabricated events. The event table's
+non-null product composite foreign key implements only the product arm; later
+resource slices must extend it with the exactly-one-root constraints described
+below. No provider calls or new UI framework are introduced. Features, existing
+certificate/profile page integration, templates/bindings, providers, memory and
+confidential-page changes remain later slices. Each slice must complete its
+API/CLI/browser and isolation acceptance before release.
 
 ## Permission and task boundaries
 
@@ -422,8 +434,9 @@ root remains active; check both roots in stable ID order after task locks.
 
 ## HTTP and Pydantic interfaces
 
-All new HTTP paths below are **proposed** under `/v4`; no routes are registered by
-this draft. Paths in existing tables omit `/v4` for readability; new pages request
+Product query, detail, history and lifecycle paths below are implemented under
+`/v4`; paths for other kinds and areas remain proposed and have no placeholder
+handlers. Paths in existing tables omit `/v4` for readability; new pages request
 version 4 explicitly through `orgRequest`/`api.request(contractVersion:4)`. Existing
 unprefixed routes retain compatibility projections. Register fixed query/history
 paths before UUID routes and extend the browser allowlist by exact route pattern.
@@ -655,8 +668,9 @@ and fixed error code without request/response capture.
 
 ## Test plan and repeatable artifacts
 
-The draft's checks are import/lint/format/type validation only. The following are
-implementation acceptance requirements; neither code inspection nor mocked
+The product slice has API/PostgreSQL, CLI, fixed-scale and mocked-browser acceptance
+tests. The following remain implementation acceptance requirements for their
+respective slices; neither code inspection nor mocked
 Playwright proves database authorization. Use the project's fake Providers and
 synthetic files; no real external services or secrets. The main integration
 session owns any disposable database/service lifecycle.
@@ -742,7 +756,7 @@ The owner approved every recommended default; implementation follows these decis
 
 | Decision | Approved default | Reason |
 | --- | --- | --- |
-| First slice | Product bounded browse/create/revise/history and explicit task pinning | Small existing service surface demonstrates reusable material ownership and stable task inputs |
+| First slice | Product bounded browse/create/revise/history, product lifecycle and explicit task pinning | Small existing service surface demonstrates reusable material ownership and stable task inputs |
 | Library lifecycle | Human maintainers deactivate/restore with independent lifecycle CAS/events; no deletion | Reversible withdrawal from future use preserves immutable content and ongoing tasks |
 | Inactive duplicate selection | Allow exact existing active pin as no-op; reject new/replacement pins, including old revisions | Keeps idempotency without creating a path around deactivation |
 | Feature whose product is inactive | Preserve pins; block new selection and new/revised feature association until restore | Avoids offering a newly selectable child of a withdrawn product |

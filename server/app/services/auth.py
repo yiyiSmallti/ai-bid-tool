@@ -351,7 +351,12 @@ async def login(
 
 
 async def authenticate(
-    session: AsyncSession, bearer: str, org_id: UUID, crypto: TokenSigner
+    session: AsyncSession,
+    bearer: str,
+    org_id: UUID,
+    crypto: TokenSigner,
+    *,
+    joined_membership=False,
 ) -> Identity:
     session_expires_at = None
     if bearer.startswith("bid_"):
@@ -373,10 +378,35 @@ async def authenticate(
         session_expires_at = datetime.fromtimestamp(payload["exp"], UTC)
         token_scopes = None
         token_id = None
-    user = await session.get(User, user_id)
-    if user is None or not user.active:
-        raise ServiceError("invalid_session", "Invalid credentials", 401, 4)
-    member = await membership(session, user_id, org_id)
+    if joined_membership:
+        # The product read projection has a strict round-trip budget. Outer joins
+        # preserve the established user -> membership -> org error precedence.
+        row = (
+            await session.execute(
+                select(User, Membership, Org)
+                .outerjoin(
+                    Membership,
+                    (Membership.user_id == User.id)
+                    & (Membership.org_id == org_id)
+                    & Membership.active.is_(True),
+                )
+                .outerjoin(Org, Org.id == Membership.org_id)
+                .where(User.id == user_id)
+                .execution_options(populate_existing=True)
+            )
+        ).first()
+        if row is None or not row[0].active:
+            raise ServiceError("invalid_session", "Invalid credentials", 401, 4)
+        _, member, org = row
+        if member is None:
+            raise not_found()
+        if org is None or not org.active:
+            raise ServiceError("org_inactive", "Organization is disabled", 403, 4)
+    else:
+        user = await session.get(User, user_id)
+        if user is None or not user.active:
+            raise ServiceError("invalid_session", "Invalid credentials", 401, 4)
+        member = await membership(session, user_id, org_id)
     role_scopes = ROLE_SCOPES[member.role]
     scopes = role_scopes if token_scopes is None else token_scopes & role_scopes & SCOPES
     return Identity(

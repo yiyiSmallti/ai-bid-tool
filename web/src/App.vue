@@ -19,6 +19,7 @@ const menus = computed(() => area.value === "platform"
     ]
   : [
       { key: "tasks", to: "/org/tasks", title: "招标任务", icon: Document },
+      { key: "products", to: "/org/products", title: "产品库", icon: Files },
       { key: "profiles", to: "/org/profiles", title: "单位资料", icon: Memo },
       { key: "confidential", to: "/org/confidential", title: "保密字段", icon: Lock },
       ...(orgAccess.role === "admin" ? [{ key: "billing", to: "/org/billing", title: "余额与充值", icon: Wallet }] : []),
@@ -57,7 +58,7 @@ async function signOut() {
         <main id="main-content" class="app-main" tabindex="-1">
           <template v-if="area === 'org'">
             <el-alert v-if="orgAccess.error" :title="orgAccess.error" type="error" show-icon :closable="false" role="alert" />
-            <RouterView v-else-if="orgAccess.role" :key="`${route.path}:${route.query.job ?? ''}:${org?.orgId}`" />
+            <RouterView v-else-if="orgAccess.role" :key="`${route.path}:${route.query.job ?? ''}:${route.meta.nav === 'products' ? `${route.query.revision ?? ''}:${route.query.task ?? ''}` : ''}:${org?.orgId}`" />
           </template>
           <RouterView v-else />
         </main>

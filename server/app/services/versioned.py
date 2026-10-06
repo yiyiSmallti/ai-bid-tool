@@ -15,7 +15,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
-from app.models.entities import AuditLog, Task
+from app.models.entities import AuditLog, Product, Task
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
 
@@ -255,7 +255,10 @@ async def select_revision(
     if task is None:
         raise not_found()
     root = await session.scalar(
-        select(kind.root).where(kind.root.id == root_id).with_for_update(read=True)
+        select(kind.root)
+        .where(kind.root.id == root_id)
+        .with_for_update(read=True)
+        .execution_options(populate_existing=True)
     )
     if root is None:
         raise not_found()
@@ -283,6 +286,14 @@ async def select_revision(
             "duplicate": True,
             "replaced_snapshot_id": None,
         }
+    # An inactive product preserves an exact active pin replay, but cannot create
+    # any new pin (including an old revision or a different normalized lot). Keep
+    # this check before retiring the previous selection; both share the root lock
+    # with lifecycle transitions after the task/workflow authorization locks.
+    if kind.root is Product and root.lifecycle_state != "active":
+        raise ServiceError(
+            "resource_inactive", "Product is inactive; existing selections are preserved", 409, 2
+        )
     if previous is not None:
         previous.active = False
         await session.flush()

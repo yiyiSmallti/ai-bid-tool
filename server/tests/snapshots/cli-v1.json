@@ -43201,6 +43201,1075 @@
             "type": "object"
           }
         },
+        "resource product browse": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "implementation_status": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "implemented",
+                      "developing",
+                      "planned"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Implementation Status"
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "product_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Product Id"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  {
+                    "const": "all",
+                    "type": "string"
+                  }
+                ],
+                "default": "active",
+                "title": "State"
+              }
+            },
+            "title": "ResourceQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "ResourceRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "products",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ResourceRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "enum": [
+                  "declared",
+                  "simulated"
+                ],
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/ResourceRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "name",
+              "revision_id",
+              "revision",
+              "lifecycle",
+              "provenance",
+              "created_at",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "ResourceRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource product history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ResourceRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "products",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ResourceRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Created By"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "has_file": {
+                "title": "Has File",
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/ResourceRef"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "revision_id",
+              "revision",
+              "name",
+              "created_at",
+              "created_by",
+              "current",
+              "has_file"
+            ],
+            "title": "ResourceHistoryRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource product lifecycle history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "ResourceRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "products",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ResourceRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "actor_user_id": {
+                "format": "uuid",
+                "title": "Actor User Id",
+                "type": "string"
+              },
+              "after": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "before": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "ref": {
+                "$ref": "#/$defs/ResourceRef"
+              },
+              "resource_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "ref",
+              "revision",
+              "resource_revision",
+              "before",
+              "after",
+              "reason_code",
+              "actor_user_id",
+              "created_at"
+            ],
+            "title": "ResourceLifecycleEvent",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource product lifecycle set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_lifecycle_revision": {
+                "$ref": "#/$defs/LifecycleRevision"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "state": {
+                "$ref": "#/$defs/LifecycleState"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_lifecycle_revision",
+              "state",
+              "reason_code"
+            ],
+            "title": "ResourceLifecycleSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "ResourceLifecycleEvent": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "const": "session",
+                    "default": "session",
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_user_id": {
+                    "format": "uuid",
+                    "title": "Actor User Id",
+                    "type": "string"
+                  },
+                  "after": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "before": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reason_code": {
+                    "$ref": "#/$defs/ReasonCode"
+                  },
+                  "ref": {
+                    "$ref": "#/$defs/ResourceRef"
+                  },
+                  "resource_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "ref",
+                  "revision",
+                  "resource_revision",
+                  "before",
+                  "after",
+                  "reason_code",
+                  "actor_user_id",
+                  "created_at"
+                ],
+                "title": "ResourceLifecycleEvent",
+                "type": "object"
+              },
+              "ResourceRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "products",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ResourceRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "event": {
+                "$ref": "#/$defs/ResourceLifecycleEvent"
+              },
+              "existing_selections": {
+                "const": "preserved",
+                "default": "preserved",
+                "title": "Existing Selections",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              }
+            },
+            "required": [
+              "event",
+              "lifecycle"
+            ],
+            "title": "ResourceLifecycleData",
+            "type": "object"
+          }
+        },
         "resource product list": {
           "cli_parameters": [
             {
@@ -43235,6 +44304,381 @@
             }
           ],
           "input": null
+        },
+        "resource product show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision",
+              "options": [
+                "--revision"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "revision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ResourceDetailQuery",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "ProductData": {
+                "additionalProperties": false,
+                "properties": {
+                  "model": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "model_version": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model Version"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "official_url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 2083,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Official Url"
+                  },
+                  "vendor": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Vendor",
+                    "type": "string"
+                  },
+                  "whitepaper_url": {
+                    "anyOf": [
+                      {
+                        "format": "uri",
+                        "maxLength": 2083,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Whitepaper Url"
+                  }
+                },
+                "required": [
+                  "name",
+                  "vendor",
+                  "model"
+                ],
+                "title": "ProductData",
+                "type": "object"
+              },
+              "ProductDetail": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "products",
+                    "default": "products",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/ProductRevision"
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "title": "ProductDetail",
+                "type": "object"
+              },
+              "ProductRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "$ref": "#/$defs/ProductData"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "product_id": {
+                    "format": "uuid",
+                    "title": "Product Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "product_id",
+                  "revision",
+                  "data"
+                ],
+                "title": "ProductRevision",
+                "type": "object"
+              },
+              "ResourceRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "products",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ResourceRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "current_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "detail": {
+                "$ref": "#/$defs/ProductDetail"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "enum": [
+                  "declared",
+                  "simulated"
+                ],
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/ResourceRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "current_revision",
+              "lifecycle",
+              "provenance",
+              "detail",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "ResourceDetailData",
+            "type": "object"
+          }
         },
         "resource product update": {
           "cli_parameters": [

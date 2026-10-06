@@ -258,6 +258,7 @@ from app.schemas.team_workflow import PageData as WorkflowPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
+from bid_cli.management_products import COMMAND_DATA, COMMAND_INPUTS, COMMAND_ITEMS
 from bid_cli.requirement_confirmation import RequirementProgressInvocation
 
 # Only implemented commands are advertised; future commands are deliberately absent.
@@ -741,6 +742,7 @@ COMMANDS.update(
         "billing notices": None,
     }
 )
+COMMANDS.update(COMMAND_INPUTS)
 
 
 def command_schema(app=None, version: str = "4.0") -> dict:
@@ -805,6 +807,10 @@ def command_schema(app=None, version: str = "4.0") -> dict:
     commands = dict(LEGACY_COMMANDS if version == "3.0" else COMMANDS)
     outputs = dict(OUTPUTS)
     if version == "4.0":
+        from app.schemas.management_pages import PageData as ManagementPageData
+
+        outputs.update({name: TypeAdapter(model) for name, model in COMMAND_DATA.items()})
+        outputs.update({name: TypeAdapter(ManagementPageData) for name in COMMAND_ITEMS})
         commands.update(
             {
                 "product simulate": ProductSimulationInput,
@@ -930,6 +936,9 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         "card signoff list": CoSignSignatureView,
     }
     for name, model in workflow_items.items():
+        if name in schema["commands"]:
+            schema["commands"][name]["items"] = model.model_json_schema()
+    for name, model in COMMAND_ITEMS.items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
     if version == "4.0":

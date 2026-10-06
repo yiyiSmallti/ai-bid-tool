@@ -1,6 +1,7 @@
-"""U01 management pages: approved, not implemented.
+"""U01 management pages: approved; first slice implemented.
 
-Only proposed interfaces and Pydantic v2 payloads live here. No handlers, database
+Approved interfaces and Pydantic v2 payloads live here. Product runtime schemas
+live in app.schemas.management_pages; other slices remain unimplemented. No handlers, database
 writes, Provider calls or runtime registration occur on import. Existing mutation
 schemas remain authoritative; these projections never authorize an action.
 """
@@ -227,6 +228,9 @@ class ResourceDetailData(Contract):
     org_id: UUID
     ref: ResourceRef
     current_revision: Revision
+    # Exact viewed revision metadata avoids scanning history to recover its author.
+    revised_at: AwareDatetime
+    revised_by: UUID | None
     lifecycle: LifecycleView
     provenance: Literal["declared", "simulated"]
     detail: ResourceDetail

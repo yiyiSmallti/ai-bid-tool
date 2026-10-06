@@ -58,6 +58,13 @@ CONSOLE_HEADERS = {
     "Referrer-Policy": "no-referrer",
 }
 
+PRODUCT_MANAGEMENT_READS = {
+    "resource_product_browse",
+    "resource_product_show",
+    "resource_product_history",
+    "resource_product_lifecycle_history",
+}
+
 
 def mount_console(app: FastAPI, web_dir: Path) -> None:
     root = web_dir.resolve()
@@ -141,6 +148,9 @@ def create_app(
             and parts[4] in {"manual", "manual-preview"}
         )
         credential_route = request.url.path.startswith("/platform/credentials")
+        product_management_route = request.method == "POST" and request.url.path.startswith(
+            "/management/resources/products"
+        )
         if credential_route:
             from app.services.platform import identify
 
@@ -179,6 +189,7 @@ def create_app(
                 )
         if (
             credential_route
+            or product_management_route
             or manual_requirement_route
             or (
                 request.method == "POST"
@@ -191,7 +202,9 @@ def create_app(
             async for chunk in request.stream():
                 content.extend(chunk)
                 if len(content) > (
-                    512 * 1024
+                    16 * 1024
+                    if product_management_route
+                    else 512 * 1024
                     if credential_route
                     else 256 * 1024
                     if manual_requirement_route
@@ -215,6 +228,10 @@ def create_app(
                         request,
                         ServiceError("invalid_input", "Credential input exceeds JSON limit", 422, 2)
                         if credential_route
+                        else ServiceError(
+                            "invalid_input", "Management input exceeds JSON limit", 413, 2
+                        )
+                        if product_management_route
                         else ServiceError(
                             "input_too_large",
                             "Source input exceeds JSON limit",
@@ -445,6 +462,7 @@ def create_app(
 
         identity = None
         command = request.scope["route"].name.replace("_", " ")
+        product_management_read = request.scope["route"].name in PRODUCT_MANAGEMENT_READS
         dry_run = request.query_params.get("dry_run") == "true"
         if request.headers.get("content-type", "").startswith("application/json"):
             try:
@@ -454,10 +472,19 @@ def create_app(
             dry_run = dry_run or (isinstance(body, dict) and body.get("dry_run") is True)
         try:
             async with db.transaction(x_org_id) as session:
-                identity = await authenticate(session, credentials.credentials, x_org_id, crypto)
+                identity = await authenticate(
+                    session,
+                    credentials.credentials,
+                    x_org_id,
+                    crypto,
+                    joined_membership=product_management_read,
+                )
                 identity.invocation_id = uuid4()
                 session.info["command"] = command
                 await set_actor_context(session, identity)
+                if product_management_read:
+                    # Consumed only by the first product read in this request.
+                    session.info["management_authenticated_actor"] = identity
                 session.info["memory_settings"] = settings
                 session.info["command"] = command
                 if identity.token_id is not None and not dry_run:
@@ -541,6 +568,9 @@ def create_app(
         create_tender_router(context, settings, db, storage, queue, crypto, llm, resolve, ocr)
     )
     app.include_router(create_resource_router(context, settings, storage, crypto))
+    from app.api.management_products import create_router as create_management_product_router
+
+    app.include_router(create_management_product_router(context, settings))
     app.include_router(create_confidential_router(context, settings))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))

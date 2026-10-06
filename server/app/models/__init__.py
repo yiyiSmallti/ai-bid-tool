@@ -7,6 +7,7 @@ from app.models import agent as agent
 from app.models import check as check
 from app.models import confidential as confidential
 from app.models import exports as exports
+from app.models import management as management
 from app.models import memory as memory
 from app.models import provider_configs as provider_configs
 from app.models import requirement_confirmation as requirement_confirmation

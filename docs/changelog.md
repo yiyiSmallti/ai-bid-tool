@@ -6,6 +6,22 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Product library management slice
+
+- Added bounded product browse/search, exact revision detail and content/lifecycle
+  histories through additive v4 API and CLI commands. Existing all-row lists retain
+  their output and are not preloaded by the new console pages.
+- Added human product deactivate/restore with independent lifecycle CAS, immutable
+  tenant-scoped events and database selection guards in migration `0048`. Existing
+  roots begin active without fabricated lifecycle events; no delete action exists.
+- Added product creation/revision forms and explicit task revision selection under
+  task role and archival checks. Library revisions preserve task pins; inactive
+  products allow only exact existing active-pin replays.
+- Added API/PostgreSQL, role/isolation, CLI, fixed-scale and mocked-browser acceptance
+  scenarios. PostgreSQL, Chromium and measured scale acceptance remain integration
+  checks; see the [plan](plan/management-pages.md#test-plan-and-repeatable-artifacts)
+  and [mechanism](notes/management-pages.md).
+
 ## 2026-10-06: Bounded requirement-review work on board reads
 
 - Project fail-closed review states for the default board without deriving unused
