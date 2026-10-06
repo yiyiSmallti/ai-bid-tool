@@ -6,6 +6,32 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Rubric revision regression fixture corrections
+
+- Deep-copy the read report in the shared rubric replacement test helper before constructing
+  requests. Nested range edits previously mutated the expected baseline before the HTTP request,
+  falsely reporting candidate changes after rejection. Retain full report equality checks.
+- Set an explicit initial assessment date before previewing in the console date-invalidation
+  regression, then edit to a distinct date so the test is independent of the current day.
+
+## 2026-10-06: Rubric revision across domains with normalization errors
+
+- Fix the dev real-model rubric v2 deadlock observed after #21: generation retained 8 sections,
+  86 items and 8 normalization-error kinds, but after admin classification neither domain could
+  submit a full replacement. Commercial weights such as `35` blocked the technical reviewer;
+  technical model-assessable items without bounds blocked the bidder. Candidate storage from #16
+  tolerated these declarations while revision input still applied confirmed-rule validation.
+- Use candidate decimal/range semantics in complete replacements, allowing both unchanged entries
+  and partial repairs to retain errors. Compare protected content against stored declarations,
+  recompute errors for each version, and retain strict human confirmation and source-selection
+  gates. The [scoring contract](plan/score.md#rubric-versions-coverage-and-human-confirmation-人工确认)
+  defines incremental repair and renewed classification/decisions.
+- Add local normalization codes to section/item reads and console review/replacement entries, so
+  reviewers can locate affected rules. Aggregate errors remain in completeness and blockers.
+- Add DB-free schema regressions, database-backed two-domain repair/rejection scenarios and mocked
+  Playwright replacement flows. The [mechanism note](notes/score.md#pitfalls) describes the failure
+  mode and retained gates.
+
 ## 2026-10-05: Rubric section-source regression corrections
 
 - Authorize citation-window tasks before validating query fields or section source selectors.

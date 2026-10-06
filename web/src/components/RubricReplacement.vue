@@ -11,6 +11,8 @@ const base = computed(() => `/tasks/${enc(props.taskId)}/score-rubrics/${enc(pro
 const sectionFields = ['key','title','order','aggregation','aggregation_rule_text','score_range','weight','cap','included_in_overall_total','ambiguity_reason'];
 const itemFields = ['requirement_id','key','title','rule_text','order','assessment_mode','score_range','weight','ambiguity_reason'];
 const overallFields = ['overall_aggregation','overall_rule_text','overall_score_range','overall_cap'];
+// Candidate declarations can violate normalization rules. Copy their values
+// verbatim so a reviewer can repair one domain without altering another domain.
 const pick = (row, fields) => Object.fromEntries(fields.map(key => [key, row[key] ?? null]));
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const ownDomain = computed(() => ({ bidder: 'commercial', technical: 'technical' })[orgAccess.role]);
@@ -27,7 +29,9 @@ const editable = computed(() => {
   const original = graph.value?.[active.value].find(item => item.id === (row.source_section_id ?? row.source_item_id));
   return !original || original.review_domain === ownDomain.value;
 });
-const originalDomain = computed(() => { const row = current.value; return graph.value?.[active.value]?.find(item => item.id === (row?.source_section_id ?? row?.source_item_id))?.review_domain; });
+const originalEntry = computed(() => { const row = current.value; return graph.value?.[active.value]?.find(item => item.id === (row?.source_section_id ?? row?.source_item_id)); });
+const originalDomain = computed(() => originalEntry.value?.review_domain);
+const normalizationErrors = computed(() => originalEntry.value?.normalization_errors ?? []);
 const changes = computed(() => {
   if (!form.value || !baseline.value) return [];
   const output = [];
@@ -136,7 +140,7 @@ load();
       <el-tabs v-model="active" aria-label="完整修订分区"><el-tab-pane label="修订分节" name="sections" /><el-tab-pane label="修订条目" name="items" /><el-tab-pane label="修订覆盖提议" name="coverage" /><el-tab-pane label="修订总分规则" name="overall" /></el-tabs>
       <template v-if="active !== 'overall'">
         <div class="actions"><el-button :disabled="index === 0" @click="index--">上一条修订</el-button><span>{{ index + 1 }} / {{ entries.length }}</span><el-button :disabled="index >= entries.length - 1" @click="index++">下一条修订</el-button><el-button v-if="active !== 'coverage'" @click="add">{{ active === 'sections' ? '新增分节' : '新增条目' }}</el-button><el-button v-if="active !== 'coverage'" :disabled="!editable" @click="remove">移除当前项</el-button></div>
-        <template v-if="current"><p v-if="!editable">此内容属于{{ domainLabels[originalDomain ?? 'unclassified'] }}，必须完整保留。</p><blockquote v-if="active !== 'sections'" class="quote">{{ currentSource?.quote }}</blockquote>
+        <template v-if="current"><p v-if="!editable">此内容属于{{ domainLabels[originalDomain ?? 'unclassified'] }}，必须完整保留。</p><div v-if="normalizationErrors.length" data-testid="replacement-normalization-errors"><p>已载入版本的规范化问题（保存后由服务器重新核验）：</p><ul><li v-for="code in normalizationErrors" :key="code"><code>{{ code }}</code></li></ul><p>可修订当前职责内容；其他职责的问题保留待其负责人修订。规范化问题解决并完成审核后才能确认整套规则。</p></div><blockquote v-if="active !== 'sections'" class="quote">{{ currentSource?.quote }}</blockquote>
           <el-form label-position="top" :disabled="!editable">
             <template v-if="active === 'sections'"><p>分节可引用多段已固定的评分要求原文，至少保留一段。</p><article v-for="(entry, sourceIndex) in current.sources" :key="`${entry.requirement_id}-${sourceIndex}`"><p>评分要求 {{ entry.requirement_id }}</p><blockquote class="quote">{{ entry.quote }}</blockquote><AssessmentCitation v-if="sourceTarget(entry)" :task-id="taskId" parent-kind="rubric" :parent-id="rubricId" v-bind="sourceTarget(entry)" /><el-button :disabled="!editable || current.sources.length === 1" @click="removeSource(sourceIndex)">移除此原文</el-button></article><el-form-item label="添加固定分节原文"><el-select v-model="sourceRequirement" aria-label="添加固定分节原文"><el-option v-for="entry in graph.coverage" :key="entry.requirement_id" :value="entry.requirement_id" :label="entry.source.quote" /></el-select><el-button :disabled="!sourceRequirement" @click="addSource">添加此原文</el-button></el-form-item></template>
             <el-form-item v-else label="固定评分要求"><el-select v-model="current.requirement_id" aria-label="固定评分要求" :disabled="!!current.source_item_id || active === 'coverage'"><el-option v-for="entry in graph.coverage" :key="entry.requirement_id" :value="entry.requirement_id" :label="entry.source.quote" /></el-select></el-form-item>
