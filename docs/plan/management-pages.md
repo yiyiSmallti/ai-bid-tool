@@ -4,7 +4,7 @@ kind: plan
 
 # Contract: U01 org management pages
 
-Status: **pending approval, not implemented**. This draft covers the remaining
+Status: **approved with all recommended defaults, not implemented**. This contract covers the remaining
 management-page scope of [roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
 Existing services and pages cited below are foundations, not delivery of this contract.
 The proposed [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
@@ -736,12 +736,11 @@ with the fixed dataset, recording query plans/payload sizes and environment, the
 repeat only failed/affected scenarios. Mocked-only success leaves database and
 performance acceptance open.
 
-## Open decisions
+## Decisions
 
-All recommendations below await owner confirmation with this contract; none is
-implementation authorization.
+The owner approved every recommended default; implementation follows these decisions.
 
-| Decision | Recommended default | Reason |
+| Decision | Approved default | Reason |
 | --- | --- | --- |
 | First slice | Product bounded browse/create/revise/history and explicit task pinning | Small existing service surface demonstrates reusable material ownership and stable task inputs |
 | Library lifecycle | Human maintainers deactivate/restore with independent lifecycle CAS/events; no deletion | Reversible withdrawal from future use preserves immutable content and ongoing tasks |

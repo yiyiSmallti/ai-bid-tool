@@ -1,4 +1,4 @@
-"""U01 management pages: pending approval, not implemented.
+"""U01 management pages: approved, not implemented.
 
 Only proposed interfaces and Pydantic v2 payloads live here. No handlers, database
 writes, Provider calls or runtime registration occur on import. Existing mutation
