@@ -210,7 +210,10 @@ async def board(session, actor, task_id, query, storage, settings):
     response_counts = Counter(
         row.bucket for row in inputs["rows"] if reviews[row.requirement_id].confirmed
     )
-    counts = BoardCounts(total=sum(response_counts.values()), **response_counts)
+    counts = BoardCounts(
+        total=sum(response_counts.values()),
+        **{name: response_counts[name] for name in BoardCounts.model_fields if name != "total"},
+    )
     scope = await requirement_confirmation.scope_view(
         session,
         actor,

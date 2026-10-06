@@ -50,6 +50,8 @@ enforce the same org/task authority as the services. Source mutation records
 invalidation permanently, including when content is later changed back.
 
 Preparation binds meaning, source and membership without requiring human approval.
+For selected response generation, the preparation manifest binds the complete
+extraction scope while the provider receives only the selected requirements.
 Acceptance binds the current review revision/hash as well. Response confirmation,
 comply-only disposition, whole-rubric confirmation and score consumption require
 current confirmation. Draft assembly partitions every saved requirement into an
@@ -75,6 +77,12 @@ transaction; audit payloads contain IDs and hashes, never reasons or quotations.
   human administrator gate and invalidates the affected requirement binding.
 - Historical accepted artifacts remain readable as stale. Reconfirmation does
   not approve an old response or make an old draft/report current automatically.
+  The deferred draft gate validates a newly inserted publication; it does not
+  prohibit later source changes because a historical draft now needs reassembly.
+- Source-event producers may derive a missing org context only when the current
+  database role already has superuser or BYPASSRLS authority. They restore that
+  context afterward. Runtime roles and explicitly conflicting org contexts retain
+  the normal tenant boundary; automatic invalidation never grants human approval.
 - Migration seeds `legacy_unconfirmed` without invented historical approval.
   Existing rows require the data-encryption key for their encrypted baseline.
   Stop writes and restore a gate-aware release for recovery; do not run a binary

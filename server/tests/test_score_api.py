@@ -357,11 +357,14 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     assert len(case["vendor"].requests) == 2
     assert await rubric_counts(case) == after
 
-    path = f"/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
+    path = f"/v4/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
     report = await case["api"].get(path, headers=case["header"])
     assert report.status_code == 200, report.text
     RubricReportData.model_validate(report.json()["data"])
     assert report.json()["data"]["rubric"]["state"] == "candidate"
+    legacy_report = await case["api"].get(path.removeprefix("/v4"), headers=case["header"])
+    assert legacy_report.status_code == 200, legacy_report.text
+    assert "requirement_review" not in legacy_report.json()["data"]["rubric"]
     assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
 
     monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
@@ -395,6 +398,7 @@ async def add_whole_scoring_table(case):
     async with case["app"].state.db.transaction(org) as session:
         original = await session.get(Requirement, UUID(case["requirements"][0]["id"]))
         original.category = "technical"
+        accepted_ids = [original.id]
         for index, section in enumerate(("Technical", "Technical", "Commercial"), 6):
             text = (
                 f"{section} criterion {index}: earn 5 points. " + "Supporting rule wording. " * 140
@@ -407,18 +411,21 @@ async def add_whole_scoring_table(case):
                 page=index,
                 seq=index,
                 text=text,
+                citation_verified=True,
             )
             session.add(chunk)
             await session.flush()
+            requirement_id = uuid4()
+            accepted_ids.append(requirement_id)
             session.add(
                 Requirement(
-                    id=uuid4(),
+                    id=requirement_id,
                     org_id=org,
                     task_id=chunk.task_id,
                     document_id=chunk.document_id,
                     chunk_id=chunk.id,
                     page=index,
-                    quote=text,
+                    quote=text.rstrip(),
                     text=text,
                     category="scoring",
                     starred=False,
@@ -430,7 +437,11 @@ async def add_whole_scoring_table(case):
 
         await session.flush()
         await confirm_requirements_async(
-            session, org, UUID(case["task"]), settings=case["app"].state.processor.settings
+            session,
+            org,
+            UUID(case["task"]),
+            accepted_ids,
+            settings=case["app"].state.processor.settings,
         )
 
 

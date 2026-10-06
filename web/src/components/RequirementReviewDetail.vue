@@ -85,7 +85,7 @@ defineExpose({discard,load});
       <template v-if="!row.citation_valid"><p class="warning">引用无效，必须修复后重新核对。请任务负责人协调管理员修复引用。</p><el-button v-if="orgAccess.role==='admin' && writable" :disabled="busy" @click="previewRepair">预检修复集合引用</el-button><RouterLink :to="`/org/tasks/${taskId}/members`">协调负责人或恢复任务</RouterLink></template>
       <template v-if="repairPreview"><p>引用修复预检：{{display(repairPreview.data)}}</p><ul><li v-for="item in repairPreview.items" :key="item.requirement_id">{{item.status}} · {{item.proposed_quote ?? item.source.quote}}</li></ul><el-button :disabled="busy || !reason.trim()" @click="repair">按预检修复引用</el-button></template>
       <el-form label-position="top" @submit.prevent>
-        <el-form-item label="要求审阅原因" required><el-input v-model="reason" type="textarea" :rows="3" maxlength="10000" :disabled="!writable" /></el-form-item>
+        <el-form-item label="要求审阅原因" required><el-input v-model="reason" aria-label="要求审阅原因" aria-required="true" type="textarea" :rows="3" maxlength="10000" :disabled="!writable" /></el-form-item>
         <el-checkbox v-if="row.state!=='confirmed'" v-model="reviewed" :disabled="!writable || stale || !originalReady || !row.citation_valid">已核对正文、类别、星标、结构条件和逐字原文</el-checkbox>
         <div class="actions"><el-button v-if="row.state!=='confirmed'" type="primary" :disabled="!writable || busy || stale || !originalReady || !row.citation_valid || !reviewed || !reason.trim()" @click="decide('confirm')">确认要求</el-button><el-button v-else type="warning" :disabled="!writable || busy || stale || !reason.trim()" @click="decide('reopen')">重新打开要求</el-button></div>
         <p v-if="!writable" class="hint">当前身份或任务状态仅允许读取。任务负责人 / 协作者本人可在有效任务中确认要求。</p>

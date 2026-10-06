@@ -265,6 +265,7 @@ async def test_requirement_board_optin_progress_legacy_and_org_isolation(tenants
         data = RequirementBoardData.model_validate(optin.json()["data"])
         assert data.buckets.total == data.buckets.requirement_review == len(requirements)
         assert data.buckets.responses.total == 0
+        assert all(count == 0 for count in data.buckets.responses.model_dump().values())
         for row in optin.json()["items"]:
             item = RequirementBoardItem.model_validate(row)
             assert item.requirement.bucket == "requirement_review"
@@ -286,8 +287,16 @@ async def test_requirement_board_optin_progress_legacy_and_org_isolation(tenants
         assert missing.status_code in {400, 422}, missing.text
         legacy = await api.get(f"/tasks/{task}/board", headers=headers[0], params=params)
         assert legacy.status_code == 200, legacy.text
-        assert "requirement_review" not in json.dumps(legacy.json())
-        assert "confirm_requirement" not in json.dumps(legacy.json())
+        BoardData.model_validate(legacy.json()["data"])
+        assert "scope" not in legacy.json()["data"] and "buckets" not in legacy.json()["data"]
+        for row in legacy.json()["items"]:
+            BoardRow.model_validate(row)
+            assert row["bucket"] == "gap"
+            assert "requirement" not in row
+            assert all(action["code"] == "view" for action in row["next_actions"])
+        # The compatibility contract preserves closed enums while explicitly
+        # warning legacy readers to open the requirement-review workspace.
+        assert "requirement_review_pending:open_requirement_review" in legacy.json()["warnings"]
         for part in ("board", "progress"):
             foreign = await api.get(
                 f"/v4/tasks/{task}/{part}",

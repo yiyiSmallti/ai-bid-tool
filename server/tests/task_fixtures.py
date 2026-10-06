@@ -170,6 +170,40 @@ def confirm_requirements(session, org, task_id, requirement_ids=None, *, setting
     )
 
 
+async def requirement_review_manifest_async(session, org, task_id, extraction_job_id):
+    """Pin live review inputs for an explicitly constructed synthetic draft."""
+    from app.models.entities import Requirement
+    from app.services import requirement_consumption
+
+    rows = list(
+        await session.scalars(
+            select(Requirement)
+            .where(
+                Requirement.org_id == org,
+                Requirement.task_id == task_id,
+                Requirement.job_id == extraction_job_id,
+            )
+            .order_by(Requirement.id)
+        )
+    )
+    reviews = await requirement_consumption.effective(session, rows)
+    return {
+        "requirements": [
+            {
+                "requirement_id": str(row.id),
+                "requirement_review": requirement_consumption.fields(reviews[row.id]),
+            }
+            for row in rows
+        ]
+    }
+
+
+def requirement_review_manifest(session, org, task_id, extraction_job_id):
+    return service_call(
+        requirement_review_manifest_async(ServiceSession(session), org, task_id, extraction_job_id)
+    )
+
+
 def review_card(session, org, user, card_id, *, action, storage=None, settings=None):
     return service_call(
         review_card_async(

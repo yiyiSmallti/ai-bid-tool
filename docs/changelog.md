@@ -6,6 +6,21 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Requirement-review publication and console regression fixes
+
+- Preserve tenant event context during privileged source maintenance without
+  granting runtime roles permission to infer another org. Keep human requirement
+  decisions under the live org-role, task-role and scope checks.
+- Bind selected response generation to the complete extraction preparation scope
+  at submission, admission and publication; send only selected requirement content
+  to the provider. Return explicit zero counts for empty response buckets.
+- Give requirement-review and manual-entry fields stable accessible names, restore
+  rejected batch selections to their accepted state, and retain the 100-item limit.
+  See [Requirement confirmation](notes/requirement-confirmation.md).
+- Update accepted-source fixtures through the real review service and current
+  publication manifest. Preserve source verification, deferred gates and exact
+  citation-location count assertions.
+
 ## 2026-10-05: Requirement confirmation and verified manual entry
 
 - Added independent requirement review, source pins, legacy-unconfirmed migration,

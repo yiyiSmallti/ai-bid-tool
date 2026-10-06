@@ -19,6 +19,7 @@ from app.services.extraction import locate_quote
 from app.services.response_cards import citation_valid
 from conftest import FakeQueue, credential_app
 from sqlalchemy import text
+from task_fixtures import confirm_requirements_async
 from test_api import run_job
 from test_citation_repair import create_commitment_card
 from test_docx_extraction import item
@@ -91,6 +92,10 @@ async def test_boundary_citation_extract_repair_confirm_and_draft(
             assert repaired.status_code == 200, repaired.text
             assert repaired.json()["data"]["changed"] == 2
 
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session, tenants["orgs"][0], UUID(task), settings=settings
+            )
         confirmations = []
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
         for row in rows:

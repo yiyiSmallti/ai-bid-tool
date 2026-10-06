@@ -360,7 +360,13 @@ async def test_every_mutation_requires_active_human_owner_or_contributor(
             uid, auth = await person(api, admin_engine, tenants["orgs"][0])
             state = await workflow(api, headers[0], task)
             response = await add_member(
-                api, headers[0], task, uid, state["revision"], role=authority
+                api,
+                headers[0],
+                task,
+                uid,
+                state["revision"],
+                role=authority,
+                domains=["commercial"] if authority == "reviewer" else [],
             )
             assert response.status_code == 200, response.text
         else:

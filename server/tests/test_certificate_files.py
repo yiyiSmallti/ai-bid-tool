@@ -293,6 +293,14 @@ async def test_concurrent_old_version_only_one_file_write(
 
 @pytest.mark.parametrize("role", ["admin", "bidder", "technical", "viewer"])
 async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tenants, admin_engine):
+    from app.services.auth import SCOPES
+
+    requirement_scopes = {"req:confirm", "req:manual"}
+    assert ROLE_SCOPES[role] & requirement_scopes == (
+        requirement_scopes if role in {"admin", "bidder", "technical"} else set()
+    )
+    assert requirement_scopes.isdisjoint(SCOPES)
+
     row, task = await setup(api, headers[0])
     with Session(admin_engine) as session, session.begin():
         member = session.scalar(select(Membership).where(Membership.org_id == tenants["orgs"][0]))
@@ -355,6 +363,8 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
         "sandbox:read",
         "sandbox:render",
         "sandbox:capture",
+        "req:confirm",
+        "req:manual",
     } == set(old[role])
 
 

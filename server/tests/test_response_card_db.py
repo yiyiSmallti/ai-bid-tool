@@ -44,7 +44,7 @@ RESPONSE_TABLES = (
 
 def seed_response_rows(session, org, user, task, extraction, requirement):
     """Seed genuine relational materials under actor context, never bypass triggers."""
-    from task_fixtures import actor_context, confirm_requirements
+    from task_fixtures import actor_context, confirm_requirements, requirement_review_manifest
 
     confirm_requirements(session, org, task.id, [requirement.id])
     actor_context(session, org, user)
@@ -144,6 +144,7 @@ def seed_response_rows(session, org, user, task, extraction, requirement):
     )
     session.add_all([draft_job, model_job])
     session.flush()
+    manifest = requirement_review_manifest(session, org, task.id, extraction.id)
     run = DraftRun(
         id=uuid4(),
         org_id=org,
@@ -154,7 +155,7 @@ def seed_response_rows(session, org, user, task, extraction, requirement):
         input_hash=uuid4().hex * 2,
         actor_user_id=user,
         actor_kind="session",
-        input_manifest={"requirements": [str(requirement.id)]},
+        input_manifest=manifest,
         completion="partial",
         summary={"gap_requirements": 1},
     )

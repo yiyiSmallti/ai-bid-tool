@@ -42,6 +42,7 @@ from app.providers.llm import AnthropicExtractor
 from conftest import PASSWORD, FakeQueue, credential_app
 from docx import Document
 from sqlalchemy import text
+from task_fixtures import confirm_requirements_async
 from test_llm_providers import Vendor, anthropic_reply
 
 SYNTHETIC_KEY = "synthetic-citation-repair-key-not-real"
@@ -417,6 +418,13 @@ async def test_extraction_persists_exact_span_and_rejects_ambiguous_match(
         assert word_requirement["source"]["quote"] == WORD_SOURCE_QUOTE
         assert word_requirement["model_quote"] == WORD_MODEL_QUOTE
 
+        async with word_app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session,
+                tenants["orgs"][0],
+                UUID(word_task),
+                settings=word_app.state.processor.settings,
+            )
         word_card = await create_commitment_card(
             word_api,
             header,
@@ -447,6 +455,10 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         )
         assert status["result"]["created"] == 7
         requirements = {row["source"]["page"]: row for row in listed}
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session, tenants["orgs"][0], UUID(task_id), settings=app.state.processor.settings
+            )
 
         foreign_task_id, _, foreign_job_id, _, _ = await extract_fixture(
             api, app, foreign_header, tmp_path, "foreign"
@@ -855,7 +867,13 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
 
         invalid = (await api.get(f"/cards/{unlocatable['id']}", headers=header)).json()["data"]
         assert invalid["state"] == "pending_review"
-        assert invalid["eligibility"] == "invalid_citation"
+        assert invalid["eligibility"] == "needs_reconfirmation"
+        invalid_source = await api.get(
+            f"/v4/requirements/{requirements[5]['id']}/review", headers=header
+        )
+        assert invalid_source.status_code == 200, invalid_source.text
+        assert invalid_source.json()["data"]["requirement"]["state"] == "invalidated"
+        assert invalid_source.json()["data"]["requirement"]["citation_valid"] is False
         normalized_after = (await api.get(f"/cards/{normalized['id']}", headers=header)).json()[
             "data"
         ]
@@ -866,7 +884,17 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         assert normalized_after["revision_id"] == normalized["revision_id"]
         strict_gate = await card_action(api, reviewer, invalid, "confirm", reviewed_evidence_ids=[])
         assert strict_gate.status_code == 409
-        assert strict_gate.json()["data"]["error"]["code"] == "invalid_citation"
+        assert strict_gate.json()["data"]["error"]["code"] == "requirement_invalidated"
+        # Reaccept only currently locatable sources; this never approves response
+        # cards or overrides the unresolved legacy citations on pages 5 and 6.
+        async with app.state.db.transaction(tenants["orgs"][0]) as session:
+            await confirm_requirements_async(
+                session,
+                tenants["orgs"][0],
+                UUID(task_id),
+                [UUID(requirements[page]["id"]) for page in (1, 2, 3, 4, 7)],
+                settings=app.state.processor.settings,
+            )
         pending_stale_confirm = await card_action(
             api, reviewer, changed_cards[3], "confirm", reviewed_evidence_ids=[]
         )

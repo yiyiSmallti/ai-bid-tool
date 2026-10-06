@@ -149,7 +149,9 @@ async def material_inputs(session: AsyncSession, actor: Identity, task_id: UUID,
     return entries, originals, unavailable
 
 
-async def snapshot(session, actor, task, requirements, storage, llm, reasoning, settings):
+async def snapshot(
+    session, actor, task, requirements, storage, llm, reasoning, settings, *, scope_requirements
+):
     by_requirement = {str(row.id): row for row in requirements}
     # Registered confidential values become their placeholders before any pattern
     # rule runs; the task switch turns both off together.
@@ -244,7 +246,9 @@ async def snapshot(session, actor, task, requirements, storage, llm, reasoning, 
         )
     from app.services import requirement_consumption
 
-    preparation = await requirement_consumption.preparation(session, requirements)
+    # The provider receives only the selected requirements, but admission and
+    # publication compare membership against the same complete extraction scope.
+    preparation = await requirement_consumption.preparation(session, scope_requirements)
     manifest = {
         "requirement_preparation": preparation,
         "org_id": str(actor.org_id),
@@ -377,6 +381,7 @@ async def submit_generation(
     extraction, requirements = await cards.extraction_scope(
         session, task_id, body.extraction_job_id
     )
+    scope_requirements = requirements
     if body.requirement_ids is not None:
         if not set(body.requirement_ids) <= {row.id for row in requirements}:
             raise not_found()
@@ -385,7 +390,15 @@ async def submit_generation(
     if reasoning is None and not warnings:
         warnings.append("The current model has no reasoning levels configured.")
     manifest, secret, targets, selected, skipped = await snapshot(
-        session, actor, task, requirements, storage, llm, reasoning, settings
+        session,
+        actor,
+        task,
+        requirements,
+        storage,
+        llm,
+        reasoning,
+        settings,
+        scope_requirements=scope_requirements,
     )
     manifest["extraction_job_id"] = str(extraction.id)
     input_hash = digest(manifest)

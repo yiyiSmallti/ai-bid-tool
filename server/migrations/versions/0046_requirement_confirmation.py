@@ -274,13 +274,22 @@ def backfill():
 
 
 GUARD_SQL = r"""
+CREATE FUNCTION public.requirement_human_authority(p_org uuid,p_task uuid,p_scope text) RETURNS void
+LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+BEGIN
+ IF p_scope IS NULL OR p_scope NOT IN ('req:confirm','req:manual') OR NOT EXISTS(SELECT 1 FROM public.memberships m
+  WHERE m.org_id=p_org AND m.user_id=nullif(current_setting('app.actor_user_id',true),'')::uuid
+   AND m.active AND m.role IN ('admin','bidder','technical')) THEN
+  RAISE EXCEPTION 'requirement human role required' USING ERRCODE='42501'; END IF;
+ PERFORM public.task_write_authority(p_org,p_task,p_scope,NULL,false,true);
+END $$;
 CREATE FUNCTION public.requirement_seed_authority(p_org uuid,p_task uuid,p_job uuid,p_manual boolean) RETURNS void
 LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE j public.jobs; uid uuid:=nullif(current_setting('app.actor_user_id',true),'')::uuid;
 BEGIN
- IF p_manual THEN PERFORM public.task_write_authority(p_org,p_task,'req:manual',NULL,false,true); RETURN; END IF;
+ IF p_manual THEN PERFORM public.requirement_human_authority(p_org,p_task,'req:manual'); RETURN; END IF;
  IF current_setting('app.actor_kind',true)='session' AND coalesce(current_setting('app.actor_token_id',true),'')='' THEN
- PERFORM public.task_write_authority(p_org,p_task,'req:confirm',NULL,false,true); RETURN; END IF;
+ PERFORM public.requirement_human_authority(p_org,p_task,'req:confirm'); RETURN; END IF;
  SELECT * INTO j FROM public.jobs WHERE org_id=p_org AND id=p_job AND task_id=p_task AND kind='extract';
  IF current_setting('app.actor_kind',true) IS DISTINCT FROM 'worker'
  OR j.id IS DISTINCT FROM nullif(current_setting('app.execution_job_id',true),'')::uuid
@@ -295,8 +304,6 @@ DECLARE uid uuid:=nullif(current_setting('app.actor_user_id',true),'')::uuid; r 
 BEGIN
  IF TG_OP='UPDATE' AND current_user=pg_get_userbyid((SELECT relowner FROM pg_class WHERE oid=TG_RELID))
  AND (to_jsonb(NEW)-ARRAY['snapshot_ciphertext','reason_ciphertext','receipt_ciphertext'])=(to_jsonb(OLD)-ARRAY['snapshot_ciphertext','reason_ciphertext','receipt_ciphertext']) THEN RETURN NEW; END IF;
- IF current_setting('app.actor_kind',true)='session' AND NOT EXISTS(SELECT 1 FROM public.memberships m WHERE m.org_id=NEW.org_id AND m.user_id=uid AND m.active AND m.role IN ('admin','bidder','technical')) THEN
- RAISE EXCEPTION 'requirement human role required' USING ERRCODE='42501'; END IF;
  IF TG_OP='DELETE' THEN RAISE EXCEPTION 'requirement review history cannot be deleted' USING ERRCODE='42501'; END IF;
  IF TG_TABLE_NAME='requirement_review_sets' THEN
   IF TG_OP='INSERT' THEN
@@ -310,12 +317,12 @@ BEGIN
   END IF;
  ELSIF TG_TABLE_NAME='requirement_review_requests' THEN
   IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'immutable review receipt' USING ERRCODE='42501'; END IF;
-  PERFORM public.task_write_authority(NEW.org_id,NEW.task_id,CASE WHEN NEW.action='manual_add' THEN 'req:manual' ELSE 'req:confirm' END,NULL,false,true);
+  PERFORM public.requirement_human_authority(NEW.org_id,NEW.task_id,CASE WHEN NEW.action='manual_add' THEN 'req:manual' ELSE 'req:confirm' END);
   IF NEW.actor_user_id IS DISTINCT FROM uid THEN RAISE EXCEPTION 'receipt actor mismatch' USING ERRCODE='42501'; END IF;
  ELSIF TG_TABLE_NAME='requirement_review_events' THEN
   IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'immutable review event' USING ERRCODE='42501'; END IF;
   IF NEW.action IN ('confirm','reopen','manual_add') THEN
-   PERFORM public.task_write_authority(NEW.org_id,NEW.task_id,CASE WHEN NEW.action='manual_add' THEN 'req:manual' ELSE 'req:confirm' END,NULL,false,true);
+   PERFORM public.requirement_human_authority(NEW.org_id,NEW.task_id,CASE WHEN NEW.action='manual_add' THEN 'req:manual' ELSE 'req:confirm' END);
    IF NEW.actor_kind<>'session' OR NEW.actor_user_id IS DISTINCT FROM uid OR NEW.request_id IS NULL
     OR NEW.reason_sha256 IS NULL OR NEW.reason_ciphertext IS NULL THEN RAISE EXCEPTION 'human event binding required' USING ERRCODE='42501'; END IF;
   ELSIF NEW.action='seed' THEN
@@ -341,7 +348,7 @@ BEGIN
     IS DISTINCT FROM ROW(OLD.id,OLD.org_id,OLD.task_id,OLD.extraction_job_id,OLD.requirement_id,OLD.origin) THEN
     RAISE EXCEPTION 'review identity is immutable' USING ERRCODE='42501'; END IF;
    IF pg_trigger_depth()<2 THEN
-    PERFORM public.task_write_authority(NEW.org_id,NEW.task_id,'req:confirm',NULL,false,true);
+    PERFORM public.requirement_human_authority(NEW.org_id,NEW.task_id,'req:confirm');
     IF NEW.revision<>OLD.revision+1 OR (NEW.state='confirmed' AND OLD.state='confirmed') OR
       (NEW.state='unconfirmed' AND OLD.state<>'confirmed') OR NEW.state NOT IN ('confirmed','unconfirmed') THEN
       RAISE EXCEPTION 'invalid review transition' USING ERRCODE='23514'; END IF;
@@ -394,20 +401,28 @@ END $$;
 
 INVALIDATION_SQL = r"""
 CREATE FUNCTION public.requirement_review_changed() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$
+DECLARE previous_org text:=current_setting('app.current_org',true); derive_org boolean;
 BEGIN
  IF TG_OP='UPDATE' AND (to_jsonb(NEW)-'snapshot_ciphertext')=(to_jsonb(OLD)-'snapshot_ciphertext') THEN RETURN NULL; END IF;
+ -- Match the existing tenant statement producers. append_task_event runs as its
+ -- restricted function owner, so derive before entering it, never inside it.
+ SELECT nullif(previous_org,'') IS NULL AND (r.rolsuper OR r.rolbypassrls)
+  INTO derive_org FROM pg_catalog.pg_roles r WHERE r.rolname=current_user;
+ IF derive_org THEN PERFORM set_config('app.current_org',NEW.org_id::text,true); END IF;
  UPDATE public.requirement_review_sets s SET revision=revision+CASE WHEN TG_OP='INSERT' AND NEW.origin='legacy' THEN 0 ELSE 1 END,
  membership_sha256=(SELECT public.requirement_digest(coalesce(jsonb_agg(r.id ORDER BY r.id),'[]')) FROM public.requirements r WHERE r.org_id=s.org_id AND r.job_id=s.extraction_job_id),
  confirmation_sha256=(SELECT public.requirement_digest(coalesce(jsonb_agg(jsonb_build_array(v.requirement_id,v.revision,v.review_hash,v.state) ORDER BY v.requirement_id),'[]')) FROM public.requirement_reviews v WHERE v.org_id=s.org_id AND v.extraction_job_id=s.extraction_job_id)
  WHERE s.org_id=NEW.org_id AND s.extraction_job_id=NEW.extraction_job_id;
  PERFORM public.append_task_event(NEW.org_id,NEW.task_id,'board_changed',jsonb_build_object('type','board_changed',
  'extraction_job_id',NEW.extraction_job_id,'requirement_ids',jsonb_build_array(NEW.requirement_id),'card_ids','[]'::jsonb,'invalidate_all',false),NULL);
+ IF derive_org THEN PERFORM set_config('app.current_org',coalesce(previous_org,''),true); END IF;
  RETURN NULL;
 END $$;
 CREATE TRIGGER zz_requirement_review_changed AFTER INSERT OR UPDATE ON public.requirement_reviews
  FOR EACH ROW EXECUTE FUNCTION public.requirement_review_changed();
 CREATE FUNCTION public.requirement_source_invalidate() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE v public.requirement_reviews; prior public.requirement_review_events; eid uuid; next_state text; next_pin jsonb;
+ previous_org text:=current_setting('app.current_org',true); derive_org boolean;
 BEGIN
  IF TG_TABLE_NAME='requirements' THEN
  IF ROW(NEW.text,NEW.category,NEW.starred,NEW.condition,NEW.document_id,NEW.chunk_id,NEW.page,NEW.location,NEW.quote)
@@ -418,6 +433,12 @@ BEGIN
  ELSIF TG_TABLE_NAME='documents' THEN
  IF NEW.sha256 IS NOT DISTINCT FROM OLD.sha256 THEN RETURN NEW; END IF;
  END IF;
+ -- Maintenance connections may omit tenant context, but runtime roles cannot.
+ -- Keep it installed through review/event/audit producers, then restore it so
+ -- the source table's own statement producer can derive the same org normally.
+ SELECT nullif(previous_org,'') IS NULL AND (r.rolsuper OR r.rolbypassrls)
+  INTO derive_org FROM pg_catalog.pg_roles r WHERE r.rolname=current_user;
+ IF derive_org THEN PERFORM set_config('app.current_org',NEW.org_id::text,true); END IF;
  FOR v IN SELECT rv.* FROM public.requirement_reviews rv JOIN public.requirements r ON r.org_id=rv.org_id AND r.id=rv.requirement_id
  WHERE r.org_id=NEW.org_id AND (CASE TG_TABLE_NAME WHEN 'requirements' THEN r.id=NEW.id WHEN 'chunks' THEN r.chunk_id=NEW.id ELSE r.document_id=NEW.id END)
  ORDER BY rv.task_id,rv.extraction_job_id,rv.requirement_id FOR UPDATE OF rv LOOP
@@ -435,6 +456,7 @@ BEGIN
    CASE WHEN TG_TABLE_NAME='requirements' AND to_jsonb(NEW)->>'quote' IS DISTINCT FROM to_jsonb(OLD)->>'quote' THEN 'source_repair' ELSE 'invalidate' END,
    next_state,prior.review_hash,prior.snapshot_sha256,prior.snapshot_ciphertext,prior.source_pin,'worker');
  END LOOP;
+ IF derive_org THEN PERFORM set_config('app.current_org',coalesce(previous_org,''),true); END IF;
  RETURN NEW;
 END $$;
 CREATE TRIGGER requirement_source_invalidate AFTER UPDATE ON public.requirements FOR EACH ROW EXECUTE FUNCTION public.requirement_source_invalidate();
@@ -453,7 +475,7 @@ BEGIN
  IF TG_OP='UPDATE' AND OLD.result->>'origin'='manual' AND NEW IS DISTINCT FROM OLD THEN
  RAISE EXCEPTION 'manual extraction is an immutable terminal receipt' USING ERRCODE='42501'; END IF;
  IF NEW.kind='extract' AND NEW.result->>'origin'='manual' THEN
- PERFORM public.task_write_authority(NEW.org_id,NEW.task_id,'req:manual',NULL,false,true);
+ PERFORM public.requirement_human_authority(NEW.org_id,NEW.task_id,'req:manual');
  IF NEW.status<>'succeeded' OR NEW.attempts<>0 OR NEW.provider_config_id IS NOT NULL OR NEW.provider_identity IS NOT NULL
  OR NEW.reasoning IS NOT NULL OR NEW.run_id IS NOT NULL OR NEW.lease_until IS NOT NULL OR NEW.queue_id IS NOT NULL
  OR NEW.finished_at IS NULL THEN RAISE EXCEPTION 'invalid manual extraction receipt' USING ERRCODE='23514'; END IF;
@@ -590,6 +612,7 @@ GRANT SELECT,INSERT ON public.requirement_review_events,public.requirement_revie
 REVOKE ALL ON FUNCTION public.requirement_canonical(jsonb),public.requirement_digest(jsonb),
  public.requirement_content(uuid,uuid),public.requirement_hash(uuid,uuid,jsonb),public.requirement_pin_valid(uuid,uuid,jsonb),
  public.requirement_review_current(uuid,uuid),public.requirement_review_state(uuid,uuid),
+ public.requirement_human_authority(uuid,uuid,text),
  public.requirement_seed_authority(uuid,uuid,uuid,boolean),public.requirement_review_guard(),
  public.requirement_event_pointer(),public.requirement_archived_guard(),public.requirement_review_changed(),public.requirement_source_invalidate(),
  public.requirement_source_lock(),public.requirement_manual_job_guard(),public.requirement_response_gate(),
@@ -597,6 +620,7 @@ REVOKE ALL ON FUNCTION public.requirement_canonical(jsonb),public.requirement_di
 GRANT EXECUTE ON FUNCTION public.requirement_canonical(jsonb),public.requirement_digest(jsonb),
  public.requirement_content(uuid,uuid),public.requirement_hash(uuid,uuid,jsonb),public.requirement_pin_valid(uuid,uuid,jsonb),
  public.requirement_review_current(uuid,uuid),public.requirement_review_state(uuid,uuid),
+ public.requirement_human_authority(uuid,uuid,text),
  public.requirement_seed_authority(uuid,uuid,uuid,boolean),public.requirement_rubric_confirmed(uuid,uuid) TO bid_app;
 """
 
