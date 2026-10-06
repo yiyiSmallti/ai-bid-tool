@@ -38040,10 +38040,9 @@
                 ],
                 "type": "string"
               },
-              "Money": {
+              "CandidateScoreNumber": {
                 "anyOf": [
                   {
-                    "minimum": 0.0,
                     "type": "number"
                   },
                   {
@@ -38051,6 +38050,24 @@
                     "type": "string"
                   }
                 ]
+              },
+              "CandidateScoreRange": {
+                "additionalProperties": false,
+                "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/CandidateScoreNumber"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/CandidateScoreNumber"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "CandidateScoreRange",
+                "type": "object"
               },
               "NonBlank": {
                 "maxLength": 20000,
@@ -38148,25 +38165,14 @@
                 ],
                 "type": "string"
               },
-              "ScoreRange": {
-                "additionalProperties": false,
-                "properties": {
-                  "maximum": {
-                    "$ref": "#/$defs/Money"
-                  },
-                  "minimum": {
-                    "$ref": "#/$defs/Money"
-                  }
-                },
-                "required": [
-                  "minimum",
-                  "maximum"
-                ],
-                "title": "ScoreRange",
-                "type": "object"
-              },
               "Sha256": {
                 "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "VerbatimRule": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "pattern": "\\S",
                 "type": "string"
               }
             },
@@ -38242,7 +38248,7 @@
               "overall_cap": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/Money"
+                    "$ref": "#/$defs/CandidateScoreNumber"
                   },
                   {
                     "type": "null"
@@ -38253,7 +38259,7 @@
               "overall_rule_text": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/NonBlank"
+                    "$ref": "#/$defs/VerbatimRule"
                   },
                   {
                     "type": "null"
@@ -38264,7 +38270,7 @@
               "overall_score_range": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/ScoreRange"
+                    "$ref": "#/$defs/CandidateScoreRange"
                   },
                   {
                     "type": "null"
@@ -38465,18 +38471,9 @@
                     ],
                     "type": "string"
                   },
-                  "Code": {
-                    "pattern": "^[a-z0-9_:-]{1,100}$",
-                    "type": "string"
-                  },
-                  "Count": {
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "Money": {
+                  "CandidateScoreNumber": {
                     "anyOf": [
                       {
-                        "minimum": 0.0,
                         "type": "number"
                       },
                       {
@@ -38485,10 +38482,31 @@
                       }
                     ]
                   },
-                  "NonBlank": {
-                    "maxLength": 20000,
-                    "minLength": 1,
+                  "CandidateScoreRange": {
+                    "additionalProperties": false,
+                    "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                    "properties": {
+                      "maximum": {
+                        "$ref": "#/$defs/CandidateScoreNumber"
+                      },
+                      "minimum": {
+                        "$ref": "#/$defs/CandidateScoreNumber"
+                      }
+                    },
+                    "required": [
+                      "minimum",
+                      "maximum"
+                    ],
+                    "title": "CandidateScoreRange",
+                    "type": "object"
+                  },
+                  "Code": {
+                    "pattern": "^[a-z0-9_:-]{1,100}$",
                     "type": "string"
+                  },
+                  "Count": {
+                    "minimum": 0,
+                    "type": "integer"
                   },
                   "ReviewDomain": {
                     "enum": [
@@ -38562,23 +38580,6 @@
                     ],
                     "type": "string"
                   },
-                  "ScoreRange": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "maximum": {
-                        "$ref": "#/$defs/Money"
-                      },
-                      "minimum": {
-                        "$ref": "#/$defs/Money"
-                      }
-                    },
-                    "required": [
-                      "minimum",
-                      "maximum"
-                    ],
-                    "title": "ScoreRange",
-                    "type": "object"
-                  },
                   "Sha256": {
                     "pattern": "^[0-9a-f]{64}$",
                     "type": "string"
@@ -38588,6 +38589,12 @@
                       "current",
                       "stale"
                     ],
+                    "type": "string"
+                  },
+                  "VerbatimRule": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "type": "string"
                   }
                 },
@@ -38645,7 +38652,7 @@
                   "overall_cap": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Money"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -38655,7 +38662,7 @@
                   "overall_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -38665,7 +38672,7 @@
                   "overall_score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -39961,18 +39968,9 @@
                     ],
                     "type": "string"
                   },
-                  "Code": {
-                    "pattern": "^[a-z0-9_:-]{1,100}$",
-                    "type": "string"
-                  },
-                  "Count": {
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "Money": {
+                  "CandidateScoreNumber": {
                     "anyOf": [
                       {
-                        "minimum": 0.0,
                         "type": "number"
                       },
                       {
@@ -39981,10 +39979,31 @@
                       }
                     ]
                   },
-                  "NonBlank": {
-                    "maxLength": 20000,
-                    "minLength": 1,
+                  "CandidateScoreRange": {
+                    "additionalProperties": false,
+                    "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                    "properties": {
+                      "maximum": {
+                        "$ref": "#/$defs/CandidateScoreNumber"
+                      },
+                      "minimum": {
+                        "$ref": "#/$defs/CandidateScoreNumber"
+                      }
+                    },
+                    "required": [
+                      "minimum",
+                      "maximum"
+                    ],
+                    "title": "CandidateScoreRange",
+                    "type": "object"
+                  },
+                  "Code": {
+                    "pattern": "^[a-z0-9_:-]{1,100}$",
                     "type": "string"
+                  },
+                  "Count": {
+                    "minimum": 0,
+                    "type": "integer"
                   },
                   "ReviewDomain": {
                     "enum": [
@@ -40058,23 +40077,6 @@
                     ],
                     "type": "string"
                   },
-                  "ScoreRange": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "maximum": {
-                        "$ref": "#/$defs/Money"
-                      },
-                      "minimum": {
-                        "$ref": "#/$defs/Money"
-                      }
-                    },
-                    "required": [
-                      "minimum",
-                      "maximum"
-                    ],
-                    "title": "ScoreRange",
-                    "type": "object"
-                  },
                   "Sha256": {
                     "pattern": "^[0-9a-f]{64}$",
                     "type": "string"
@@ -40084,6 +40086,12 @@
                       "current",
                       "stale"
                     ],
+                    "type": "string"
+                  },
+                  "VerbatimRule": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "type": "string"
                   }
                 },
@@ -40141,7 +40149,7 @@
                   "overall_cap": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Money"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -40151,7 +40159,7 @@
                   "overall_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -40161,7 +40169,7 @@
                   "overall_score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -40444,7 +40452,7 @@
                     "type": "string"
                   },
                   "rule_text": {
-                    "$ref": "#/$defs/NonBlank"
+                    "$ref": "#/$defs/VerbatimRule"
                   },
                   "score_range": {
                     "anyOf": [
@@ -40509,7 +40517,7 @@
                   "aggregation_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -40627,6 +40635,12 @@
                 "pattern": "^[0-9a-f]{64}$",
                 "type": "string"
               },
+              "VerbatimRule": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
+              },
               "Weight": {
                 "anyOf": [
                   {
@@ -40684,7 +40698,7 @@
               "overall_rule_text": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/NonBlank"
+                    "$ref": "#/$defs/VerbatimRule"
                   },
                   {
                     "type": "null"
@@ -40749,6 +40763,35 @@
                   "unsupported_formula"
                 ],
                 "type": "string"
+              },
+              "CandidateScoreNumber": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "CandidateScoreRange": {
+                "additionalProperties": false,
+                "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/CandidateScoreNumber"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/CandidateScoreNumber"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "CandidateScoreRange",
+                "type": "object"
               },
               "Location": {
                 "additionalProperties": false,
@@ -40840,18 +40883,6 @@
                 ],
                 "title": "Location",
                 "type": "object"
-              },
-              "Money": {
-                "anyOf": [
-                  {
-                    "minimum": 0.0,
-                    "type": "number"
-                  },
-                  {
-                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                    "type": "string"
-                  }
-                ]
               },
               "NonBlank": {
                 "maxLength": 20000,
@@ -41053,12 +41084,12 @@
                     "type": "string"
                   },
                   "rule_text": {
-                    "$ref": "#/$defs/NonBlank"
+                    "$ref": "#/$defs/VerbatimRule"
                   },
                   "score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -41088,7 +41119,7 @@
                   "weight": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Weight"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -41249,7 +41280,7 @@
                   "aggregation_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -41271,7 +41302,7 @@
                   "cap": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Money"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -41351,7 +41382,7 @@
                   "score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -41376,7 +41407,7 @@
                   "weight": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Weight"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -41484,7 +41515,7 @@
                   "overall_cap": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Money"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -41495,7 +41526,7 @@
                   "overall_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -41506,7 +41537,7 @@
                   "overall_score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -41573,23 +41604,6 @@
                 "title": "RubricSetView",
                 "type": "object"
               },
-              "ScoreRange": {
-                "additionalProperties": false,
-                "properties": {
-                  "maximum": {
-                    "$ref": "#/$defs/Money"
-                  },
-                  "minimum": {
-                    "$ref": "#/$defs/Money"
-                  }
-                },
-                "required": [
-                  "minimum",
-                  "maximum"
-                ],
-                "title": "ScoreRange",
-                "type": "object"
-              },
               "Sha256": {
                 "pattern": "^[0-9a-f]{64}$",
                 "type": "string"
@@ -41645,18 +41659,11 @@
                 "title": "Source",
                 "type": "object"
               },
-              "Weight": {
-                "anyOf": [
-                  {
-                    "exclusiveMinimum": 0.0,
-                    "maximum": 1.0,
-                    "type": "number"
-                  },
-                  {
-                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                    "type": "string"
-                  }
-                ]
+              "VerbatimRule": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
               }
             },
             "additionalProperties": false,
@@ -41825,7 +41832,7 @@
                         "type": "string"
                       },
                       "rule_text": {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       "score_range": {
                         "anyOf": [
@@ -41890,7 +41897,7 @@
                       "aggregation_rule_text": {
                         "anyOf": [
                           {
-                            "$ref": "#/$defs/NonBlank"
+                            "$ref": "#/$defs/VerbatimRule"
                           },
                           {
                             "type": "null"
@@ -42008,6 +42015,12 @@
                     "pattern": "^[0-9a-f]{64}$",
                     "type": "string"
                   },
+                  "VerbatimRule": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "pattern": "\\S",
+                    "type": "string"
+                  },
                   "Weight": {
                     "anyOf": [
                       {
@@ -42065,7 +42078,7 @@
                   "overall_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -42197,18 +42210,9 @@
                     ],
                     "type": "string"
                   },
-                  "Code": {
-                    "pattern": "^[a-z0-9_:-]{1,100}$",
-                    "type": "string"
-                  },
-                  "Count": {
-                    "minimum": 0,
-                    "type": "integer"
-                  },
-                  "Money": {
+                  "CandidateScoreNumber": {
                     "anyOf": [
                       {
-                        "minimum": 0.0,
                         "type": "number"
                       },
                       {
@@ -42217,10 +42221,31 @@
                       }
                     ]
                   },
-                  "NonBlank": {
-                    "maxLength": 20000,
-                    "minLength": 1,
+                  "CandidateScoreRange": {
+                    "additionalProperties": false,
+                    "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                    "properties": {
+                      "maximum": {
+                        "$ref": "#/$defs/CandidateScoreNumber"
+                      },
+                      "minimum": {
+                        "$ref": "#/$defs/CandidateScoreNumber"
+                      }
+                    },
+                    "required": [
+                      "minimum",
+                      "maximum"
+                    ],
+                    "title": "CandidateScoreRange",
+                    "type": "object"
+                  },
+                  "Code": {
+                    "pattern": "^[a-z0-9_:-]{1,100}$",
                     "type": "string"
+                  },
+                  "Count": {
+                    "minimum": 0,
+                    "type": "integer"
                   },
                   "ReviewDomain": {
                     "enum": [
@@ -42294,23 +42319,6 @@
                     ],
                     "type": "string"
                   },
-                  "ScoreRange": {
-                    "additionalProperties": false,
-                    "properties": {
-                      "maximum": {
-                        "$ref": "#/$defs/Money"
-                      },
-                      "minimum": {
-                        "$ref": "#/$defs/Money"
-                      }
-                    },
-                    "required": [
-                      "minimum",
-                      "maximum"
-                    ],
-                    "title": "ScoreRange",
-                    "type": "object"
-                  },
                   "Sha256": {
                     "pattern": "^[0-9a-f]{64}$",
                     "type": "string"
@@ -42320,6 +42328,12 @@
                       "current",
                       "stale"
                     ],
+                    "type": "string"
+                  },
+                  "VerbatimRule": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "pattern": "\\S",
                     "type": "string"
                   }
                 },
@@ -42377,7 +42391,7 @@
                   "overall_cap": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Money"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -42387,7 +42401,7 @@
                   "overall_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -42397,7 +42411,7 @@
                   "overall_score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -42835,6 +42849,35 @@
                 ],
                 "type": "string"
               },
+              "CandidateScoreNumber": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ]
+              },
+              "CandidateScoreRange": {
+                "additionalProperties": false,
+                "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                "properties": {
+                  "maximum": {
+                    "$ref": "#/$defs/CandidateScoreNumber"
+                  },
+                  "minimum": {
+                    "$ref": "#/$defs/CandidateScoreNumber"
+                  }
+                },
+                "required": [
+                  "minimum",
+                  "maximum"
+                ],
+                "title": "CandidateScoreRange",
+                "type": "object"
+              },
               "Location": {
                 "additionalProperties": false,
                 "description": "Where a quote sits in a Word document: a paragraph or a table cell.",
@@ -42925,18 +42968,6 @@
                 ],
                 "title": "Location",
                 "type": "object"
-              },
-              "Money": {
-                "anyOf": [
-                  {
-                    "minimum": 0.0,
-                    "type": "number"
-                  },
-                  {
-                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                    "type": "string"
-                  }
-                ]
               },
               "NonBlank": {
                 "maxLength": 20000,
@@ -43138,12 +43169,12 @@
                     "type": "string"
                   },
                   "rule_text": {
-                    "$ref": "#/$defs/NonBlank"
+                    "$ref": "#/$defs/VerbatimRule"
                   },
                   "score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -43173,7 +43204,7 @@
                   "weight": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Weight"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -43334,7 +43365,7 @@
                   "aggregation_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -43356,7 +43387,7 @@
                   "cap": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Money"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -43436,7 +43467,7 @@
                   "score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -43461,7 +43492,7 @@
                   "weight": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Weight"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -43569,7 +43600,7 @@
                   "overall_cap": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/Money"
+                        "$ref": "#/$defs/CandidateScoreNumber"
                       },
                       {
                         "type": "null"
@@ -43580,7 +43611,7 @@
                   "overall_rule_text": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/NonBlank"
+                        "$ref": "#/$defs/VerbatimRule"
                       },
                       {
                         "type": "null"
@@ -43591,7 +43622,7 @@
                   "overall_score_range": {
                     "anyOf": [
                       {
-                        "$ref": "#/$defs/ScoreRange"
+                        "$ref": "#/$defs/CandidateScoreRange"
                       },
                       {
                         "type": "null"
@@ -43658,23 +43689,6 @@
                 "title": "RubricSetView",
                 "type": "object"
               },
-              "ScoreRange": {
-                "additionalProperties": false,
-                "properties": {
-                  "maximum": {
-                    "$ref": "#/$defs/Money"
-                  },
-                  "minimum": {
-                    "$ref": "#/$defs/Money"
-                  }
-                },
-                "required": [
-                  "minimum",
-                  "maximum"
-                ],
-                "title": "ScoreRange",
-                "type": "object"
-              },
               "Sha256": {
                 "pattern": "^[0-9a-f]{64}$",
                 "type": "string"
@@ -43730,18 +43744,11 @@
                 "title": "Source",
                 "type": "object"
               },
-              "Weight": {
-                "anyOf": [
-                  {
-                    "exclusiveMinimum": 0.0,
-                    "maximum": 1.0,
-                    "type": "number"
-                  },
-                  {
-                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                    "type": "string"
-                  }
-                ]
+              "VerbatimRule": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "pattern": "\\S",
+                "type": "string"
               }
             },
             "additionalProperties": false,
@@ -44977,6 +44984,35 @@
                       ],
                       "type": "string"
                     },
+                    "CandidateScoreNumber": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "CandidateScoreRange": {
+                      "additionalProperties": false,
+                      "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                      "properties": {
+                        "maximum": {
+                          "$ref": "#/$defs/CandidateScoreNumber"
+                        },
+                        "minimum": {
+                          "$ref": "#/$defs/CandidateScoreNumber"
+                        }
+                      },
+                      "required": [
+                        "minimum",
+                        "maximum"
+                      ],
+                      "title": "CandidateScoreRange",
+                      "type": "object"
+                    },
                     "Location": {
                       "additionalProperties": false,
                       "description": "Where a quote sits in a Word document: a paragraph or a table cell.",
@@ -45068,18 +45104,6 @@
                       "title": "Location",
                       "type": "object"
                     },
-                    "Money": {
-                      "anyOf": [
-                        {
-                          "minimum": 0.0,
-                          "type": "number"
-                        },
-                        {
-                          "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                          "type": "string"
-                        }
-                      ]
-                    },
                     "NonBlank": {
                       "maxLength": 20000,
                       "minLength": 1,
@@ -45099,23 +45123,6 @@
                         "rejected"
                       ],
                       "type": "string"
-                    },
-                    "ScoreRange": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "maximum": {
-                          "$ref": "#/$defs/Money"
-                        },
-                        "minimum": {
-                          "$ref": "#/$defs/Money"
-                        }
-                      },
-                      "required": [
-                        "minimum",
-                        "maximum"
-                      ],
-                      "title": "ScoreRange",
-                      "type": "object"
                     },
                     "Sha256": {
                       "pattern": "^[0-9a-f]{64}$",
@@ -45172,18 +45179,11 @@
                       "title": "Source",
                       "type": "object"
                     },
-                    "Weight": {
-                      "anyOf": [
-                        {
-                          "exclusiveMinimum": 0.0,
-                          "maximum": 1.0,
-                          "type": "number"
-                        },
-                        {
-                          "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                          "type": "string"
-                        }
-                      ]
+                    "VerbatimRule": {
+                      "maxLength": 20000,
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
                     }
                   },
                   "additionalProperties": false,
@@ -45282,12 +45282,12 @@
                       "type": "string"
                     },
                     "rule_text": {
-                      "$ref": "#/$defs/NonBlank"
+                      "$ref": "#/$defs/VerbatimRule"
                     },
                     "score_range": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/ScoreRange"
+                          "$ref": "#/$defs/CandidateScoreRange"
                         },
                         {
                           "type": "null"
@@ -45317,7 +45317,7 @@
                     "weight": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/Weight"
+                          "$ref": "#/$defs/CandidateScoreNumber"
                         },
                         {
                           "type": "null"
@@ -45688,7 +45688,7 @@
                           "type": "string"
                         },
                         "rule_text": {
-                          "$ref": "#/$defs/NonBlank"
+                          "$ref": "#/$defs/VerbatimRule"
                         },
                         "score_range": {
                           "anyOf": [
@@ -45788,7 +45788,7 @@
                         "overall_rule_text": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/NonBlank"
+                              "$ref": "#/$defs/VerbatimRule"
                             },
                             {
                               "type": "null"
@@ -45840,7 +45840,7 @@
                         "aggregation_rule_text": {
                           "anyOf": [
                             {
-                              "$ref": "#/$defs/NonBlank"
+                              "$ref": "#/$defs/VerbatimRule"
                             },
                             {
                               "type": "null"
@@ -45956,6 +45956,12 @@
                     },
                     "Sha256": {
                       "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    "VerbatimRule": {
+                      "maxLength": 20000,
+                      "minLength": 1,
+                      "pattern": "\\S",
                       "type": "string"
                     },
                     "Weight": {
@@ -46151,6 +46157,35 @@
                       ],
                       "type": "string"
                     },
+                    "CandidateScoreNumber": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "CandidateScoreRange": {
+                      "additionalProperties": false,
+                      "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                      "properties": {
+                        "maximum": {
+                          "$ref": "#/$defs/CandidateScoreNumber"
+                        },
+                        "minimum": {
+                          "$ref": "#/$defs/CandidateScoreNumber"
+                        }
+                      },
+                      "required": [
+                        "minimum",
+                        "maximum"
+                      ],
+                      "title": "CandidateScoreRange",
+                      "type": "object"
+                    },
                     "Location": {
                       "additionalProperties": false,
                       "description": "Where a quote sits in a Word document: a paragraph or a table cell.",
@@ -46242,18 +46277,6 @@
                       "title": "Location",
                       "type": "object"
                     },
-                    "Money": {
-                      "anyOf": [
-                        {
-                          "minimum": 0.0,
-                          "type": "number"
-                        },
-                        {
-                          "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                          "type": "string"
-                        }
-                      ]
-                    },
                     "NonBlank": {
                       "maxLength": 20000,
                       "minLength": 1,
@@ -46273,23 +46296,6 @@
                         "rejected"
                       ],
                       "type": "string"
-                    },
-                    "ScoreRange": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "maximum": {
-                          "$ref": "#/$defs/Money"
-                        },
-                        "minimum": {
-                          "$ref": "#/$defs/Money"
-                        }
-                      },
-                      "required": [
-                        "minimum",
-                        "maximum"
-                      ],
-                      "title": "ScoreRange",
-                      "type": "object"
                     },
                     "Source": {
                       "additionalProperties": false,
@@ -46342,18 +46348,11 @@
                       "title": "Source",
                       "type": "object"
                     },
-                    "Weight": {
-                      "anyOf": [
-                        {
-                          "exclusiveMinimum": 0.0,
-                          "maximum": 1.0,
-                          "type": "number"
-                        },
-                        {
-                          "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
-                          "type": "string"
-                        }
-                      ]
+                    "VerbatimRule": {
+                      "maxLength": 20000,
+                      "minLength": 1,
+                      "pattern": "\\S",
+                      "type": "string"
                     }
                   },
                   "additionalProperties": false,
@@ -46369,7 +46368,7 @@
                     "aggregation_rule_text": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/NonBlank"
+                          "$ref": "#/$defs/VerbatimRule"
                         },
                         {
                           "type": "null"
@@ -46391,7 +46390,7 @@
                     "cap": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/Money"
+                          "$ref": "#/$defs/CandidateScoreNumber"
                         },
                         {
                           "type": "null"
@@ -46476,7 +46475,7 @@
                     "score_range": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/ScoreRange"
+                          "$ref": "#/$defs/CandidateScoreRange"
                         },
                         {
                           "type": "null"
@@ -46501,7 +46500,7 @@
                     "weight": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/Weight"
+                          "$ref": "#/$defs/CandidateScoreNumber"
                         },
                         {
                           "type": "null"
@@ -46828,18 +46827,9 @@
                       ],
                       "type": "string"
                     },
-                    "Code": {
-                      "pattern": "^[a-z0-9_:-]{1,100}$",
-                      "type": "string"
-                    },
-                    "Count": {
-                      "minimum": 0,
-                      "type": "integer"
-                    },
-                    "Money": {
+                    "CandidateScoreNumber": {
                       "anyOf": [
                         {
-                          "minimum": 0.0,
                           "type": "number"
                         },
                         {
@@ -46848,10 +46838,31 @@
                         }
                       ]
                     },
-                    "NonBlank": {
-                      "maxLength": 20000,
-                      "minLength": 1,
+                    "CandidateScoreRange": {
+                      "additionalProperties": false,
+                      "description": "Typed model declarations; semantic bounds are checked during normalization.",
+                      "properties": {
+                        "maximum": {
+                          "$ref": "#/$defs/CandidateScoreNumber"
+                        },
+                        "minimum": {
+                          "$ref": "#/$defs/CandidateScoreNumber"
+                        }
+                      },
+                      "required": [
+                        "minimum",
+                        "maximum"
+                      ],
+                      "title": "CandidateScoreRange",
+                      "type": "object"
+                    },
+                    "Code": {
+                      "pattern": "^[a-z0-9_:-]{1,100}$",
                       "type": "string"
+                    },
+                    "Count": {
+                      "minimum": 0,
+                      "type": "integer"
                     },
                     "ReviewDomain": {
                       "enum": [
@@ -46925,23 +46936,6 @@
                       ],
                       "type": "string"
                     },
-                    "ScoreRange": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "maximum": {
-                          "$ref": "#/$defs/Money"
-                        },
-                        "minimum": {
-                          "$ref": "#/$defs/Money"
-                        }
-                      },
-                      "required": [
-                        "minimum",
-                        "maximum"
-                      ],
-                      "title": "ScoreRange",
-                      "type": "object"
-                    },
                     "Sha256": {
                       "pattern": "^[0-9a-f]{64}$",
                       "type": "string"
@@ -46951,6 +46945,12 @@
                         "current",
                         "stale"
                       ],
+                      "type": "string"
+                    },
+                    "VerbatimRule": {
+                      "maxLength": 20000,
+                      "minLength": 1,
+                      "pattern": "\\S",
                       "type": "string"
                     }
                   },
@@ -47008,7 +47008,7 @@
                     "overall_cap": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/Money"
+                          "$ref": "#/$defs/CandidateScoreNumber"
                         },
                         {
                           "type": "null"
@@ -47018,7 +47018,7 @@
                     "overall_rule_text": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/NonBlank"
+                          "$ref": "#/$defs/VerbatimRule"
                         },
                         {
                           "type": "null"
@@ -47028,7 +47028,7 @@
                     "overall_score_range": {
                       "anyOf": [
                         {
-                          "$ref": "#/$defs/ScoreRange"
+                          "$ref": "#/$defs/CandidateScoreRange"
                         },
                         {
                           "type": "null"

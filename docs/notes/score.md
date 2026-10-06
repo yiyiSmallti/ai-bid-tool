@@ -130,6 +130,29 @@ confidential values, or produce an official tender score. The boundaries are fix
 [score contract](../plan/score.md). Formula text is retained as text and is never evaluated.
 Rejected or ambiguous model citations are not repaired into another source.
 
+Provider JSON shape validation must not enforce confirmed-rule semantics. A formula section with
+`cap: 35`, or a `capped_sum` section with an explicit null cap, is a reviewable candidate with
+normalization errors. The same applies to unused weights, invalid weight sums and inconsistent
+bounds; the [aggregation contract and error table](../plan/score.md#first-version-aggregation-algorithms)
+define the codes. Candidate storage and console reads preserve the declared values and verbatim
+rule text. Do not move cap into score bounds, relabel an aggregation, or fill missing weights.
+Malformed types/keys/enums and invalid citations still fail their existing checks.
+
+Candidate numeric storage checks differ from confirmation checks. Migration
+[`0044_score_rubric_candidates.py`](../../server/migrations/versions/0044_score_rubric_candidates.py)
+permits invalid numeric declarations only as unconfirmed history; the subject and set gates still
+check their strict invariants independently of the stored error list. A human fixes them through
+the existing complete replacement flow and repeats classification, coverage and confirmation.
+The console's “待处理问题” tab displays every normalization error code. The generation wire schema
+version participates in the preview identity, so queued work with an incompatible schema must be
+resubmitted from a new preview.
+
+Output-token exhaustion is `provider_output_truncated`, distinct from malformed JSON/schema
+`invalid_provider_output`; the [Provider failure table](../plan/score.md#providers-jobs-and-prepaid-billing)
+defines both. Lower reasoning or raise `BID_LLM_MAX_OUTPUT_TOKENS`, then preview and resubmit.
+Stage-1 truncation makes no item calls; stage-2 truncation can retain independent valid batches,
+with the same action guidance in job warnings and the incurred usage preserved.
+
 Generated item keys use the fixed tender-ref prefix and a local item ordinal, such as `r1.item-1`.
 Embedding numeric local UUIDs in free-text keys can match bank-account or phone redaction rules and
 leave valid items unresolved. Identifiers must be chosen without weakening sensitive-text checks.

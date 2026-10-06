@@ -83,6 +83,37 @@ def _duplicates(rows: list[dict], fields: tuple[str, ...], prefix: str, errors: 
             errors.add(f"duplicate_{prefix}_{field}")
 
 
+def subject_errors(kind: str, node: dict) -> set[str]:
+    """Local invariants required before a candidate section or item can be confirmed."""
+
+    errors: set[str] = set()
+    bounds = _bounds(node.get("score_range"), errors)
+    weight = _decimal(node.get("weight"))
+    if node.get("weight") is not None and (weight is None or not 0 < weight <= 1):
+        errors.add("invalid_weight")
+    if kind == "item":
+        if node.get("assessment_mode") == "model_assessable" and bounds is None:
+            errors.add("missing_score_bounds")
+        if node.get("assessment_mode") != "model_assessable" and not node.get("ambiguity_reason"):
+            errors.add("missing_ambiguity_reason")
+    elif kind == "section":
+        cap = _decimal(node.get("cap"))
+        if node.get("aggregation") == "capped_sum" and node.get("cap") is None:
+            errors.add("missing_cap")
+        if node.get("aggregation") != "capped_sum" and node.get("cap") is not None:
+            errors.add("unexpected_cap")
+        if node.get("cap") is not None and (cap is None or cap < 0):
+            errors.add("invalid_cap")
+        if node.get("aggregation") in RECORDED_ONLY:
+            if not node.get("aggregation_rule_text"):
+                errors.add("missing_aggregation_rule_text")
+            if not node.get("ambiguity_reason"):
+                errors.add("missing_aggregation_limitation")
+    else:
+        raise ValueError("Unknown rubric content kind")
+    return errors
+
+
 def _aggregate(
     node: dict,
     children: list[dict],
@@ -102,11 +133,11 @@ def _aggregate(
     if algorithm not in EXECUTABLE | RECORDED_ONLY:
         errors.add("invalid_aggregation")
         return None
+    if node.get(prefix + "cap") is not None and (cap is None or cap < 0):
+        errors.add("invalid_cap")
     if algorithm == "capped_sum":
         if node.get(prefix + "cap") is None:
             errors.add("missing_cap")
-        elif cap is None or cap < 0:
-            errors.add("invalid_cap")
     elif node.get(prefix + "cap") is not None:
         errors.add("unexpected_cap")
     if algorithm == "weighted_sum":
@@ -155,6 +186,49 @@ def _aggregate(
     return minimum, maximum
 
 
+def rule_errors(
+    rubric: dict, sections: list[dict], items: list[dict], *, candidate_keys: bool = False
+) -> tuple[set[str], set[str], set[str]]:
+    """Use the same numeric checks at generation and on every saved rubric read.
+
+    Generation links children by the fixed section key; storage uses section IDs.
+    Neither path changes a declared value or infers a missing bound, weight or cap.
+    """
+
+    section_field, item_field = ("key", "section_key") if candidate_keys else ("id", "section_id")
+    with localcontext() as context:
+        context.prec = 80
+        item_errors: set[str] = set()
+        section_errors: set[str] = set()
+        overall_errors: set[str] = set()
+        for item in items:
+            item_errors |= subject_errors("item", item)
+        section_ranges = {}
+        for section in sections:
+            section_errors |= subject_errors("section", section)
+            children = [row for row in items if str(row[item_field]) == str(section[section_field])]
+            if not children:
+                section_errors.add("empty_section")
+            _duplicates(children, ("order",), "item", item_errors)
+            section_ranges[str(section[section_field])] = _aggregate(
+                section,
+                children,
+                [_bounds(row.get("score_range"), item_errors) for row in children],
+                section_errors,
+            )
+            if not section.get("included_in_overall_total") and section.get("weight") is not None:
+                section_errors.add("unexpected_weight")
+        included = [row for row in sections if row.get("included_in_overall_total")]
+        _aggregate(
+            rubric,
+            included,
+            [section_ranges[str(row[section_field])] for row in included],
+            overall_errors,
+            overall=True,
+        )
+        return item_errors, section_errors, overall_errors
+
+
 def completeness(report: dict) -> RubricCompletenessView:
     """Check an authorized fixed report graph; parent/source authorization is the service's job.
 
@@ -201,11 +275,6 @@ def _completeness(report: dict) -> RubricCompletenessView:
         fingerprints[item["fingerprint"]].append(UUID(str(item["id"])))
         if str(item["section_id"]) not in section_by_id:
             errors.add("dangling_section")
-        bounds = _bounds(item.get("score_range"), errors)
-        if item.get("assessment_mode") == "model_assessable" and bounds is None:
-            errors.add("missing_score_bounds")
-        if item.get("assessment_mode") != "model_assessable" and not item.get("ambiguity_reason"):
-            errors.add("missing_ambiguity_reason")
     fingerprint_groups = [ids for ids in fingerprints.values() if len(ids) > 1]
     if fingerprint_groups:
         errors.add("duplicate_item_fingerprint")
@@ -262,31 +331,8 @@ def _completeness(report: dict) -> RubricCompletenessView:
         errors.add("duplicate_item_inclusion")
     if item_by_id.keys() - mapped_ids.keys():
         errors.add("unmapped_item")
-    section_errors: set[str] = set()
-    section_ranges = {}
-    for section in sections:
-        children = [row for row in items if str(row["section_id"]) == str(section["id"])]
-        if not children:
-            section_errors.add("empty_section")
-        _duplicates(children, ("order",), "item", errors)
-        section_ranges[str(section["id"])] = _aggregate(
-            section,
-            children,
-            [_bounds(row.get("score_range"), errors) for row in children],
-            section_errors,
-        )
-        if not section.get("included_in_overall_total") and section.get("weight") is not None:
-            section_errors.add("unexpected_weight")
-    overall_errors: set[str] = set()
-    included = [row for row in sections if row.get("included_in_overall_total")]
-    _aggregate(
-        rubric,
-        included,
-        [section_ranges[str(row["id"])] for row in included],
-        overall_errors,
-        overall=True,
-    )
-    errors |= section_errors | overall_errors
+    item_errors, section_errors, overall_errors = rule_errors(rubric, sections, items)
+    errors |= item_errors | section_errors | overall_errors
     unconfirmed_sections = [
         UUID(str(row["id"]))
         for row in sections

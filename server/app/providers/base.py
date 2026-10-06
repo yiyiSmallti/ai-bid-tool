@@ -9,6 +9,11 @@ if TYPE_CHECKING:
     from app.providers.drafting import DraftingOutput
     from app.schemas.memory_contracts import MemoryPromptContext
 
+OUTPUT_TRUNCATED_MESSAGE = (
+    "Model output reached its output limit; lower the reasoning level or raise "
+    "BID_LLM_MAX_OUTPUT_TOKENS"
+)
+
 
 class ProviderFailure(Exception):
     def __init__(
@@ -44,9 +49,8 @@ class TruncatedOutput(ProviderFailure):
 
     def __init__(self, usage: list[ProviderUsage]):
         super().__init__(
-            "Model output was truncated even for a single line; raise "
-            "BID_LLM_MAX_OUTPUT_TOKENS or turn off model thinking with BID_LLM_REQUEST_OPTIONS",
-            code="invalid_provider_output",
+            OUTPUT_TRUNCATED_MESSAGE,
+            code="provider_output_truncated",
             usage=usage,
         )
 

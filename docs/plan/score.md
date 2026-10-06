@@ -74,6 +74,40 @@ The service executes only these three deterministic algorithms, using `Decimal`,
 
 A section's `weight` is used only by overall `weighted_sum`; an item's `weight` only by its section's `weighted_sum`. Unneeded weights for other algorithms, missing caps, duplicate inclusion, weights not summing to 1, or declared bounds inconsistent with algorithm results produce normalization errors. `formula`/`non_additive` save only verbatim rules and limitation reasons; arbitrary formula strings are neither parsed nor executed.
 
+Provider wire contracts validate structure separately from these normalization rules. Required
+keys, field types, finite decimal representation, enum values, and citation rules remain strict.
+Algorithm/field inconsistencies are retained on unconfirmed candidates, including a cap on an
+algorithm other than `capped_sum`, an explicit null cap on `capped_sum`, invalid or unnecessary
+weights, missing score bounds, and invalid or inconsistent declared bounds. Such a stage-1
+candidate may proceed to item generation; it is not malformed Provider output. The saved
+candidate records the original declarations and rule wording alongside normalization errors.
+No cap is moved into bounds, no aggregation is relabeled, and no weight is inferred. Human
+replacement revisions resolve the errors; confirmed section/item values and set completeness
+remain strict in both application and database confirmation gates.
+
+The normalization codes are defined by
+[`score_normalization.subject_errors`, `rule_errors`, and `completeness`](../../server/app/services/score_normalization.py):
+
+| Inconsistency | Normalization error |
+| --- | --- |
+| Cap on an algorithm other than `capped_sum` | `unexpected_cap` |
+| Null cap on `capped_sum` | `missing_cap` |
+| Negative cap | `invalid_cap` |
+| Child weight not used by the parent algorithm, or a weighted excluded section | `unexpected_weight` |
+| Missing child weight under `weighted_sum` | `missing_weight` |
+| Weight outside `(0,1]` | `invalid_weight` |
+| Included weights do not sum exactly to one | `weights_not_one` |
+| Negative or reversed declared bounds | `invalid_score_bounds` |
+| Model-assessable item has no valid bounds | `missing_score_bounds` |
+| Declared bounds differ from the deterministic aggregate | `aggregate_bounds_mismatch` |
+| Repeated inclusion of an item in coverage | `duplicate_item_inclusion` |
+| Missing recorded formula/non-additive wording or limitation | `missing_aggregation_rule_text`, `missing_aggregation_limitation` |
+| Non-model assessment mode lacks its reason | `missing_ambiguity_reason` |
+
+One declaration can produce more than one error. Duplicate section keys remain a malformed
+structure because stage 2 cannot bind items to an unambiguous section; citation failures retain
+the existing rejection/unresolved behavior.
+
 ## Scoring semantics and aggregation
 
 The first version provides `estimated_score` only for `assessment_mode=model_assessable` items with sufficient rules, bounds, and input evidence (证据). These items must be explicitly `unassessable`, retaining reasons and strengthening actions without guessed scores:
@@ -107,6 +141,13 @@ The [runtime contract](../../server/app/schemas/score_contracts.py) defines thes
 - `ScoreProvider.score`: confirmed rubric items, corresponding DraftRun partitions, and outbound context → item-level assessed/unassessable results, scores, reasons, strengthening actions, and refs.
 
 Only implementations in `server/app/providers/` call vendor SDKs/HTTP, using strict JSON Schema; business services depend on Protocols only. `RubricProvider.extract_structure` sends the complete Requirement table once for structure; `RubricProvider.extract_items` performs bounded Requirement batching and concurrency, with the complete fixed section list in every batch. Stage-1 structure must validate before stage 2 begins; stage-2 items cannot change its keys, ordering, or aggregation. Prompt/schema versions bind preview cache identity; the structure hash binds the published input manifest. The preview accounts for both stages and the entire repeated section context. Invalid/truncated stage 1 fails without stage-2 calls; stage-2 structural errors or batch failures leave unresolved Requirements and may retain independent valid batches, including sections without accepted items. Score adapters retain completed batches and per-call `ProviderUsage`; the first nonrecoverable failure stops unstarted batches, while in-flight calls may finish and be charged. Default scores, empty citations, or broad retries cannot conceal failures.
+
+The Provider failure code survives into the Job error or retained rubric/report stop reason:
+
+| Provider code | Meaning and caller action | Result outcome |
+| --- | --- | --- |
+| `provider_output_truncated` | The vendor reported its output limit; lower the reasoning level or raise `BID_LLM_MAX_OUTPUT_TOKENS` before submitting again | Nonretryable failure, exit 4 without retained candidates/report; exit 5 when valid partial candidates/report remain |
+| `invalid_provider_output` | The returned JSON or wire schema is malformed; inspect model compatibility before submitting again | Nonretryable failure, exit 4 without retained candidates/report; exit 5 when valid partial candidates/report remain |
 
 Rubric/score Job kinds are respectively `score_rubric` and `score`. Both require non-null `task_id`/`document_id`; score's document comes from the real Document pinned by DraftRun's extraction Job, never a placeholder. Execution reuses `JobExecution.activate/owned_job/admit/_complete_once`: attempts hold lease/run_id and revalidate all pinned inputs before publication. Old runs cannot publish after takeover, expiry, cancellation, or settings changes.
 

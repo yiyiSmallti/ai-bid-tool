@@ -75,8 +75,9 @@ class Accounting:
 
 
 class Vendor:
-    def __init__(self, output: dict) -> None:
+    def __init__(self, output: dict, *, finish_reason="stop") -> None:
         self.output = output
+        self.finish_reason = finish_reason
         self.requests: list[httpx.Request] = []
         self.events: list[str] | None = None
 
@@ -90,7 +91,7 @@ class Vendor:
                 "model": "synthetic-check-model",
                 "choices": [
                     {
-                        "finish_reason": "stop",
+                        "finish_reason": self.finish_reason,
                         "message": {"content": json.dumps(self.output, ensure_ascii=False)},
                     }
                 ],
@@ -276,6 +277,32 @@ async def test_http_check_sends_one_exact_accounted_structured_request(tmp_path)
         CHECK_ADAPTER_VERSION,
         CHECK_PROMPT_VERSION,
         CHECK_SCHEMA_VERSION,
+    )
+
+
+async def test_truncation_is_distinct_and_actionable_after_one_accounted_call(tmp_path):
+    vendor = Vendor(output(), finish_reason="length")
+    provider = adapter(tmp_path, vendor)
+    accounting = Accounting()
+    vendor.events = accounting.events
+
+    with pytest.raises(ProviderFailure) as truncated:
+        await run_check(provider, accounting)
+
+    error = truncated.value
+    assert error.code == "provider_output_truncated"
+    assert error.retryable is error.refused is False
+    assert "reasoning" in str(error)
+    assert "BID_LLM_MAX_OUTPUT_TOKENS" in str(error)
+    assert "single line" not in str(error)
+    assert len(vendor.requests) == len(error.usage) == len(accounting.completed) == 1
+    assert accounting.events == ["plan", "admit", "http", "complete"]
+    assert not accounting.unknown_calls
+    (tmp_path / "check-truncation.json").write_text(
+        json.dumps(
+            {"code": error.code, "message": str(error), "events": accounting.events}, indent=2
+        ),
+        encoding="utf-8",
     )
 
 

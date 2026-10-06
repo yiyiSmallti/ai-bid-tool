@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from contextlib import asynccontextmanager
 from decimal import ROUND_CEILING, Decimal
 from types import SimpleNamespace
 from typing import cast
@@ -234,7 +235,7 @@ async def test_two_stage_rubric_sends_fixed_refs_and_accounts_each_call(tmp_path
     assert set(second_schema) == {"items"}
     assert provider.adapter_version == RUBRIC_ADAPTER_VERSION == "http-score-rubric-v3"
     assert provider.prompt_version == RUBRIC_PROMPT_VERSION == "score-rubric-v3"
-    assert provider.schema_version == RUBRIC_SCHEMA_VERSION == "score-rubric-wire-v2"
+    assert provider.schema_version == RUBRIC_SCHEMA_VERSION == "score-rubric-wire-v3"
     assert STRUCTURE_PROMPT_VERSION != ITEMS_PROMPT_VERSION
     artifact = {
         "structure": structure.model_dump(mode="json"),
@@ -276,6 +277,10 @@ async def test_structure_failure_is_one_full_accounted_request_without_retry(
     finally:
         current_accounting.reset(token)
     assert result.failure is not None
+    assert result.failure.code == (
+        "provider_output_truncated" if failure_kind == "truncated" else "invalid_provider_output"
+    )
+    assert result.failure.retryable is result.failure.refused is False
     assert result.output is None
     assert len(result.usages) == len(accounting.completed) == len(sent) == 1
     assert accounting.planned == [1]
@@ -313,12 +318,26 @@ async def test_items_batches_receive_only_own_refs_and_same_fixed_sections(tmp_p
         assert "citations" not in json.dumps(payload["sections"])
 
 
-async def test_items_malformed_batch_is_missing_and_later_batches_finish_without_retry(tmp_path):
+@pytest.mark.parametrize("failure_kind", ["malformed", "truncated"])
+async def test_items_invalid_batch_is_missing_and_later_batches_finish_without_retry(
+    tmp_path, failure_kind
+):
     sent = []
+
+    def handler(http_request):
+        sent.append(json.loads(http_request.content))
+        if len(sent) == 2:
+            return response(
+                "{broken",
+                finish_reason="length" if failure_kind == "truncated" else "stop",
+            )
+        return response(items_wire([UUID(int=len(sent))]))
+
     provider = adapter(
         tmp_path,
-        [items_wire([REQ_1]), "{broken", items_wire([UUID(int=3)])],
+        [],
         sent,
+        handler=handler,
         llm_batch_chars=1000,
         llm_concurrency=1,
     )
@@ -329,9 +348,134 @@ async def test_items_malformed_batch_is_missing_and_later_batches_finish_without
     finally:
         current_accounting.reset(token)
     assert result.failure is not None
-    assert result.failure.code == "invalid_provider_output"
+    assert result.failure.code == (
+        "provider_output_truncated" if failure_kind == "truncated" else "invalid_provider_output"
+    )
+    assert [failure.code for failure in result.failures] == [result.failure.code]
+    assert result.failure.retryable is result.failure.refused is False
     assert [batch.requested_requirement_ids for batch in result.batches] == [[REQ_1], [UUID(int=3)]]
     assert len(result.usages) == len(sent) == len(accounting.completed) == 3
+    (tmp_path / "rubric-batch-failure.json").write_text(
+        json.dumps(
+            {
+                "failure_kind": failure_kind,
+                "result": result.model_dump(mode="json"),
+                "accounted_calls": len(accounting.completed),
+                "sent_requirement_ids": [
+                    [
+                        row["requirement_id"]
+                        for row in json.loads(body["messages"][1]["content"])["requirements"]
+                    ]
+                    for body in sent
+                ],
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.parametrize("stage", ["structure", "items"])
+async def test_rubric_job_exposes_actionable_truncation_after_accounting(
+    tmp_path, monkeypatch, stage
+):
+    """A stage-one failure must expose guidance; retained stage-two output needs a warning."""
+    from app.core.security import Secrets
+    from app.jobs import score_rubric
+
+    sent = []
+
+    def handler(http_request):
+        sent.append(json.loads(http_request.content))
+        if stage == "items" and len(sent) == 1:
+            return response(structure_wire())
+        return response("{incomplete", finish_reason="length")
+
+    provider = adapter(tmp_path, [], sent, handler=handler)
+    saved = {}
+    job = SimpleNamespace(
+        task_id=uuid4(),
+        result={
+            "submission": {"encrypted_input": Secrets.for_data(provider.llm.settings).encrypt("{}")}
+        },
+    )
+    fixed = SimpleNamespace(secret={"outbound": {}}, extraction=SimpleNamespace(id=uuid4()))
+
+    class Execution:
+        org_id = uuid4()
+        run_id = uuid4()
+        settings = provider.llm.settings
+        stopped = None
+        db = None
+
+        @asynccontextmanager
+        async def transaction(self, org_id):
+            assert org_id == self.org_id
+            yield object()
+
+        async def owned_job(self, session):
+            return job
+
+    execution = Execution()
+    execution.db = execution
+
+    async def snapshot(*args):
+        return fixed, provider.llm
+
+    async def access(*args):
+        return object()
+
+    async def library(*args):
+        return None, {}
+
+    async def noop(*args):
+        pass
+
+    async def publish(*args):
+        assert args[-1] == "provider_output_truncated"
+        return {"completion": "partial", "stop_reason": args[-1], "warnings": [], "exit_code": 5}
+
+    monkeypatch.setattr(score_rubric, "current_snapshot", snapshot)
+    monkeypatch.setattr(score_rubric.score_inputs, "access", access)
+    monkeypatch.setattr(score_rubric.score_inputs, "lock_inputs", noop)
+    generation = score_rubric.score_generation
+    monkeypatch.setattr(generation, "worker", lambda job: object())
+    monkeypatch.setattr(generation, "safe_input", lambda fixed: saved)
+    monkeypatch.setattr(generation, "secret_library", library)
+    monkeypatch.setattr(generation, "provider_request", lambda outbound: request())
+    monkeypatch.setattr(generation, "items_request", lambda *args: items_request())
+    monkeypatch.setattr(generation, "accept_structure", lambda *args: {})
+    monkeypatch.setattr(generation, "accept_batches", lambda *args: {})
+    monkeypatch.setattr(generation, "usage_integrity", noop)
+    monkeypatch.setattr(generation, "publish", publish)
+    accounting = Accounting()
+    token = current_accounting.set(accounting)
+    try:
+        if stage == "structure":
+            with pytest.raises(ProviderFailure) as failed:
+                await score_rubric.process(execution)
+            assert failed.value.code == "provider_output_truncated"
+            message = str(failed.value)
+            assert len(failed.value.usage) == 1
+            artifact = {"code": failed.value.code, "message": message}
+        else:
+            await score_rubric.process(execution)
+            assert job.status == "succeeded"
+            assert job.result["completion"] == "partial"
+            assert job.result["exit_code"] == 5
+            assert job.result["stop_reason"] == "provider_output_truncated"
+            assert len(job.result["warnings"]) == 1
+            message = job.result["warnings"][0]
+            artifact = {key: value for key, value in job.result.items() if key != "submission"}
+    finally:
+        current_accounting.reset(token)
+    assert "reasoning" in message and "BID_LLM_MAX_OUTPUT_TOKENS" in message
+    assert "single line" not in message
+    assert len(sent) == len(accounting.completed) == (1 if stage == "structure" else 2)
+    assert not accounting.unknown_calls
+    (tmp_path / "rubric-job-truncation.json").write_text(
+        json.dumps(artifact, indent=2), encoding="utf-8"
+    )
 
 
 async def test_items_admission_stop_preserves_answered_batch_and_skips_unstarted(tmp_path):

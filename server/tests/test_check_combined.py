@@ -896,7 +896,7 @@ async def test_combined_later_batch_failure_keeps_one_bill_and_partial_report(
     result = terminal["result"]
     assert result["completion"] == "partial"
     assert result["stop_reason"] == (
-        "provider_refused" if failure == "refused" else "invalid_provider_output"
+        "provider_refused" if failure == "refused" else "provider_output_truncated"
     )
     assert [request["requested_requirement_ids"] for request in vendor.requests] == [["r2"], ["r3"]]
     async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
@@ -956,7 +956,7 @@ async def test_combined_platform_call_cap_and_failure_settle_exactly_once(
     assert terminal["status"] == "succeeded", terminal
     assert terminal["result"]["completion"] == "partial"
     assert terminal["result"]["stop_reason"] == (
-        "provider_refused" if failure == "refused" else "invalid_provider_output"
+        "provider_refused" if failure == "refused" else "provider_output_truncated"
     )
     assert len(vendor.requests) == 1
     job_id = UUID(queued.json()["data"]["job_id"])

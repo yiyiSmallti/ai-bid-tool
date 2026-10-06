@@ -896,6 +896,10 @@ def accept_batches(
     unresolved = sorted(expected - {item["requirement_id"] for item in items})
     if unresolved:
         errors.append("missing_requirement_output")
+    for codes in score_normalization.rule_errors(
+        structure, structure["sections"], items, candidate_keys=True
+    ):
+        errors.extend(codes)
     return {
         **structure,
         "items": items,

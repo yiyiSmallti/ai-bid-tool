@@ -26,6 +26,8 @@ from app.schemas.contracts import CONTRACT_VERSION, Contract, Cost, Location, Re
 from app.schemas.response_card_contracts import ReviewDomain
 from app.schemas.score_contracts import (
     AggregationRule,
+    CandidateScoreNumber,
+    CandidateScoreRange,
     RubricClassifyRequest,
     RubricCoverageDecisionRequest,
     RubricGenerateRequest,
@@ -43,6 +45,7 @@ from app.schemas.score_contracts import (
     ScoreRange,
     ScoreRequest,
     ScoreSectionSummary,
+    VerbatimRule,
 )
 from app.schemas.score_contracts import (
     RubricProvider as RubricProvider,
@@ -365,9 +368,9 @@ class RubricSummaryData(Contract):
     completeness: RubricCompletenessSummary
     overall_aggregation: AggregationRule
     overall_aggregation_assessable: bool
-    overall_rule_text: NonBlank | None
-    overall_score_range: ScoreRange | None
-    overall_cap: Money | None
+    overall_rule_text: VerbatimRule | None
+    overall_score_range: CandidateScoreRange | None
+    overall_cap: CandidateScoreNumber | None
     actions: list[ActionAvailability] = Field(max_length=3)
 
 
