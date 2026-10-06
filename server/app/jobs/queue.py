@@ -1,14 +1,20 @@
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 import procrastinate
-from sqlalchemy import text
+from procrastinate.jobs import Status
+from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.jobs.sandbox_queue import register_sandbox_task
+from app.models.entities import Job
+
+logger = logging.getLogger(__name__)
 
 
 class Queue:
@@ -48,6 +54,7 @@ class Queue:
         @self.app.task(name="bid.agent_recover", queue="bid", retry=True)
         async def agent_recover(timestamp: int):
             await self.recover_agent_wakes()
+            await self.recover_sandbox_jobs()
 
         self.agent_wake_task = agent_wake
         self.agent_recover_task = agent_recover
@@ -134,6 +141,67 @@ class Queue:
     async def enqueue(self, org_id: str, job_id: str) -> int:
         async with self.lock, self.app.open_async():
             return await self.task.defer_async(org_id=org_id, job_id=job_id)
+
+    async def recover_sandbox_jobs(self) -> None:
+        """Close abandoned deliveries only after tenant-scoped application checks."""
+        from app.jobs.processor import Processor
+
+        if not isinstance(self.processor, Processor):
+            raise RuntimeError("Worker processor is not configured")
+        candidates = await self.app.job_manager.get_stalled_jobs(
+            queue="bid", task_name="bid.sandbox"
+        )
+        counts = {"checked": 0, "terminal": 0, "missing": 0, "retained": 0, "invalid": 0}
+        end_statuses = {
+            "succeeded": Status.SUCCEEDED,
+            "failed": Status.FAILED,
+            "cancelled": Status.ABORTED,
+        }
+        for candidate in candidates:
+            counts["checked"] += 1
+            try:
+                org_id = UUID(str(candidate.task_kwargs.get("org_id")))
+                job_id = UUID(str(candidate.task_kwargs.get("job_id")))
+            except ValueError:
+                counts["invalid"] += 1
+                continue
+            async with self.processor.db.transaction(org_id) as session:
+                # Serialize recovery with queue completion/retry and other starters;
+                # recheck the heartbeat because it may have resumed since the scan.
+                queued = await session.scalar(
+                    text(
+                        "SELECT queued.id FROM procrastinate_jobs AS queued "
+                        "WHERE queued.id=:id AND queued.status='doing' "
+                        "AND queued.task_name='bid.sandbox' AND queued.queue_name='bid' "
+                        "AND NOT EXISTS (SELECT 1 FROM procrastinate_workers AS live "
+                        "WHERE live.id=queued.worker_id "
+                        "AND live.last_heartbeat>=now()-interval '30 seconds') "
+                        "FOR UPDATE OF queued SKIP LOCKED"
+                    ),
+                    {"id": candidate.id},
+                )
+                if queued is None:
+                    counts["retained"] += 1
+                    continue
+                job = await session.scalar(
+                    select(Job).where(Job.id == job_id, Job.org_id == org_id).with_for_update()
+                )
+                if job is not None and (job.kind != "sandbox" or job.status not in end_statuses):
+                    counts["retained"] += 1
+                    continue
+                status = end_statuses[job.status] if job is not None else Status.ABORTED
+                # Use Procrastinate's finish API on this locked transaction, retaining
+                # its attempt/event bookkeeping. CANCELLED only applies to todo rows.
+                await session.execute(
+                    text("SELECT procrastinate_finish_job_v1(:id, :status, false)"),
+                    {"id": queued, "status": status.value},
+                )
+            counts["missing" if job is None else "terminal"] += 1
+        logger.info(
+            "Sandbox queue reconciliation: checked=%(checked)d terminal=%(terminal)d "
+            "missing=%(missing)d retained=%(retained)d invalid=%(invalid)d",
+            counts,
+        )
 
     async def enqueue_sandbox(self, org_id: str, job_id: str) -> int:
         async with self.lock, self.app.open_async():

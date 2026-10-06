@@ -36,6 +36,7 @@ async def run():
     try:
         async with queue.app.open_async():
             await queue.recover_agent_wakes()
+            await queue.recover_sandbox_jobs()
             await queue.app.run_worker_async(queues=["bid"])
     finally:
         from app.core.credential_db import close_connections

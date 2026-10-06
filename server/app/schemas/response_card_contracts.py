@@ -49,7 +49,8 @@ class _TrimmedContract(Contract):
     @field_validator("*", mode="after")
     @classmethod
     def trim_strings(cls, value):
-        if isinstance(value, str):
+        # StrEnum fields have already been validated; strip() would turn them back into str.
+        if type(value) is str:
             value = value.strip()
             if not value:
                 raise ValueError("strings must contain non-whitespace characters")

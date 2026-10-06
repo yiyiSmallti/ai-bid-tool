@@ -32,6 +32,25 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   `data/work`. Database, Chromium and measured scale acceptance remain for the main
   integration environment, as tracked in the [contract](plan/management-pages.md).
 
+## 2026-10-06: Drafting identity, enum serialization and sandbox queue recovery
+
+- Bind no-card drafting inputs directly to the pinned source chunk/block hash,
+  supplementing the existing indirect requirement-preparation binding. Preserve
+  existing card cache identities and carry the new hash through model-generated
+  cards so unchanged resubmissions still reuse their result. The input manifest
+  changes invalidate old no-card keys without a prompt or schema version bump.
+- Preserve validated category enums in response-card string trimming, preventing
+  draft result serialization warnings for technical and scoring response rows.
+- Reconcile abandoned sandbox queue deliveries at worker startup and on the
+  existing recovery schedule. Check application jobs under their tenant context,
+  retain live workers and nonterminal jobs, and finish terminal or missing jobs'
+  deliveries through Procrastinate's terminal-state function. Retain application
+  data and queue history, and log reconciliation counts.
+- Add source identity and warning regressions, plus PostgreSQL scenarios for
+  terminal/missing jobs, live work, tenant isolation, renewed heartbeats and
+  concurrent/idempotent recovery. PostgreSQL execution remains an integration
+  check; no migration is required.
+
 ## 2026-10-06: Bounded product and feature revision authors
 
 - Resolve product and feature authors with explicit page-revision filters on a
