@@ -38,14 +38,15 @@ from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.compatibility import legacy_projection
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import DraftView
-from app.services import drafts
+from app.services import drafts, task_cosign
 from app.services import response_cards as cards
 from app.services.agent_tools import provenance
 from app.services.auth import ROLE_SCOPES, Identity
 from conftest import FakeQueue
 from docx import Document
-from sqlalchemy import event, select
+from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from task_fixtures import reviewer_header
 from test_response_cards import (
     PRODUCT_DATA,
     create_card,
@@ -118,6 +119,34 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             "tender_clause": item.source,
             "location_label": item.location_label,
         }
+        # The slow reference keeps its own reads and consumption gate; only
+        # reason precedence is shared with the production projection.
+        if (
+            card is not None
+            and item.kind != "gap"
+            and not await session.scalar(
+                select(func.team_cosign_card_approved(actor.org_id, card.id))
+            )
+        ):
+            current_revision = await session.get(ResponseCardRevision, card.current_revision_id)
+            if current_revision is None:
+                raise not_found()
+            current_view = await cards.card_view(
+                session, actor, card, current_revision, requirement
+            )
+            review = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
+            entry["reasons"] = drafts.gap_reasons(
+                current_view,
+                review,
+                valid_citation=await cards.citation_valid(session, requirement),
+                quote_current=cards.revision_quote_hash(current_revision, requirement)
+                == cards.quote_hash(requirement.quote),
+                generation_stale=await cards.generation_materials_stale(
+                    session, actor, current_revision
+                ),
+            )
+            gaps.append(entry)
+            continue
         if item.kind == "row":
             if item.card_revision_id is None or item.table is None:
                 cards.fail("invalid_draft", "Draft row is incomplete", 500, 4)
@@ -161,7 +190,7 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             "task_id": run.task_id,
             "extraction_job_id": run.extraction_job_id,
             "generation_job_id": run.generation_job_id,
-            "completion": run.completion,
+            "completion": "partial" if gaps else "complete",
             "validity": "stale" if invalidated else "current",
             "input_hash": run.input_hash,
             "tables": tables,
@@ -388,19 +417,26 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
         )
     for role in ("technical", "bidder"):
         set_role(admin_engine, org, user, role)
+        _, review_header = await reviewer_header(
+            api,
+            admin_engine,
+            org,
+            UUID(task),
+            "technical" if role == "technical" else "commercial",
+        )
         for index, card in list(created.items()):
             domain = "commercial" if role == "bidder" else "technical"
             if card["review_domain"] != domain:
                 continue
-            card = await require_action(api, header, card, "submit")
+            card = await require_action(api, review_header, card, "submit")
             if index % 6 == 5:
                 card = await require_action(
-                    api, header, card, "reject", reason="Synthetic unresolved response."
+                    api, review_header, card, "reject", reason="Synthetic unresolved response."
                 )
             else:
                 card = await require_action(
                     api,
-                    header,
+                    review_header,
                     card,
                     "confirm",
                     reviewed_evidence_ids=[e["id"] for e in card["evidence"]],

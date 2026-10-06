@@ -43,6 +43,7 @@ from app.models.response_cards import (
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
 from conftest import FakeQueue, credential_app
 from sqlalchemy import func, select, update
+from task_fixtures import reviewer_header
 from test_api import create_document, run_job
 from test_llm_providers import provider_reply, settings_for
 from test_response_cards import (
@@ -364,13 +365,17 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
                         app.state.storage,
                     )
             assert rejected.value.code == "forbidden"
+        review_headers = {}
+        for domain in ("technical", "commercial"):
+            _, review_headers[domain] = await reviewer_header(
+                api, admin_engine, tenants["orgs"][0], UUID(task), domain
+            )
         for index, slot in enumerate(current):
-            role = "bidder" if index == 1 else "technical"
-            set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], role)
+            review_header = review_headers[slot["card"]["review_domain"]]
             pending = (
                 first_pending
                 if index == 0
-                else await require_action(api, header, slot["card"], "submit")
+                else await require_action(api, review_header, slot["card"], "submit")
             )
             extra = {"reviewed_evidence_ids": [item["id"] for item in pending["evidence"]]}
             if pending["warning_codes"]:
@@ -378,7 +383,7 @@ async def test_generation_review_and_draft_full_chain(tenants, tmp_path, admin_e
                     "reviewed_warning_codes": pending["warning_codes"],
                     "reason": "Reviewed synthetic source and proof obligation.",
                 }
-            confirmed = await require_action(api, header, pending, "confirm", **extra)
+            confirmed = await require_action(api, review_header, pending, "confirm", **extra)
             assert confirmed["state"] == "confirmed" and confirmed["content"] == pending["content"]
             for evidence in confirmed["evidence"]:
                 if evidence["source_archive"]:

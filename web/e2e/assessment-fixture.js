@@ -66,6 +66,12 @@ export async function fixture(page, options = {}) {
         response = result("task member list", { org_id: state.org, task_id: ids.task, next_cursor: null, returned: 1, has_more: false }, [{ org_id: state.org, task_id: ids.task, user_id: uuid(3), display_label: "合成成员", role, active: true, review_domains, revision: 1 }]);
       }
       else if (method === "GET" && path === `/tasks/${ids.task}/events`) return route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify({ type: "heartbeat", cursor: "opaque-snapshot", as_of: now })}\n\n` });
+      else if (method === "GET" && path === `/tasks/${ids.task}/review-rule`) response = result("task review-rule show", { rule: { org_id: state.org, task_id: ids.task, workflow_revision: 1, rule_revision: 1, co_sign_starred: false }, dry_run: false, affected_requirements: 0 });
+      else if (method === "GET" && path === `/tasks/${ids.task}/requirements/${ids.requirement}/review-policy`) {
+        expect(url.searchParams.get("extraction_job_id")).toBe(ids.extract);
+        response = result("card policy show", { policy: { org_id: state.org, task_id: ids.task, extraction_job_id: ids.extract, requirement_id: ids.requirement, revision: 0, primary_domain: "technical", co_sign_required: false, starred: false, co_sign_starred: false, task_rule_revision: 1, required_domains: ["technical"] } });
+      }
+      else if (method === "GET" && path === `/cards/${ids.card}/signoffs`) response = result("card signoff list", { org_id: state.org, task_id: ids.task, card_id: ids.card, thread_id: null, returned: 0, has_more: false, next_cursor: null, round: null, summary: { status: "not_required", round_revision: 0, required_domains: ["technical"], signed_domains: [], pending_domains: ["technical"] } });
       else if (method === "GET" && path === `/cards/${ids.card}/threads`) {
         expect(Number(url.searchParams.get("limit"))).toBeLessThanOrEqual(100);
         response = result("card thread list", { org_id: state.org, task_id: ids.task, card_id: ids.card, thread_id: null, next_cursor: null, returned: 0, has_more: false });

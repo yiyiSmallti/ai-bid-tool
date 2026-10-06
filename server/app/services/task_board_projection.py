@@ -419,4 +419,12 @@ async def load(session, actor, requirements, task_id, assessment_day):
             "date_advisory": date_advisory,
             "prototype_blocked": prototype_blocked,
         }
+    from app.services import task_cosign
+
+    cosign = await task_cosign.projections(session, actor.org_id, [card.id for card, _ in pairs])
+    for view in views.values():
+        projection = cosign[view["id"]]
+        task_cosign.apply_eligibility(view, projection)
+        view["co_sign"] = projection["summary"]
+        view["co_sign_purpose"] = projection["manifest"]["purpose"]
     return views

@@ -468,6 +468,7 @@ async def build_manifest(
     )
     view = await drafts.show_draft(session, actor, draft.id)
     issues = []
+    current_gaps = {entry["requirement_id"]: entry["reasons"] for entry in view["gaps"]}
     current_binding = binding_is_current(binding.sections)
     if not current_binding:
         issues.append(issue("export_binding_outdated", "block", revision=str(binding.id)))
@@ -519,6 +520,11 @@ async def build_manifest(
         for n, entry in enumerate(draft.input_manifest["requirements"])
     }
     rows.sort(key=lambda row: positions[row.requirement_id])
+    from app.services import task_cosign
+
+    cosign = await task_cosign.projections(
+        session, actor.org_id, [row.card_id for row in rows if row.card_id]
+    )
     adapter = TypeAdapter(EvidenceInput)
     items, attachments = [], []
     pages = {}
@@ -547,6 +553,34 @@ async def build_manifest(
             "starred": row.starred,
             "evidence": [],
         }
+        if row.card_id is not None:
+            projection = cosign[row.card_id]
+            entry.update(task_cosign.manifest_fields(projection))
+            if row.kind != "gap" and not projection["approved"]:
+                # Admission, publication, release and download all rebuild this
+                # manifest. Never copy revoked prose or Evidence even in previews.
+                multi_domain = len(projection["summary"]["required_domains"]) > 1
+                if multi_domain or not any(
+                    value["code"] == "export_stale_draft" for value in issues
+                ):
+                    issues.append(
+                        issue(
+                            "export_cosign_required" if multi_domain else "export_stale_draft",
+                            "block",
+                            requirements=[row.requirement_id],
+                            revision=str(row.card_revision_id),
+                        )
+                    )
+                # Reuse the current draft's precise cause. If a read observes a
+                # later approval loss, the known cause is that review is needed.
+                reasons = current_gaps.get(str(row.requirement_id))
+                if reasons is None:
+                    reasons = task_cosign.review_gap_reasons(
+                        [], projection, state="confirmed", disposition=None
+                    )
+                entry.update(kind="gap", gap_reasons=reasons)
+                items.append(entry)
+                continue
         for code in cards.warnings_for(requirement):
             issues.append(
                 issue(

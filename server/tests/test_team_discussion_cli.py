@@ -310,4 +310,4 @@ def test_discussion_schema_discovery(capsys):
         assert names[command]["cli_parameters"]
     assert names["card thread list"]["items"] == schemas.CommentThreadView.model_json_schema()
     assert names["card comment list"]["items"] == schemas.CommentMessageView.model_json_schema()
-    assert "card signoff add" not in names and "card policy set" not in names
+    assert "card signoff add" in names and "card policy set" in names

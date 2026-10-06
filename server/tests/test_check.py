@@ -63,6 +63,7 @@ from conftest import FakeQueue
 from fakes import FakeLLM
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
+from task_fixtures import reviewer_header
 from test_card_generation import token_header
 from test_docx_extraction import word_tender
 from test_response_cards import (
@@ -353,10 +354,13 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
     assert candidate["state"] == "draft"
 
     set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "bidder")
-    commercial = await require_action(api, header, commercial, "submit")
+    _, review_header = await reviewer_header(
+        api, admin_engine, tenants["orgs"][0], UUID(task), "commercial"
+    )
+    commercial = await require_action(api, review_header, commercial, "submit")
     commercial = await require_action(
         api,
-        header,
+        review_header,
         commercial,
         "confirm",
         reviewed_evidence_ids=[row["id"] for row in commercial["evidence"]],
@@ -365,11 +369,16 @@ async def build_check_case(api, app, headers, provider, tenants, admin_engine, t
     )
 
     set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "technical")
-    technical = await require_action(api, header, technical, "submit")
-    technical = await require_action(api, header, technical, "confirm", reviewed_evidence_ids=[])
-    reconfirmation = await require_action(api, header, reconfirmation, "submit")
+    _, review_header = await reviewer_header(
+        api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
+    )
+    technical = await require_action(api, review_header, technical, "submit")
+    technical = await require_action(
+        api, review_header, technical, "confirm", reviewed_evidence_ids=[]
+    )
+    reconfirmation = await require_action(api, review_header, reconfirmation, "submit")
     reconfirmation = await require_action(
-        api, header, reconfirmation, "confirm", reviewed_evidence_ids=[]
+        api, review_header, reconfirmation, "confirm", reviewed_evidence_ids=[]
     )
     repaired_quote = "support team shall provide a named escalation contact."
     assert repaired_quote in TENDER_LINES[4]

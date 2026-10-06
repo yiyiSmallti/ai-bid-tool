@@ -95,7 +95,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     @router.post("/cards/{card_id}/actions", name="card_action", response_model=Result)
     async def card_action(card_id: UUID, body: CardAction, ctx=Depends(context, scope="function")):
         ctx[0].info["memory_settings"] = settings
-        view = await cards.card_action(ctx[0], ctx[1], card_id, body, storage)
+        view = await cards.card_action(ctx[0], ctx[1], card_id, body, storage, settings)
         warnings = list(view["warning_codes"])
         if body.action == "submit":
             if not all(view["content"][key] for key in cards.CONTENT_FIELDS):

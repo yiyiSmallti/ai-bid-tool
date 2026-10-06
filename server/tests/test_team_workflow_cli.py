@@ -442,7 +442,7 @@ def test_workflow_schema_discovery(capsys):
             "events",
         )
     )
-    assert "card assign" in names and "card signoff add" not in names
+    assert "card assign" in names and "card signoff add" in names
     # Both slices call their envelope PageData; discovery must keep each contract.
     assert names["task member list"]["output"] == WorkflowPageData.model_json_schema()
     assert (

@@ -1,7 +1,6 @@
-"""Approved task access, board, assignment and discussion contracts.
+"""Approved task access, board, discussion and human co-sign contracts.
 
-Transport uses the current shared Result/Cost contract. Co-sign writes remain
-outside the implemented slices.
+Transport uses the current shared Result/Cost contract.
 """
 
 from typing import Annotated, Literal
@@ -11,7 +10,7 @@ from pydantic import AwareDatetime, Field, StringConstraints, field_validator, m
 
 from app.schemas.budget_contracts import TaskBudgetView
 from app.schemas.contracts import Category, Contract
-from app.schemas.response_card_contracts import CardState, ReviewDomain
+from app.schemas.response_card_contracts import CardAction, CardState, ReviewDomain
 
 type TaskRole = Literal["owner", "contributor", "reviewer", "observer"]
 type MemberRole = Literal["contributor", "reviewer", "observer"]
@@ -90,6 +89,7 @@ type WorkflowAction = Literal[
     "card_changed",
     "job_changed",
 ]
+type Sha256 = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 type Revision = Annotated[int, Field(strict=True, ge=1)]
 type Cursor = Annotated[str, Field(min_length=1, max_length=1024)]
 type Reason = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
@@ -299,6 +299,38 @@ class CommentThreadDetail(Contract):
         return self
 
 
+class RequirementCoSignPolicySet(Contract):
+    expected_policy_revision: int = Field(strict=True, ge=0)
+    co_sign_required: bool
+    reason: Reason
+
+
+class RequirementCoSignPolicyView(Contract):
+    org_id: UUID
+    task_id: UUID
+    extraction_job_id: UUID
+    requirement_id: UUID
+    revision: int = Field(strict=True, ge=0)
+    primary_domain: ReviewDomain | None
+    co_sign_required: bool
+    starred: bool
+    co_sign_starred: bool
+    task_rule_revision: Revision
+    required_domains: Domains
+
+    @model_validator(mode="after")
+    def effective_domains(self):
+        _unique(self.required_domains, "required_domains")
+        required = {self.primary_domain} if self.primary_domain is not None else set()
+        if self.primary_domain is not None and (
+            self.co_sign_required or (self.starred and self.co_sign_starred)
+        ):
+            required = {"commercial", "technical"}
+        if set(self.required_domains) != required:
+            raise ValueError("effective domains must include primary and applicable co-sign domain")
+        return self
+
+
 class CoSignSummary(Contract):
     status: Literal["not_required", "pending", "partial", "complete", "invalidated"]
     round_revision: int = Field(strict=True, ge=0)
@@ -330,6 +362,167 @@ class CoSignSummary(Contract):
             raise ValueError("complete rounds have no pending domains")
         if self.status == "invalidated" and signed:
             raise ValueError("invalidated summaries exclude signatures from superseded rounds")
+        return self
+
+
+class CoSignRoundView(Contract):
+    id: UUID
+    org_id: UUID
+    task_id: UUID
+    card_id: UUID
+    extraction_job_id: UUID
+    requirement_id: UUID
+    round_revision: Revision
+    card_revision: Revision
+    card_revision_id: UUID
+    policy_revision: int = Field(strict=True, ge=0)
+    task_rule_revision: Revision
+    access_epoch: Revision
+    evidence_sha256: Sha256
+    requirement_sha256: Sha256
+    citation_sha256: Sha256
+    content_sha256: Sha256
+    required_domains: Domains = Field(min_length=1)
+    purpose: Literal["response", "disposition"]
+    intended_disposition: Literal["respond", "comply_only"]
+    disposition_reason: Reason | None = None
+    prior_card_state: CardState
+    state: Literal["open", "complete", "invalidated"]
+    created_at: AwareDatetime
+
+    @field_validator("required_domains")
+    @classmethod
+    def unique_domains(cls, value: list[ReviewDomain]) -> list[ReviewDomain]:
+        _unique(value, "required_domains")
+        return value
+
+    @model_validator(mode="after")
+    def response_round_state(self):
+        if self.purpose == "response" and self.prior_card_state != "pending_review":
+            raise ValueError("response co-sign rounds snapshot a pending-review card")
+        if self.purpose == "response" and self.intended_disposition != "respond":
+            raise ValueError("response reviews cannot approve comply-only disposition")
+        if self.purpose == "disposition" and self.prior_card_state not in {
+            "draft",
+            "rejected",
+            "needs_material",
+        }:
+            raise ValueError("disposition rounds require a disposition-editable card state")
+        return self
+
+
+class CoSignOpen(WorkflowMutation):
+    """Bind a card revision; respond/comply-only waits for signatures before disposition."""
+
+    intended_disposition: Literal["respond", "comply_only"]
+    purpose: Literal["disposition"] = "disposition"
+    client_request_id: UUID
+
+
+class CoSignConfirm(CardAction):
+    """expected_revision is the exact card revision; partial signatures do not advance it."""
+
+    expected_revision: Revision
+    action: Literal["confirm"] = "confirm"
+    purpose: Literal["response"] = "response"
+    selected_domain: ReviewDomain
+    expected_round: Revision
+    client_request_id: UUID
+
+
+class CoSignDispositionSign(Contract):
+    """Disposition acknowledgment never confirms Evidence or creates a response row."""
+
+    expected_revision: Revision
+    purpose: Literal["disposition"] = "disposition"
+    expected_round: Revision
+    selected_domain: ReviewDomain
+    reviewed_warning_codes: list[str] = Field(default_factory=list, max_length=100)
+    reason: Reason
+    client_request_id: UUID
+
+    @field_validator("reviewed_warning_codes")
+    @classmethod
+    def reviewed_warnings(cls, value: list[str]) -> list[str]:
+        value = [code.strip() for code in value]
+        _unique(value, "reviewed_warning_codes")
+        if any(not code for code in value):
+            raise ValueError("reviewed warning codes cannot be blank")
+        return value
+
+
+type CoSignSignRequest = Annotated[
+    CoSignConfirm | CoSignDispositionSign, Field(discriminator="purpose")
+]
+
+
+class CoSignSignatureView(Contract):
+    id: UUID
+    org_id: UUID
+    task_id: UUID
+    card_id: UUID
+    round_id: UUID
+    purpose: Literal["response", "disposition"]
+    domain: ReviewDomain
+    signer_user_id: UUID
+    signer_org_role: Literal["bidder", "technical"]
+    reviewed_evidence_ids: list[UUID] = Field(max_length=100)
+    reviewed_warning_codes: list[str] = Field(max_length=100)
+    reason_sha256: Sha256 | None
+    client_request_id: UUID
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def authorized_role(self):
+        if self.signer_org_role != {"commercial": "bidder", "technical": "technical"}[self.domain]:
+            raise ValueError("signature org role must authorize the selected domain")
+        _unique(self.reviewed_evidence_ids, "reviewed_evidence_ids")
+        _unique(self.reviewed_warning_codes, "reviewed_warning_codes")
+        if any(not code.strip() for code in self.reviewed_warning_codes):
+            raise ValueError("reviewed warning codes cannot be blank")
+        if self.reviewed_warning_codes and self.reason_sha256 is None:
+            raise ValueError("reviewed warnings require a retained reason hash")
+        if self.purpose == "disposition" and (
+            self.reviewed_evidence_ids or self.reason_sha256 is None
+        ):
+            raise ValueError("disposition signatures require a reason and no reviewed Evidence")
+        return self
+
+
+class CoSignReviewView(Contract):
+    round: CoSignRoundView
+    signatures: list[CoSignSignatureView] = Field(max_length=2)
+    summary: CoSignSummary
+
+    @model_validator(mode="after")
+    def signatures_match_round(self):
+        _unique([signature.domain for signature in self.signatures], "signature domains")
+        _unique([signature.signer_user_id for signature in self.signatures], "signers")
+        if any(
+            (signature.org_id, signature.task_id, signature.card_id, signature.round_id)
+            != (self.round.org_id, self.round.task_id, self.round.card_id, self.round.id)
+            or signature.domain not in self.round.required_domains
+            for signature in self.signatures
+        ):
+            raise ValueError("signatures must belong to the exact review round")
+        if self.round.purpose == "disposition" and any(
+            signature.reviewed_evidence_ids or signature.reason_sha256 is None
+            for signature in self.signatures
+        ):
+            raise ValueError("disposition signatures require reasons and cannot confirm Evidence")
+        if any(signature.purpose != self.round.purpose for signature in self.signatures):
+            raise ValueError("signature purpose must match the exact review round")
+        if self.summary.round_revision != self.round.round_revision or set(
+            self.summary.required_domains
+        ) != set(self.round.required_domains):
+            raise ValueError("summary must describe the exact review round")
+        current = self.round.state != "invalidated"
+        if current and set(self.summary.signed_domains) != {s.domain for s in self.signatures}:
+            raise ValueError("active summary must include exactly the current signatures")
+        if (self.round.state == "complete") != (self.summary.status == "complete") or (
+            self.round.state == "invalidated"
+        ) != (self.summary.status == "invalidated"):
+            raise ValueError("round and summary states must agree")
         return self
 
 
@@ -755,3 +948,34 @@ class CommentData(Contract):
 class ThreadCreatedData(Contract):
     thread: CommentThreadView
     first_comment: CommentMessageView
+
+
+class CoSignPolicyData(Contract):
+    policy: RequirementCoSignPolicyView
+
+
+class CoSignData(Contract):
+    summary: CoSignSummary
+    signature: CoSignSignatureView
+    current_card_revision: Revision
+    current_card_revision_id: UUID
+
+
+class ReviewRoundData(Contract):
+    round: CoSignRoundView
+
+
+class SignoffsData(PageData):
+    round: CoSignRoundView | None
+    summary: CoSignSummary
+
+
+class SignoffsView(Contract):
+    data: SignoffsData
+    items: list[CoSignSignatureView] = Field(max_length=100)
+
+    @model_validator(mode="after")
+    def returned_count(self):
+        if len(self.items) != self.data.returned:
+            raise ValueError("returned must equal the signature history item count")
+        return self

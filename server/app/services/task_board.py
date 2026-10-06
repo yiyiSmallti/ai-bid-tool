@@ -209,6 +209,12 @@ async def activity(
         "task.assignment_changed": "assignment_set",
         "task.thread_created": "thread_created",
         "task.comment_added": "comment_replied",
+        "task.review_rule_changed": "task_rule_set",
+        "task.review_policy_changed": "cosign_policy_set",
+        "task.review_round_opened": "card_changed",
+        "task.review_round_invalidated": "review_invalidated",
+        "task.domain_signed": "review_signed",
+        "task.cosign_completed": "review_signed",
     }
     card_actions = {
         f"card.{value}"
@@ -386,10 +392,62 @@ def row_projection(
         if view
         else {"technical": "technical", "qualification": "commercial"}.get(requirement.category)
     )
+    co_sign = view.get("co_sign") if view else None
+    required_domains = (
+        co_sign["required_domains"]
+        if co_sign
+        else (
+            ["commercial", "technical"]
+            if domain
+            and (
+                bool(assignment and assignment.co_sign_required)
+                or workflow.co_sign_starred
+                and requirement.starred
+            )
+            else [domain]
+            if domain
+            else []
+        )
+    )
+    if co_sign is None:
+        co_sign = {
+            "status": "pending" if len(required_domains) > 1 else "not_required",
+            "round_revision": 0,
+            "required_domains": required_domains,
+            "signed_domains": [],
+            "pending_domains": required_domains,
+        }
+    pending_domains = co_sign["pending_domains"]
     eligible = [entry.user_id for entry in reviewers if domain in entry.review_domains]
+    missing_domains = [
+        required
+        for required in required_domains
+        if not any(required in entry.review_domains for entry in reviewers)
+    ]
+    signer_domains = [
+        required
+        for required in pending_domains
+        if any(
+            entry.user_id == actor.user_id and required in entry.review_domains
+            for entry in reviewers
+        )
+    ]
+    if co_sign and co_sign["status"] in {"pending", "partial"}:
+        if len(required_domains) > 1:
+            blockers.append("pending_cosign")
+        if view and view.get("co_sign_purpose") == "disposition":
+            bucket = "pending_review"
+    elif co_sign and co_sign["status"] == "invalidated":
+        if len(required_domains) > 1:
+            blockers.append("invalidated_cosign")
+        elif not {"stale_material", "invalid_citation", "needs_reconfirmation"}.intersection(
+            blockers
+        ):
+            blockers.append("needs_reconfirmation")
+        bucket = "gap"
     if view:
         blockers.extend(view.get("blockers", []))
-    if domain and not eligible:
+    if missing_domains:
         blockers.append("missing_reviewer")
     assignee = assignment.assignee_user_id if assignment else None
     available = any(entry.user_id == assignee and entry.can_edit for entry in reviewers)
@@ -433,8 +491,24 @@ def row_projection(
             and actor.actor_kind == "session"
             and actor.token_id is None
             and member.role in ("owner", "contributor")
+            else "reopen"
+            if view
+            and view["state"] == "confirmed"
+            and view["eligibility"] == "needs_reconfirmation"
+            and actor.actor_kind == "session"
+            and actor.token_id is None
+            and actor.user_id in eligible
+            else "cosign"
+            if bucket == "pending_review"
+            and len(required_domains) > 1
+            and co_sign is not None
+            and co_sign["status"] in {"pending", "partial"}
+            and signer_domains
+            and actor.actor_kind == "session"
+            and actor.token_id is None
             else "confirm"
             if bucket == "pending_review"
+            and (co_sign is None or len(co_sign["required_domains"]) <= 1)
             and actor.actor_kind == "session"
             and actor.token_id is None
             and actor.user_id in eligible
@@ -456,10 +530,12 @@ def row_projection(
             "refresh_material": "card:write",
             "repair_citation": "req:extract",
             "confirm": "evidence:confirm",
+            "cosign": "card:cosign",
             "view": "card:read",
         }
         if scopes[code] in actor.scopes and (
-            code in ("view", "confirm") or member.role in ("owner", "contributor")
+            code in ("view", "confirm", "cosign", "reopen")
+            or member.role in ("owner", "contributor")
         ):
             actions.append(
                 BoardActionView.model_validate(
@@ -469,7 +545,11 @@ def row_projection(
                         if code == "repair_citation"
                         else target,
                         eligible_user_ids=[actor.user_id],
-                        eligible_domains=[domain] if code == "confirm" and domain else [],
+                        eligible_domains=signer_domains
+                        if code == "cosign"
+                        else [domain]
+                        if code in {"confirm", "reopen"} and domain
+                        else [],
                     )
                 )
             )
@@ -487,7 +567,7 @@ def row_projection(
                     code="find_reviewer",
                     target={"kind": "task", "id": workflow.task_id},
                     eligible_user_ids=[actor.user_id],
-                    eligible_domains=[domain] if domain else [],
+                    eligible_domains=missing_domains,
                 )
             )
         )
@@ -539,7 +619,7 @@ def row_projection(
             review_domain=domain,
             owner_user_id=assignee,
             assignment_revision=assignment.assignment_revision if assignment else 0,
-            co_sign=None,
+            co_sign=co_sign,
             flags=BoardRowFlags(
                 human_needs_material=bool(view and view["state"] == "needs_material"),
                 model_needs_material_hint=bool(
@@ -562,7 +642,12 @@ def matches(row, query, actor, *, bucket=True, mentioned=False):
         and (query.starred is None or row.starred == query.starred)
         and (query.owner_user_id is None or row.owner_user_id == query.owner_user_id)
         and (not query.unassigned or row.owner_user_id is None)
-        and (query.review_domain is None or row.review_domain == query.review_domain)
+        and (
+            query.review_domain is None
+            or row.review_domain == query.review_domain
+            or row.co_sign is not None
+            and query.review_domain in row.co_sign.required_domains
+        )
         and (query.blocker is None or query.blocker in row.blockers)
         and (
             not query.mine
@@ -572,7 +657,10 @@ def matches(row, query, actor, *, bucket=True, mentioned=False):
                 actor.token_id is None
                 and actor.actor_kind == "session"
                 and any(
-                    (action.code == "confirm" or action.target.kind == "thread")
+                    (
+                        action.code in {"confirm", "cosign", "reopen"}
+                        or action.target.kind == "thread"
+                    )
                     and actor.user_id in action.eligible_user_ids
                     for action in row.next_actions
                 )
