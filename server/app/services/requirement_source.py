@@ -181,48 +181,42 @@ async def effective_reviews(session, requirements, *, citation_validity=None):
     if not requirements:
         return {}
     ids = [r.id for r in requirements]
-    # Raw SQL/source triggers may have changed rows already present in the identity map.
-    requirements = list(
+    # Raw SQL/source triggers may have changed objects in the identity map.
+    # Refresh requirements with their review in one set query. Load distinct
+    # chunks with their documents separately so shared large text is not repeated
+    # once per requirement in a wide join, and the graph stays bounded to two reads.
+    rows = list(
         (
-            await session.scalars(
-                select(Requirement)
+            await session.execute(
+                select(Requirement, RequirementReview)
+                .outerjoin(
+                    RequirementReview,
+                    (RequirementReview.org_id == Requirement.org_id)
+                    & (RequirementReview.requirement_id == Requirement.id),
+                )
                 .where(Requirement.id.in_(ids))
                 .execution_options(populate_existing=True)
             )
         ).all()
     )
+    requirements = [requirement for requirement, _ in rows]
     if len(requirements) != len(set(ids)):
         raise not_found()
-    stored = {
-        r.requirement_id: r
-        for r in (
-            await session.scalars(
-                select(RequirementReview)
-                .where(RequirementReview.requirement_id.in_(ids))
-                .execution_options(populate_existing=True)
-            )
-        ).all()
-    }
-    chunks = {
-        r.id: r
-        for r in (
-            await session.scalars(
-                select(Chunk)
+    stored = {review.requirement_id: review for _, review in rows if review is not None}
+    parents = list(
+        (
+            await session.execute(
+                select(Chunk, Document)
+                .outerjoin(
+                    Document, (Document.org_id == Chunk.org_id) & (Document.id == Chunk.document_id)
+                )
                 .where(Chunk.id.in_({r.chunk_id for r in requirements}))
                 .execution_options(populate_existing=True)
             )
         ).all()
-    }
-    documents = {
-        r.id: r
-        for r in (
-            await session.scalars(
-                select(Document)
-                .where(Document.id.in_({r.document_id for r in requirements}))
-                .execution_options(populate_existing=True)
-            )
-        ).all()
-    }
+    )
+    chunks = {chunk.id: chunk for chunk, _ in parents}
+    documents = {document.id: document for _, document in parents if document is not None}
     chunk_hashes = {key: digest(chunk_data(chunk)) for key, chunk in chunks.items()}
     location_hashes = {}
     pins, unresolved = {}, defaultdict(list)

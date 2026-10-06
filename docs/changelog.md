@@ -6,6 +6,19 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Requirement review batch reads and savepoint audit binding
+
+- Refresh requirement/review and distinct chunk/document dependencies in two
+  bounded queries, retaining live ORM refresh, citation checks and the existing
+  draft-read statement budget.
+- Bind source-invalidation audits to the current backend's actual writer
+  transaction, including savepoint subtransactions. Preserve immutable-event,
+  org, action and metadata checks, and reject committed-history replay.
+- Keep source-changing citation fixtures behind real human reconfirmation,
+  distinguish human repair from system invalidation audits, and compare rubric
+  CLI/report output under the same contract version. See
+  [Requirement confirmation](notes/requirement-confirmation.md).
+
 ## 2026-10-06: Requirement-review publication and console regression fixes
 
 - Preserve tenant event context during privileged source maintenance without

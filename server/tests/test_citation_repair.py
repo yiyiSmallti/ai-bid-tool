@@ -340,7 +340,7 @@ def assert_hashes_and_ids_only(value) -> None:
             assert_hashes_and_ids_only(item)
         return
     if isinstance(value, str):
-        if value == "session":
+        if value in {"session", "system"}:
             return
         try:
             UUID(value)
@@ -763,6 +763,13 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
         # and chunk/card changes above. Citation repair itself must preserve it.
         before = requirement_rows(admin_engine, task_id)
         with admin_engine.connect() as connection:
+            audit_ids_before_execute = set(
+                connection.scalars(
+                    text(
+                        "SELECT id::text FROM audit_logs WHERE action='requirement.repair_citation'"
+                    )
+                )
+            )
             revision_before = connection.scalar(
                 text("SELECT count(*) FROM response_card_revisions")
             )
@@ -807,7 +814,7 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 dict(row)
                 for row in connection.execute(
                     text(
-                        "SELECT object_id::text, details FROM audit_logs "
+                        "SELECT id::text, object_id::text, actor_kind, actor_user_id::text, details FROM audit_logs "
                         "WHERE action = 'requirement.repair_citation' ORDER BY object_id"
                     )
                 ).mappings()
@@ -816,14 +823,43 @@ async def test_preview_execute_permissions_cards_drafts_and_audit(tenants, tmp_p
                 connection.scalar(text("SELECT count(*) FROM response_card_revisions"))
                 == revision_before
             )
-        assert len(audits) - audit_before == 4
-        repair_audits = audits[-4:]
+        committed_audits = [row for row in audits if row["id"] not in audit_ids_before_execute]
+        repair_audits = [row for row in committed_audits if row["actor_kind"] == "session"]
+        invalidation_audits = [row for row in committed_audits if row["actor_kind"] == "system"]
+        # Four explicit repairs include one model_quote-only change. Only the
+        # other three quote changes append B02 source-repair invalidation events.
+        assert len(repair_audits) == 4
+        assert len(invalidation_audits) == len(REPAIRED_QUOTES) == 3
+        assert len(committed_audits) == 7
         assert {row["object_id"] for row in repair_audits} == {
             requirements[page]["id"] for page in (1, *REPAIRED_QUOTES)
         }
-        for row in repair_audits:
+        assert {row["object_id"] for row in invalidation_audits} == {
+            requirements[page]["id"] for page in REPAIRED_QUOTES
+        }
+        assert len({row["details"]["correlation_id"] for row in repair_audits}) == 1
+        assert all(row["details"]["preview_hash"] == fresh["preview_hash"] for row in repair_audits)
+        with admin_engine.connect() as connection:
+            for row in invalidation_audits:
+                assert row["actor_user_id"] is None
+                recorded = connection.execute(
+                    text(
+                        "SELECT org_id::text, task_id::text, requirement_id::text, revision, action, state_after "
+                        "FROM requirement_review_events WHERE id=:id"
+                    ),
+                    {"id": UUID(row["details"]["event_id"])},
+                ).one()
+                assert tuple(recorded) == (
+                    str(tenants["orgs"][0]),
+                    task_id,
+                    row["object_id"],
+                    row["details"]["revision"],
+                    "source_repair",
+                    "invalidated",
+                )
+        for row in committed_audits:
             assert_hashes_and_ids_only(row)
-        audit_json = json.dumps(repair_audits, ensure_ascii=False)
+        audit_json = json.dumps(committed_audits, ensure_ascii=False)
         assert reason not in audit_json
         assert all(
             quote not in audit_json

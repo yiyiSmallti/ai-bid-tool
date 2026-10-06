@@ -672,7 +672,15 @@ DO $$ DECLARE definition text; patched text; BEGIN
  IF TG_TABLE_NAME='audit_logs' THEN
   IF NEW.action IN ('requirement.invalidated','requirement.repair_citation') AND NEW.actor_user_id IS NULL THEN
    IF pg_trigger_depth()<2 OR NOT EXISTS(SELECT 1 FROM public.requirement_review_events e
-    WHERE e.org_id=NEW.org_id AND e.requirement_id=NEW.object_id AND e.xmin=pg_current_xact_id()::xid
+    WHERE e.org_id=NEW.org_id AND e.requirement_id=NEW.object_id
+    -- xmin is a subxid inside SAVEPOINT, while pg_current_xact_id() reports the
+    -- top-level xid. PostgreSQL owns an ExclusiveLock for the writing xid;
+    -- require this backend's exact transaction-ID lock, not a caller-set marker,
+    -- an advisory lock or a shared lock on another transaction.
+    AND EXISTS(SELECT 1 FROM pg_catalog.pg_locks writing_xact
+      WHERE writing_xact.locktype='transactionid' AND writing_xact.transactionid=e.xmin
+       AND writing_xact.pid=pg_catalog.pg_backend_pid() AND writing_xact.granted
+       AND writing_xact.mode='ExclusiveLock')
     AND e.action IN ('invalidate','source_repair') AND e.id=(NEW.details->>'event_id')::uuid
     AND NEW.details=jsonb_build_object('task_id',e.task_id,'extraction_job_id',e.extraction_job_id,
       'requirement_id',e.requirement_id,'event_id',e.id,'revision',e.revision,'actor_kind','system')) THEN

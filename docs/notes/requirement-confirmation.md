@@ -65,6 +65,9 @@ assignee/owner or recovery action, and keeps response completion separate. Legac
 boards retain their existing enums and show pending requirement review as a gap.
 Metadata-only durable task events invalidate snapshots in the committing
 transaction; audit payloads contain IDs and hashes, never reasons or quotations.
+Source-invalidation audit binding includes the actual savepoint writer transaction,
+not only the top-level transaction ID. Rolling back a savepoint removes its source
+change, review event, audit and task-event head increment together.
 
 ## Pitfalls
 

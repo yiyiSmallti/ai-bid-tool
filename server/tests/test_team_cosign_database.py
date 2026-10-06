@@ -180,12 +180,22 @@ async def review_scope(api, headers, tenants, admin_engine):
     "required,confirmed,mutation,reasons",
     [
         (False, False, None, ["unconfirmed"]),
-        (False, False, "requirement", ["unconfirmed", "needs_reconfirmation"]),
-        (False, True, "requirement", ["needs_reconfirmation"]),
-        (False, True, "citation", ["invalid_citation"]),
+        (
+            False,
+            False,
+            "requirement",
+            ["requirement_invalidated", "unconfirmed", "needs_reconfirmation"],
+        ),
+        (False, True, "requirement", ["requirement_invalidated", "needs_reconfirmation"]),
+        (False, True, "citation", ["requirement_invalidated", "invalid_citation"]),
         (False, True, "material", ["stale_material"]),
         (True, False, None, ["unconfirmed", "cosign_required"]),
-        (True, True, "citation", ["invalid_citation", "cosign_required"]),
+        (
+            True,
+            True,
+            "citation",
+            ["requirement_invalidated", "invalid_citation", "cosign_required"],
+        ),
         (True, True, "material", ["stale_material", "cosign_required"]),
     ],
 )

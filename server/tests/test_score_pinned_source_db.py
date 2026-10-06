@@ -22,7 +22,9 @@ import test_score_api
 from app.models.entities import Chunk, Requirement
 from app.models.score import ScoreItemCitation, ScoreReportItem
 from app.schemas.score_contracts import ScoreReportData
+from app.services import requirement_consumption
 from sqlalchemy import select
+from task_fixtures import confirm_requirements_async
 from test_score_api import rubric_case as rubric_case
 from test_score_run import finish_score, preview_score, submit_score
 from test_score_run import score_case as score_case
@@ -49,6 +51,19 @@ async def rubric_input_case(original_rubric_input_case, repeat_position):
         assert original.count(pinned_quote) == pinned_quote.count(QUOTE) == 1
         assert original.count(QUOTE) == 2
         chunk.text = original
+        await session.flush()
+        review = (await requirement_consumption.effective(session, [requirement]))[requirement.id]
+        assert review.state == "invalidated"
+        await confirm_requirements_async(
+            session,
+            org,
+            UUID(case["task"]),
+            [requirement.id],
+            settings=case["app"].state.processor.settings,
+        )
+        assert (await requirement_consumption.effective(session, [requirement]))[
+            requirement.id
+        ].confirmed
     return {
         **case,
         "pinned_source": source,

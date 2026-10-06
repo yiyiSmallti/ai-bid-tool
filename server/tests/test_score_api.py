@@ -893,7 +893,7 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
     if failure == "task_budget_exceeded":
         assert result["stop_reason"] == failure
     shown = await case["api"].get(
-        f"/tasks/{case['task']}/score-rubrics/{result['rubric_id']}", headers=case["header"]
+        f"/v4/tasks/{case['task']}/score-rubrics/{result['rubric_id']}", headers=case["header"]
     )
     assert shown.status_code == 200, shown.text
     report = shown.json()["data"]

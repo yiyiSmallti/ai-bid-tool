@@ -14,8 +14,9 @@ import httpx
 import pytest
 from app.models.check import CheckFindingCitation, CheckItem, CheckRun
 from app.models.entities import Chunk, Requirement
-from app.services import drafts
+from app.services import drafts, requirement_consumption
 from sqlalchemy import select
+from task_fixtures import confirm_requirements_async
 from test_check_combined import (
     SemanticVendor,
     combined_preview,
@@ -69,6 +70,18 @@ async def test_combined_check_short_citation_repeated_outside_pinned_source(
         assert original.count(quote) == 2
         assert original.count(source["quote"]) == 1
         chunk.text = original
+        await session.flush()
+        target = await session.get(Requirement, UUID(requirement["id"]))
+        review = (await requirement_consumption.effective(session, [target]))[target.id]
+        assert review.state == "invalidated"
+        await confirm_requirements_async(
+            session,
+            org,
+            UUID(case["task"]),
+            [target.id],
+            settings=case["app"].state.processor.settings,
+        )
+        assert (await requirement_consumption.effective(session, [target]))[target.id].confirmed
     await scope_draft(case, response=True)
     vendor = ShortTenderCitationVendor(quote)
     install_resolver(monkeypatch, semantic_llm(tmp_path, vendor))

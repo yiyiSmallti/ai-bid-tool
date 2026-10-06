@@ -11,6 +11,11 @@ Failure inventory, fixed before the implementation change:
   to derive an org context.
 * Rollback removes source mutations, review revisions, audit/event rows and head
   increments together, while restoring the caller's transaction-local context.
+* Savepoint-created events carry a subxid, not the top-level transaction ID;
+  the backend must prove ownership of that exact live transaction-ID lock.
+* Child release restores caller context; parent/savepoint rollback still removes
+  every event. Committed events cannot be replayed through a nested trigger,
+  even when their tuple is locked or an advisory lock uses the same number.
 * A previously committed draft remains readable as stale after source mutation.
   New drafts still require a complete B02 manifest at deferred publication and
   cannot publish when requirement membership or review revisions changed.
@@ -35,7 +40,7 @@ from test_requirement_confirmation import review
 from test_response_cards import create_tender, phase_one_client
 from test_team_workflow_membership import add_member, person, workflow
 
-ARTIFACTS = Path(__file__).resolve().parents[2] / "data/work/b02-fixes/trigger-regressions"
+ARTIFACTS = Path(__file__).resolve().parents[2] / "data/work/b02-residual/trigger-regressions"
 
 
 def record(name, **values):
@@ -110,6 +115,25 @@ def checkpoints(connection, case):
             {"task": str(case["task"])},
         ),
     }
+
+
+def current_event_creation_proof(connection, case):
+    """Inspect PostgreSQL's actual writer xid and lock owner, not an app marker."""
+    return (
+        connection.execute(
+            text(
+                "SELECT e.id,e.xmin::text AS writer_xid,pg_current_xact_id()::xid::text AS top_xid,"
+                "pg_backend_pid() AS backend_pid,ARRAY(SELECT writing.pid FROM pg_catalog.pg_locks writing "
+                "WHERE writing.locktype='transactionid' AND writing.transactionid=e.xmin "
+                "AND writing.mode='ExclusiveLock' AND writing.granted) AS exclusive_owners "
+                "FROM requirement_reviews v JOIN requirement_review_events e ON e.org_id=v.org_id "
+                "AND e.id=v.current_event_id WHERE v.org_id=:org AND v.requirement_id=:req"
+            ),
+            {"org": case["org"], "req": case["requirement"]},
+        )
+        .mappings()
+        .one()
+    )
 
 
 def maintenance_context(connection, case, *, org="", stale_actor=False):
@@ -227,6 +251,9 @@ async def test_source_and_events_rollback_together(trigger_case, admin_engine):
         )
         savepoint = connection.begin_nested()
         mutate_source(connection, case, "chunk")
+        proof = current_event_creation_proof(connection, case)
+        assert proof["writer_xid"] != proof["top_xid"]
+        assert proof["exclusive_owners"] == [proof["backend_pid"]]
         assert checkpoints(connection, case)["head"] > before["head"]
         assert connection.scalar(text("SELECT current_setting('app.current_org',true)")) == ""
         savepoint.rollback()
@@ -236,6 +263,152 @@ async def test_source_and_events_rollback_together(trigger_case, admin_engine):
             == before_text
         )
         assert connection.scalar(text("SELECT current_setting('app.current_org',true)")) == ""
+
+
+@pytest.mark.parametrize("rollback_parent", [False, True], ids=["commit", "rollback"])
+async def test_nested_source_audit_release_and_parent_outcome(
+    trigger_case, admin_engine, rollback_parent
+):
+    case = trigger_case
+    with admin_engine.begin() as connection:
+        maintenance_context(connection, case)
+        before = checkpoints(connection, case)
+        outer = connection.begin_nested()
+        first_child = connection.begin_nested()
+        mutate_source(connection, case, "chunk")
+        first = current_event_creation_proof(connection, case)
+        assert first["writer_xid"] != first["top_xid"]
+        assert first["exclusive_owners"] == [first["backend_pid"]]
+        first_child.commit()
+        assert connection.scalar(text("SELECT current_setting('app.current_org',true)")) == ""
+        assert current_event_creation_proof(connection, case)["id"] == first["id"]
+
+        second_child = connection.begin_nested()
+        mutate_source(connection, case, "requirement")
+        second = current_event_creation_proof(connection, case)
+        assert second["writer_xid"] not in {second["top_xid"], first["writer_xid"]}
+        assert second["exclusive_owners"] == [second["backend_pid"]]
+        assert second["id"] != first["id"]
+        second_child.commit()
+        assert connection.scalar(text("SELECT current_setting('app.current_org',true)")) == ""
+        if rollback_parent:
+            outer.rollback()
+            assert checkpoints(connection, case) == before
+        else:
+            outer.commit()
+            after = checkpoints(connection, case)
+            assert after["events"] == before["events"] + 2
+            assert after["audit"] == before["audit"] + 2
+            assert after["other_head"] == before["other_head"]
+            assert current_event_creation_proof(connection, case)["id"] == second["id"]
+        assert connection.scalar(text("SELECT current_setting('app.current_org',true)")) == ""
+        connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+    shown = await review(case["api"], case["headers"][0], case["requirement"])
+    assert shown["requirement"]["state"] == ("confirmed" if rollback_parent else "invalidated")
+    record(
+        f"nested-audit-{'rollback' if rollback_parent else 'commit'}",
+        requirement_id=case["requirement"],
+        first_writer_xid=first["writer_xid"],
+        second_writer_xid=second["writer_xid"],
+        top_xid=second["top_xid"],
+        restored_org="",
+        final_state=shown["requirement"]["state"],
+    )
+
+
+@pytest.mark.parametrize("fake_advisory_lock", [False, True], ids=["tuple-lock", "advisory-lock"])
+async def test_committed_event_cannot_forge_nested_system_audit(
+    trigger_case, admin_engine, fake_advisory_lock
+):
+    case = trigger_case
+    with admin_engine.begin() as connection:
+        maintenance_context(connection, case)
+        mutate_source(connection, case, "chunk")
+        committed = current_event_creation_proof(connection, case)
+        assert committed["exclusive_owners"] == [committed["backend_pid"]]
+        event_id = committed["id"]
+
+    with admin_engine.begin() as connection:
+        maintenance_context(connection, case, org=str(case["org"]))
+        # A tuple lock only changes locking metadata; it does not make its
+        # historical inserting transaction belong to this backend.
+        connection.execute(
+            text("SELECT id FROM requirement_review_events WHERE id=:id FOR UPDATE"),
+            {"id": event_id},
+        )
+        old = current_event_creation_proof(connection, case)
+        assert old["id"] == event_id and old["writer_xid"] == committed["writer_xid"]
+        assert old["exclusive_owners"] == []
+        original_audits = connection.scalar(
+            text("SELECT count(*) FROM audit_logs WHERE object_id=:req"),
+            {"req": case["requirement"]},
+        )
+        # A temporary test relay supplies a genuine nested trigger call and the
+        # exact historical payload. The production guard must still reject it;
+        # only checking pg_trigger_depth or matching JSON would accept a forgery.
+        connection.execute(
+            text("CREATE TEMP TABLE b02_audit_relay_request(event_id uuid NOT NULL) ON COMMIT DROP")
+        )
+        connection.execute(
+            text("""
+            CREATE FUNCTION pg_temp.b02_audit_relay() RETURNS trigger
+            LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog AS $$
+            BEGIN
+              INSERT INTO public.audit_logs(id,org_id,actor_user_id,actor_token_id,action,object_id,details)
+              SELECT gen_random_uuid(),e.org_id,NULL,NULL,
+                CASE WHEN e.action='source_repair' THEN 'requirement.repair_citation' ELSE 'requirement.invalidated' END,
+                e.requirement_id,jsonb_build_object('task_id',e.task_id,'extraction_job_id',e.extraction_job_id,
+                  'requirement_id',e.requirement_id,'event_id',e.id,'revision',e.revision,'actor_kind','system')
+              FROM public.requirement_review_events e WHERE e.id=NEW.event_id;
+              RETURN NULL;
+            END $$;
+        """)
+        )
+        connection.execute(
+            text(
+                "CREATE TRIGGER b02_audit_relay AFTER INSERT ON pg_temp.b02_audit_relay_request FOR EACH ROW EXECUTE FUNCTION pg_temp.b02_audit_relay()"
+            )
+        )
+        connection.execute(text("GRANT INSERT ON pg_temp.b02_audit_relay_request TO bid_app"))
+        connection.execute(text("REVOKE ALL ON FUNCTION pg_temp.b02_audit_relay() FROM PUBLIC"))
+        connection.execute(text("GRANT EXECUTE ON FUNCTION pg_temp.b02_audit_relay() TO bid_app"))
+        connection.execute(text("SET LOCAL ROLE bid_app"))
+        if fake_advisory_lock:
+            connection.execute(
+                text("SELECT pg_advisory_xact_lock(CAST(:key AS bigint))"),
+                {"key": old["writer_xid"]},
+            )
+            assert connection.scalar(
+                text(
+                    "SELECT EXISTS(SELECT 1 FROM pg_catalog.pg_locks WHERE locktype='advisory' AND pid=pg_backend_pid() AND granted)"
+                )
+            )
+        with pytest.raises(
+            DBAPIError, match="requirement invalidation audit requires immutable event"
+        ):
+            with connection.begin_nested():
+                connection.execute(
+                    text("INSERT INTO pg_temp.b02_audit_relay_request VALUES(:event)"),
+                    {"event": event_id},
+                )
+        assert (
+            connection.scalar(
+                text("SELECT count(*) FROM audit_logs WHERE object_id=:req"),
+                {"req": case["requirement"]},
+            )
+            == original_audits
+        )
+        assert current_event_creation_proof(connection, case)["exclusive_owners"] == []
+        connection.execute(text("RESET ROLE"))
+        connection.execute(text("DROP TABLE pg_temp.b02_audit_relay_request"))
+        connection.execute(text("DROP FUNCTION pg_temp.b02_audit_relay()"))
+    record(
+        f"historical-event-forgery-{'advisory' if fake_advisory_lock else 'tuple'}",
+        event_id=event_id,
+        requirement_id=case["requirement"],
+        committed_writer_xid=committed["writer_xid"],
+        forged_audit_rejected=True,
+    )
 
 
 async def test_event_write_failure_restores_context_and_business_state(trigger_case, admin_engine):
