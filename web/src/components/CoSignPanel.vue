@@ -114,7 +114,7 @@ defineExpose({ refresh: () => { clear(); return load(); } });
       <p>有效职责：{{policy.required_domains.map(domain => label(domains,domain)).join('、') || '待分类'}} · 策略修订 {{policy.revision}} · 任务规则修订 {{policy.task_rule_revision}}</p>
       <p v-if="policy.starred && policy.co_sign_starred" class="notice warning">★ 条款匹配任务规则，关闭本条显式会签要求仍须商务与技术分别签署。</p>
       <details><summary>本条要求的会签策略</summary><label class="check"><input v-model="policyRequired" type="checkbox" :disabled="!manage || busy" />本条要求商务与技术会签</label>
-        <el-form v-if="manage" label-position="top" @submit.prevent="savePolicy"><el-form-item label="会签策略修改原因" required><el-input v-model="policyReason" type="textarea" maxlength="500" :disabled="busy" /></el-form-item><p class="hint">修改会退役受影响轮次；历史签署不能批准新策略。</p><el-button native-type="submit" :disabled="busy || !policyReason.trim() || dirty || conflict">保存本条会签策略</el-button></el-form>
+        <el-form v-if="manage" label-position="top" @submit.prevent="savePolicy"><el-form-item label="会签策略修改原因" required><el-input v-model="policyReason" type="textarea" aria-label="会签策略修改原因" aria-required="true" maxlength="500" :disabled="busy" /></el-form-item><p class="hint">修改会退役受影响轮次；历史签署不能批准新策略。</p><el-button native-type="submit" :disabled="busy || !policyReason.trim() || dirty || conflict">保存本条会签策略</el-button></el-form>
         <p v-else class="hint">{{activeTask ? '只有任务负责人或单位管理员可以修改策略。' : '任务已归档，策略只读。'}}</p>
       </details>
     </template>
@@ -128,7 +128,7 @@ defineExpose({ refresh: () => { clear(); return load(); } });
       <p v-if="review.summary.status === 'invalidated'" class="notice warning">该轮次已失效，历史签署不能算作当前审批。</p>
     </div>
     <template v-if="editableDisposition">
-      <el-form label-position="top" @submit.prevent><el-form-item label="处置会签原因" required><el-input v-model="dispositionReason" type="textarea" maxlength="500" :disabled="busy" /></el-form-item></el-form>
+      <el-form label-position="top" @submit.prevent><el-form-item label="处置会签原因" required><el-input v-model="dispositionReason" type="textarea" aria-label="处置会签原因" aria-required="true" maxlength="500" :disabled="busy" /></el-form-item></el-form>
       <div class="actions"><el-button :disabled="busy || dirty || conflict || !dispositionReason.trim()" @click="openDisposition(card.disposition === 'comply_only' ? 'respond' : 'comply_only')">{{card.disposition === 'comply_only' ? '发起逐项响应会签' : '发起仅需遵守会签'}}</el-button></div>
     </template>
     <template v-if="signableDomains.length && (multi || round?.purpose === 'disposition')">

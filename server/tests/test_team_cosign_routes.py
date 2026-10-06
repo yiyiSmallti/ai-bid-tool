@@ -138,7 +138,7 @@ async def test_cosign_archived_task_blocks_writes(api, headers, tenants, admin_e
     ).status_code == 200
     response = await request(
         api,
-        reviewer if operation == "sign" else headers[0],
+        reviewer if operation in {"open", "sign"} else headers[0],
         scope,
         operation,
         **({"expected_revision": 3} if operation == "rule_set" else {}),

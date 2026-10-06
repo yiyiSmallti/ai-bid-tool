@@ -19,6 +19,7 @@ def upgrade():
 
 SCHEMA_SQL = r"""
 ALTER TABLE public.users ADD COLUMN review_authority_epoch bigint NOT NULL DEFAULT 1 CHECK(review_authority_epoch>=1);
+ALTER TABLE public.orgs ADD COLUMN review_authority_epoch bigint NOT NULL DEFAULT 1 CHECK(review_authority_epoch>=1);
 ALTER TABLE public.audit_logs ALTER COLUMN actor_user_id DROP NOT NULL,
  ADD CONSTRAINT audit_system_cosign_invalidation_actor CHECK(actor_user_id IS NOT NULL OR coalesce(
    action='task.review_round_invalidated' AND actor_kind='system'
@@ -85,7 +86,8 @@ CREATE TABLE public.card_review_signatures (
  purpose varchar(20) NOT NULL CHECK(purpose IN ('response','disposition')),
  domain varchar(20) NOT NULL CHECK(domain IN ('commercial','technical')),
  ordinal integer NOT NULL CHECK(ordinal BETWEEN 1 AND 2),
- signer_user_id uuid NOT NULL, signer_user_epoch bigint NOT NULL CHECK(signer_user_epoch>=1), signer_org_role varchar(20) NOT NULL CHECK(signer_org_role IN ('bidder','technical')),
+ signer_user_id uuid NOT NULL, signer_user_epoch bigint NOT NULL CHECK(signer_user_epoch>=1),
+ signer_org_epoch bigint NOT NULL CHECK(signer_org_epoch>=1), signer_org_role varchar(20) NOT NULL CHECK(signer_org_role IN ('bidder','technical')),
  reviewed_evidence_ids jsonb NOT NULL CHECK(jsonb_typeof(reviewed_evidence_ids)='array' AND jsonb_array_length(reviewed_evidence_ids)<=100),
  reviewed_warning_codes jsonb NOT NULL CHECK(jsonb_typeof(reviewed_warning_codes)='array' AND jsonb_array_length(reviewed_warning_codes)<=100),
  reason_ciphertext text, reason_sha256 varchar(64) CHECK(reason_sha256~'^[0-9a-f]{64}$'),
@@ -125,6 +127,9 @@ DO $$ DECLARE tab text; BEGIN
   EXECUTE format('GRANT SELECT,INSERT ON public.%I TO bid_app',tab);
  END LOOP;
 END $$;
+-- PostgreSQL row locks require UPDATE on at least one column. The history guard
+-- rejects every actual UPDATE/DELETE, including an id=id no-op.
+GRANT UPDATE(id) ON public.card_review_rounds TO bid_app;
 """
 
 HELPERS_SQL = r"""
@@ -213,7 +218,8 @@ LANGUAGE sql VOLATILE SET search_path=pg_catalog AS $$
     AND public.response_evidence_active(p_org,l.evidence_id) IS DISTINCT FROM true)))
   AND NOT EXISTS(SELECT 1 FROM public.card_review_signatures sig WHERE sig.org_id=p_org AND sig.round_id=rr.id
     AND (NOT public.team_cosign_signer_authorized(p_org,rr.task_id,sig.signer_user_id,sig.domain)
-      OR sig.signer_user_epoch IS DISTINCT FROM (SELECT u.review_authority_epoch FROM public.users u WHERE u.id=sig.signer_user_id)))
+      OR sig.signer_user_epoch IS DISTINCT FROM (SELECT u.review_authority_epoch FROM public.users u WHERE u.id=sig.signer_user_id)
+      OR sig.signer_org_epoch IS DISTINCT FROM (SELECT o.review_authority_epoch FROM public.orgs o WHERE o.id=sig.org_id)))
   AND (c.current_revision_id=rr.card_revision_id OR
    (cv.revision=rr.card_revision+1 AND cv.actor_kind='session'
     AND ((rr.purpose='response' AND cv.state='confirmed') OR (rr.purpose='disposition' AND cv.disposition=rr.intended_disposition AND cv.state=rr.prior_card_state))
@@ -285,6 +291,10 @@ BEGIN
  RETURN NEW;
 END $$;
 CREATE TRIGGER aaa_team_cosign_user_epoch BEFORE INSERT OR UPDATE ON public.users
+ FOR EACH ROW EXECUTE FUNCTION public.team_cosign_user_epoch();
+-- The platform function owns no business-table privileges. This row-local epoch
+-- preserves org revocations even when an invalidation cannot be materialized there.
+CREATE TRIGGER aaa_team_cosign_org_epoch BEFORE INSERT OR UPDATE ON public.orgs
  FOR EACH ROW EXECUTE FUNCTION public.team_cosign_user_epoch();
 CREATE FUNCTION public.team_cosign_policy_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog AS $$
@@ -399,7 +409,8 @@ BEGIN
    RAISE EXCEPTION 'stale co-sign round or purpose' USING ERRCODE='23514'; END IF;
   uid:=public.team_cosign_human(NEW.org_id,NEW.task_id,NEW.domain);
   IF NEW.signer_user_id IS DISTINCT FROM uid THEN RAISE EXCEPTION 'co-sign signer mismatch' USING ERRCODE='42501'; END IF;
-  SELECT m.role,u.review_authority_epoch INTO NEW.signer_org_role,NEW.signer_user_epoch FROM public.memberships m JOIN public.users u ON u.id=m.user_id WHERE m.org_id=NEW.org_id AND m.user_id=uid;
+  SELECT m.role,u.review_authority_epoch,o.review_authority_epoch INTO NEW.signer_org_role,NEW.signer_user_epoch,NEW.signer_org_epoch
+   FROM public.memberships m JOIN public.users u ON u.id=m.user_id JOIN public.orgs o ON o.id=m.org_id WHERE m.org_id=NEW.org_id AND m.user_id=uid;
   expected_ids:=(CASE WHEN rr.purpose='response' THEN rr.snapshot->'evidence_ids' ELSE '[]'::jsonb END);
   expected_warnings:=rr.snapshot->'warnings';
   IF jsonb_typeof(NEW.reviewed_evidence_ids) IS DISTINCT FROM 'array' OR jsonb_typeof(NEW.reviewed_warning_codes) IS DISTINCT FROM 'array'
@@ -457,6 +468,13 @@ CREATE FUNCTION public.team_cosign_revision_gate() RETURNS trigger
 LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE rr public.card_review_rounds; prev public.response_card_revisions;
 BEGIN
+ IF NEW.state='confirmed' THEN
+  PERFORM public.response_check_actor(NEW.org_id,NEW.actor_user_id,NEW.actor_token_id,NEW.actor_kind);
+  IF NEW.actor_kind IS DISTINCT FROM 'session' OR NEW.actor_token_id IS NOT NULL
+   OR current_setting('app.actor_kind',true) IS DISTINCT FROM 'session'
+   OR coalesce(current_setting('app.actor_token_id',true),'')<>'' THEN
+   RAISE EXCEPTION 'response confirmation requires human session' USING ERRCODE='42501'; END IF;
+ END IF;
  SELECT r.* INTO rr FROM public.card_review_rounds r JOIN public.requirement_workflows rw ON (rw.org_id,rw.current_round_id)=(r.org_id,r.id)
   WHERE r.org_id=NEW.org_id AND r.card_id=NEW.card_id;
  SELECT v.* INTO prev FROM public.response_card_revisions v WHERE v.org_id=NEW.org_id AND v.card_id=NEW.card_id AND v.revision=NEW.revision-1;
@@ -602,6 +620,16 @@ DECLARE rr public.card_review_rounds; payload jsonb; changed jsonb; why text;
  old_org text:=current_setting('app.current_org',true); can_derive boolean; uid uuid;
 BEGIN
  changed:=(CASE WHEN TG_OP='DELETE' THEN to_jsonb(OLD) ELSE to_jsonb(NEW) END);
+ -- New identities cannot revoke existing signers, and unrelated identity edits
+ -- must not enter business tables from platform-owned provisioning functions.
+ IF TG_TABLE_NAME IN ('users','orgs','memberships') THEN
+  IF TG_OP='INSERT' THEN RETURN NULL; END IF;
+  IF TG_OP='UPDATE' AND changed->>'active' IS NOT DISTINCT FROM to_jsonb(OLD)->>'active'
+   AND (TG_TABLE_NAME<>'memberships' OR changed->>'role' IS NOT DISTINCT FROM to_jsonb(OLD)->>'role') THEN RETURN NULL; END IF;
+  -- The fixed platform function only changes org.active. The row-local epoch
+  -- and live signer checks enforce revocation without widening its privileges.
+  IF TG_TABLE_NAME='orgs' AND current_user='bid_platform_fn' THEN RETURN NULL; END IF;
+ END IF;
  IF TG_TABLE_NAME='requirement_workflows' AND ((TG_OP='INSERT' AND (changed->>'policy_revision')::integer=0)
   OR (TG_OP='UPDATE' AND changed->>'policy_revision'=to_jsonb(OLD)->>'policy_revision')) THEN RETURN NULL; END IF;
  IF TG_TABLE_NAME='task_workflows' AND TG_OP='UPDATE' AND changed->>'rule_revision'=to_jsonb(OLD)->>'rule_revision' THEN RETURN NULL; END IF;

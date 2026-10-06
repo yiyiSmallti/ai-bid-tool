@@ -10,7 +10,7 @@ export async function cosignFixture(page, options = {}) {
   const card = { ...scope, id: ids.card, requirement_id: ids.requirement, extraction_job_id: ids.extract, revision: 2, revision_id: ids.revision, state: "pending_review", review_domain: "technical", disposition: "respond", suggested_disposition: null, eligibility: "unconfirmed", source: source(), warning_codes: ["source_needs_review"], content: { response_kind: "evidence", response_text: "提供已核对的真实材料。", deviation: "none", deviation_note: "材料参数与本项要求逐项对应。", evidence: evidence.map(item => item.input) }, evidence, confirmed_by: null, confirmed_at: null, reason: null };
   if (options.draft) card.state = "draft";
   const required = () => state.required || state.rule ? ["commercial", "technical"] : ["technical"];
-  const workflow = () => ({ ...scope, owner_user_id: state.role === "bidder" || state.role === "admin" ? uuid(3) : uuid(4), state: state.archived ? "archived" : "active", revision: state.workflowRevision, access_epoch: 1, last_event_cursor: "opaque-snapshot", co_sign_starred: state.rule, rule_revision: state.ruleRevision, archived_at: state.archived ? now : null, archived_by_user_id: state.archived ? uuid(3) : null });
+  const workflow = () => ({ ...scope, owner_user_id: state.role === "bidder" || state.role === "admin" ? uuid(3) : uuid(4), state: state.archived ? "archived" : "active", revision: state.workflowRevision, access_epoch: state.workflowRevision, last_event_cursor: "opaque-snapshot", co_sign_starred: state.rule, rule_revision: state.ruleRevision, archived_at: state.archived ? now : null, archived_by_user_id: state.archived ? uuid(3) : null });
   const policy = () => ({ ...scope, extraction_job_id: ids.extract, requirement_id: ids.requirement, revision: state.policyRevision, primary_domain: "technical", co_sign_required: state.required, starred: true, co_sign_starred: state.rule, task_rule_revision: state.ruleRevision, required_domains: required() });
   const round = () => state.roundRevision ? ({ ...scope, id: uuid(70 + state.roundRevision), card_id: ids.card, extraction_job_id: ids.extract, requirement_id: ids.requirement, round_revision: state.roundRevision, card_revision: card.revision, card_revision_id: card.revision_id, policy_revision: state.policyRevision, task_rule_revision: state.ruleRevision, access_epoch: 1, evidence_sha256: hash, requirement_sha256: hash, citation_sha256: hash, content_sha256: hash, required_domains: required(), purpose: state.purpose ?? "response", intended_disposition: state.intended ?? "respond", prior_card_state: state.purpose === "disposition" ? "draft" : "pending_review", disposition_reason: state.purpose === "disposition" ? state.reason : null, state: state.invalidated ? "invalidated" : state.signed.length === required().length ? "complete" : "open", created_at: now }) : null;
   const summary = () => ({ status: state.invalidated ? "invalidated" : state.signed.length === required().length ? "complete" : state.signed.length ? "partial" : state.roundRevision ? "pending" : "not_required", round_revision: state.roundRevision, required_domains: required(), signed_domains: state.signed, pending_domains: required().filter(domain => !state.signed.includes(domain)) });
@@ -21,6 +21,11 @@ export async function cosignFixture(page, options = {}) {
     if (path === `/tasks/${ids.task}/members`) return { payload: result("task member list", { ...scope, returned: 1, has_more: false, next_cursor: null }, [{ ...scope, user_id: uuid(3), display_label: "合成成员", active: true, role: ["admin", "bidder"].includes(state.role) ? "owner" : state.role === "viewer" ? "observer" : "reviewer", review_domains: state.role === "technical" ? ["technical"] : state.role === "bidder" ? ["commercial"] : [], revision: 1 }]) };
     if (path === `/tasks/${ids.task}/member-candidates`) return { payload: result("candidates", { ...scope, returned: 0, has_more: false, next_cursor: null }) };
     if (path === `/tasks/${ids.task}/simulated-resources`) return response({ selection_ids: [] });
+    if (method === "POST" && path === `/documents/${ids.document}/extract`) {
+      // GenerationPanel reads reasoning choices on mount; this is not a paid submission.
+      expect(body).toEqual({ dry_run: true });
+      return response({ dry_run: true, document_id: ids.document, parsed: true, estimated_cost_usd: null, reasoning: null, reasoning_levels: [] });
+    }
     if (path === `/tasks/${ids.task}/requirements`) return { payload: result("req list", {}, [{ id: ids.requirement, job_id: ids.extract, category: "technical", text: "合成会签要求", starred: true, source: source() }]) };
     if (path === `/tasks/${ids.task}/cards`) return { payload: result("card list", { task_id: ids.task, extraction_job_id: ids.extract }, [{ requirement_id: ids.requirement, source: source(), status: card.state, card: structuredClone(card) }]) };
     if (path === `/cards/${ids.card}`) return response(structuredClone(card));
@@ -28,9 +33,9 @@ export async function cosignFixture(page, options = {}) {
     if (path === `/tasks/${ids.task}/review-rule`) {
       if (method === "PUT") {
         expect(body.expected_revision).toBe(state.workflowRevision); expect(body.reason.trim()).not.toBe("");
-        if (body.dry_run) state.previews++; else { expect(state.previews).toBeGreaterThan(0); state.rule = body.co_sign_starred; state.ruleRevision++; state.workflowRevision++; state.writes.push({ path, body }); }
+        if (body.dry_run) state.previews++; else { expect(state.previews).toBeGreaterThan(0); state.rule = body.co_sign_starred; state.ruleRevision++; state.workflowRevision++; state.invalidated = Boolean(state.roundRevision); state.signed = []; state.writes.push({ path, body }); }
       }
-      return response({ rule: { ...scope, workflow_revision: state.workflowRevision, rule_revision: state.ruleRevision, co_sign_starred: state.rule }, dry_run: body?.dry_run ?? false, affected_requirements: 1 });
+      return response({ rule: { ...scope, workflow_revision: state.workflowRevision, rule_revision: state.ruleRevision, co_sign_starred: body?.dry_run ? body.co_sign_starred : state.rule }, dry_run: body?.dry_run ?? false, affected_requirements: 1 });
     }
     if (path === `/tasks/${ids.task}/requirements/${ids.requirement}/review-policy`) {
       expect(url.searchParams.get("extraction_job_id")).toBe(ids.extract);

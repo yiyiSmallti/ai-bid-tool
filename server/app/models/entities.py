@@ -41,6 +41,7 @@ class Org(Identity, Base):
     org_id: Mapped[UUID] = mapped_column(nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(200))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    review_authority_epoch: Mapped[int] = mapped_column(BigInteger, default=1)
     __table_args__ = (CheckConstraint("id = org_id", name="org_self_scope"),)
 
 

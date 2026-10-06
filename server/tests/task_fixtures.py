@@ -33,8 +33,14 @@ class ServiceSession:
     async def get(self, *args, **kwargs):
         return self.session.get(*args, **kwargs)
 
-    async def flush(self):
-        self.session.flush()
+    async def scalars(self, *args, **kwargs):
+        return self.session.scalars(*args, **kwargs)
+
+    async def flush(self, *args, **kwargs):
+        self.session.flush(*args, **kwargs)
+
+    async def refresh(self, *args, **kwargs):
+        self.session.refresh(*args, **kwargs)
 
 
 def service_call(coroutine):
@@ -59,6 +65,9 @@ def actor_context(session, org, user, *, kind="session", token=None):
 
 
 async def actor_context_async(session, org, user, *, kind="session", token=None):
+    await session.execute(
+        text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org)}
+    )
     member = await session.scalar(
         select(Membership).where(Membership.org_id == org, Membership.user_id == user)
     )
@@ -66,6 +75,82 @@ async def actor_context_async(session, org, user, *, kind="session", token=None)
     actor = Identity(user, org, set(ROLE_SCOPES[member.role]), member.role, token, kind)
     await set_actor_context(session, actor)
     return actor
+
+
+async def review_card_async(session, org, user, card_id, *, action, storage=None, settings=None):
+    """Use the authenticated response service to open or complete a real round.
+
+    SQL gate tests still write invalid rows directly. Successful setup must pass
+    the same input, warning, signer and Evidence checks as the public API.
+    """
+    from app.schemas.response_card_contracts import CardAction
+    from app.services import response_cards
+
+    actor = await actor_context_async(session, org, user)
+    card, revision, requirement = await response_cards.require_card(session, card_id)
+    values = {"action": action, "expected_revision": card.revision}
+    if action == "confirm":
+        view = await response_cards.card_view(session, actor, card, revision, requirement, storage)
+        values.update(
+            reviewed_evidence_ids=[row["id"] for row in view["evidence"]],
+            reviewed_warning_codes=view["warning_codes"],
+            reason="Synthetic reviewer inspected all linked materials and warnings.",
+        )
+    await response_cards.card_action(
+        session, actor, card_id, CardAction(**values), storage, settings or Settings()
+    )
+    return await session.get(type(revision), card.current_revision_id)
+
+
+def review_card(session, org, user, card_id, *, action, storage=None, settings=None):
+    return service_call(
+        review_card_async(
+            ServiceSession(session),
+            org,
+            user,
+            card_id,
+            action=action,
+            storage=storage,
+            settings=settings,
+        )
+    )
+
+
+def domain_reviewer(admin_engine, org, task_id, domain):
+    """Enroll a distinct professional human whose authority survives actor switches."""
+    from conftest import PASSWORD_HASH
+    from sqlalchemy.orm import Session
+
+    assert domain in {"technical", "commercial"}
+    with Session(admin_engine) as session, session.begin():
+        session.execute(text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org)})
+        user = User(
+            id=uuid4(), email=f"reviewer-{uuid4().hex}@example.test", password_hash=PASSWORD_HASH
+        )
+        session.add(user)
+        session.flush()
+        session.add(
+            Membership(
+                org_id=org, user_id=user.id, role="technical" if domain == "technical" else "bidder"
+            )
+        )
+        session.flush()
+        add_member(session, org, task_id, user.id, role="contributor", review_domains=[domain])
+        return user.id, user.email
+
+
+async def reviewer_header(api, admin_engine, org, task_id, domain):
+    from conftest import PASSWORD
+
+    user, email = domain_reviewer(admin_engine, org, task_id, domain)
+    response = await api.post(
+        "/auth/login", json={"email": email, "password": PASSWORD, "org_id": str(org)}
+    )
+    assert response.status_code == 200, response.text
+    return user, {
+        "Authorization": "Bearer " + response.json()["data"]["session"],
+        "X-Org-Id": str(org),
+    }
 
 
 def finish_scope(session):

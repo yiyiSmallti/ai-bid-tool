@@ -22,6 +22,7 @@ from zipfile import ZipFile
 from app.models.exports import ExportRunEvidence
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from task_fixtures import reviewer_header
 from test_exports import draft, prepared, setup_template  # pyright: ignore[reportMissingImports]
 from test_prototype_decisions import (  # pyright: ignore[reportMissingImports]
     confirmed_prototype_card,
@@ -129,10 +130,16 @@ async def test_prototype_image_export_gate_keep_attachment_and_replace(
         )
         assert classified.status_code == 200, classified.text
         cards[0] = classified.json()["data"]
+        _, technical_header = await reviewer_header(api, admin_engine, org, UUID(task), "technical")
+        _, commercial_header = await reviewer_header(
+            api, admin_engine, org, UUID(task), "commercial"
+        )
         set_role(admin_engine, org, user, "technical")
         for index in (0, 4):
-            await confirm(api, header, cards[index])
-        await confirmed_prototype_card(api, header, task, extraction, requirements[2], uploaded)
+            await confirm(api, technical_header, cards[index])
+        await confirmed_prototype_card(
+            api, technical_header, task, extraction, requirements[2], uploaded
+        )
         disposition = await api.post(
             f"/tasks/{task}/cards/dispositions",
             headers=header,
@@ -150,7 +157,7 @@ async def test_prototype_image_export_gate_keep_attachment_and_replace(
         )
         assert disposition.status_code == 200, disposition.text
         set_role(admin_engine, org, user, "bidder")
-        await confirm(api, header, cards[1])
+        await confirm(api, commercial_header, cards[1])
         body = {
             "draft_id": await draft(api, app, header, task, extraction),
             "task_template_id": selected["id"],
@@ -174,7 +181,7 @@ async def test_prototype_image_export_gate_keep_attachment_and_replace(
         assert not any(i["code"].startswith("prototype_") for i in review.json()["data"]["issues"])
 
         set_role(admin_engine, org, user, "technical")
-        kept = await decide(api, header, task, extraction, feature["id"], decision="keep")
+        kept = await decide(api, technical_header, task, extraction, feature["id"], decision="keep")
         set_role(admin_engine, org, user, "bidder")
         decided = await api.post(
             f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
@@ -222,7 +229,7 @@ async def test_prototype_image_export_gate_keep_attachment_and_replace(
         set_role(admin_engine, org, user, "technical")
         await decide(
             api,
-            header,
+            technical_header,
             task,
             extraction,
             feature["id"],

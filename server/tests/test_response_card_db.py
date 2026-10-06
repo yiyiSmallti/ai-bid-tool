@@ -239,6 +239,22 @@ async def append_revision(session, seeded, link_evidence=True, **changes):
     card_id = seeded["ids"][org]["card"]
     card = await session.get(ResponseCard, card_id)
     previous = await session.get(ResponseCardRevision, card.current_revision_id)
+    if (
+        changes.get("state") == "pending_review"
+        and changes.get("actor_kind", "session") == "session"
+    ):
+        from task_fixtures import review_card_async
+
+        edits = {key: value for key, value in changes.items() if key != "state"}
+        if edits or not link_evidence:
+            await append_revision(session, seeded, link_evidence=link_evidence, **edits)
+        revision = await review_card_async(
+            session, org, seeded["users"][0], card_id, action="submit"
+        )
+        return {
+            column.name: getattr(revision, column.name)
+            for column in ResponseCardRevision.__table__.columns
+        }
     payload = {
         column.name: getattr(previous, column.name)
         for column in ResponseCardRevision.__table__.columns
@@ -466,16 +482,10 @@ async def test_commitment_confirmation_needs_no_evidence(gate_db, technical_memb
         await append_revision(session, seeded, state="pending_review", link_evidence=False)
     async with gate_db.transaction(org) as session:
         await context(session, seeded)
-        await append_revision(
-            session,
-            seeded,
-            state="confirmed",
-            disposition="respond",
-            disposition_by=seeded["users"][0],
-            disposition_at=datetime.now(UTC),
-            confirmed_by=seeded["users"][0],
-            confirmed_at=datetime.now(UTC),
-            link_evidence=False,
+        from task_fixtures import review_card_async
+
+        await review_card_async(
+            session, org, seeded["users"][0], seeded["ids"][org]["card"], action="confirm"
         )
     async with gate_db.transaction(org) as session:
         card = await session.get(ResponseCard, seeded["ids"][org]["card"])
@@ -615,19 +625,10 @@ async def test_evidence_and_card_confirm_in_one_human_transaction(gate_db, techn
         await append_revision(session, seeded, state="pending_review")
     async with gate_db.transaction(org) as session:
         await context(session, seeded)
-        await session.execute(
-            text("UPDATE evidence SET confirmed_by=:user, confirmed_at=now()"),
-            {"user": seeded["users"][0]},
-        )
-        await append_revision(
-            session,
-            seeded,
-            state="confirmed",
-            disposition="respond",
-            disposition_by=seeded["users"][0],
-            disposition_at=datetime.now(UTC),
-            confirmed_by=seeded["users"][0],
-            confirmed_at=datetime.now(UTC),
+        from task_fixtures import review_card_async
+
+        await review_card_async(
+            session, org, seeded["users"][0], seeded["ids"][org]["card"], action="confirm"
         )
     async with gate_db.transaction(org) as session:
         card = await session.get(ResponseCard, seeded["ids"][org]["card"])
@@ -792,16 +793,10 @@ async def test_eligible_negative_response_cannot_be_hidden_as_gap(gate_db, techn
         await append_revision(session, seeded, state="pending_review", link_evidence=False)
     async with gate_db.transaction(org) as session:
         await context(session, seeded)
-        await append_revision(
-            session,
-            seeded,
-            state="confirmed",
-            disposition="respond",
-            disposition_by=seeded["users"][0],
-            disposition_at=datetime.now(UTC),
-            confirmed_by=seeded["users"][0],
-            confirmed_at=datetime.now(UTC),
-            link_evidence=False,
+        from task_fixtures import review_card_async
+
+        await review_card_async(
+            session, org, seeded["users"][0], seeded["ids"][org]["card"], action="confirm"
         )
     with pytest.raises(DBAPIError) as error:
         async with gate_db.transaction(org) as session:

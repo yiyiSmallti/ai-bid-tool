@@ -11,7 +11,9 @@ Finalization must occur atomically with the last signature, under its human acto
 Reopen, policy/input change or loss of any actual signer's authority permanently
 retires a round; unrelated membership/assignment changes preserve it. Historical
 single-domain decisions remain usable without synthetic signatures. Events contain
-only bound IDs. These tests never start or stop database/runtime services.
+only bound IDs. Platform org deactivation/reactivation permanently retires prior
+signatures without granting the platform role access to business history. These
+tests never start or stop database/runtime services.
 """
 
 import json
@@ -48,6 +50,50 @@ async def test_cosign_tables_force_rls_and_no_mutation_grants(admin_engine):
                     text("SELECT has_table_privilege('bid_app',:name,:privilege)"),
                     {"name": name, "privilege": privilege},
                 )
+            columns = connection.execute(
+                text(
+                    "SELECT attname,has_column_privilege('bid_app',attrelid,attnum,'UPDATE') "
+                    "FROM pg_attribute WHERE attrelid=to_regclass(:name) "
+                    "AND attnum>0 AND NOT attisdropped"
+                ),
+                {"name": name},
+            )
+            assert [column for column, allowed in columns if allowed] == (
+                ["id"] if name == "card_review_rounds" else []
+            )
+            for privilege in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+                assert not connection.scalar(
+                    text("SELECT has_table_privilege('bid_platform_fn',:name,:privilege)"),
+                    {"name": name, "privilege": privilege},
+                )
+            assert connection.scalar(
+                text(
+                    "SELECT tgenabled='O' AND tgtype=31 FROM pg_trigger "
+                    "WHERE tgrelid=to_regclass(:name) AND tgname='team_cosign_history_guard'"
+                ),
+                {"name": name},
+            )
+        functions = (
+            connection.execute(
+                text(
+                    "SELECT proname,prosecdef,proconfig,prorettype='trigger'::regtype AS is_trigger, "
+                    "has_function_privilege('bid_app',p.oid,'EXECUTE') AS app_execute, "
+                    "has_function_privilege('bid_platform_fn',p.oid,'EXECUTE') AS platform_execute, "
+                    "EXISTS(SELECT 1 FROM aclexplode(coalesce(proacl,acldefault('f',proowner))) acl "
+                    "WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE') AS public_execute "
+                    "FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace "
+                    "WHERE n.nspname='public' AND proname LIKE 'team_cosign_%'"
+                )
+            )
+            .mappings()
+            .all()
+        )
+        assert functions
+        for function in functions:
+            assert not function["prosecdef"], function["proname"]
+            assert function["proconfig"] == ["search_path=pg_catalog"]
+            assert function["app_execute"] is not function["is_trigger"]
+            assert not function["platform_execute"] and not function["public_execute"]
 
 
 @pytest.mark.parametrize("table", TABLES)
@@ -367,11 +413,57 @@ async def test_global_user_reactivation_does_not_resurrect_other_org_signature(
         await db.engine.dispose()
 
 
+async def test_platform_org_reactivation_does_not_resurrect_signature(
+    api, headers, tenants, admin_engine
+):
+    scope = await review_scope(api, headers, tenants, admin_engine)
+    response = await signature(api, scope, "commercial")
+    assert response.status_code == 200, response.text
+    response = await signature(api, scope, "technical")
+    assert response.status_code == 200, response.text
+    assert response.json()["data"]["summary"]["status"] == "complete"
+    db = Database(Settings())
+    try:
+        for active in (False, True):
+            async with db.transaction(scope["org_id"]) as session:
+                assert await session.scalar(
+                    text("SELECT platform_set_org_active(:org,:active)"),
+                    {"org": scope["org_id"], "active": active},
+                )
+            async with db.transaction(scope["org_id"]) as session:
+                assert not await session.scalar(
+                    text("SELECT team_cosign_round_valid(:org,:round)"),
+                    {"org": scope["org_id"], "round": scope["round"]["id"]},
+                )
+                assert not await session.scalar(
+                    text("SELECT team_cosign_card_approved(:org,:card)"),
+                    {"org": scope["org_id"], "card": scope["card"]["id"]},
+                )
+                assert await session.scalar(
+                    text(
+                        "SELECT bool_and(o.review_authority_epoch>sig.signer_org_epoch) "
+                        "FROM orgs o JOIN card_review_signatures sig ON sig.org_id=o.id "
+                        "WHERE sig.round_id=:round"
+                    ),
+                    {"round": scope["round"]["id"]},
+                )
+    finally:
+        await db.engine.dispose()
+
+
 async def test_round_pointer_does_not_retire_new_round(api, headers, tenants, admin_engine):
     scope = await review_scope(api, headers, tenants, admin_engine)
     db = Database(Settings())
     try:
         async with db.transaction(scope["org_id"]) as session:
+            # Runtime finalization locks immutable history without mutation authority.
+            assert (
+                await session.scalar(
+                    text("SELECT id::text FROM card_review_rounds WHERE id=:round FOR UPDATE"),
+                    {"round": scope["round"]["id"]},
+                )
+                == scope["round"]["id"]
+            )
             assert (
                 await session.scalar(
                     text("SELECT team_cosign_round_valid(:org,:round)"),
@@ -395,6 +487,12 @@ async def test_round_pointer_does_not_retire_new_round(api, headers, tenants, ad
                 )
                 == 0
             )
+        with pytest.raises(DBAPIError, match="co-sign history is immutable"):
+            async with db.transaction(scope["org_id"]) as session:
+                await session.execute(
+                    text("UPDATE card_review_rounds SET id=id WHERE id=:round"),
+                    {"round": scope["round"]["id"]},
+                )
     finally:
         await db.engine.dispose()
 

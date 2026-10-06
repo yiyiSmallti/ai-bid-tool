@@ -143,9 +143,13 @@ Revisions, policy changes, citation/material changes and loss of an actual signe
 grants append `card_review_invalidations`. Re-adding a signer never restores a
 retired round; unrelated assignment, discussion or member edits do not retire it.
 Reads recalculate dependency and signer validity even without a materialized
-invalidation. Complete-round checks apply to direct SQL revision/Evidence/response
+invalidation. User and org activation epochs prevent an authorization restored
+later from reviving a signature. Platform org-management functions update only the
+org epoch; they do not read tenant review content or receive business-table grants.
+The review validity predicate checks that epoch even before retirement is materialized. Complete-round checks apply to direct SQL revision/Evidence/response
 item writes as well as service actions. All review history uses org/task composite
-keys, FORCE RLS and immutable records, with metadata-only audit and durable events.
+keys, FORCE RLS and immutable records, with metadata-only audit and durable events. A narrow column-level update grant permits
+review-round row locks; history triggers still reject every actual update/delete.
 
 Drafts turn incomplete or invalidated approval into explicit `cosign_required` gaps
 and bind policy, round, signature IDs and hashes in their input manifest. Untouched

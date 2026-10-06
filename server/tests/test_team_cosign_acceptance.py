@@ -447,7 +447,7 @@ async def test_score_rejects_old_draft_after_review_invalidation(rubric_case, mu
     )
     assert confirmed.status_code == 200, confirmed.text
     rubric = await show(case)
-    role(case, "bidder")
+    role(case, "admin")
     task = await workflow(case["api"], case["header"], case["task"])
     members = {}
     for domain, org_role in (("commercial", "bidder"), ("technical", "technical")):

@@ -139,6 +139,7 @@ async def set_rule(session, actor, task_id, body, settings):
         workflow.co_sign_starred = body.co_sign_starred
         workflow.rule_revision += 1
         workflow.revision += 1
+        workflow.access_epoch += 1
         workflow.last_reason_ciphertext = Secrets.for_data(settings).encrypt(body.reason)
         change_audit(
             session,

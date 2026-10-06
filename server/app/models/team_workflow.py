@@ -328,6 +328,7 @@ class CardReviewSignature(Tenant, Base):
     ordinal: Mapped[int] = mapped_column(Integer, default=1)
     signer_user_id: Mapped[UUID] = mapped_column()
     signer_user_epoch: Mapped[int] = mapped_column(BigInteger, default=1)
+    signer_org_epoch: Mapped[int] = mapped_column(BigInteger, default=1)
     signer_org_role: Mapped[str] = mapped_column(String(20))
     reviewed_evidence_ids: Mapped[list[str]] = mapped_column(JSONB, default=list)
     reviewed_warning_codes: Mapped[list[str]] = mapped_column(JSONB, default=list)

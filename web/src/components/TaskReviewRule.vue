@@ -53,7 +53,7 @@ onBeforeUnmount(() => { active = false; generation++; });
     <label class="check"><input v-model="enabled" type="checkbox" :disabled="!writable || busy || !rule" />★ 条款要求商务与技术会签</label>
     <p class="hint">规则适用的 ★ 条款保留主职责，并要求商务与技术分别签署。保存会使受影响的既有会签失效。</p>
     <el-form v-if="writable" label-position="top" @submit.prevent="write(true)">
-      <el-form-item label="审阅规则修改原因" required><el-input v-model="reason" type="textarea" maxlength="500" :disabled="busy" /></el-form-item>
+      <el-form-item label="审阅规则修改原因" required><el-input v-model="reason" type="textarea" aria-label="审阅规则修改原因" aria-required="true" maxlength="500" :disabled="busy" /></el-form-item>
       <p v-if="preview" data-testid="rule-impact" role="status">将影响 {{preview.affected_requirements}} 项要求；保存后需重新审阅。</p>
       <div class="actions"><el-button native-type="submit" :disabled="busy || !rule || !reason.trim()">预览规则影响</el-button><el-button type="primary" :disabled="busy || !preview || !reason.trim()" @click="write(false)">保存审阅规则</el-button></div>
     </el-form>

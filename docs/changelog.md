@@ -6,6 +6,20 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-05: Co-sign validation and fixture compatibility
+
+- Granted only the review-round column update privilege needed for PostgreSQL
+  row locks; immutable-history triggers still reject updates. Unit deactivation
+  uses an authorization epoch without granting platform functions business-table
+  access, and task rule changes advance the existing access epoch.
+- Preserved the [new single-domain review contract](plan/team-workflow.md#co-sign-policy-rounds-and-consumption-gates):
+  successful fixture preparation now submits and confirms through the real service,
+  while direct SQL denial cases retain their triggers. Independent professional
+  fixture reviewers keep unrelated actor-role changes from retiring their reviews.
+- Gave required co-sign reason fields explicit accessible names. Browser scenarios
+  wait for all material controls before reviewing them, and their API fixture
+  includes the existing read-only extraction reasoning preview.
+
 ## 2026-10-05: Team workflow co-sign review and consumption gates
 
 - Implemented requirement co-sign policy and the starred-task rule, immutable

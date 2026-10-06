@@ -46,6 +46,7 @@ from conftest import FakeQueue
 from docx import Document
 from sqlalchemy import event, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from task_fixtures import reviewer_header
 from test_response_cards import (
     PRODUCT_DATA,
     create_card,
@@ -400,19 +401,26 @@ async def build_large_draft(api, app, header, tenants, admin_engine, tmp_path, c
         )
     for role in ("technical", "bidder"):
         set_role(admin_engine, org, user, role)
+        _, review_header = await reviewer_header(
+            api,
+            admin_engine,
+            org,
+            UUID(task),
+            "technical" if role == "technical" else "commercial",
+        )
         for index, card in list(created.items()):
             domain = "commercial" if role == "bidder" else "technical"
             if card["review_domain"] != domain:
                 continue
-            card = await require_action(api, header, card, "submit")
+            card = await require_action(api, review_header, card, "submit")
             if index % 6 == 5:
                 card = await require_action(
-                    api, header, card, "reject", reason="Synthetic unresolved response."
+                    api, review_header, card, "reject", reason="Synthetic unresolved response."
                 )
             else:
                 card = await require_action(
                     api,
-                    header,
+                    review_header,
                     card,
                     "confirm",
                     reviewed_evidence_ids=[e["id"] for e in card["evidence"]],
