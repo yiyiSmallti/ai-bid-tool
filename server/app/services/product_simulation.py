@@ -37,8 +37,8 @@ from app.providers.llm import HTTPExtractor
 from app.providers.sandbox_fetch import (
     FetchBroker,
     FetchDenied,
-    SQLiteFetchQuota,
     canonical_url,
+    quota_from_env,
     system_resolver,
 )
 from app.schemas.feature_contracts import FeatureCreate, TaskFeatureSelection
@@ -271,7 +271,7 @@ async def fetch_page(org_id: UUID, url: str, processor) -> simulation.Page:
         source,
         policy.revision,
         org_id,
-        quota=SQLiteFetchQuota(Path(os.environ["BID_SANDBOX_FETCH_QUOTA"])),
+        quota=quota_from_env(Path(os.environ["BID_SANDBOX_FETCH_QUOTA"])),
         transport=processor.sandbox_fetch_transport,
         resolver=processor.sandbox_resolver or system_resolver,
     )

@@ -44,7 +44,7 @@ from app.providers.sandbox_fetch import (
     FetchBroker,
     FetchDenied,
     PolicySource,
-    SQLiteFetchQuota,
+    quota_from_env,
     system_resolver,
 )
 from app.providers.sandbox_runtime import (
@@ -689,7 +689,7 @@ def make_fetcher(processor, run: SandboxRun, row: SandboxInput) -> FetchBroker:
         policy_source(),
         run.policy_revision,
         run.org_id,
-        quota=SQLiteFetchQuota(Path(path)),
+        quota=quota_from_env(Path(path)),
         transport=processor.sandbox_fetch_transport,
         resolver=processor.sandbox_resolver or system_resolver,
         bundle=row.spec.get("archive") == "bundle",

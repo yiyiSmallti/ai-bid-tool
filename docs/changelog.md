@@ -6,6 +6,12 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Rate-limited open vendor egress
+
+- Open vendor-egress policies now keep a per-organization minute window instead of
+  skipping it, at `BID_SANDBOX_OPEN_FETCH_PER_MINUTE` requests (default 600; a
+  non-positive or non-numeric value fails closed). Named vendor policies keep 60.
+
 ## 2026-10-07: Sandbox quote encoding
 
 - Encode the sandbox browser quote's run descriptor like the run frame. Its UUID IDs

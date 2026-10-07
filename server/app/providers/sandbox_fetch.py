@@ -357,8 +357,16 @@ class FetchDenial:
 
 class FetchQuota(Protocol):
     def acquire(
-        self, org_id: UUID, origin: str, *, org_window: bool = True
+        self, org_id: UUID, origin: str, *, open_egress: bool = False
     ) -> AbstractAsyncContextManager[None]: ...
+
+
+def quota_from_env(path: Path) -> SQLiteFetchQuota:
+    """Node ledger with the operator's open-policy limit (requests per organization-minute)."""
+    raw = os.environ.get("BID_SANDBOX_OPEN_FETCH_PER_MINUTE", "600")
+    if not raw.isdigit() or int(raw) < 1:
+        raise FetchDenied("policy_invalid")
+    return SQLiteFetchQuota(path, open_requests_per_minute=int(raw))
 
 
 class SQLiteFetchQuota:
@@ -368,8 +376,16 @@ class SQLiteFetchQuota:
     A lease outlives the maximum request timeout; dead processes recover on expiry.
     """
 
-    def __init__(self, path: Path, *, origin_wait_seconds: float = 15.0):
+    # Named vendor policies list few resources; an open policy loads whole pages.
+    ORG_REQUESTS_PER_MINUTE = 60
+
+    def __init__(
+        self, path: Path, *, origin_wait_seconds: float = 15.0, open_requests_per_minute: int = 600
+    ):
+        if open_requests_per_minute < 1:
+            raise ValueError("open_requests_per_minute must be positive")
         self.path = Path(path)
+        self.open_requests_per_minute = open_requests_per_minute
         # A full origin queues for a lease up to the request timeout; the org rate denies.
         self.origin_wait_seconds = origin_wait_seconds
 
@@ -385,19 +401,19 @@ class SQLiteFetchQuota:
         )
         return connection
 
-    def _claim(self, org_hash: str, origin_hash: str, lease_id: str, org_window: bool = True):
+    def _claim(self, org_hash: str, origin_hash: str, lease_id: str, open_egress: bool = False):
         connection = self._connect()
         try:
             connection.execute("BEGIN IMMEDIATE")
             now = time.time()
             connection.execute("DELETE FROM requests WHERE at <= ?", (now - 60,))
             connection.execute("DELETE FROM leases WHERE expires <= ?", (now,))
+            limit = self.open_requests_per_minute if open_egress else self.ORG_REQUESTS_PER_MINUTE
             if (
-                org_window
-                and connection.execute(
+                connection.execute(
                     "SELECT count(*) FROM requests WHERE org_hash = ?", (org_hash,)
                 ).fetchone()[0]
-                >= 60
+                >= limit
             ):
                 raise FetchDenied("org_rate_limit")
             if (
@@ -424,7 +440,7 @@ class SQLiteFetchQuota:
 
     @asynccontextmanager
     async def acquire(
-        self, org_id: UUID, origin: str, *, org_window: bool = True
+        self, org_id: UUID, origin: str, *, open_egress: bool = False
     ) -> AsyncIterator[None]:
         lease_id = uuid4().hex
         deadline = time.monotonic() + self.origin_wait_seconds
@@ -436,7 +452,7 @@ class SQLiteFetchQuota:
                         hashlib.sha256(str(org_id).encode()).hexdigest(),
                         hashlib.sha256(origin.encode()).hexdigest(),
                         lease_id,
-                        org_window,
+                        open_egress,
                     )
                     break
                 except FetchDenied as exc:
@@ -650,10 +666,10 @@ class FetchBroker:
         ):
             raise FetchDenied("dns_denied")
         origin = str(target.copy_with(path="/", query=None)).rstrip("/")
-        # The per-organization minute window protects named vendors; an open development
-        # policy has no such list, so only the per-origin connection leases apply.
+        # Both policies keep a per-organization minute window; an open policy uses its
+        # own larger, operator-configured limit because whole pages load many resources.
         async with self.quota.acquire(
-            self.org_id, origin, org_window=not self.policy.open_public_https
+            self.org_id, origin, open_egress=self.policy.open_public_https
         ):
             self._live()
             # Numeric URL pins the real socket. Host and SNI preserve hostname verification.
