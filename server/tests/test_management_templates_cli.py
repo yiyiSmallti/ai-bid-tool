@@ -19,12 +19,12 @@ from bid_cli.client import Client
 
 ID = "00000000-0000-4000-8000-000000000001"
 WHEN = "2026-10-06T00:00:00Z"
-PREFIX = "/v4/management/resources/features"
-REF = {"kind": "features", "resource_id": ID}
+PREFIX = "/v4/management/resources/templates"
+REF = {"kind": "templates", "resource_id": ID}
 ROW = {
     "org_id": ID,
     "ref": REF,
-    "name": "Synthetic feature",
+    "name": "Synthetic template",
     "revision_id": ID,
     "revision": 1,
     "lifecycle": {"state": "active", "revision": 0},
@@ -75,18 +75,18 @@ def projection(command, empty=False):
             "provenance": "declared",
             "actions": ROW["actions"],
             "detail": {
-                "kind": "features",
+                "kind": "templates",
                 "revision": {
                     "id": ID,
                     "org_id": ID,
-                    "feature_id": ID,
+                    "template_id": ID,
                     "revision": 1,
                     "data": {
-                        "name": "Synthetic feature",
-                        "product_id": ID,
-                        "description": "Synthetic declaration",
-                        "status": "implemented",
+                        "name": "Synthetic template",
+                        "project_types": ["Synthetic"],
+                        "chapters": [{"title": "Declared chapter", "children": []}],
                     },
+                    "file": {"name": "template.docx", "sha256": "a" * 64, "size_bytes": 100},
                 },
             },
         }
@@ -101,11 +101,11 @@ def projection(command, empty=False):
                     "ref": REF,
                     "revision_id": ID,
                     "revision": 1,
-                    "name": "Synthetic feature",
+                    "name": "Synthetic template",
                     "created_at": WHEN,
                     "created_by": ID,
                     "current": True,
-                    "has_file": False,
+                    "has_file": True,
                 }
             ]
         )
@@ -119,7 +119,7 @@ def projection(command, empty=False):
     elif command == "lifecycle history":
         items = [] if empty else [EVENT]
     return Result(
-        ok=True, command="resource feature " + command, data=data, items=items
+        ok=True, command="resource template " + command, data=data, items=items
     ).model_dump(mode="json")
 
 
@@ -137,7 +137,7 @@ def invoke(capsys, flags, exit_code=0):
     return body
 
 
-def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
+def test_management_templates_transport_snapshots(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("BID_SESSION", "synthetic-only")
     monkeypatch.setenv("BID_ORG", ID)
     calls, snapshots = [], {}
@@ -162,7 +162,7 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
                 status,
                 json=Result(
                     ok=False,
-                    command="resource feature " + command,
+                    command="resource template " + command,
                     data={
                         "error": {
                             "code": code,
@@ -190,8 +190,6 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
                 "state": "all",
                 "cursor": "opaque-query",
                 "limit": 2,
-                "product_id": ID,
-                "implementation_status": "implemented",
             }
         )
     )
@@ -208,11 +206,19 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
                 "state": "all",
                 "cursor": "opaque-query",
                 "limit": 2,
-                "product_id": ID,
-                "implementation_status": "implemented",
+                "product_id": None,
+                "implementation_status": None,
             },
         ),
         ("show", ["show", "--id", ID, "--revision", "1"], "GET", "/" + ID, {"revision": "1"}, None),
+        (
+            "show",
+            ["show", "--id", ID, "--revision-id", ID],
+            "GET",
+            "/" + ID,
+            {"revision_id": ID},
+            None,
+        ),
         (
             "history",
             ["history", "--id", ID, "--cursor", "opaque-history", "--limit", "2"],
@@ -241,7 +247,7 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
     for mode in ("remote", "local"):
         for command, flags, method, path, params, content in cases:
             snapshots[mode + ":" + command] = invoke(
-                capsys, ["--mode", mode, "resource", "feature", *flags]
+                capsys, ["--mode", mode, "resource", "template", *flags]
             )
             assert calls[-1] == (method, PREFIX + path, params, content)
         empty = True
@@ -249,7 +255,7 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
             if command not in {"browse", "history", "lifecycle history"}:
                 continue
             snapshots[mode + ":empty:" + command] = invoke(
-                capsys, ["--mode", mode, "resource", "feature", *flags]
+                capsys, ["--mode", mode, "resource", "template", *flags]
             )
             assert snapshots[mode + ":empty:" + command]["items"] == []
         empty = False
@@ -268,7 +274,7 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
                     "--mode",
                     mode,
                     "resource",
-                    "feature",
+                    "template",
                     "lifecycle",
                     "set",
                     "--id",
@@ -280,7 +286,7 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
             )
             assert len(calls) == before + 1
         failure = None
-    snapshot = Path(__file__).with_name("snapshots") / "management-features-cli.json"
+    snapshot = Path(__file__).with_name("snapshots") / "management-templates-cli.json"
     if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
         snapshot.write_text(
             json.dumps(snapshots, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
@@ -288,7 +294,7 @@ def test_management_features_transport_snapshots(monkeypatch, capsys, tmp_path):
     assert snapshots == json.loads(snapshot.read_text())
 
 
-def test_management_features_invalid_and_legacy_no_request(monkeypatch, capsys, tmp_path):
+def test_management_templates_invalid_and_legacy_no_request(monkeypatch, capsys, tmp_path):
     calls = []
     monkeypatch.setattr(cli, "call", lambda *a, **kw: calls.append(a))
     invalid = tmp_path / "invalid.json"
@@ -298,18 +304,19 @@ def test_management_features_invalid_and_legacy_no_request(monkeypatch, capsys, 
         ["browse", "--input", str(invalid)],
         ["show"],
         ["show", "--id", ID, "--revision", "0"],
+        ["show", "--id", ID, "--revision", "1", "--revision-id", ID],
         ["history", "--id", ID, "--limit", "101"],
         ["history", "--id", ID, "--cursor", ""],
         ["lifecycle", "set", "--id", ID],
         ["lifecycle", "history"],
         ["browse", "--input", str(tmp_path / "missing.json")],
     ):
-        body = invoke(capsys, ["resource", "feature", *flags], 2)
+        body = invoke(capsys, ["resource", "template", *flags], 2)
         assert body["data"]["error"]["code"] == "invalid_input"
     for command in ("browse", "show", "history", "lifecycle set", "lifecycle history"):
         with pytest.raises(SystemExit) as error:
             cli.main(
-                ["--contract-version", "3.0", "resource", "feature", *command.split(), "--json"]
+                ["--contract-version", "3.0", "resource", "template", *command.split(), "--json"]
             )
         assert error.value.code == 2
         assert (
@@ -319,30 +326,31 @@ def test_management_features_invalid_and_legacy_no_request(monkeypatch, capsys, 
     assert calls == []
 
 
-def test_management_features_schema_and_legacy_list(monkeypatch, capsys):
+def test_management_templates_schema_and_legacy_list(monkeypatch, capsys):
     body = invoke(capsys, ["schema"])
     commands = body["data"]["commands"]
     for command in ("browse", "show", "history", "lifecycle set", "lifecycle history"):
-        entry = commands["resource feature " + command]
+        entry = commands["resource template " + command]
         assert entry["input"] is not None and entry["output"] is not None
         for kind in ("product", "feature", "certificate", "profile", "template"):
             assert "resource " + kind + " " + command in commands
-    assert "ResourceQuery" in json.dumps(commands["resource feature browse"])
+    assert "ResourceQuery" in json.dumps(commands["resource template browse"])
+    assert "revision_id" in json.dumps(commands["resource template show"])
     cli.main(["--contract-version", "3.0", "schema", "--json"])
     legacy = json.loads(capsys.readouterr().out)["data"]["commands"]
-    assert "resource feature list" in legacy
-    assert "resource feature browse" not in legacy
+    assert "resource template list" in legacy
+    assert "resource template browse" not in legacy
     calls = []
 
     def call(method, path, **kwargs):
         calls.append((method, path, kwargs))
         return Result(
-            ok=True, command="resource feature list", data={"current_revisions": {}}, items=[]
+            ok=True, command="resource template list", data={"current_revisions": {}}, items=[]
         ).model_dump(mode="json")
 
     monkeypatch.setattr(cli, "call", call)
-    result = invoke(capsys, ["resource", "feature", "list", "--history"])
-    assert calls == [("GET", "/resources/features", {"params": {"history": "true"}})]
+    result = invoke(capsys, ["resource", "template", "list", "--history"])
+    assert calls == [("GET", "/resources/templates", {"params": {"history": True}})]
     assert result["data"] == {"current_revisions": {}}
 
 
@@ -359,7 +367,7 @@ def test_management_features_schema_and_legacy_list(monkeypatch, capsys):
         ("lifecycle set", "mismatched_event"),
     ],
 )
-def test_feature_cli_rejects_malformed_server_receipt(
+def test_template_cli_rejects_malformed_server_receipt(
     command, defect, monkeypatch, capsys, tmp_path
 ):
     response = projection(command)
@@ -397,6 +405,6 @@ def test_feature_cli_rejects_malformed_server_receipt(
         flags += ["--id", ID]
     if command != "show":
         flags += ["--input", str(query)]
-    result = invoke(capsys, ["resource", "feature", *flags], 4)
+    result = invoke(capsys, ["resource", "template", *flags], 4)
     assert result["data"]["error"]["code"] == "invalid_server_response"
     assert len(calls) == 1

@@ -7,8 +7,9 @@ kind: reference
 ## Problem
 
 An org (organization/tenant; 单位) library must expose manageable pages without
-loading every product, feature, certificate or org-profile revision. Library
-maintenance must preserve the exact version selected by each task (任务). Withdrawing a resource from future selection
+loading every product, feature, certificate, org-profile or template revision.
+Library maintenance must preserve the exact version selected by each task (任务).
+Withdrawing a resource from future selection
 must retain its content, historical pins and auditable human action.
 
 ## Usage
@@ -37,19 +38,43 @@ A metadata-only revision displays "no original on this revision" even when an ol
 revision has a file. A date advisory requires an explicit `as_of`; it makes no
 claim about authenticity or qualification eligibility.
 
-The corresponding commands are `bid resource <product|feature|certificate|profile> browse --input QUERY.json`,
+The template list at `/app/org/templates` supports name-prefix search and lifecycle
+filters. Detail at `/app/org/templates/:id` separates declared chapters/project
+types, file validation, original inspection, binding inspection and task selection.
+Each create or revision requires its own real DOCX. Its stored hash and validation
+receipt establish file readability, not evidence authenticity or export approval.
+Human org administrators maintain templates; all org roles can inspect metadata
+and, through authenticated short-lived links, open originals.
+
+The exact revision's `/app/org/templates/:id/revisions/:revisionId/bindings` page
+lets human administrators configure the fixed sections and response columns from
+[ExportSectionBinding](../../server/app/schemas/export_contracts.py), preview the
+mapping, inspect static content in the original and explicitly create a binding.
+Changing the form invalidates the preview and review acknowledgement. Creation
+uses the template and static hashes returned by that exact preview. A hash conflict
+requires a fresh preview and deliberate review. Human bidders inspect bindings;
+technical/viewer users and tokens cannot invoke binding reads or writes. Existing
+bindings are immutable, and a legacy `current=false` binding remains unusable for
+export. There is no visual Word editor or automatic binding inheritance.
+
+The corresponding commands are `bid resource <product|feature|certificate|profile|template> browse --input QUERY.json`,
 `show --id R [--revision N]`, `history --id R`, `lifecycle set --id R --input STATE.json`
 and `lifecycle history --id R`. Their payloads, bounds and seven-field Result envelope
 are defined in the [approved contract](../plan/management-pages.md#http-and-pydantic-interfaces).
 Certificate `show` also accepts `--as-of YYYY-MM-DD`. Existing `add`, `update`,
 `list`, certificate file and task resource commands retain their contracts.
+Template `show` also accepts `--revision-id UUID`, mutually exclusive with
+`--revision N`. `bid export binding browse --template-revision UUID` and
+`show --id UUID --template-revision UUID` use bounded human-authorized reads;
+existing binding `create/list` commands retain their shapes and gates.
 
 ## How it works
 
 The [product read service](../../server/app/services/management_products.py),
 [feature read service](../../server/app/services/management_features.py),
-[certificate read service](../../server/app/services/management_certificates.py) and
-[profile read service](../../server/app/services/management_profiles.py) apply
+[certificate read service](../../server/app/services/management_certificates.py),
+[profile read service](../../server/app/services/management_profiles.py) and
+[template read service](../../server/app/services/management_templates.py) apply
 org visibility and filters in SQL before `LIMIT limit+1`. Immutable root creation
 time and ID order the live list; revision and ID order each root's histories.
 Encrypted cursors bind the current actor, org, authority, parent, filters and
@@ -57,7 +82,8 @@ anchor. Pages have their own observation time and no total count. Indexed curren
 name/vendor/model tokens support prefix search; source URLs and bodies are not
 search fields. Features search only name prefixes and filter the current same-org
 product and implementation state. Certificates search declared name and number;
-profiles search name only, never profile bodies or confidential values.
+Profiles and templates search name only, never profile bodies, confidential
+values, declared template chapters or project types.
 Exact revision authors come from a unique matching audit (审计)
 association, or remain unknown. A root-level simulation marker applies to older
 revisions too.
@@ -90,9 +116,10 @@ Content revision and lifecycle revision are independent. A transition requires
 both expected versions, a real human maintainer, a fixed reason code and the
 locked resource root. The event insertion changes the root and requires the audit
 in the same transaction. Tenant composite foreign keys, FORCE RLS and database
-guards protect event bindings and immutable history. Product, feature, certificate
-and profile events share a table with exactly one non-null root arm. Each arm binds
-both its real root and immutable content revision through org composite keys; partial unique indexes
+guards protect event bindings and immutable history. Product, feature, certificate,
+profile and template events share a table with exactly one non-null root arm. Each
+arm binds its real root and immutable content revision through org composite keys;
+partial unique indexes
 protect each lifecycle sequence. Extending another kind requires its own migration.
 
 [Selection](../../server/app/services/versioned.py) checks task membership and
@@ -127,7 +154,10 @@ protects product, feature and certificate pins. The profile trigger in
 [0052](../../server/migrations/versions/0052_certificate_profile_library.py) runs
 after row, unique and composite-key constraints, then rejects historical activation
 before new-pin authority and lifecycle checks. A conflicting active profile slot
-therefore retains its unique-constraint rejection. Restoring a library root does
+therefore retains its unique-constraint rejection. Template pins enforce the same
+retained-history rule in the AFTER selection guard in
+[0054](../../server/migrations/versions/0054_template_library.py), after RLS,
+row, unique and composite-key constraints. Restoring a library root does
 not restore retired pins. New pin inserts pass the tenant, composite-key and
 authority checks before lifecycle rejection.
 
@@ -149,6 +179,33 @@ route and `PageViewer` image handling; `DocumentPreview` remains unchanged.
 Lifecycle transitions do not update certificate files, file parts or evidence-source
 archives, and never confirm evidence. Profile forms retain confidential field
 placeholders as declared text without resolving or reading confidential values.
+
+The [template migration](../../server/migrations/versions/0054_template_library.py)
+extends lifecycle events with a template root/revision arm and independent unique
+sequence. Template lifecycle uses a human admin session, existing template write
+scope and content/lifecycle CAS. Selection locks task/workflow before the root;
+RLS and immediate composite keys reject invalid tenants and parents before the
+AFTER selection guard evaluates authority and active state. Only an exact existing
+active pin is an idempotent replay. Restoring or revising a template never replaces
+task selections. Recovery preserves lifecycle history and repairs forward.
+
+Template authors use the same stored audit revision projection, with a template
+action partial index and one explicitly org-filtered query restricted to the loaded
+page's revision IDs. Missing or ambiguous exact matches remain unknown. Template
+name-prefix and binding `(org_id, template_revision_id, reviewed_at, id)` indexes
+support bounded queries; binding reads validate the exact revision parent and use
+[exports.human_access](../../server/app/services/exports.py). Read projections do
+not retrieve file bytes or call providers.
+
+Original-file endpoints require both `template:read` and human-only
+`template:file:read`. The new scope is denied in `HUMAN_ONLY_SCOPES` and the
+API-token database check. The internal template reader remains available to the
+existing authorized export worker; the human gate belongs to original-download
+entry points. Upload keeps the existing `template:write` eligibility. Binding
+preview and creation reuse the existing DOCX inspector and immutable hash checks,
+with `export.binding_created` auditing explicit creation. File validation,
+lifecycle changes and binding review do not confirm evidence or bypass task export
+preflight/release and prototype decisions.
 
 ## Pitfalls
 
@@ -216,3 +273,16 @@ placeholders as declared text without resolving or reading confidential values.
   [certificate CLI snapshots](../../server/tests/test_management_certificates_cli.py),
   [profile CLI snapshots](../../server/tests/test_management_profiles_cli.py) and
   [qualification browser scenarios](../../web/e2e/qualification-management.spec.js).
+
+- [Template routes](../../server/app/api/management_templates.py),
+  [binding routes](../../server/app/api/management_bindings.py) and
+  [binding projections](../../server/app/services/management_bindings.py).
+- [Template list](../../web/src/views/OrgTemplates.vue),
+  [detail](../../web/src/views/OrgTemplate.vue) and
+  [binding review](../../web/src/views/OrgTemplateBindings.vue).
+- [Template API acceptance](../../server/tests/test_management_templates.py),
+  [storage acceptance](../../server/tests/test_management_templates_storage.py),
+  [scale acceptance](../../server/tests/test_management_templates_scale.py),
+  [template CLI snapshots](../../server/tests/test_management_templates_cli.py),
+  [binding CLI snapshots](../../server/tests/test_management_bindings_cli.py) and
+  [browser scenarios](../../web/e2e/template-management.spec.js).

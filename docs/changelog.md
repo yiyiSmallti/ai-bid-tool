@@ -6,6 +6,30 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Template and binding management slice
+
+- Added template browse/search, exact revision detail, content/lifecycle histories
+  and bounded binding inspection to the v4 API, CLI and org console. Legacy list
+  outputs and template revision-conflict exit code 4 remain unchanged.
+- Added the template lifecycle event arm, tenant composite keys, page-only indexed
+  audit author lookup and task selection guards in migration `0054`. Existing pins
+  remain unchanged; inactive roots reject new/replacement selections.
+- Reject retired template-pin reactivation even after root restoration, after
+  declarative database constraints. Align scope regression expectations with all
+  four human original-file readers, compare binding timestamps as aware instants,
+  and require composite-FK rejection before binding actor/hash checks.
+- Added DOCX-required upload/revision forms and authenticated original inspection
+  under human-only `template:file:read`, enforced in token issuance and storage.
+  Binding creation uses six fixed sections, explicit preview, static-content review
+  and exact template/static hashes through the existing export service.
+- Remove the duplicate accessible label on the static-content review checkbox.
+  Review stays disabled during original download and integrity validation; browser
+  scenarios wait for that gate and verify corrupt originals cannot enable review.
+- Added DB-backed API/service, role/isolation, fixed-scale, CLI snapshot and mocked
+  browser acceptance scenarios. See the
+  [template scope](plan/management-pages.md#template-vertical-slice) and
+  [mechanism](notes/management-pages.md).
+
 ## 2026-10-06: Production deployment plan
 
 - Add the [production deployment plan](plan/production-deployment.md) covering

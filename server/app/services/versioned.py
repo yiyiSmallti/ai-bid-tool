@@ -23,6 +23,7 @@ from app.models.entities import (
     OrgProfile,
     Product,
     Task,
+    Template,
 )
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
@@ -389,7 +390,7 @@ async def select_revision(
     # this check before retiring the previous selection; both share the root lock
     # with lifecycle transitions after the task/workflow authorization locks.
     if (
-        kind.root in (Product, Feature, Certificate, OrgProfile)
+        kind.root in (Product, Feature, Certificate, OrgProfile, Template)
         and root.lifecycle_state != "active"
     ):
         raise ServiceError(

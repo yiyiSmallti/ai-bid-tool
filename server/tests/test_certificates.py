@@ -189,10 +189,16 @@ async def test_certificate_roles_preserve_old_grants(
 ):
     from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES
 
+    # U01 permits every human org role to open originals, never API tokens.
+    assert "template:file:read" in ROLE_SCOPES[role]
+    assert "template:file:read" in HUMAN_ONLY_SCOPES
+    assert "template:file:read" not in SCOPES
+
     human_workflow_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
     assert ROLE_SCOPES[role] & human_workflow_scopes == (
         human_workflow_scopes if role in {"admin", "bidder", "technical"} else set()
     )
+    assert human_workflow_scopes <= HUMAN_ONLY_SCOPES
     assert human_workflow_scopes.isdisjoint(SCOPES)
 
     lifecycle_scopes = {"certificate:lifecycle", "profile:lifecycle"}
@@ -259,6 +265,7 @@ async def test_certificate_roles_preserve_old_grants(
             "evidence:source:write",
             "evidence:annotate",
             "template:read",
+            "template:file:read",
             "template:write",
             "task:template",
             "billing:read",

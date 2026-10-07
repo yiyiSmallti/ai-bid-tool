@@ -158,6 +158,7 @@ SCOPES.update({"score:read", "score:run", "score:rubric:generate"})
 SCOPES.update({"memory:read", "memory:write", "memory:retrieve", "memory:candidate:run"})
 
 for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.add("template:file:read")
     _scopes.add("agent:read")
     if _role != "viewer":
         _scopes.update({"agent:run", "agent:cancel"})
@@ -210,6 +211,7 @@ for _role in ("admin", "bidder", "technical"):
 
 
 HUMAN_ONLY_SCOPES = {
+    "template:file:read",
     "evidence:annotate",
     "certificate:lifecycle",
     "profile:lifecycle",

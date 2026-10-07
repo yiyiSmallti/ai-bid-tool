@@ -1,4 +1,4 @@
-"""Runtime contracts for bounded org resource management."""
+"""Runtime contracts for bounded org resource and export binding management."""
 
 from datetime import date
 from typing import Annotated, Literal, Self
@@ -12,6 +12,7 @@ from app.schemas.contracts import Contract
 from app.schemas.feature_contracts import FeatureRevision
 from app.schemas.profile_contracts import OrgProfileRevision
 from app.schemas.resource_contracts import ProductRevision
+from app.schemas.template_contracts import TemplateRevision
 
 PAGE_BYTE_LIMIT = 256 * 1024
 DETAIL_BYTE_LIMIT = 1024 * 1024
@@ -575,3 +576,121 @@ class ProfileLifecycleData(Contract):
         ):
             raise ValueError("event must describe the returned lifecycle")
         return self
+
+
+class TemplateDetailQuery(ResourceDetailQuery):
+    revision_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def exact_revision(self) -> Self:
+        if self.revision is not None and self.revision_id is not None:
+            raise ValueError("choose revision or revision_id, not both")
+        return self
+
+
+class TemplateDetail(Contract):
+    kind: Literal["templates"] = "templates"
+    revision: TemplateRevision
+
+
+class TemplateRef(Contract):
+    kind: Literal["templates"]
+    resource_id: UUID
+
+
+class TemplateRow(Contract):
+    org_id: UUID
+    ref: TemplateRef
+    name: str = Field(min_length=1, max_length=200)
+    revision_id: UUID
+    revision: Revision
+    lifecycle: LifecycleView
+    provenance: Literal["declared"]
+    created_at: AwareDatetime
+    revised_at: AwareDatetime
+    revised_by: UUID | None
+    actions: list[ActionHint] = Field(max_length=16)
+
+
+class TemplateHistoryRow(Contract):
+    org_id: UUID
+    ref: TemplateRef
+    revision_id: UUID
+    revision: Revision
+    name: str = Field(min_length=1, max_length=200)
+    created_at: AwareDatetime
+    created_by: UUID | None
+    current: bool
+    has_file: bool
+
+
+class TemplateDetailData(Contract):
+    org_id: UUID
+    ref: TemplateRef
+    current_revision: Revision
+    lifecycle: LifecycleView
+    provenance: Literal["declared"]
+    detail: TemplateDetail
+    revised_at: AwareDatetime
+    revised_by: UUID | None
+    actions: list[ActionHint] = Field(max_length=16)
+
+    @model_validator(mode="after")
+    def identity_binding(self) -> Self:
+        revision = self.detail.revision
+        resource_id = revision.template_id
+        if (
+            self.ref.kind != self.detail.kind
+            or self.ref.resource_id != resource_id
+            or self.org_id != revision.org_id
+            or revision.revision > self.current_revision
+        ):
+            raise ValueError("resource, org and revision must match")
+        if len(self.model_dump_json().encode("utf-8")) > DETAIL_BYTE_LIMIT:
+            raise ValueError("detail exceeds its byte budget")
+        return self
+
+
+class TemplateLifecycleEvent(Contract):
+    id: UUID
+    org_id: UUID
+    ref: TemplateRef
+    revision: Revision
+    resource_revision: Revision
+    before: LifecycleState
+    after: LifecycleState
+    reason_code: ReasonCode
+    actor_user_id: UUID
+    actor_kind: Literal["session"] = "session"
+    created_at: AwareDatetime
+
+    @model_validator(mode="after")
+    def actual_transition(self) -> Self:
+        if self.before == self.after:
+            raise ValueError("a lifecycle event records a change")
+        if (self.after == "active") != (self.reason_code == "restored"):
+            raise ValueError("restored is the required reason for activation only")
+        return self
+
+
+class TemplateLifecycleData(Contract):
+    event: TemplateLifecycleEvent
+    lifecycle: LifecycleView
+    existing_selections: Literal["preserved"] = "preserved"
+
+    @model_validator(mode="after")
+    def current_event(self) -> Self:
+        if (self.event.revision, self.event.after) != (
+            self.lifecycle.revision,
+            self.lifecycle.state,
+        ):
+            raise ValueError("event must describe the returned lifecycle")
+        return self
+
+
+class BindingQuery(PageQuery):
+    template_revision_id: UUID
+
+
+class BindingDetailQuery(Contract):
+    template_revision_id: UUID

@@ -265,6 +265,9 @@ from app.schemas.team_workflow import PageData as WorkflowPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
+from bid_cli.management_bindings import COMMAND_DATA as BINDING_COMMAND_DATA
+from bid_cli.management_bindings import COMMAND_INPUTS as BINDING_COMMAND_INPUTS
+from bid_cli.management_bindings import COMMAND_ITEMS as BINDING_COMMAND_ITEMS
 from bid_cli.management_certificates import COMMAND_DATA as CERTIFICATE_COMMAND_DATA
 from bid_cli.management_certificates import COMMAND_INPUTS as CERTIFICATE_COMMAND_INPUTS
 from bid_cli.management_certificates import COMMAND_ITEMS as CERTIFICATE_COMMAND_ITEMS
@@ -275,6 +278,9 @@ from bid_cli.management_products import COMMAND_DATA, COMMAND_INPUTS, COMMAND_IT
 from bid_cli.management_profiles import COMMAND_DATA as PROFILE_COMMAND_DATA
 from bid_cli.management_profiles import COMMAND_INPUTS as PROFILE_COMMAND_INPUTS
 from bid_cli.management_profiles import COMMAND_ITEMS as PROFILE_COMMAND_ITEMS
+from bid_cli.management_templates import COMMAND_DATA as TEMPLATE_COMMAND_DATA
+from bid_cli.management_templates import COMMAND_INPUTS as TEMPLATE_COMMAND_INPUTS
+from bid_cli.management_templates import COMMAND_ITEMS as TEMPLATE_COMMAND_ITEMS
 from bid_cli.requirement_confirmation import RequirementProgressInvocation
 
 # Only implemented commands are advertised; future commands are deliberately absent.
@@ -760,6 +766,8 @@ COMMANDS.update(
 )
 COMMANDS.update(COMMAND_INPUTS)
 COMMANDS.update(FEATURE_COMMAND_INPUTS)
+COMMANDS.update(TEMPLATE_COMMAND_INPUTS)
+COMMANDS.update(BINDING_COMMAND_INPUTS)
 COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
 COMMANDS.update(PROFILE_COMMAND_INPUTS)
 
@@ -841,6 +849,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                 for name, model in (
                     COMMAND_DATA
                     | FEATURE_COMMAND_DATA
+                    | TEMPLATE_COMMAND_DATA
+                    | BINDING_COMMAND_DATA
                     | CERTIFICATE_COMMAND_DATA
                     | PROFILE_COMMAND_DATA
                 ).items()
@@ -852,6 +862,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                 for name in (
                     COMMAND_ITEMS
                     | FEATURE_COMMAND_ITEMS
+                    | TEMPLATE_COMMAND_ITEMS
+                    | BINDING_COMMAND_ITEMS
                     | CERTIFICATE_COMMAND_ITEMS
                     | PROFILE_COMMAND_ITEMS
                 )
@@ -985,7 +997,12 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
     for name, model in (
-        COMMAND_ITEMS | FEATURE_COMMAND_ITEMS | CERTIFICATE_COMMAND_ITEMS | PROFILE_COMMAND_ITEMS
+        COMMAND_ITEMS
+        | FEATURE_COMMAND_ITEMS
+        | CERTIFICATE_COMMAND_ITEMS
+        | PROFILE_COMMAND_ITEMS
+        | TEMPLATE_COMMAND_ITEMS
+        | BINDING_COMMAND_ITEMS
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
