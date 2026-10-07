@@ -41,6 +41,7 @@ export const router = createRouter({
     { path: "/org/tasks/:taskId/progress", component: OrgTaskProgress, meta: { area: "org", title: "作业进度", nav: "tasks" } },
     { path: "/org/tasks/:taskId/members", component: OrgTaskMembers, meta: { area: "org", title: "成员与归档", nav: "tasks" } },
     { path: "/org/tasks/:taskId/requirements", component: OrgRequirements, meta: { area: "org", title: "要求确认与补录", nav: "tasks" } },
+    { path: "/org/tasks/:taskId/cards/:cardId/annotation", component: () => import("./views/OrgAnnotation.vue"), meta: { area: "org", title: "证据标注", nav: "tasks" } },
     { path: "/org/tasks/:taskId/review", component: OrgReview, meta: { area: "org", title: "要求与响应审阅", nav: "tasks" } },
     { path: "/org/tasks/:taskId/drafts", component: OrgDrafts, meta: { area: "org", title: "响应表初稿", nav: "tasks" } },
     { path: "/org/tasks/:taskId/checks", component: () => import("./views/OrgChecks.vue"), meta: { area: "org", title: "检查风险", nav: "tasks" } },

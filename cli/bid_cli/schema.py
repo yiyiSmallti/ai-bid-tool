@@ -19,6 +19,13 @@ from app.schemas.agent_contracts import (
     ExtractionArguments,
     JobStatusArguments,
 )
+from app.schemas.annotation_contracts import (
+    COMMAND_PAYLOADS as ANNOTATION_PAYLOADS,
+)
+from app.schemas.annotation_contracts import (
+    AnnotationInput,
+    AnnotationReleaseRetry,
+)
 from app.schemas.budget_contracts import (
     BudgetPlatformModelTest,
     BudgetProviderTest,
@@ -756,6 +763,13 @@ COMMANDS.update(FEATURE_COMMAND_INPUTS)
 COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
 COMMANDS.update(PROFILE_COMMAND_INPUTS)
 
+# Registered commands and discovery share one inventory; the legacy snapshot above
+# intentionally excludes this Result 4.0-only slice.
+
+COMMANDS.update({name: None for name in ANNOTATION_PAYLOADS if "--dry-run" not in name})
+COMMANDS["evidence stamp"] = AnnotationInput
+COMMANDS["evidence annotation release retry"] = AnnotationReleaseRetry
+
 
 def command_schema(app=None, version: str = "4.0") -> dict:
     parameters = {}
@@ -975,6 +989,34 @@ def command_schema(app=None, version: str = "4.0") -> dict:
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
+    if version == "4.0":
+        from app.schemas.annotation_contracts import (
+            COMMAND_PAYLOADS,
+            AnnotationCandidateView,
+            AnnotationPreflight,
+            AnnotationPreflightRequest,
+            AnnotationSubmit,
+        )
+
+        for name, (data_model, item_model) in COMMAND_PAYLOADS.items():
+            if name.endswith(" --dry-run"):
+                continue
+            schema["commands"][name]["output"] = data_model.model_json_schema()
+            if item_model:
+                schema["commands"][name]["items"] = item_model.model_json_schema()
+        from app.schemas.annotation_contracts import ENABLED_SOURCE_KINDS
+
+        schema["commands"]["evidence stamp"]["enabled_source_kinds"] = list(ENABLED_SOURCE_KINDS)
+        schema["commands"]["evidence stamp"]["wait_output"] = (
+            AnnotationCandidateView.model_json_schema()
+        )
+        schema["commands"]["evidence stamp"]["preflight"] = AnnotationPreflight.model_json_schema()
+        schema["commands"]["evidence stamp"]["http_preflight_input"] = (
+            AnnotationPreflightRequest.model_json_schema()
+        )
+        schema["commands"]["evidence stamp"]["http_submit_input"] = (
+            AnnotationSubmit.model_json_schema()
+        )
     if version == "4.0":
         from app.schemas.budget_contracts import (
             BudgetPreflightData,

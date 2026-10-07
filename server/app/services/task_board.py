@@ -596,6 +596,48 @@ def row_projection(
                 )
             ),
         )
+    annotation = view.get("annotation") if view else None
+    if annotation and view is not None and workflow.state == "active":
+        can_create = (
+            member is not None
+            and member.role in {"owner", "contributor"}
+            and actor.actor_kind == "session"
+            and actor.token_id is None
+            and "evidence:annotate" in actor.scopes
+        )
+        action_code = None
+        action_target = {"kind": "annotation", "id": annotation["annotation_id"]}
+        action_users = [actor.user_id]
+        action_domains = []
+        if not annotation["source_current"]:
+            blockers.append("annotation_source_stale")
+            if can_create:
+                action_code = "replace_annotation_source"
+        elif not annotation["attached"] and can_create:
+            action_code = "inspect_annotated_material"
+        elif view["state"] == "pending_review" and actor.user_id in eligible:
+            action_code = "confirm_annotated_material"
+            action_domains = signer_domains or ([domain] if domain else [])
+        elif view["state"] == "confirmed" and not annotation["released"]:
+            failed = annotation["job_status"] in {"failed", "cancelled"}
+            blockers.append("annotation_release_failed" if failed else "annotation_release_pending")
+            if failed and can_create:
+                action_code = "retry_annotation_release"
+            elif annotation["job_id"]:
+                action_code = "view_job"
+                action_target = {"kind": "job", "id": annotation["job_id"]}
+        if action_code:
+            actions.insert(
+                0,
+                BoardActionView.model_validate(
+                    dict(
+                        code=action_code,
+                        target=action_target,
+                        eligible_user_ids=action_users,
+                        eligible_domains=action_domains,
+                    )
+                ),
+            )
     if mentioned_thread_id is not None:
         actions.append(
             BoardActionView.model_validate(

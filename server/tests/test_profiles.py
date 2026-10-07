@@ -176,11 +176,11 @@ async def test_profile_roles_preserve_old_grants(
 ):
     from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES
 
-    requirement_scopes = {"req:confirm", "req:manual"}
-    assert ROLE_SCOPES[role] & requirement_scopes == (
-        requirement_scopes if role in {"admin", "bidder", "technical"} else set()
+    human_workflow_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
+    assert ROLE_SCOPES[role] & human_workflow_scopes == (
+        human_workflow_scopes if role in {"admin", "bidder", "technical"} else set()
     )
-    assert requirement_scopes.isdisjoint(SCOPES)
+    assert human_workflow_scopes.isdisjoint(SCOPES)
 
     lifecycle_scopes = {"certificate:lifecycle", "profile:lifecycle"}
     assert ROLE_SCOPES[role] & lifecycle_scopes == (
@@ -246,6 +246,7 @@ async def test_profile_roles_preserve_old_grants(
             "certificate:file:write",
             "evidence:source:read",
             "evidence:source:write",
+            "evidence:annotate",
             "template:read",
             "template:write",
             "task:template",

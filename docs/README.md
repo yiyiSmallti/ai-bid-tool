@@ -61,6 +61,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [page-previews.md](notes/page-previews.md): online page previews of original tender documents (招标文件), original certificates and exports, and export conversion.
 - [sandbox-execution.md](notes/sandbox-execution.md): isolated execution, job authorization, artifact provenance, cleanup and downloads.
 - [sandbox-fetch.md](notes/sandbox-fetch.md): allowlist and open-development policies, DNS/IP pinning, fetch quotas, individual-resource denial and trusted request receipts.
+- [annotation.md](notes/annotation.md): source-bound cloud certificate-page candidates, exact-approval confirmed releases, and explicit human attachment.
 - [screenshot-evidence.md](notes/screenshot-evidence.md): screenshot pixel redaction and privacy clearance, vendor web/PDF capture and archival, vendor-source search, response-card image evidence, prototype (原型) delivery decisions, analysis admission and billing, and invalidation/recomputation.
 
 ## Decision records
@@ -79,7 +80,7 @@ Implementation and acceptance status is maintained on each plan page; the
 [roadmap](plan/roadmap.md) links the remaining work and dependencies.
 
 - [Remaining scope and roadmap](plan/roadmap.md) (plan): coverage matrices, known defects and open decisions.
-- [Rust annotation contract](plan/annotation.md) (plan): local annotation copies of pinned, unconfirmed sources.
+- [Cloud annotation contract](plan/annotation.md) (plan): archived certificate pages, bounded server rendering, human response review and confirmed image releases.
 - [Org model configuration contract](plan/provider-config.md) (plan): org BYOK models and platform-model selection.
 - [Export contract](plan/export.md) (plan): human export of deviation (偏离) tables and evidence attachments using org Word templates; Word/WPS visual pagination acceptance.
 - [Screenshot and evidence-image contract](plan/screenshots.md) (plan): screenshots, vendor-material capture, redaction, model prototypes and response evidence.

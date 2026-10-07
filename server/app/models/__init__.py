@@ -4,6 +4,7 @@ __all__ = ["Base"]
 
 # Register response tables for migration metadata and SQL-level isolation tests.
 from app.models import agent as agent
+from app.models import annotations as annotations
 from app.models import check as check
 from app.models import confidential as confidential
 from app.models import exports as exports

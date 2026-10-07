@@ -6,6 +6,52 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Annotation regression fixes
+
+- Pinned `team_cosign_snapshot` to the UTC TimeZone. It hashes whole requirement,
+  chunk and evidence rows with `to_jsonb`, which renders timestamps in the session
+  TimeZone, so connections with different settings invalidated open review rounds.
+- Normalized approval timestamps to UTC before hashing, retaining exact approval
+  comparisons across confirmation and worker transactions with different database
+  time zones. See [approval binding](notes/annotation.md#how-it-works).
+- Aligned role-preservation expectations with the approved human-only annotation
+  grant. Token and privacy-release fixtures now reach the intended authority gate
+  with valid inputs and distinct assets; existing token CHECKs remain cumulative.
+- Kept automatically classified response cards in their assigned domain during
+  export acceptance, submitting through a contributor and confirming through the
+  corresponding reviewer.
+- Corrected the annotation browser fixture's running-job Result envelope and the
+  stale-release button selector, retaining cancellation and no-preview assertions.
+
+## 2026-10-06: Cloud certificate-page annotation slice
+
+- Added the approved B05 runtime contract and certificate-page API/CLI path:
+  explicit source/geometry preview, reviewed hash admission, immutable server-rendered
+  candidates, bounded history and signed preview downloads. Vendor renditions and
+  arbitrary profile/contract attachments remain deferred.
+- Extended the trusted screenshot-renderer binary with annotation description and
+  candidate/release profiles. Read-only `--annotation-describe` predicts the complete
+  canvas without producing pixels; confirmed releases preserve the reviewed content
+  and canonical Evidence hash while binding the exact current human approval.
+- Added source-bound storage and migration guards, worker publication/cancellation,
+  task events and board recovery actions, current B02/co-sign approval binding, and
+  draft/export release dependencies. Workers never attach material or confirm Evidence.
+- Added a fail-closed Linux renderer launcher with child resource limits and
+  architecture-checked seccomp network/process/write restrictions. The Docker
+  build packages the same Rust binary root-owned and executable, and the worker
+  definition caps CPU. Unsupported host configurations reject rendering explicitly.
+- Added the console's certificate source picker, numeric crop/box controls, explicit
+  preview and submission, actual-candidate inspection, manual `ImageEvidenceInput`
+  staging in the response editor, and separate requirement/co-sign/release states.
+- Added compatible `--id` aliases to job status/wait/cancel while retaining positional
+  UUIDs; ambiguous or missing IDs fail before requests. Added CLI transport snapshots
+  and mocked Playwright acceptance with bounded reads,
+  conflicts, read-only roles, failed/cancelled jobs and org-reset cases. Added durable
+  pre-upload staging and age-gated orphan reconciliation without requeuing cancelled
+  rendering. The repeatable cases and remaining acceptance are defined in the
+  [annotation plan](plan/annotation.md#failure-modes-and-test-plan).
+  See the [mechanism note](notes/annotation.md).
+
 ## 2026-10-06: Certificate and org-profile management slice
 
 - Keep qualification list tables mounted across page loads so clearing their data

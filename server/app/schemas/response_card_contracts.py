@@ -10,7 +10,12 @@ from pydantic import Field, field_validator, model_validator
 from app.schemas.agent_provenance import AgentProvenance
 from app.schemas.contracts import Category, Contract, Cost, Source
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive
-from app.schemas.screenshot_contracts import ImageEvidenceInput, PixelRect, RenditionView
+from app.schemas.screenshot_contracts import (
+    AnnotationEvidenceRendition,
+    ImageEvidenceInput,
+    PixelRect,
+    RenditionView,
+)
 
 type CardState = Literal["draft", "pending_review", "confirmed", "rejected", "needs_material"]
 type ReviewDomain = Literal["commercial", "technical"]
@@ -271,7 +276,7 @@ class CardGenerateResult(_TrimmedContract):
 
 
 class EvidenceView(_TimestampContract):
-    image_rendition: RenditionView | None = None
+    image_rendition: RenditionView | AnnotationEvidenceRendition | None = None
     id: UUID
     org_id: UUID
     task_id: UUID

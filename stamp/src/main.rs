@@ -9,6 +9,10 @@ use std::collections::BTreeMap;
 use std::fmt::{Display, Formatter};
 use std::io::{self, Cursor, Read, Write};
 
+mod annotation;
+#[cfg(test)]
+mod annotation_tests;
+
 const MAX_IMAGE_BYTES: usize = 40 * 1024 * 1024;
 const MAX_REQUEST_BYTES: usize = 64 * 1024;
 const MAX_DIMENSION: u32 = 8192;
@@ -150,20 +154,39 @@ fn run() -> Result<(), RendererError> {
     stdin
         .read_exact(&mut request_bytes)
         .map_err(|_| RendererError::invalid("request metadata is incomplete"))?;
-    let request: RenderRequest = serde_json::from_slice(&request_bytes)
+    let metadata: serde_json::Value = serde_json::from_slice(&request_bytes)
         .map_err(|_| RendererError::invalid("request metadata is invalid"))?;
+    let describe = std::env::args().skip(1).collect::<Vec<_>>() == ["--annotation-describe"];
+    if std::env::args().len() > 1 && !describe {
+        return Err(RendererError::invalid("renderer argument is unsupported"));
+    }
     let mut content = Vec::new();
     stdin
         .take((MAX_IMAGE_BYTES + 1) as u64)
         .read_to_end(&mut content)
         .map_err(|_| RendererError::image("image input could not be read"))?;
-    if content.is_empty() || content.len() > MAX_IMAGE_BYTES {
+    if (!describe && content.is_empty()) || content.len() > MAX_IMAGE_BYTES {
         return Err(RendererError::image("image input exceeds its limit"));
     }
 
-    let (png, rendering) = render(content, request)?;
-    let metadata = serde_json::to_vec(&rendering)
-        .map_err(|_| RendererError::internal("rendering receipt could not be encoded"))?;
+    let (metadata, png) = if metadata.get("protocol").is_some() {
+        let (receipt, png) = annotation::execute(&request_bytes, content, describe)?;
+        let encoded = serde_json::to_vec(&receipt)
+            .map_err(|_| RendererError::internal("rendering receipt could not be encoded"))?;
+        (encoded, png)
+    } else {
+        if describe {
+            return Err(RendererError::invalid(
+                "description requires annotation protocol",
+            ));
+        }
+        let request: RenderRequest = serde_json::from_slice(&request_bytes)
+            .map_err(|_| RendererError::invalid("request metadata is invalid"))?;
+        let (png, receipt) = render(content, request)?;
+        let encoded = serde_json::to_vec(&receipt)
+            .map_err(|_| RendererError::internal("rendering receipt could not be encoded"))?;
+        (encoded, png)
+    };
     if metadata.len() > MAX_REQUEST_BYTES {
         return Err(RendererError::internal(
             "rendering receipt exceeds its limit",

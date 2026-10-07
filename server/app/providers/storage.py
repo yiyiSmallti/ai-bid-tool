@@ -171,11 +171,13 @@ class LocalStorage:
 
 
 class S3Storage:
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, *, request_timeout_seconds: float | None = None):
         import boto3
+        from botocore.config import Config
 
         if not settings.s3_access_key or not settings.s3_secret_key:
             raise ValueError("S3 credentials are required for S3 mode")
+        self._annotation_storage: S3Storage | None = None
         self.bucket = settings.s3_bucket
         self.cipher = FileCipher.for_data(settings)
         self.client = boto3.client(
@@ -183,6 +185,17 @@ class S3Storage:
             endpoint_url=settings.s3_endpoint,
             aws_access_key_id=settings.s3_access_key.get_secret_value(),
             aws_secret_access_key=settings.s3_secret_key.get_secret_value(),
+            **(
+                {
+                    "config": Config(
+                        connect_timeout=request_timeout_seconds,
+                        read_timeout=request_timeout_seconds,
+                        retries={"total_max_attempts": 1},
+                    )
+                }
+                if request_timeout_seconds is not None
+                else {}
+            ),
         )
 
     async def put(self, org_id: UUID, key: str, content: bytes) -> None:
@@ -313,3 +326,14 @@ def create_storage(settings: Settings) -> "LocalStorage | S3Storage":
             [item.get_secret_value() for item in settings.encryption_key_previous],
         )
     )
+
+
+def annotation_storage(storage: Storage, settings: Settings) -> Storage:
+    """Use short, non-retrying S3 requests within B05's attempt and orphan grace."""
+    if not isinstance(storage, S3Storage):
+        return storage
+    scoped = getattr(storage, "_annotation_storage", None)
+    if scoped is None:
+        scoped = S3Storage(settings, request_timeout_seconds=10.0)
+        storage._annotation_storage = scoped
+    return scoped

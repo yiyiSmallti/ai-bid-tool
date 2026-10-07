@@ -300,7 +300,7 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
         lifecycle_scopes if role in {"admin", "bidder"} else set()
     )
     assert lifecycle_scopes.isdisjoint(SCOPES)
-    requirement_scopes = {"req:confirm", "req:manual"}
+    requirement_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
     assert ROLE_SCOPES[role] & requirement_scopes == (
         requirement_scopes if role in {"admin", "bidder", "technical"} else set()
     )
@@ -324,6 +324,7 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
         "certificate:file:write",
         "evidence:source:read",
         "evidence:source:write",
+        "evidence:annotate",
         "billing:read",
         "billing:redeem",
         "provider:read",

@@ -1210,6 +1210,10 @@ async def build_evidence(
 ):
     rows = []
     for item in content.evidence:
+        if isinstance(item, ImageEvidenceInput):
+            from app.services.annotations import attachment_gate
+
+            await attachment_gate(session, actor, item.rendition_id, storage=storage)
         fixed = await resolve_material(
             session,
             actor,

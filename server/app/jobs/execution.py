@@ -52,6 +52,8 @@ ADMISSION_STOPS = TASK_STOPS | {
     "job_call_limit_exceeded",
 }
 JOB_SCOPES = {
+    "annotation_render": "evidence:annotate",
+    "annotation_release": "card:read",
     "parse": "tender:parse",
     "extract": "req:extract",
     "card_generate": "card:generate",
@@ -93,6 +95,10 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
         raise ProviderFailure(
             "Resubmit this job with an authorized identity", code="job_actor_required"
         )
+    if job.kind in {"annotation_render", "annotation_release"}:
+        from app.services.annotations import worker_access
+
+        return await worker_access(session, job, bind_context=bind_context)
     member = await membership(session, job.actor_user_id, job.org_id)
     user = await session.get(User, job.actor_user_id)
     if user is None or not user.active:

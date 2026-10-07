@@ -176,7 +176,7 @@ for _role, _scopes in ROLE_SCOPES.items():
         )
     _scopes.update({"provider:read", "screenshot:read"})
     if _role != "viewer":
-        _scopes.update({"screenshot:write", "screenshot:ingest"})
+        _scopes.update({"screenshot:write", "screenshot:ingest", "evidence:annotate"})
     _scopes.update({"card:read", "draft:read", "sandbox:read", "confidential:read", "check:read"})
     _scopes.add("score:read")
     if _role != "viewer":
@@ -210,6 +210,7 @@ for _role in ("admin", "bidder", "technical"):
 
 
 HUMAN_ONLY_SCOPES = {
+    "evidence:annotate",
     "certificate:lifecycle",
     "profile:lifecycle",
     "req:confirm",

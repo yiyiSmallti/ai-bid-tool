@@ -286,7 +286,8 @@ def create_app(
                 len(parts) == 3
                 and parts[0] == "tasks"
                 and parts[2] == "jobs"
-                and request.query_params.get("kind") in {"check", "score_rubric", "score"}
+                and request.query_params.get("kind")
+                in {"check", "score_rubric", "score", "annotation_render", "annotation_release"}
             )
             or (
                 request.query_params.get("view") == "console"
@@ -302,9 +303,13 @@ def create_app(
                 )
             )
         )
+        annotation_route = (
+            len(parts) == 3 and parts[0] == "tasks" and parts[2] == "annotations"
+        ) or (parts[0] in {"annotations", "annotation-releases"} and parts[-1] != "content")
         response = (
             error_response(request, ServiceError("not_found", "Resource not found", 404, 4))
-            if version == "3.0" and (budget_route or agent_route or assessment_route)
+            if version == "3.0"
+            and (budget_route or agent_route or assessment_route or annotation_route)
             else await call_next(request)
         )
         response.headers["X-Bid-Contract-Version"] = version
@@ -482,10 +487,28 @@ def create_app(
         resource_management_read = request.scope["route"].name in RESOURCE_MANAGEMENT_READS
         dry_run = request.query_params.get("dry_run") == "true"
         if request.headers.get("content-type", "").startswith("application/json"):
-            try:
-                body = await request.json()
-            except (ValueError, UnicodeDecodeError):
-                body = None
+            if request.scope["route"].name in {
+                "evidence_stamp",
+                "evidence_annotation_release_retry",
+            }:
+                from pydantic import TypeAdapter
+
+                from app.api.annotations import BODY, bounded_input
+                from app.schemas.annotation_contracts import AnnotationReleaseRetry
+
+                adapter = (
+                    BODY
+                    if request.scope["route"].name == "evidence_stamp"
+                    else TypeAdapter(AnnotationReleaseRetry)
+                )
+                parsed = await bounded_input(request, adapter)
+                request.state.annotation_input = parsed
+                body = parsed.model_dump(mode="json")
+            else:
+                try:
+                    body = await request.json()
+                except (ValueError, UnicodeDecodeError):
+                    body = None
             dry_run = dry_run or (isinstance(body, dict) and body.get("dry_run") is True)
         try:
             async with db.transaction(x_org_id) as session:
@@ -503,6 +526,7 @@ def create_app(
                     # Consumed only by the first management resource read in this request.
                     session.info["management_authenticated_actor"] = identity
                 session.info["memory_settings"] = settings
+                session.info["annotation_queue"] = queue
                 session.info["command"] = command
                 if identity.token_id is not None and not dry_run:
                     audit(
@@ -561,6 +585,11 @@ def create_app(
     from app.api.requirement_confirmation import create_router as create_requirement_review_router
 
     app.include_router(create_requirement_review_router(context, settings))
+    from app.api.annotations import create_router as create_annotation_router
+
+    app.include_router(
+        create_annotation_router(context, storage, queue, settings, crypto, processor)
+    )
     app.include_router(create_task_cosign_router(context, settings, storage))
     app.include_router(create_task_discussion_router(context, settings))
     task_board_router = create_task_board_router(context, db, storage, queue, settings)

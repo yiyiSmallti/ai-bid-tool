@@ -267,6 +267,7 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "sandbox:capture",
         "req:confirm",
         "req:manual",
+        "evidence:annotate",
     }
     assert ROLE_SCOPES[role] - later == set(BASELINE[role])
     # Export is a human bidder responsibility; source-read remains unchanged.

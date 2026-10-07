@@ -40,6 +40,18 @@ class Queue:
         self.sandbox_task = register_sandbox_task(self.app, lambda: self.processor)
         self.task = process
 
+        @self.app.task(name="bid.annotation_cleanup", queue="bid", retry=True)
+        async def annotation_cleanup(org_id: str, job_id: str):
+            from uuid import UUID
+
+            from app.services.annotation_objects import reconcile
+
+            if self.processor is None:
+                raise RuntimeError("Worker processor is not configured")
+            await reconcile(self.processor, UUID(org_id), UUID(job_id))
+
+        self.annotation_cleanup_task = annotation_cleanup
+
         @self.app.task(name="bid.agent_wake", queue="bid", retry=True)
         async def agent_wake(org_id: str, session_id: str):
             from uuid import UUID
@@ -72,6 +84,30 @@ class Queue:
         return await self.task.configure(connection=connection).defer_async(
             org_id=org_id, job_id=job_id
         )
+
+    async def enqueue_annotation_cleanup_in_transaction(
+        self, session: AsyncSession, org_id: str, job_id: str, *, delay: int = 300
+    ) -> int:
+        """Commit delayed cleanup with the stage record, without requeueing rendering."""
+        from app.services.annotation_objects import GRACE_SECONDS
+
+        key = f"annotation-cleanup:{org_id}:{job_id}"
+        await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key})
+        existing = await session.scalar(
+            text(
+                "SELECT id FROM procrastinate_jobs WHERE task_name='bid.annotation_cleanup' "
+                "AND queueing_lock=:key AND status='todo' ORDER BY id LIMIT 1"
+            ),
+            {"key": key},
+        )
+        if existing is not None:
+            return existing
+        connection = await self.transaction_connection(session)
+        return await self.annotation_cleanup_task.configure(
+            connection=connection,
+            queueing_lock=key,
+            schedule_at=datetime.now(UTC) + timedelta(seconds=max(GRACE_SECONDS, delay)),
+        ).defer_async(org_id=org_id, job_id=job_id)
 
     async def ensure_process_delivery(self, session: AsyncSession, job) -> None:
         """A killed queue worker may never have reached the business Job claim."""
