@@ -26,13 +26,16 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   Review stays disabled during original download and integrity validation; browser
   scenarios wait for that gate and verify corrupt originals cannot enable review.
 - Added DB-backed API/service, role/isolation, fixed-scale, CLI snapshot and mocked
-  browser acceptance scenarios. Fixed-scale template/binding latency acceptance
-  passed before integration with the certificate/profile and annotation slices.
-  Full database acceptance reported failures; guard and regression corrections
-  require a rerun against the integrated migration chain. Merged database,
-  Chromium and fixed-scale acceptance remain pending. See the
+  browser acceptance scenarios. See the
   [template scope](plan/management-pages.md#template-vertical-slice) and
   [mechanism](notes/management-pages.md).
+
+## 2026-10-06: Production deployment plan
+
+- Add the [production deployment plan](plan/production-deployment.md) covering
+  environment decisions, repository deployment prerequisites, recovery and release
+  acceptance; link it from roadmap F10. The owner approved the plan; environment
+  decisions remain open and no deployment has been executed.
 
 ## 2026-10-06: Annotation regression fixes
 
