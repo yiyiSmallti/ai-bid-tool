@@ -4,7 +4,7 @@ kind: plan
 
 # Contract: U01 org management pages
 
-Status: **approved; product, feature, certificate/profile and template slices implemented**.
+Status: **approved; product, feature, certificate/profile, template and confidential slices implemented**.
 This contract covers the remaining management-page scope of
 [roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
 The implemented resource slices supply bounded browse/search, creation, exact
@@ -13,14 +13,15 @@ lifecycle events, and explicit task pinning. Features add same-org product and
 implementation-state filters. Certificates/profiles add exact original-file
 inspection, explicit certificate date advisories and bidder/admin lifecycle
 authority. Templates add original DOCX access and human-reviewed immutable export
-bindings. Configuration, memory and confidential-page changes remain later slices.
+bindings. Confidential fields add bounded metadata/current/history reads and guarded
+value writes. Configuration and memory changes remain later slices.
 The [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
 remain approval artifacts; [runtime management contracts](../../server/app/schemas/management_pages.py)
 and the [mechanism note](../notes/management-pages.md) define the implemented path.
 Merged database, real-browser and fixed-scale acceptance remains pending. Earlier
 slice checks do not establish acceptance of the integrated migration chain;
-[shipped changes](../changelog.md#2026-10-06-template-and-binding-management-slice)
-record the template scope and its acceptance limitation.
+[shipped changes](../changelog.md#2026-10-06-confidential-field-management-slice)
+record the confidential scope and its acceptance limitation.
 
 ## Goal and boundary
 
@@ -67,7 +68,7 @@ page, searching, loading history or editing a form.
 | Configuration | [api/providers.py](../../server/app/api/providers.py); [provider_configs.py](../../server/app/services/provider_configs.py) `require_access/set_config/list_configs/config_view/catalog_view/balance_view/submit_test/preview_test` | Only `llm_extract`, org BYOK and platform model selection exist. The design's OCR/vision/search/embedding configuration and task provider profiles are deferred. Existing `GET /providers` can query vendor balance; history includes unbounded per-revision usage aggregation |
 | Platform secrets | [platform_credentials.py](../../server/app/services/platform_credentials.py), [configured.py](../../server/app/providers/configured.py), [ADR 0006](../adr/0006-platform-credentials.md) | Separate platform operator console (平台运营后台), TOTP and restricted connection roles. No org-facing credential resolver or platform-key management. No env fallback |
 | Memory | [api/memory.py](../../server/app/api/memory.py), [memory/access.py](../../server/app/memory/access.py), [crud.py](../../server/app/memory/crud.py), [feedback.py](../../server/app/memory/feedback.py), [candidates.py](../../server/app/memory/candidates.py), [retrieval.py](../../server/app/memory/retrieval.py), [safety.py](../../server/app/memory/safety.py) | Org scope and keyword retrieval only; four-scope schema enums do not enable the other scopes or embeddings. Management list is paged but has no text/tag/expired filter. Retrieval is not a complete library search |
-| Confidential data | [api/confidential.py](../../server/app/api/confidential.py), [confidential.py](../../server/app/services/confidential.py) `update_field/set_value/list_values/history/reveal` | Field label/archive updates mutate a metadata row with a revision counter; there is no field-metadata revision archive. Value versions are immutable and encrypted. Existing value writes serialize under a field lock but have no optimistic value precondition |
+| Confidential data | [api/confidential.py](../../server/app/api/confidential.py), [confidential.py](../../server/app/services/confidential.py) `update_field/set_value/list_values/history/reveal` | Field label/archive updates mutate a metadata row with a revision counter; there is no field-metadata revision archive. Value versions are immutable and encrypted. Legacy value writes serialize under a field lock without an optimistic precondition; management writes add owner-specific field/value CAS |
 | Console | [router.js](../../web/src/router.js), [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue), [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [api.js](../../web/src/api.js), [task-authority.js](../../web/src/task-authority.js) | Profiles, embedded certificates and confidential fields already have pages. Product, feature, certificate/profile and template management pages are implemented; org provider and memory pages remain deferred. The org path allowlist must gain exact new paths, not an unrestricted API proxy |
 | Team and cost | [task_workflow.py](../../server/app/services/task_workflow.py) `live_actor/access`; [task_authorization.py](../../server/app/services/task_authorization.py) `task_authorized`; [contracts.py](../../server/app/schemas/contracts.py) `CONTRACT_VERSION/Cost/Result`; [budget](budget.md) | Task membership/archival and Result 4.0 budgets are present. Earlier passages in memory/assessment plans saying task membership is absent, or in check plans saying budgets are not enforced, cannot describe these pages' gates |
 
@@ -217,9 +218,33 @@ Original reads require
 `template:read` and human-only `template:file:read`; template upload retains its
 existing token eligibility. Binding preview/create retain their existing human gates.
 
-Providers, memory and confidential-page changes remain later slices. Database,
+Providers and memory remain later slices. Database,
 real-browser and measured fixed-scale acceptance of the integrated slices remains
 pending; DB-free checks do not complete that acceptance.
+
+### Confidential management slice
+
+The confidential slice extends `/app/org/confidential` with field registration,
+label revision, archive/unarchive, separate bounded definition/current-value views,
+masked value history and owner-specific CAS. Task pages link to this same screen
+with an explicit task ID. Legacy task-panel and CLI append writes remain compatible.
+Field metadata revisions remain counters; there is no metadata revision archive,
+historical-label restore or invented revision author. Value rows retain their real
+`set_at`/`set_by` metadata. Reveal uses the existing audited human action.
+
+Migration [0055](../../server/migrations/versions/0055_confidential_management.py)
+adds generated key/label search metadata, a derived tenant-isolated lexeme
+projection with C-collated prefix-range indexes, owner-specific bounded-read indexes
+and an AFTER metadata-update guard. Existing FORCE RLS, composite keys, column grants,
+append-only value grants and human-only token checks remain in force.
+`ConfidentialQuery.field_id` is an additive exact filter for editor hydration:
+prefix matches can exceed one page, so a selected field must not be resolved by
+searching only the first 25 matches. It filters both definitions and masked current
+values and binds continuation cursors, without adding a new detail route.
+
+Database, real-browser and measured fixed-scale acceptance remain pending.
+[Confidential mechanism](../notes/confidential-values.md#bounded-management-and-checked-writes)
+defines the storage, read and concurrency boundaries.
 
 ## Permission and task boundaries
 
@@ -397,8 +422,7 @@ accordingly. No historical field-label restore is promised.
 
 List/detail/history never carry plaintext values. Preserve existing masked-tail
 policy only for authorized confidential views; amounts and short values have no
-tail. New values enter a blank write-only control. Proposed
-`ConfidentialValueRevisionSet` adds exact field/value compare-and-swap (CAS)
+tail. New values enter a blank write-only control. `ConfidentialValueRevisionSet` adds exact field/value compare-and-swap (CAS)
 preconditions under the existing field lock, comparing the current value for the exact field and
 org/task owner. A required null expected value asserts absence for that owner,
 not absence across all tasks. The dedicated submit transport must send the
@@ -502,8 +526,8 @@ root remains active; check both roots in stable ID order after task locks.
 ## HTTP and Pydantic interfaces
 
 Product, feature, certificate, profile and template query, detail, history and
-lifecycle paths, plus binding query/detail, are implemented under `/v4`. Paths for
-other areas remain proposed and have no placeholder handlers. Paths in existing tables omit `/v4` for readability; new pages request
+lifecycle paths, binding query/detail, and confidential query/history/CAS are
+implemented under `/v4`. Provider and memory additions remain proposed and have no placeholder handlers. Paths in existing tables omit `/v4` for readability; new pages request
 version 4 explicitly through `orgRequest`/`api.request(contractVersion:4)`. Existing
 unprefixed routes retain compatibility projections. Register fixed query/history
 paths before UUID routes and extend the browser allowlist by exact route pattern.
@@ -669,7 +693,8 @@ Features accept product/status filters only; other kinds reject these fields.
 Memory search uses sanitized current text/conflict key/tags and kind/stored status/
 expiry, with explicit `include_deleted` admin gate. Tag matching is all selected
 tags. Confidential search covers key/label only; `task_id` establishes authorization,
-not a cross-task search. `archived=true` includes archived definitions/values rather
+not a cross-task search. Optional `field_id` restricts either browse to one exact
+same-org definition without weakening task authorization. `archived=true` includes archived definitions/values rather
 than meaning archived-only; field definitions are org-wide even with task context.
 
 | Bound | Requirement |
@@ -736,7 +761,7 @@ and fixed error code without request/response capture.
 
 ## Test plan and repeatable artifacts
 
-The product, feature, certificate/profile and template slices have API/PostgreSQL,
+The product, feature, certificate/profile, template and confidential slices have API/PostgreSQL,
 CLI, fixed-scale and mocked-browser acceptance tests. The following remain implementation acceptance requirements for their
 respective slices; neither code inspection nor mocked
 Playwright proves database authorization. Use the project's fake Providers and
@@ -781,7 +806,8 @@ Use a canary input only in memory and assert its absence from outputs/logs/artif
 Use [product scenarios](../../web/e2e/management-pages.spec.js),
 [feature scenarios](../../web/e2e/feature-management.spec.js),
 [certificate/profile scenarios](../../web/e2e/qualification-management.spec.js) and
-[template scenarios](../../web/e2e/template-management.spec.js), following
+[template scenarios](../../web/e2e/template-management.spec.js) and
+[confidential scenarios](../../web/e2e/confidential-management.spec.js), following
 [console-assessments.spec.js](../../web/e2e/console-assessments.spec.js) and
 [team-workflow.spec.js](../../web/e2e/team-workflow.spec.js), using the built app and
 stateful intercepted `/v4` API calls. Fixtures are test-only; production pages
@@ -810,7 +836,7 @@ built app is:
 
 ```sh
 cd web
-E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js e2e/feature-management.spec.js e2e/qualification-management.spec.js e2e/template-management.spec.js
+E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js e2e/feature-management.spec.js e2e/qualification-management.spec.js e2e/template-management.spec.js e2e/confidential-management.spec.js
 ```
 
 Each spec must validate that its resolved output directory is inside the

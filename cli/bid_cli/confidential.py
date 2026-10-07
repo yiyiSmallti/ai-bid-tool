@@ -143,3 +143,7 @@ def register(app: typer.Typer) -> None:
             "confidential history",
             json_output,
         )
+
+    from bid_cli.management_confidential import register as register_management
+
+    register_management(confidential_app, field_app)

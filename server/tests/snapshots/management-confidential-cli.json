@@ -1,0 +1,772 @@
+{
+  "remote:0:confidential field browse": {
+    "ok": true,
+    "command": "confidential field browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 1,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "key": "bid_total",
+        "placeholder": "{{confidential.bid_total}}",
+        "label": "投标总价",
+        "kind": "amount",
+        "scope": "task",
+        "archived": false,
+        "revision": 1,
+        "created_at": "2026-10-06T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:1:confidential browse": {
+    "ok": true,
+    "command": "confidential browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 1,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [
+      {
+        "field_id": "00000000-0000-4000-8000-000000000001",
+        "key": "bid_total",
+        "placeholder": "{{confidential.bid_total}}",
+        "label": "投标总价",
+        "kind": "amount",
+        "scope": "task",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "status": "filled",
+        "value_id": "00000000-0000-4000-8000-000000000001",
+        "version": 1,
+        "tail": null,
+        "set_by": "00000000-0000-4000-8000-000000000001",
+        "set_at": "2026-10-06T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:2:confidential history-page": {
+    "ok": true,
+    "command": "confidential history-page",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 1,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [
+      {
+        "field_id": "00000000-0000-4000-8000-000000000001",
+        "key": "bid_total",
+        "placeholder": "{{confidential.bid_total}}",
+        "label": "投标总价",
+        "kind": "amount",
+        "scope": "task",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "status": "filled",
+        "value_id": "00000000-0000-4000-8000-000000000001",
+        "version": 1,
+        "tail": null,
+        "set_by": "00000000-0000-4000-8000-000000000001",
+        "set_at": "2026-10-06T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:3:confidential set-checked": {
+    "ok": true,
+    "command": "confidential set-checked",
+    "data": {
+      "field_id": "00000000-0000-4000-8000-000000000001",
+      "key": "bid_total",
+      "placeholder": "{{confidential.bid_total}}",
+      "label": "投标总价",
+      "kind": "amount",
+      "scope": "task",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "status": "filled",
+      "value_id": "00000000-0000-4000-8000-000000000001",
+      "version": 1,
+      "tail": null,
+      "set_by": "00000000-0000-4000-8000-000000000001",
+      "set_at": "2026-10-06T00:00:00Z"
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:4:confidential set-checked": {
+    "ok": true,
+    "command": "confidential set-checked",
+    "data": {
+      "field_id": "00000000-0000-4000-8000-000000000001",
+      "key": "bid_total",
+      "placeholder": "{{confidential.bid_total}}",
+      "label": "投标总价",
+      "kind": "amount",
+      "scope": "task",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "status": "filled",
+      "value_id": "00000000-0000-4000-8000-000000000001",
+      "version": 1,
+      "tail": null,
+      "set_by": "00000000-0000-4000-8000-000000000001",
+      "set_at": "2026-10-06T00:00:00Z"
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:confidential field browse": {
+    "ok": true,
+    "command": "confidential field browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 0,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:confidential browse": {
+    "ok": true,
+    "command": "confidential browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 0,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:confidential history-page": {
+    "ok": true,
+    "command": "confidential history-page",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 0,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP404:not_found": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP409:confidential_value_conflict": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "confidential_value_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP409:revision_conflict": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP429:rate_limit": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "rate_limit",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP503:unavailable": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:0:confidential field browse": {
+    "ok": true,
+    "command": "confidential field browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 1,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "key": "bid_total",
+        "placeholder": "{{confidential.bid_total}}",
+        "label": "投标总价",
+        "kind": "amount",
+        "scope": "task",
+        "archived": false,
+        "revision": 1,
+        "created_at": "2026-10-06T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:1:confidential browse": {
+    "ok": true,
+    "command": "confidential browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 1,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [
+      {
+        "field_id": "00000000-0000-4000-8000-000000000001",
+        "key": "bid_total",
+        "placeholder": "{{confidential.bid_total}}",
+        "label": "投标总价",
+        "kind": "amount",
+        "scope": "task",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "status": "filled",
+        "value_id": "00000000-0000-4000-8000-000000000001",
+        "version": 1,
+        "tail": null,
+        "set_by": "00000000-0000-4000-8000-000000000001",
+        "set_at": "2026-10-06T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:2:confidential history-page": {
+    "ok": true,
+    "command": "confidential history-page",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 1,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [
+      {
+        "field_id": "00000000-0000-4000-8000-000000000001",
+        "key": "bid_total",
+        "placeholder": "{{confidential.bid_total}}",
+        "label": "投标总价",
+        "kind": "amount",
+        "scope": "task",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "status": "filled",
+        "value_id": "00000000-0000-4000-8000-000000000001",
+        "version": 1,
+        "tail": null,
+        "set_by": "00000000-0000-4000-8000-000000000001",
+        "set_at": "2026-10-06T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:3:confidential set-checked": {
+    "ok": true,
+    "command": "confidential set-checked",
+    "data": {
+      "field_id": "00000000-0000-4000-8000-000000000001",
+      "key": "bid_total",
+      "placeholder": "{{confidential.bid_total}}",
+      "label": "投标总价",
+      "kind": "amount",
+      "scope": "task",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "status": "filled",
+      "value_id": "00000000-0000-4000-8000-000000000001",
+      "version": 1,
+      "tail": null,
+      "set_by": "00000000-0000-4000-8000-000000000001",
+      "set_at": "2026-10-06T00:00:00Z"
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:4:confidential set-checked": {
+    "ok": true,
+    "command": "confidential set-checked",
+    "data": {
+      "field_id": "00000000-0000-4000-8000-000000000001",
+      "key": "bid_total",
+      "placeholder": "{{confidential.bid_total}}",
+      "label": "投标总价",
+      "kind": "amount",
+      "scope": "task",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "status": "filled",
+      "value_id": "00000000-0000-4000-8000-000000000001",
+      "version": 1,
+      "tail": null,
+      "set_by": "00000000-0000-4000-8000-000000000001",
+      "set_at": "2026-10-06T00:00:00Z"
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:confidential field browse": {
+    "ok": true,
+    "command": "confidential field browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 0,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:confidential browse": {
+    "ok": true,
+    "command": "confidential browse",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 0,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:confidential history-page": {
+    "ok": true,
+    "command": "confidential history-page",
+    "data": {
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "as_of": "2026-10-06T00:00:00Z",
+      "returned": 0,
+      "next_cursor": null,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP404:not_found": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP409:confidential_value_conflict": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "confidential_value_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP409:revision_conflict": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP429:rate_limit": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "rate_limit",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP503:unavailable": {
+    "ok": false,
+    "command": "confidential set-checked",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  }
+}
