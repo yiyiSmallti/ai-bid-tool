@@ -277,6 +277,8 @@ from bid_cli.management_confidential import COMMAND_ITEMS as CONFIDENTIAL_COMMAN
 from bid_cli.management_features import COMMAND_DATA as FEATURE_COMMAND_DATA
 from bid_cli.management_features import COMMAND_INPUTS as FEATURE_COMMAND_INPUTS
 from bid_cli.management_features import COMMAND_ITEMS as FEATURE_COMMAND_ITEMS
+from bid_cli.management_memory import COMMAND_INPUTS as MEMORY_COMMAND_INPUTS
+from bid_cli.management_memory import COMMAND_ITEMS as MEMORY_COMMAND_ITEMS
 from bid_cli.management_products import COMMAND_DATA, COMMAND_INPUTS, COMMAND_ITEMS
 from bid_cli.management_profiles import COMMAND_DATA as PROFILE_COMMAND_DATA
 from bid_cli.management_profiles import COMMAND_INPUTS as PROFILE_COMMAND_INPUTS
@@ -776,6 +778,7 @@ COMMANDS.update(TEMPLATE_COMMAND_INPUTS)
 COMMANDS.update(BINDING_COMMAND_INPUTS)
 COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
 COMMANDS.update(PROFILE_COMMAND_INPUTS)
+COMMANDS.update(MEMORY_COMMAND_INPUTS)
 COMMANDS.update(PROVIDER_COMMAND_INPUTS)
 COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 
@@ -876,6 +879,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | BINDING_COMMAND_ITEMS
                     | CERTIFICATE_COMMAND_ITEMS
                     | PROFILE_COMMAND_ITEMS
+                    | MEMORY_COMMAND_ITEMS
                     | PROVIDER_COMMAND_ITEMS
                     | CONFIDENTIAL_COMMAND_ITEMS
                 )
@@ -1015,6 +1019,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         | PROFILE_COMMAND_ITEMS
         | TEMPLATE_COMMAND_ITEMS
         | BINDING_COMMAND_ITEMS
+        | MEMORY_COMMAND_ITEMS
         | PROVIDER_COMMAND_ITEMS
         | CONFIDENTIAL_COMMAND_ITEMS
     ).items():

@@ -557,6 +557,9 @@ class AuditLog(Tenant, Base):
     action: Mapped[str] = mapped_column(String(100))
     object_id: Mapped[UUID] = mapped_column()
     details: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    memory_revision_id_text: Mapped[str | None] = mapped_column(
+        Text, Computed("details->>'revision_id'", persisted=True)
+    )
     resource_revision_id_text: Mapped[str | None] = mapped_column(
         Text, Computed("details->>'new_revision_id'", persisted=True)
     )

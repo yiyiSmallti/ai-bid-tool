@@ -20,6 +20,7 @@ watch(discussionDirty, reportDirty);
 watch(cosignDirty, reportDirty);
 watch(tab, value => {if(value === "discussion") discussionOpened.value = true;});
 const card = ref(null), content = ref(emptyContent()), baseline = ref(""), ready = ref(false), busy = ref(false), error = ref(""), notice = ref("");
+const savedMemoryJobs = ref([]);
 const reviewed = ref([]), warnings = ref([]), reason = ref(""), domain = ref("technical"), history = ref(null), sourceChunk = ref(null);
 const conflict = ref(null), conflictOpen = ref(false), heading = ref(null), kindKey = ref(0), marks = ref(new Set());
 simulatedSelections(props.taskId).then((value) => { marks.value = value; }).catch(() => {});
@@ -115,7 +116,7 @@ async function write(path, method, body) {
   try {
     const result = await orgRequest(method, path, body);
     if (!active) return;
-    const value = verifyCard(result.data); install(value); emit("updated", value); notice.value = "操作成功";
+    const value = verifyCard(result.data); install(value); emit("updated", value); savedMemoryJobs.value = result.warnings.filter(warning => /^memory_candidate_dispatch_pending:[0-9a-f-]{36}$/i.test(warning)).map(warning => warning.split(":")[1]); notice.value = savedMemoryJobs.value.length ? "人工卡片决定已保存；候选记忆作业已保存，派发暂未完成。请在反馈队列主动恢复原作业。" : "操作成功";
     window.dispatchEvent(new CustomEvent("bid:task-cards-changed", { detail: { taskId: props.taskId } }));
   } catch (exc) {
     if (exc.name === "AbortError") return;
@@ -177,7 +178,7 @@ onMounted(async () => {
       <div class="actions"><DocumentPreview :document-id="displayedSource.document_id" :name="documentName ?? '招标原件'" :page="displayedSource.page" :block="displayedSource.location?.block_id ?? ''" label="在线查看原文位置" size="small" /><el-button size="small" :icon="View" @click="source">对照原文块</el-button><el-button size="small" :icon="Download" @click="download">下载招标原件</el-button></div>
       <details v-if="sourceChunk" open><summary>所指原文块</summary><pre>{{ sourceChunk.text }}</pre><p v-for="block in sourceChunk.blocks" :key="block.block_id" class="hint">{{ block.label }}：{{ block.text }}</p></details>
       <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
-      <p v-if="notice" class="notice" role="status">{{ notice }}</p>
+      <p v-if="notice" class="notice" role="status">{{ notice }}</p><p v-for="savedJob in savedMemoryJobs" :key="savedJob" class="hint">已保存候选作业 {{savedJob}} · <RouterLink :to="`/org/tasks/${taskId}/memory-feedback?job=${savedJob}`">查看已保存作业并恢复派发</RouterLink></p>
       <el-button v-if="conflict" type="warning" plain size="small" @click="conflictOpen = true">查看修订冲突差异</el-button>
       <el-skeleton v-if="!ready" :rows="5" animated aria-label="正在读取当前修订" />
       <template v-else>

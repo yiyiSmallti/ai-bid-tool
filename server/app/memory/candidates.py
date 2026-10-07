@@ -100,6 +100,18 @@ def worker(job):
 
 
 async def events_access(session, actor, task_id, event_ids, *, execute=True):
+    from app.services.task_workflow import access as task_access
+
+    # Replays and worker admission need the same live task ceiling as the
+    # original human card decision; an org memory scope alone is insufficient.
+    await task_access(
+        session,
+        actor,
+        task_id,
+        scope="memory:candidate:run" if execute else "memory:read",
+        write=execute,
+        lock=False,
+    )
     actor = await access(session, actor, "memory:candidate:run" if execute else "memory:read")
     for scope in ("memory:read", "card:read", "task:read", *(["memory:write"] if execute else [])):
         actor.require(scope)
@@ -190,6 +202,7 @@ async def submit_candidates(session, actor, task_id, body, settings):
             ).model_dump(mode="json"),
         ), None
     await task_lock(session, task_id)
+    actor, events = await events_access(session, actor, task_id, body.event_ids)
     job, reused = await create_job(session, actor, task_id, events, retry=body.action.retry)
     return Result(
         ok=True,
