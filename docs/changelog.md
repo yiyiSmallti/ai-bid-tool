@@ -6,6 +6,32 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Certificate and org-profile management slice
+
+- Keep qualification list tables mounted across page loads so clearing their data
+  releases the previous page; table-column teardown must not retain old pages in
+  rearmed layout callbacks.
+- Enforce the raw 16 KiB HTTP body limit on certificate/profile management POSTs
+  and reject profile historical-pin reactivation after database constraints.
+  Align acceptance setup with authorized pin creation, the established member
+  removal route and the approved human-only lifecycle role grants; keep source
+  constraint and removed-member access assertions intact.
+- Extended profile and certificate management with bounded prefix browse/search,
+  exact revision details, separate content/lifecycle history, complete declaration
+  editing and explicit authorized task pins. Certificate originals remain bound to
+  their upload revision, with ordered parts/rotation, signed same-org inspection,
+  explicit date advisories and a metadata-only no-original state.
+- Added certificate/profile lifecycle arms, exactly-one-root and org composite
+  constraints, indexed page-revision authors, task selection guards and human-only
+  bidder/admin lifecycle scopes in migration `0052`. RLS and composite keys reject
+  forged relationships before business guards; existing pins and source archives
+  remain intact. See [management mechanisms](notes/management-pages.md).
+- Added v4 CLI browse/show/history/lifecycle commands and schema snapshots without
+  changing legacy command output. Added API/service, storage, role/token, isolation,
+  fixed-scale and mocked Playwright acceptance coverage with artifacts under
+  `data/work`. Database, Chromium and measured scale acceptance remain for the main
+  integration environment, as tracked in the [contract](plan/management-pages.md).
+
 ## 2026-10-06: Drafting identity, enum serialization and sandbox queue recovery
 
 - Bind no-card drafting inputs directly to the pinned source chunk/block hash,

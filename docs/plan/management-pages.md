@@ -4,14 +4,16 @@ kind: plan
 
 # Contract: U01 org management pages
 
-Status: **approved; first and second slices implemented**. This contract covers the remaining
+Status: **approved; first, second and third slices implemented**. This contract covers the remaining
 management-page scope of [roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
-The product and feature slices supply bounded browse/search, creation, exact
+The product, feature and certificate/profile slices supply bounded browse/search, creation, exact
 revision detail, revision history, human deactivate/restore with independent
 lifecycle events, and explicit task pinning. Features add same-org product and
-implementation-state filters. Other resource kinds and settings remain later slices.
+implementation-state filters. Certificates/profiles add exact original-file inspection,
+explicit certificate date advisories and bidder/admin lifecycle authority. Templates
+and settings remain later slices.
 The [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
-remain approval artifacts; [runtime product and feature contracts](../../server/app/schemas/management_pages.py)
+remain approval artifacts; [runtime resource management contracts](../../server/app/schemas/management_pages.py)
 and the [mechanism note](../notes/management-pages.md) define the implemented path.
 Database, real-browser and fixed-scale acceptance require execution in the main
 integration environment; static checks and mocked fixtures do not establish that acceptance.
@@ -94,9 +96,9 @@ Resolve authors for only the page's revision IDs through one indexed audit query
 Do not invent an assigned person or derive ownership from the last editor. Task
 owners/assignees remain in team workflow.
 
-The implemented product and feature detail projections add `revised_at` and nullable
+The implemented resource detail projections add `revised_at` and nullable
 `revised_by` for the exact viewed revision. This avoids walking content-history
-pages to find a historical author; the existing `ProductRevision` and `FeatureRevision` write receipts
+pages to find a historical author; the existing resource revision write receipts
 and legacy list outputs remain unchanged.
 
 | Page | Flows and next-step cues | Deactivation/history behavior |
@@ -165,13 +167,33 @@ material; feature maintenance never replaces screenshots or confirms evidence.
 Migration [0050](../../server/migrations/versions/0050_feature_library.py) adds the
 feature lifecycle baseline and extends lifecycle events with nullable product and
 feature arms, exactly one root per event, composite root/revision foreign keys and
-per-arm unique sequence indexes. Other resource arms remain deferred. An inactive
+per-arm unique sequence indexes. Certificate and profile arms are added by the third slice; templates remain deferred. An inactive
 parent product blocks new feature associations and new/replacement feature pins;
 existing exact active pins remain idempotent and historical pins stay intact.
 
-Certificate/profile page integration, templates/bindings, providers, memory and
-confidential-page changes remain later slices. Database, real-browser and measured
-fixed-scale acceptance for both implemented slices remain integration checks.
+### Third vertical slice
+
+The certificate/profile slice extends `/app/org/profiles` and `CertificateSection`
+with bounded prefix search and lifecycle filtering, plus `/app/org/profiles/:id`
+and `/app/org/certificates/:id` for exact declarations, complete revisions, separate
+histories and explicit authorized task pins. Certificate detail includes only its
+selected revision's original/parts. Metadata-only revisions explicitly have no
+original; uploads return a new revision for deliberate inspection. Date advice uses
+an explicit `as_of`, and original downloads preserve the existing same-org signature,
+authentication and file scopes. No confidential values are loaded into these forms.
+
+Migration [0052](../../server/migrations/versions/0052_certificate_profile_library.py)
+extends the retained lifecycle table with certificate/profile arms, exactly-one-root
+and composite revision constraints, per-arm indexes, FORCE RLS and human bidder/admin
+guards. It adds safe prefix indexes and page-revision audit indexes, including
+certificate-file creation authors. New human-only lifecycle scopes are guarded in
+both application identity checks and the database token CHECK. Selection guards keep
+task-first locking and run business checks after RLS/composite foreign keys. Existing
+pins, file bytes and evidence-source archives are retained.
+
+Templates/bindings, providers, memory and confidential-page changes remain later
+slices. Database, real-browser and measured fixed-scale acceptance for all implemented
+slices remain integration checks; DB-free checks do not complete that acceptance.
 
 ## Permission and task boundaries
 
@@ -202,7 +224,9 @@ human-only scope, including `evidence:confirm`, `export`, `provider:write`,
 `confidential:write/reveal`, `memory:approve/manage/eval:read/eval:review`, or team
 human scopes. Token creation and database CHECK protections remain in force.
 Proposed lifecycle uses a session gate plus the resource's existing write scope;
-it does not add a broadly issuable management scope. Built-in agents have their
+it does not add a broadly issuable management scope. Certificate/profile lifecycle
+also requires the matching human-only `certificate:lifecycle` or `profile:lifecycle`
+role scope; both are refused by token issuance and the database CHECK. Built-in agents have their
 own narrower `AGENT_SCOPES`; token eligibility does not expand that allowlist.
 
 Org library permission confers no task permission. Any source link, feedback,
@@ -450,7 +474,7 @@ root remains active; check both roots in stable ID order after task locks.
 
 ## HTTP and Pydantic interfaces
 
-Product and feature query, detail, history and lifecycle paths below are implemented
+Product, feature, certificate and profile query, detail, history and lifecycle paths below are implemented
 under `/v4`; paths for other kinds and areas remain proposed and have no placeholder
 handlers. Paths in existing tables omit `/v4` for readability; new pages request
 version 4 explicitly through `orgRequest`/`api.request(contractVersion:4)`. Existing
@@ -468,7 +492,7 @@ second nested envelope or a full-library metadata map. Detail objects occupy
 | Proposed HTTP route | Request → data/items | Service Protocol / authority |
 | --- | --- | --- |
 | `POST /v4/management/resources/{K}/query` | `ResourceQuery` → `PageData` / `ResourceRow[]` | `ManagementResourceReads.query`; kind's read scope |
-| `GET /v4/management/resources/{K}/{R}?revision=N` | `ResourceDetailQuery` → `ResourceDetailData` | `detail`; latest when revision omitted, exact historical revision otherwise |
+| `GET /v4/management/resources/{K}/{R}?revision=N` | `ResourceDetailQuery` → `ResourceDetailData` | `detail`; latest when revision omitted, exact historical revision otherwise; certificate detail accepts optional explicit `as_of` |
 | `POST /v4/management/resources/{K}/{R}/history/query` | `PageQuery` → `PageData` / `ResourceHistoryRow[]` | `history`; one root only, fetch full content by exact detail |
 | `POST /v4/management/resources/{K}/{R}/lifecycle` | `ResourceLifecycleSet` → `ResourceLifecycleData` | `ManagementResourceLifecycle.set_state`; human + kind's write scope |
 | `POST /v4/management/resources/{K}/{R}/lifecycle/history/query` | `PageQuery` → `PageData` / `ResourceLifecycleEvent[]` | `lifecycle_history`; kind's read scope |
@@ -727,13 +751,14 @@ Use a canary input only in memory and assert its absence from outputs/logs/artif
 ### Playwright mocked-API and real integration
 
 Use [product scenarios](../../web/e2e/management-pages.spec.js) and
-[feature scenarios](../../web/e2e/feature-management.spec.js), following
+[feature scenarios](../../web/e2e/feature-management.spec.js) and
+[certificate/profile scenarios](../../web/e2e/qualification-management.spec.js), following
 [console-assessments.spec.js](../../web/e2e/console-assessments.spec.js) and
 [team-workflow.spec.js](../../web/e2e/team-workflow.spec.js), using the built app and
 stateful intercepted `/v4` API calls. Fixtures are test-only; production pages
 must have no mock/sample/fixture fallback.
 
-Cover product and feature slices and old task pins; filters/cursors/cancelled responses;
+Cover product, feature and certificate/profile slices and old task pins; filters/cursors/cancelled responses;
 empty/error/oversize pages; two org switch with late response; all role/task matrices;
 conflict with unsaved edits; revision/file/history distinction; inactive selection;
 binding preview and static-hash mismatch; provider key submission once and absence
@@ -756,7 +781,7 @@ built app is:
 
 ```sh
 cd web
-E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js e2e/feature-management.spec.js
+E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js e2e/feature-management.spec.js e2e/qualification-management.spec.js
 ```
 
 Each spec must validate that its resolved output directory is inside the

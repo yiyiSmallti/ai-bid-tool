@@ -95,6 +95,10 @@ class ApiToken(Tenant, Base):
         ),
         CheckConstraint("NOT (scopes ? 'provider:write')", name="token_no_provider_write"),
         CheckConstraint("NOT (scopes ? 'token:create')", name="token_forbidden_creation_scope"),
+        CheckConstraint(
+            "NOT (scopes ?| ARRAY['certificate:lifecycle','profile:lifecycle'])",
+            name="token_forbidden_library_lifecycle_scopes",
+        ),
         CheckConstraint("NOT (scopes ? 'check:decide')", name="token_forbidden_check_scopes"),
         CheckConstraint(
             "NOT (scopes ? 'score:rubric:review')", name="token_forbidden_score_scopes"
@@ -576,6 +580,24 @@ class AuditLog(Tenant, Base):
                 "action IN ('resource.feature.create','resource.feature.update')"
             ),
         ),
+        Index(
+            "management_certificate_audit_author",
+            "org_id",
+            "resource_revision_id_text",
+            "object_id",
+            postgresql_where=text(
+                "action IN ('resource.certificate.create','resource.certificate.update','resource.certificate.file.create')"
+            ),
+        ),
+        Index(
+            "management_profile_audit_author",
+            "org_id",
+            "resource_revision_id_text",
+            "object_id",
+            postgresql_where=text(
+                "action IN ('resource.profile.create','resource.profile.update')"
+            ),
+        ),
         ForeignKeyConstraint(
             ["org_id", "agent_session_id", "job_id"],
             ["jobs.org_id", "jobs.agent_session_id", "jobs.id"],
@@ -710,6 +732,11 @@ class Certificate(Tenant, Base):
     __tablename__ = "certificates"
     created_by: Mapped[UUID] = mapped_column()
     current_revision: Mapped[int] = mapped_column(Integer, default=1)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(8), default="active", server_default="active"
+    )
+    lifecycle_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    search_vector: Mapped[str] = mapped_column(TSVECTOR, server_default=text("''::tsvector"))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
@@ -728,6 +755,11 @@ class Certificate(Tenant, Base):
             initially="DEFERRED",
         ),
         CheckConstraint("current_revision > 0", name="certificate_revision_positive"),
+        CheckConstraint(
+            "lifecycle_state IN ('active','inactive') AND lifecycle_revision >= 0 "
+            "AND (lifecycle_revision > 0 OR lifecycle_state = 'active')",
+            name="certificate_lifecycle_valid",
+        ),
     )
 
 
@@ -805,6 +837,11 @@ class OrgProfile(Tenant, Base):
     __tablename__ = "org_profiles"
     created_by: Mapped[UUID] = mapped_column()
     current_revision: Mapped[int] = mapped_column(Integer, default=1)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(8), default="active", server_default="active"
+    )
+    lifecycle_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    search_vector: Mapped[str] = mapped_column(TSVECTOR, server_default=text("''::tsvector"))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
@@ -823,6 +860,11 @@ class OrgProfile(Tenant, Base):
             initially="DEFERRED",
         ),
         CheckConstraint("current_revision > 0", name="profile_revision_positive"),
+        CheckConstraint(
+            "lifecycle_state IN ('active','inactive') AND lifecycle_revision >= 0 "
+            "AND (lifecycle_revision > 0 OR lifecycle_state = 'active')",
+            name="profile_lifecycle_valid",
+        ),
     )
 
 
