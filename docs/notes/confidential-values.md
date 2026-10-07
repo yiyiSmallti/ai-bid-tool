@@ -69,8 +69,13 @@ PostgreSQL's `tsvector @@ tsquery` function is not leakproof, so a GIN predicate
 cannot be promoted ahead of the field table's RLS barrier. The derived
 `confidential_field_search_tokens` table stores only `tsvector_to_array` lexemes
 from key/label metadata. Its `(org_id, token, field_id)` B-tree uses `C` collation;
-literal prefix bounds use leakproof text comparisons. Remaining query tokens use
-bounded `(org_id, field_id, token)` probes. Materialized candidate IDs feed
+literal prefix bounds use leakproof text comparisons. A recursive keyset reads
+ordered `(token, field_id)` windows of 128 lexemes, retaining both columns as
+its continuation. Each window has its own ORDER BY and LIMIT before any
+DISTINCT or remaining-token filter; materialization alone does not fix the
+inner scan's access path. The recursion continues until an empty window, so the
+batch size never caps matching fields. De-duplicated candidate IDs then use
+bounded `(org_id, field_id, token)` probes for remaining query tokens and feed
 parameterized field point reads, with `OFFSET 0` preventing join flattening;
 archive/scope/exact-ID/keyset filters and the original `@@` semantic check precede
 page LIMIT. The values path reads only that retained field page.
@@ -84,7 +89,11 @@ current ones. FK cascade cleanup is allowed when the parent no longer exists;
 queued AFTER triggers do not have a fixed cascade nesting depth.
 Runtime INSERT/DELETE grants serve derived maintenance, with no
 privileged function owner, new bypass role or change to PostgreSQL's leakproof flags. The scale acceptance checks both root
-and lexeme relation visits and the actual range index conditions.
+and lexeme relation visits and the actual range index conditions for both the
+initial and continuation windows. Repeated per-loop counters use conservative
+visit bounds instead of rounded averages alone. The scale fixture creates its
+own orgs/accounts and retains earlier runs' data; each receipt records global
+cardinality growth and is saved under its unique run ID.
 Its stored search-column/index build needs a maintenance window sized for the
 existing field table; recovery preserves rows and guards and repairs forward.
 

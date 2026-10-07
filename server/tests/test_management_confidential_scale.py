@@ -2,8 +2,9 @@
 
 Failure inventory: N+1 owner reads, all-history scans, unindexed prefix scans,
 cross-org/task mixing, missing continuation, ciphertext reads, excessive payload
-or SQL work, and warmed p95 above the approved budget. Seed exactly two orgs
-with 10,000 fields and 100,000 encrypted values each. Never start a service.
+or SQL work, and warmed p95 above the approved budget. Each run adds two own orgs
+with 10,000 fields and 100,000 encrypted values each, retaining all earlier rows.
+Never start a service.
 Retain actual read plans and reproducible receipts only under data/work.
 Selective prefixes must drive a C-collated token range, rather than scan all
 org tokens or roots and filter afterward; remaining tokens use owner lookups.
@@ -13,12 +14,20 @@ import json
 import math
 import os
 import platform
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
+from uuid import uuid4
 
 import pytest
 from app.core.security import Secrets
+from app.models.entities import Membership, Org, User
+from conftest import PASSWORD, PASSWORD_HASH
+from cryptography.fernet import Fernet
 from sqlalchemy import event, text
+from sqlalchemy.engine import make_url
+from sqlalchemy.orm import Session
 from test_management_confidential import FIELDS, VALUES, assert_page
 from test_management_features_scale import plan_work
 from test_team_workflow_membership import new_task
@@ -31,6 +40,79 @@ SELECTIVE_PREFIXES = {"key_prefix", "label_prefix", "values_prefix"}
 OUTPUT = (
     Path(__file__).resolve().parents[2] / "data/work/management-pages-validation/confidential-scale"
 )
+CARDINALITY_TABLES = (
+    "orgs",
+    "users",
+    "memberships",
+    "tasks",
+    "confidential_fields",
+    "confidential_values",
+    TOKEN_TABLE,
+)
+
+
+def global_cardinalities(connection):
+    return {
+        table: connection.scalar(text(f"SELECT count(*) FROM {table}"))
+        for table in CARDINALITY_TABLES
+    }
+
+
+@pytest.fixture
+def tenants(admin_engine, monkeypatch):
+    # Reproduce the shared Settings setup without invoking its TRUNCATE fixture.
+    runtime_url = make_url(os.environ["BID_DATABASE_URL"])
+    for variable, role in (
+        ("BID_PLATFORM_DATABASE_URL", "bid_platform_app"),
+        ("BID_CREDENTIAL_DATABASE_URL", "bid_credential_reader"),
+    ):
+        if not os.environ.get(variable):
+            monkeypatch.setenv(
+                variable, runtime_url.set(username=role).render_as_string(hide_password=False)
+            )
+    if not os.environ.get("BID_SECRETS_KEY"):
+        monkeypatch.setenv("BID_SECRETS_KEY", Fernet.generate_key().decode())
+    run_id = f"{datetime.now(UTC):%Y%m%dT%H%M%S%fZ}-{uuid4().hex}"
+    with admin_engine.connect() as connection:
+        before = global_cardinalities(connection)
+    orgs, users, emails = [], [], []
+    with Session(admin_engine) as session, session.begin():
+        for label in ("a", "b"):
+            org_id, user_id = uuid4(), uuid4()
+            email = f"confidential-scale-{run_id.lower()}-{label}@example.test"
+            session.add_all(
+                [
+                    Org(id=org_id, org_id=org_id, name=f"Synthetic scale {run_id} {label}"),
+                    User(id=user_id, email=email, password_hash=PASSWORD_HASH),
+                ]
+            )
+            session.flush()
+            session.add(Membership(org_id=org_id, user_id=user_id, role="admin"))
+            orgs.append(org_id)
+            users.append(user_id)
+            emails.append(email)
+    # No teardown: repeated runs must query the same growing tables.
+    return {
+        "orgs": orgs,
+        "users": users,
+        "emails": emails,
+        "run_id": run_id,
+        "global_before": before,
+    }
+
+
+@pytest.fixture
+async def headers(api, tenants):
+    output = []
+    for email, org in zip(tenants["emails"], tenants["orgs"], strict=True):
+        response = await api.post(
+            "/auth/login", json={"email": email, "password": PASSWORD, "org_id": str(org)}
+        )
+        assert response.status_code == 200
+        output.append(
+            {"Authorization": "Bearer " + response.json()["data"]["session"], "X-Org-Id": str(org)}
+        )
+    return output
 
 
 def is_select_statement(statement, context):
@@ -45,6 +127,7 @@ def is_select_statement(statement, context):
 
 def seed_scale(admin_engine, tenants, tasks, settings):
     ciphertext = Secrets.for_data(settings).encrypt("synthetic-scale-private-value-123456789")
+    org_counts = []
     with admin_engine.begin() as connection:
         for org, user, task in zip(tenants["orgs"], tenants["users"], tasks, strict=True):
             values = {
@@ -77,17 +160,19 @@ def seed_scale(admin_engine, tenants, tasks, settings):
                 ),
                 values,
             )
+            counts = {
+                table: connection.scalar(
+                    text(f"SELECT count(*) FROM {table} WHERE org_id=CAST(:org AS uuid)"),
+                    values,
+                )
+                for table in ("confidential_fields", "confidential_values", TOKEN_TABLE)
+            }
             for table, expected in (
                 ("confidential_fields", ROOTS),
                 ("confidential_values", ROOTS * VERSIONS),
             ):
-                assert (
-                    connection.scalar(
-                        text(f"SELECT count(*) FROM {table} WHERE org_id=CAST(:org AS uuid)"),
-                        values,
-                    )
-                    == expected
-                )
+                assert counts[table] == expected
+            org_counts.append({"org_id": str(org), **counts})
         for table in (
             "confidential_fields",
             TOKEN_TABLE,
@@ -97,24 +182,110 @@ def seed_scale(admin_engine, tenants, tasks, settings):
             "task_workflows",
         ):
             connection.execute(text(f"ANALYZE {table}"))
+        after = global_cardinalities(connection)
+        for table in ("confidential_fields", "confidential_values", TOKEN_TABLE):
+            assert after[table] == tenants["global_before"][table] + sum(
+                counts[table] for counts in org_counts
+            )
+    return {"own_org_counts": org_counts, "global_after_seed": after}
 
 
 def plan_nodes(node):
     return [node, *(row for child in node.get("Plans", []) for row in plan_nodes(child))]
 
 
+def plan_paths(node, parents=()):
+    yield node, parents
+    for child in node.get("Plans", []):
+        yield from plan_paths(child, (*parents, node))
+
+
+def directly_limited(parents):
+    # A Sort/Aggregate/Join under LIMIT can still consume a whole relation.
+    # Only a streaming path from LIMIT to the range scan bounds its input work.
+    for parent in reversed(parents):
+        if parent["Node Type"] == "Limit":
+            return True
+        if parent["Node Type"] not in {"Result", "Subquery Scan"}:
+            return False
+    return False
+
+
 def selective_token_ranges(node):
-    """The rare 099 prefix belongs in Index Cond, with both range bounds."""
-    return [
-        item
-        for item in plan_nodes(node)
-        if item.get("Relation Name") == TOKEN_TABLE
-        and item.get("Index Name") == "management_confidential_token_prefix"
-        and "token" in item.get("Index Cond", "")
-        and ">=" in item.get("Index Cond", "")
-        and "<" in item.get("Index Cond", "")
-        and "099" in item.get("Index Cond", "")
-    ]
+    """Accept bounded prefix access independently of streaming/bitmap plan shape."""
+    matches = []
+    for item, parents in plan_paths(node):
+        if item.get("Node Type") not in {"Index Scan", "Index Only Scan", "Bitmap Index Scan"}:
+            continue
+        condition = item.get("Index Cond", "")
+        if item.get("Index Name") != "management_confidential_token_prefix" or not all(
+            re.search(pattern, condition)
+            for pattern in (r"\borg_id\s*=", r"\btoken\s*>=", r"\btoken\s*<(?!=)")
+        ):
+            continue
+        relation = item
+        if item["Node Type"] == "Bitmap Index Scan":
+            # Bitmap index nodes have no relation/alias. Associate the actual
+            # range condition with its nearest heap scan, including BitmapAnd.
+            relation = next(
+                (
+                    parent
+                    for parent in reversed(parents)
+                    if parent["Node Type"] == "Bitmap Heap Scan"
+                ),
+                {},
+            )
+        if relation.get("Relation Name") == TOKEN_TABLE and relation.get("Alias") in {
+            "prefix_seed",
+            "prefix_seek",
+        }:
+            matches.append({**item, "Alias": relation["Alias"]})
+    return matches
+
+
+def relation_visits(node):
+    """Conservative visits, not rounded per-loop averages mistaken for totals.
+
+    A UUID point lookup visits at most one live root per loop, including a row
+    rejected by its filter. A filter-free owner probe streams at most one row
+    under its LIMIT 1. Other repeated scans account for EXPLAIN's integer
+    rounding separately for returned rows and each reported rejection counter.
+    """
+    visits = {}
+    for item, parents in plan_paths(node):
+        relation = item.get("Relation Name")
+        if relation not in {"confidential_fields", "confidential_values", TOKEN_TABLE}:
+            continue
+        loops = item.get("Actual Loops", 0)
+        counters = [item.get("Actual Rows", 0)] + [
+            item[key]
+            for key in ("Rows Removed by Filter", "Rows Removed by Index Recheck")
+            if key in item
+        ]
+        estimate = sum(counters) * loops
+        condition = item.get("Index Cond", "")
+        root_point = (
+            relation == "confidential_fields"
+            and item.get("Index Name")
+            in {"confidential_fields_pkey", "confidential_fields_org_id_id_key"}
+            and "id = matching_fields.field_id" in condition
+        )
+        owner_probe = (
+            relation == TOKEN_TABLE
+            and item.get("Index Name") == "management_confidential_token_owner"
+            and re.fullmatch(r"prefix_\d+", item.get("Alias", ""))
+            and all(column in condition for column in ("org_id", "field_id", "token"))
+            and directly_limited(parents)
+            and not item.get("Filter")
+        )
+        if loops <= 1:
+            upper = estimate
+        elif root_point or owner_probe:
+            upper = max(estimate, loops)
+        else:
+            upper = sum(math.ceil((value + 0.5) * loops) for value in counters)
+        visits[relation] = visits.get(relation, 0) + upper
+    return visits
 
 
 @pytest.mark.latency
@@ -122,7 +293,7 @@ async def test_fixed_scale_confidential_reads(
     api, headers, application, tenants, admin_engine, monkeypatch
 ):
     tasks = [await new_task(api, auth) for auth in headers]
-    seed_scale(admin_engine, tenants, tasks, application.state.processor.settings)
+    seeded = seed_scale(admin_engine, tenants, tasks, application.state.processor.settings)
 
     def fail_decrypt(self, value):
         pytest.fail("A fixed-scale metadata read attempted to decrypt a confidential value")
@@ -134,6 +305,7 @@ async def test_fixed_scale_confidential_reads(
         "scenario": "u01-confidential-fixed-scale-v1",
         "status": "running",
         "schema": "4.0",
+        "run_id": tenants["run_id"],
         "fixture": {
             "orgs": 2,
             "fields_per_org": ROOTS,
@@ -141,7 +313,13 @@ async def test_fixed_scale_confidential_reads(
             "versions_per_field_owner": VERSIONS,
             "org_scope_fields_per_org": ROOTS // 2,
             "task_scope_fields_per_org": ROOTS // 2,
+            "org_ids": [str(org) for org in tenants["orgs"]],
+            "user_ids": [str(user) for user in tenants["users"]],
+            "task_ids": tasks,
+            "retained_after_run": True,
+            **seeded,
         },
+        "global_before": tenants["global_before"],
         "hardware": {
             "system": platform.platform(),
             "machine": platform.machine(),
@@ -261,21 +439,14 @@ async def test_fixed_scale_confidential_reads(
                     ).scalar_one()
                     assert isinstance(plan, list) and len(plan) == 1
                     work = plan_work(plan[0]["Plan"])
-                    visits = {}
-                    for node in work:
-                        if node["relation"] in {
-                            "confidential_fields",
-                            "confidential_values",
-                            TOKEN_TABLE,
-                        }:
-                            visits[node["relation"]] = (
-                                visits.get(node["relation"], 0)
-                                + (node["rows"] + node["rows_removed"]) * node["loops"]
-                            )
+                    visits = relation_visits(plan[0]["Plan"])
                     if name in SELECTIVE_PREFIXES and TOKEN_TABLE in statement:
-                        if not selective_token_ranges(plan[0]["Plan"]):
+                        inputs = parameters.values() if isinstance(parameters, dict) else parameters
+                        assert "099" in inputs and "09:" in inputs
+                        probes = {node["Alias"] for node in selective_token_ranges(plan[0]["Plan"])}
+                        if probes != {"prefix_seed", "prefix_seek"}:
                             receipt["failures"].append(
-                                f"{name}: no actual token prefix range Index Cond driving rare 099"
+                                f"{name}: missing org/token range on prefix B-tree for seed/seek"
                             )
                         if visits.get(TOKEN_TABLE, 0) > 200:
                             receipt["failures"].append(
@@ -306,7 +477,13 @@ async def test_fixed_scale_confidential_reads(
                             f"{name}: field visits exceed {fields_bound}: {visits['confidential_fields']}"
                         )
                     plans.append(
-                        {"sql": statement, "plan": plan, "work": work, "relation_visits": visits}
+                        {
+                            "sql": statement,
+                            "plan": plan,
+                            "work": work,
+                            "relation_visits": visits,
+                            "visit_measure": "upper bound including per-loop rounding",
+                        }
                     )
             assert plans, f"{name}: no actual confidential SQL plan captured"
             if name in SELECTIVE_PREFIXES and not any(
@@ -353,4 +530,7 @@ async def test_fixed_scale_confidential_reads(
         serialized = json.dumps(receipt, ensure_ascii=False, indent=2) + "\n"
         assert "synthetic-scale-private-value" not in serialized
         assert "encrypted_value" not in serialized
+        run_output = OUTPUT / "runs" / tenants["run_id"]
+        run_output.mkdir(parents=True, exist_ok=True)
+        (run_output / "result.json").write_text(serialized)
         (OUTPUT / "result.json").write_text(serialized)
