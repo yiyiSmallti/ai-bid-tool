@@ -19,6 +19,9 @@ type BoardBucket = Literal[
     "gap", "draft_card", "pending_review", "needs_material", "confirmed", "comply_only"
 ]
 type BoardBlocker = Literal[
+    "annotation_source_stale",
+    "annotation_release_pending",
+    "annotation_release_failed",
     "missing_card",
     "unclassified",
     "invalid_citation",
@@ -45,6 +48,10 @@ type BoardBlocker = Literal[
     "job_call_limit_exceeded",
 ]
 type BoardNextAction = Literal[
+    "inspect_annotated_material",
+    "confirm_annotated_material",
+    "retry_annotation_release",
+    "replace_annotation_source",
     "create_card",
     "edit_card",
     "classify",
@@ -552,7 +559,7 @@ class BoardQuery(Contract):
 
 
 class BoardActionTarget(Contract):
-    kind: Literal["task", "requirement", "card", "job", "thread", "evidence"]
+    kind: Literal["task", "requirement", "card", "job", "thread", "evidence", "annotation"]
     id: UUID
 
 

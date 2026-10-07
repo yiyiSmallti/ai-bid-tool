@@ -1,17 +1,17 @@
 ---
 kind: plan
-status: draft pending owner approval and environment decisions
+status: approved; environment decisions pending
 ---
 
 # Production deployment plan
 
-This draft proposes the first production environment and its release gates. Owner
-approval, environment decisions and recorded acceptance are required before execution
-or go-live. Approval of this plan does not establish that deployment, paid provider
+This plan defines the first production environment and its release gates. The owner
+approved it with the recommended defaults; environment decisions, separate deployment
+authorization and recorded acceptance are still required before execution or go-live. Approval of this plan does not establish that deployment, paid provider
 checks or acceptance have occurred. Actual release identifiers, configuration hashes
 and results belong in a restricted release record outside `docs/`.
 
-The proposed default is a Linux application host with separately operated PostgreSQL
+The approved default is a Linux application host with separately operated PostgreSQL
 and private S3-compatible storage, plus a dedicated Linux sandbox execution node when
 browser capture is enabled. Start with a new production database and only synthetic
 acceptance orgs (organizations/tenants); do not copy development business data.
@@ -72,12 +72,12 @@ handling against [authentication admission](../notes/platform-console.md#passwor
 Do not trust arbitrary forwarded headers or expose the ASGI listener as another public
 route. Database/storage separation does not by itself make the application highly available.
 
-## Open decisions
+## Environment decisions
 
-Every row remains pending until the owner records its selection and accountable
-operator. Values below are proposed defaults, not provisioned resources or commitments.
+The owner approved the defaults below. Each row still needs the listed owner input and
+an accountable operator before its step; values are not provisioned resources or commitments.
 
-| Decision | Recommended default | Owner input required before |
+| Decision | Approved default | Owner input required before |
 | --- | --- | --- |
 | Host/provider, region and data residency | Linux application host, split PostgreSQL/S3 and isolated sandbox node; keep approved data flows within the selected residency policy | Procurement: provider, region, CPU architecture, support contact and acceptable outage |
 | Domain, ingress and TLS | One HTTPS origin for console/API, automated certificate renewal, private upstreams | Ingress configuration: domain ownership, DNS operator, proxy and renewal owner |
@@ -205,7 +205,7 @@ credential functions have restricted `search_path`, qualified names, no PUBLIC E
 and no dynamic SQL. A privileged successful query is not tenant-isolation evidence.
 
 Plan encrypted daily database backups and continuous WAL archival or managed PITR,
-with retention and recovery objectives selected in [Open decisions](#open-decisions).
+with retention and recovery objectives selected in [Environment decisions](#environment-decisions).
 Logical dumps are useful additional recovery artifacts but do not provide PITR alone.
 For self-managed PostgreSQL, prepare tested base-backup/WAL procedures; the repository
 Compose stack supplies neither WAL archival nor a production backup scheduler. Capture
@@ -526,7 +526,7 @@ gate blocks the affected release scope; a successful HTTP health response cannot
 ## Cost estimate structure
 
 Prepare a monthly worksheet using dated vendor quotes after provider/region choices;
-this draft provides no price quote. Compare the single-host and recommended split
+this plan provides no price quote. Compare the single-host and recommended split
 options at pilot, expected and peak demand, with explicit measured assumptions.
 
 | Cost line | Quantity and calculation inputs |

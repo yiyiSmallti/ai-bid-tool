@@ -66,7 +66,8 @@ def _public_result(job: Job) -> dict:
     return {
         key: value
         for key, value in job.result.items()
-        if key not in {"submission", "encrypted_input"}
+        if key
+        not in {"submission", "encrypted_input", "release_retries", "annotation_staged_objects"}
     }
 
 
@@ -102,6 +103,10 @@ async def read_access(
         from app.memory.candidates import job_access
 
         await job_access(session, identity, job)
+    if job.kind in {"annotation_render", "annotation_release"}:
+        from app.services.annotations import check_job_access
+
+        await check_job_access(session, identity, job)
     await sandbox_guard_job(session, identity, job)
     if job.kind in {"screenshot_render", "screenshot_analyze"}:
         from app.services.screenshot_jobs import check_job_access
@@ -323,6 +328,19 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         from app.memory.candidates import job_access
 
         await job_access(session, identity, job, cancel=True)
+    if job.kind in {"annotation_render", "annotation_release"}:
+        from app.services.annotations import check_job_access
+        from app.services.versioned import audit
+
+        await check_job_access(session, identity, job, cancel=True)
+        if job.status in {"queued", "running"}:
+            audit(
+                session,
+                identity,
+                "annotation.cancel",
+                job.id,
+                {"task_id": str(job.task_id), "kind": job.kind},
+            )
     await sandbox_guard_job(session, identity, job, cancel=True)
     if job.status not in {"cancelled", "queued", "running"}:
         raise ServiceError("terminal_job", "Completed jobs cannot be cancelled", 409, 2)

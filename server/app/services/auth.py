@@ -164,6 +164,7 @@ for _role, _scopes in ROLE_SCOPES.items():
     _scopes.add("card:comment")
     if _role in {"admin", "bidder"}:
         _scopes.update({"task:members:write", "task:archive", "card:assign", "task:review-policy"})
+        _scopes.update({"certificate:lifecycle", "profile:lifecycle"})
     if _role in {"bidder", "technical"}:
         _scopes.add("card:cosign")
     _scopes.update({"memory:read", "memory:retrieve"})
@@ -175,7 +176,7 @@ for _role, _scopes in ROLE_SCOPES.items():
         )
     _scopes.update({"provider:read", "screenshot:read"})
     if _role != "viewer":
-        _scopes.update({"screenshot:write", "screenshot:ingest"})
+        _scopes.update({"screenshot:write", "screenshot:ingest", "evidence:annotate"})
     _scopes.update({"card:read", "draft:read", "sandbox:read", "confidential:read", "check:read"})
     _scopes.add("score:read")
     if _role != "viewer":
@@ -209,6 +210,9 @@ for _role in ("admin", "bidder", "technical"):
 
 
 HUMAN_ONLY_SCOPES = {
+    "evidence:annotate",
+    "certificate:lifecycle",
+    "profile:lifecycle",
     "req:confirm",
     "req:manual",
     "agent:read",

@@ -94,7 +94,10 @@ async def test_cosign_tables_force_rls_and_no_mutation_grants(admin_engine):
         assert functions
         for function in functions:
             assert not function["prosecdef"], function["proname"]
-            assert function["proconfig"] == ["search_path=pg_catalog"]
+            # The snapshot hashes rows with to_jsonb, so it also pins its TimeZone.
+            assert function["proconfig"] == ["search_path=pg_catalog"] + (
+                ["TimeZone=UTC"] if function["proname"] == "team_cosign_snapshot" else []
+            ), function["proname"]
             assert function["app_execute"] is not function["is_trigger"]
             assert not function["platform_execute"] and not function["public_execute"]
 

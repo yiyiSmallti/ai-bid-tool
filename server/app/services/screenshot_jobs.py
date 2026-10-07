@@ -97,6 +97,12 @@ async def render_manifest(session, actor, asset_id, parent_id, expected_hash, pl
     asset, parent = await images.rendition_access(session, actor, parent_id, storage=storage)
     if asset.id != asset_id:
         raise not_found()
+    if parent.profile.startswith("annotation-"):
+        images.fail(
+            "annotation_parent_forbidden",
+            "Create a new annotation preview from the archived source",
+            400,
+        )
     if parent.image_sha256 != expected_hash:
         images.fail("image_hash_mismatch", "Parent image changed", 409)
     images.validate_plan(plan, parent.mapping["content_width"], parent.mapping["content_height"])

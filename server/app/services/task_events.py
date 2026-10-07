@@ -141,6 +141,8 @@ def hidden_job_kinds(actor):
         "card_generate": "card:read",
         "provider_test": "provider:read",
         "screenshot_render": "screenshot:read",
+        "annotation_render": "screenshot:read",
+        "annotation_release": "screenshot:read",
         "screenshot_analyze": "screenshot:read",
         "screenshot_search": "screenshot:read",
         "prototype_generate": "screenshot:read",

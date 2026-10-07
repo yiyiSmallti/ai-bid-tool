@@ -5,6 +5,13 @@ from typing import Any
 LEGACY_COST_FIELDS = frozenset({"llm_tokens", "ocr_pages", "usd"})
 NEW_COMMANDS = frozenset(
     {
+        "evidence stamp",
+        "evidence annotation list",
+        "evidence annotation show",
+        "evidence annotation preview",
+        "evidence annotation releases",
+        "evidence annotation release preview",
+        "evidence annotation release retry",
         "task budget show",
         "task budget set",
         "task budget history",
