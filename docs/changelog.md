@@ -6,6 +6,14 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-07: Sandbox quote encoding
+
+- Encode the sandbox browser quote's run descriptor like the run frame. Its UUID IDs
+  made the strict request serializer raise before any socket-provider capture or
+  prototype render could be admitted; the metering test now uses a real descriptor.
+- Run the trusted-proxy acceptance script inside a standalone evaluation context, as
+  shared call admission now requires an accounting context or explicit opt-in.
+
 ## 2026-10-07: Attachment archive acceptance fixes
 
 - Cast JSON-constructor seed parameters explicitly so the attachment scale fixture
