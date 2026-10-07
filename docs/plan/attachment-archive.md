@@ -7,7 +7,7 @@ kind: plan
 Status: **Approved with all recommended defaults, not implemented.** Corresponds to [roadmap](roadmap.md)
 F03/R05/R06/U01 and the profile/contract prerequisite of B05.
 
-The [Pydantic and service interface draft](attachment-archive/attachment_archive_contracts.py)
+The [Pydantic and service interface](attachment-archive/attachment_archive_contracts.py)
 is the approved contract. It registers no routes, commands, tables, permissions or
 workers; implementation follows these decisions under [agent.md](../../agent.md#workflow).
 The approved [cloud annotation contract](annotation.md) remains unchanged; its
