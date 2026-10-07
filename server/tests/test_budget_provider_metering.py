@@ -157,15 +157,12 @@ async def test_local_ocr_failure_is_zero_liability_accounted(accounting, monkeyp
 
 
 async def test_browser_execution_uses_zero_quote_and_settles_failure(accounting, monkeypatch):
-    from dataclasses import dataclass
+    import hashlib
     from types import SimpleNamespace
+    from uuid import uuid4
 
     from app.providers.browser import SocketBrowserProvider
-    from app.providers.sandbox_runtime import SandboxFailure
-
-    @dataclass
-    class Descriptor:
-        input_sha256: str = "synthetic"
+    from app.providers.sandbox_runtime import RunDescriptor, SandboxFailure
 
     provider = SocketBrowserProvider(SimpleNamespace(profile_digest="synthetic-profile"))
 
@@ -173,8 +170,16 @@ async def test_browser_execution_uses_zero_quote_and_settles_failure(accounting,
         raise SandboxFailure("synthetic_failure")
 
     monkeypatch.setattr(provider, "_execute_unaccounted", fail)
+    # A real descriptor carries UUID IDs, which the quote must encode like the run frame.
+    descriptor = RunDescriptor(
+        org_id=uuid4(),
+        job_id=uuid4(),
+        attempt_id=uuid4(),
+        input_sha256=hashlib.sha256(b"synthetic html").hexdigest(),
+        purpose="prototype_offline",
+    )
     with pytest.raises(SandboxFailure):
-        await provider._execute(Descriptor(), b"synthetic html", None)
+        await provider._execute(descriptor, b"synthetic html", None)
     assert len(accounting.quotes) == len(accounting.usages) == 1
     assert accounting.quotes[0].capability == "browser"
     assert accounting.usages[0].payer == "local_free"

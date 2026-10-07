@@ -9,7 +9,7 @@ from dataclasses import asdict
 from typing import Any, Protocol
 
 from app.providers.calls import accounted_call
-from app.providers.quotes import serialized_request, zero_quote
+from app.providers.quotes import zero_quote
 from app.providers.sandbox_fetch import RUN_FATAL_FETCH_CODES, FetchBroker, FetchDenied
 from app.providers.sandbox_runtime import (
     CONTROL_LIMIT,
@@ -21,6 +21,7 @@ from app.providers.sandbox_runtime import (
     RunDescriptor,
     RuntimeConfig,
     SandboxFailure,
+    canonical,
     read_frame,
     send_frame,
     validate_artifact,
@@ -377,8 +378,10 @@ class SocketBrowserProvider:
         return result
 
     def quote(self, descriptor: RunDescriptor, data: bytes) -> BudgetCallQuote:
+        # Encode the descriptor as the run frame does: its IDs are UUIDs, which the
+        # strict request serializer rejects.
         request = (
-            serialized_request(
+            canonical(
                 {
                     "type": "run",
                     "protocol": PROTOCOL_VERSION,

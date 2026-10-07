@@ -35,6 +35,7 @@ from uuid import uuid4
 
 import httpx
 from app.providers.browser import SocketBrowserProvider
+from app.providers.calls import standalone_evaluation
 from app.providers.sandbox_fetch import (
     FetchBroker,
     FetchDenied,
@@ -646,7 +647,9 @@ def main(output: Path) -> int:
         work.chmod(0o700)
         os.chdir(work)
         try:
-            cases = asyncio.run(run(work))
+            # A standalone check saves its own report instead of job accounting.
+            with standalone_evaluation():
+                cases = asyncio.run(run(work))
         finally:
             os.chdir(previous)
     report = {
