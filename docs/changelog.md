@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-06: Production deployment plan
+
+- Add the [production deployment plan](plan/production-deployment.md) covering
+  environment decisions, repository deployment prerequisites, recovery and release
+  acceptance; link it from roadmap F10. The owner approved the plan; environment
+  decisions remain open and no deployment has been executed.
+
 ## 2026-10-06: Annotation regression fixes
 
 - Pinned `team_cosign_snapshot` to the UTC TimeZone. It hashes whole requirement,
