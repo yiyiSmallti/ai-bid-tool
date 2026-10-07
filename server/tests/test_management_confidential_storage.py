@@ -5,10 +5,12 @@ immutable field identity/value history rewrites, fabricated stale actor reuse,
 audit failure leaving a value committed, task/field lock-order inversion,
 unisolated or writable derived search tokens, caller-forged trigger depth,
 stale label lexemes, projection
-changes on CAS failure, and prefix pagination before org/task/archive filters.
+changes on CAS failure, prefix batches truncating or duplicating matches, token
+order leaking into keyset pages, and pagination before org/task/archive filters.
 Exercise only the explicitly supplied PostgreSQL test runtime.
 """
 
+import json
 from uuid import UUID, uuid4
 
 import pytest
@@ -359,6 +361,145 @@ async def test_search_projection_prefix_semantics_unicode_and_filters_before_lim
             path + "/query", headers=headers[0], json={"q": "strass", "task_id": tasks[1]}
         )
         assert denied.status_code == 404
+
+
+@pytest.fixture
+def prefix_batch_fields(admin_engine, tenants):
+    """Token order opposes page order; eligible rows begin after two full batches."""
+    fixtures = []
+    with admin_engine.begin() as connection:
+        for org, actor in zip(tenants["orgs"], tenants["users"], strict=True):
+            connection.execute(
+                text("SELECT set_config('app.current_org',:org,true)"), {"org": str(org)}
+            )
+            base = uuid4().int & ~0xFFFF
+            rows = [
+                {
+                    "id": UUID(int=base + index + 1),
+                    "org": org,
+                    "actor": actor,
+                    "key": f"batch_{319 - index:04d}",
+                    "label": "Batchsame batchsameextra batchsameother"
+                    + (" markeraccept" if index >= 310 else ""),
+                    "scope": "task" if index < 310 else "org",
+                    "archived": index < 300,
+                }
+                for index in range(320)
+            ]
+            connection.execute(
+                text(
+                    "INSERT INTO public.confidential_fields"
+                    " (id,org_id,created_by,key,label,kind,scope,archived)"
+                    " VALUES(:id,:org,:actor,:key,:label,'other',:scope,:archived)"
+                ),
+                rows,
+            )
+            # Let real field triggers populate the projection; never forge tokens.
+            matching = connection.execute(
+                text(
+                    "SELECT token,field_id FROM public.confidential_field_search_tokens"
+                    " WHERE org_id=:org AND token >= 'batchsame' AND token < 'batchsamf'"
+                    " ORDER BY token,field_id"
+                ),
+                {"org": org},
+            ).all()
+            assert len(matching) == 320 * 3
+            target_offset = next(
+                index for index, match in enumerate(matching) if match.field_id == rows[-1]["id"]
+            )
+            assert target_offset == 319
+            fixtures.append(
+                {
+                    "rows": rows,
+                    "matching_tokens": len(matching),
+                    "target_token_offset": target_offset,
+                }
+            )
+    return fixtures
+
+
+@pytest.mark.parametrize("path,id_key", [(FIELDS, "id"), (VALUES, "field_id")])
+async def test_prefix_batches_preserve_all_matches_filters_and_keyset_pages(
+    path, id_key, api, headers, tenants, prefix_batch_fields, tmp_path
+):
+    task = await new_task(api, headers[0])
+    records = prefix_batch_fields[0]["rows"]
+    ordered = sorted(records, key=lambda row: (row["key"], row["id"]))
+    active = [row for row in ordered if not row["archived"]]
+    org_active = [row for row in active if row["scope"] == "org"]
+    receipt = {
+        "path": path,
+        "org_ids": [str(org) for org in tenants["orgs"]],
+        "fields_per_org": len(records),
+        "matching_tokens_per_org": prefix_batch_fields[0]["matching_tokens"],
+        "late_target_token_offset": prefix_batch_fields[0]["target_token_offset"],
+        "pages": [],
+        "exact_queries": [],
+    }
+    cases = [
+        ({"q": "batchsame", "archived": True, "task_id": task}, ordered),
+        ({"q": "batchsame", "task_id": task}, active),
+        ({"q": "batchsame"}, active if path == FIELDS else org_active),
+        (
+            {"q": "batchsame markeraccept", "archived": True, "task_id": task},
+            org_active,
+        ),
+    ]
+    for filters, expected in cases:
+        body = {**filters, "limit": 37}
+        observed = []
+        cursors = set()
+        while True:
+            page = assert_page(
+                await api.post(path + "/query", headers=headers[0], json=body),
+                headers[0],
+                limit=body["limit"],
+            )
+            identifiers = [(row["key"], row[id_key]) for row in page["items"]]
+            observed.extend(identifiers)
+            receipt["pages"].append(
+                {"filters": filters, "items": identifiers, "has_more": page["data"]["has_more"]}
+            )
+            if path == VALUES:
+                assert all(row["status"] == "missing" for row in page["items"])
+                assert all(
+                    row["task_id"] == (task if row["scope"] == "task" else None)
+                    for row in page["items"]
+                )
+            if not page["data"]["has_more"]:
+                break
+            assert identifiers, "Continuation must advance through matching fields"
+            cursor = page["data"]["next_cursor"]
+            assert cursor not in cursors
+            cursors.add(cursor)
+            assert len(observed) < len(expected), "Unexpected duplicate or extra continuation"
+            body["cursor"] = cursor
+        assert observed == [(row["key"], str(row["id"])) for row in expected]
+        assert len({identifier for _, identifier in observed}) == len(observed)
+
+    target = records[-1]
+    archived = records[0]
+    task_field = records[309]
+    for record, extra, expected in (
+        (target, {}, [target]),
+        (target, {"q": "batchsame markeraccept"}, [target]),
+        (archived, {}, []),
+        (archived, {"archived": True, "task_id": task}, [archived]),
+        (task_field, {}, [task_field] if path == FIELDS else []),
+        (task_field, {"task_id": task}, [task_field]),
+        (prefix_batch_fields[1]["rows"][-1], {}, []),
+        ({"id": uuid4()}, {}, []),
+    ):
+        body = {"q": "batchsame", "field_id": str(record["id"]), "limit": 1, **extra}
+        page = assert_page(
+            await api.post(path + "/query", headers=headers[0], json=body), headers[0], limit=1
+        )
+        identifiers = [row[id_key] for row in page["items"]]
+        assert identifiers == [str(row["id"]) for row in expected]
+        assert not page["data"]["has_more"]
+        receipt["exact_queries"].append({"filters": body, "ids": identifiers})
+    receipt["status"] = "passed"
+    (tmp_path / "confidential-prefix-batches.json").write_text(json.dumps(receipt, indent=2) + "\n")
 
 
 async def test_two_tables_force_rls_and_fail_closed(

@@ -12,6 +12,7 @@ from uuid import UUID
 
 from cryptography.fernet import InvalidToken
 from sqlalchemy import func, select, text, true, tuple_, union_all
+from sqlalchemy.dialects.postgresql import aggregate_order_by
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -58,6 +59,7 @@ COMMANDS = {
     "set_value": "confidential set-checked",
 }
 CURSOR_SECONDS = 15 * 60
+PREFIX_BATCH_SIZE = 128
 
 
 async def reader(session: AsyncSession, actor: Identity) -> Identity:
@@ -249,29 +251,76 @@ def prefix_bounds(lexeme, prefix: str):
 
 
 def prefix_candidates(actor: Identity, tokens: list[str]):
-    statement = select(SearchToken.field_id).where(
-        SearchToken.org_id == actor.org_id,
-        *prefix_bounds(SearchToken.token, tokens[0]),
+    def batch(rows):
+        # Identical ordering keeps both arrays aligned, including equal tokens
+        # owned by different fields. An empty chunk terminates the recursion.
+        order = (rows.c.token, rows.c.field_id)
+        return select(
+            func.array_agg(aggregate_order_by(rows.c.token, *order)).label("tokens"),
+            func.array_agg(aggregate_order_by(rows.c.field_id, *order)).label("field_ids"),
+        ).having(func.count() > 0)
+
+    seed = aliased(SearchToken, name="prefix_seed")
+    first_rows = (
+        select(seed.token, seed.field_id)
+        .where(seed.org_id == actor.org_id, *prefix_bounds(seed.token, tokens[0]))
+        .order_by(seed.token, seed.field_id)
+        .limit(PREFIX_BATCH_SIZE)
+        .subquery("first_tokens")
     )
+    batches = batch(first_rows).cte("prefix_batches", recursive=True)
+    seek = aliased(SearchToken, name="prefix_seek")
+    next_rows = (
+        select(seek.token, seek.field_id)
+        .where(
+            seek.org_id == actor.org_id,
+            *prefix_bounds(seek.token, tokens[0]),
+            tuple_(seek.token, seek.field_id)
+            > tuple_(
+                batches.c.tokens[func.cardinality(batches.c.tokens)],
+                batches.c.field_ids[func.cardinality(batches.c.field_ids)],
+            ),
+        )
+        .order_by(seek.token, seek.field_id)
+        .limit(PREFIX_BATCH_SIZE)
+        .correlate(batches)
+        .subquery("next_tokens")
+    )
+    next_batch = batch(next_rows).lateral("next_batch")
+    batches = batches.union_all(
+        select(next_batch.c.tokens, next_batch.c.field_ids)
+        .select_from(batches)
+        .join(next_batch, true())
+    )
+    # A materialization fence alone does not constrain its inner scan. Traverse
+    # the prefix B-tree in bounded, ordered windows instead of an unordered
+    # DISTINCT over the tenant. Continue to exhaustion: this is not a search cap.
+    candidates = (
+        select(func.unnest(batches.c.field_ids).label("field_id"))
+        .distinct()
+        .cte("prefix_fields")
+        .prefix_with("MATERIALIZED")
+    )
+    statement = select(candidates.c.field_id)
     for index, token in enumerate(tokens[1:]):
         other = aliased(SearchToken, name=f"prefix_{index}")
         statement = statement.where(
             select(other.field_id)
             .where(
                 other.org_id == actor.org_id,
-                other.field_id == SearchToken.field_id,
+                other.field_id == candidates.c.field_id,
                 *prefix_bounds(other.token, token),
             )
-            .correlate(SearchToken)
+            .correlate(candidates)
             # Preserve an indexed owner lookup for each candidate instead of
             # flattening EXISTS into a hash join over a broad remaining token.
             .limit(1)
             .offset(0)
             .exists()
         )
-    # A field can contain several lexemes with the same prefix. Deduplicate
-    # before hydration, but never LIMIT candidates before all field filters.
-    return statement.distinct().cte("matching_fields").prefix_with("MATERIALIZED")
+    # Multiple matching lexemes of one field cause only one owner probe and one
+    # hydration. Page LIMIT remains after all owner and field filters.
+    return statement.cte("matching_fields").prefix_with("MATERIALIZED")
 
 
 def fields_statement(actor: Identity, body: ConfidentialQuery, anchor=None, *, values=False):

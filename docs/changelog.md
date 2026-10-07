@@ -21,6 +21,16 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   Identify executed CTE SELECTs from SQLAlchemy compilation metadata for both
   read counts and EXPLAIN capture; retain all index and row-visit bounds.
 
+- Replace the unordered token candidate scan with recursive ordered B-tree
+  windows, preserving all matching fields across batches. Use a fresh pair of
+  scale-fixture orgs per run without truncating prior data, retain per-run
+  receipts, and check both range probes and conservative row-visit bounds.
+  Add multi-batch API regression coverage for duplicate lexemes, late matches,
+  filters and keyset pagination.
+- Accept prefix B-tree range access through either streaming or bitmap index
+  scans in scale-plan assertions. Associate bitmap index conditions with their
+  heap-scan probe; retain actual token/field/value visit bounds and p95 limits.
+
 ## 2026-10-06: Confidential field management slice
 
 - Extended the org confidential page with bounded definitions/current values,
