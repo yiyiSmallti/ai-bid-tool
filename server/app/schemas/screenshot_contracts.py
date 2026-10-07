@@ -341,6 +341,27 @@ class RenditionView(Contract):
     prototype_watermark: Literal[False] = False
 
 
+class AnnotationEvidencePlan(Contract):
+    crop: PixelRect | None = None
+    boxes: list[PixelRect] = Field(default_factory=list, max_length=20)
+
+
+class AnnotationEvidenceRendition(Contract):
+    """Canonical candidate metadata; release bytes have their own gated view."""
+
+    id: UUID
+    asset_id: UUID
+    parent_rendition_id: Literal[None] = None
+    image: PNGDescriptor
+    plan: AnnotationEvidencePlan
+    plan_sha256: Sha256
+    profile: Literal["annotation-candidate-v1"]
+    mapping: ContentMapping
+    privacy_review_id: UUID
+    privacy_basis: Literal["human_archive_review"] = "human_archive_review"
+    prototype_watermark: Literal[False] = False
+
+
 class ImageEvidenceInput(Contract):
     kind: Literal["image_region"]
     asset_id: UUID

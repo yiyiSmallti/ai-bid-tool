@@ -436,4 +436,10 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
         task_cosign.apply_eligibility(view, projection)
         view["co_sign"] = projection["summary"]
         view["co_sign_purpose"] = projection["manifest"]["purpose"]
+    from app.services.annotations import board_metadata
+
+    annotation_rows = await board_metadata(session, actor, task_id, [card.id for card, _ in pairs])
+    for view in views.values():
+        if view["id"] in annotation_rows:
+            view["annotation"] = annotation_rows[view["id"]]
     return views

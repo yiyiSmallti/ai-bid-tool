@@ -686,8 +686,32 @@ async def build_manifest(
                         )
                 if evidence.kind == "image_region":
                     image = material["image_rendition"]["image"]
+                    from app.services.annotations import release_for_evidence
+
+                    annotation_release = await release_for_evidence(
+                        session, actor, evidence, storage=storage if verify_files else None
+                    )
+                    release_fields = {}
+                    if annotation_release is not None:
+                        release_image = annotation_release.rendering["image"]
+                        release_fields = {
+                            "annotation_release_id": str(annotation_release.id),
+                            "annotation_approval_sha256": annotation_release.approval_sha256,
+                            "annotation_release_rendition_id": str(annotation_release.rendition_id),
+                            "annotation_release_image_sha256": release_image["sha256"],
+                            "annotation_content_pixel_sha256": annotation_release.content_pixel_sha256,
+                            "annotation_release_image": release_image,
+                        }
                     image_key = digest(
-                        {"rendition": material["screenshot_rendition_id"], "png": image["sha256"]}
+                        {
+                            "rendition": material["screenshot_rendition_id"],
+                            "png": image["sha256"],
+                            **(
+                                {"annotation_release_id": str(annotation_release.id)}
+                                if annotation_release
+                                else {}
+                            ),
+                        }
                     )
                     if image["sha256"] != evidence.image_sha256:
                         raise ServiceError(
@@ -701,6 +725,7 @@ async def build_manifest(
                             "ordinal": len(attachments) + 1,
                             "label": f"E{len(attachments) + 1:03d}",
                             "kind": "image",
+                            **release_fields,
                             "rendition_id": material["screenshot_rendition_id"],
                             "png_sha256": image["sha256"],
                             "size_bytes": image["size_bytes"],
@@ -1435,6 +1460,17 @@ async def provenance(session: AsyncSession, actor: Identity, export_id: UUID) ->
             "rendition_id": attachment.get("rendition_id"),
             "original_sha256": attachment.get("original_sha256"),
             "png_sha256": attachment["png_sha256"],
+            **{
+                key: attachment[key]
+                for key in (
+                    "annotation_release_id",
+                    "annotation_approval_sha256",
+                    "annotation_release_rendition_id",
+                    "annotation_release_image_sha256",
+                    "annotation_content_pixel_sha256",
+                )
+                if key in attachment
+            },
             "evidence_ids": attachment["evidence_ids"],
             "requirement_ids": attachment["requirement_ids"],
         }

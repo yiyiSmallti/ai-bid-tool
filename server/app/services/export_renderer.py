@@ -872,9 +872,10 @@ def _validate_manifest(
             _integer(attachment.get("page"), "attachment.page", minimum=1)
             _text(attachment.get("title"), "attachment.title")
         _sha(attachment.get("png_sha256"), "attachment.png_sha256")
-        size = _integer(attachment.get("size_bytes"), "attachment.size_bytes", minimum=1)
-        width = _integer(attachment.get("width"), "attachment.width", minimum=1)
-        height = _integer(attachment.get("height"), "attachment.height", minimum=1)
+        descriptor = attachment_image(attachment)
+        size = _integer(descriptor.get("size_bytes"), "attachment.size_bytes", minimum=1)
+        width = _integer(descriptor.get("width_px"), "attachment.width", minimum=1)
+        height = _integer(descriptor.get("height_px"), "attachment.height", minimum=1)
         if (
             size > limits.max_page_bytes
             or width > limits.max_image_side
@@ -1373,6 +1374,36 @@ def _section_geometry(document: DocumentObject, section_index: int) -> tuple[int
     return available_width, available_height
 
 
+def attachment_image(attachment: Mapping[str, Any]) -> dict[str, Any]:
+    """Keep canonical Evidence hashes while rendering its additional approved PNG."""
+    if attachment.get("annotation_release_id") is None:
+        return {
+            "sha256": attachment.get("png_sha256"),
+            "size_bytes": attachment.get("size_bytes"),
+            "width_px": attachment.get("width"),
+            "height_px": attachment.get("height"),
+        }
+    if attachment.get("kind") != "image":
+        _fail("invalid_export_manifest", "Annotation release must bind image Evidence")
+    for key in ("annotation_release_id", "annotation_release_rendition_id"):
+        _text(attachment.get(key), key)
+    for key in (
+        "annotation_approval_sha256",
+        "annotation_release_image_sha256",
+        "annotation_content_pixel_sha256",
+    ):
+        _sha(attachment.get(key), key)
+    descriptor = dict(
+        _mapping(attachment.get("annotation_release_image"), "annotation_release_image")
+    )
+    if (
+        descriptor.get("sha256") != attachment["annotation_release_image_sha256"]
+        or descriptor.get("media_type") != "image/png"
+    ):
+        _fail("invalid_export_manifest", "Confirmed image descriptor differs from release binding")
+    return descriptor
+
+
 def _render_attachments(
     document: DocumentObject,
     anchor: Any,
@@ -1390,12 +1421,13 @@ def _render_attachments(
         content = _read_private(
             Path(page_paths[ordinal]), limits.max_page_bytes, "attachment_integrity"
         )
+        descriptor = attachment_image(attachment)
         if (
-            len(content) != int(attachment["size_bytes"])
-            or hashlib.sha256(content).hexdigest() != attachment["png_sha256"]
+            len(content) != int(descriptor["size_bytes"])
+            or hashlib.sha256(content).hexdigest() != descriptor["sha256"]
         ):
             _fail("attachment_integrity", "Evidence page bytes do not match the manifest")
-        _validate_png(content, int(attachment["width"]), int(attachment["height"]))
+        _validate_png(content, int(descriptor["width_px"]), int(descriptor["height_px"]))
         title = document.add_paragraph()
         _set_paragraph_style_id(title, str(binding["heading_style_id"]))
         title.paragraph_format.page_break_before = True
@@ -1414,8 +1446,8 @@ def _render_attachments(
         image_paragraph = document.add_paragraph()
         image_paragraph.paragraph_format.space_before = Pt(0)
         image_paragraph.paragraph_format.space_after = Pt(0)
-        width = int(attachment["width"])
-        height = int(attachment["height"])
+        width = int(descriptor["width_px"])
+        height = int(descriptor["height_px"])
         scale = min(available_width / width, image_height / height)
         run = image_paragraph.add_run()
         run.add_picture(

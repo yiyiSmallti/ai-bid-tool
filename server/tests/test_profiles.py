@@ -174,13 +174,20 @@ async def test_profile_concurrent_updates_and_duplicate_selection(api, headers, 
 async def test_profile_roles_preserve_old_grants(
     role, write, select_allowed, api, headers, tenants, admin_engine
 ):
-    from app.services.auth import ROLE_SCOPES, SCOPES
+    from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, SCOPES
 
-    requirement_scopes = {"req:confirm", "req:manual"}
-    assert ROLE_SCOPES[role] & requirement_scopes == (
-        requirement_scopes if role in {"admin", "bidder", "technical"} else set()
+    human_workflow_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
+    assert ROLE_SCOPES[role] & human_workflow_scopes == (
+        human_workflow_scopes if role in {"admin", "bidder", "technical"} else set()
     )
-    assert requirement_scopes.isdisjoint(SCOPES)
+    assert human_workflow_scopes.isdisjoint(SCOPES)
+
+    lifecycle_scopes = {"certificate:lifecycle", "profile:lifecycle"}
+    assert ROLE_SCOPES[role] & lifecycle_scopes == (
+        lifecycle_scopes if role in {"admin", "bidder"} else set()
+    )
+    assert lifecycle_scopes <= HUMAN_ONLY_SCOPES
+    assert lifecycle_scopes.isdisjoint(SCOPES)
 
     old_expected = {
         "admin": {
@@ -230,6 +237,8 @@ async def test_profile_roles_preserve_old_grants(
         for scope in ROLE_SCOPES[role]
         if scope
         not in {
+            "certificate:lifecycle",
+            "profile:lifecycle",
             "profile:read",
             "profile:write",
             "task:profile",
@@ -237,6 +246,7 @@ async def test_profile_roles_preserve_old_grants(
             "certificate:file:write",
             "evidence:source:read",
             "evidence:source:write",
+            "evidence:annotate",
             "template:read",
             "template:write",
             "task:template",

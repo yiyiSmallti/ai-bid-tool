@@ -867,38 +867,75 @@ async def test_runtime_queries_show_only_the_selected_organization(table, screen
 
 
 async def test_token_context_cannot_create_a_human_privacy_release(screenshot_rows):
+    from task_fixtures import actor_context_async
+
     org = screenshot_rows["orgs"][0]
     fixed = screenshot_rows["prototype"]
+    user = screenshot_rows["users"][0]
     db = runtime_database()
     try:
-        with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
-                await session.execute(
-                    text(
-                        "SELECT set_config('app.actor_kind','token',true), "
-                        "set_config('app.actor_user_id',:user,true), "
-                        "set_config('app.actor_token_id',:token,true)"
-                    ),
+        async with db.transaction(org) as session:
+            await actor_context_async(session, org, user)
+            original_asset = await session.get(ScreenshotAsset, fixed["asset"])
+            original_rendition = await session.get(ScreenshotRendition, fixed["rendition"])
+            assert original_asset is not None and original_rendition is not None
+            asset_id, rendition_id, privacy_id = uuid4(), uuid4(), uuid4()
+            # A fresh asset lets this probe reach the human gate after immediate
+            # uniqueness/FK checks; the shared fixture already has a privacy review.
+            asset = ScreenshotAsset(
+                **(
                     {
-                        "user": str(screenshot_rows["users"][0]),
-                        "token": str(fixed["token"]),
-                    },
+                        column.name: getattr(original_asset, column.name)
+                        for column in ScreenshotAsset.__table__.columns
+                    }
+                    | {"id": asset_id, "idempotency_key": uuid4()}
                 )
-                session.add(
-                    ScreenshotPrivacyReview(
-                        id=uuid4(),
-                        org_id=org,
-                        task_id=fixed["task"],
-                        extraction_job_id=fixed["extraction"],
-                        asset_id=fixed["asset"],
-                        rendition_id=fixed["rendition"],
-                        reviewed_upload_sha256="8" * 64,
-                        stored_image_sha256=fixed["image_sha256"],
-                        reviewed_by=screenshot_rows["users"][0],
-                        rule_version="screenshot-privacy-v1",
+            )
+            session.add(asset)
+            await session.flush()
+            rendition = ScreenshotRendition(
+                **(
+                    {
+                        column.name: getattr(original_rendition, column.name)
+                        for column in ScreenshotRendition.__table__.columns
+                    }
+                    | {
+                        "id": rendition_id,
+                        "asset_id": asset_id,
+                        "privacy_review_id": privacy_id,
+                        "storage_key": f"org/{org}/synthetic/{asset_id}/{rendition_id}.png",
+                    }
+                )
+            )
+            session.add(rendition)
+            await session.flush()
+            review = {
+                "id": privacy_id,
+                "org_id": org,
+                "task_id": fixed["task"],
+                "extraction_job_id": fixed["extraction"],
+                "asset_id": asset_id,
+                "rendition_id": rendition_id,
+                "reviewed_upload_sha256": rendition.upload_sha256,
+                "stored_image_sha256": rendition.image_sha256,
+                "reviewed_by": user,
+                "rule_version": "screenshot-privacy-v1",
+            }
+            with pytest.raises(DBAPIError) as error:
+                async with session.begin_nested():
+                    await actor_context_async(
+                        session, org, user, kind="token", token=fixed["token"]
                     )
-                )
-        assert db_sqlstate(error.value) == "42501"
+                    session.add(ScreenshotPrivacyReview(**review))
+                    await session.flush()
+            assert db_sqlstate(error.value) == "42501"
+            assert "Human privacy release required" in str(error.value.orig)
+
+            # The identical inputs must succeed for the eligible human, proving
+            # the token failure was authority rather than an invalid material chain.
+            await actor_context_async(session, org, user)
+            session.add(ScreenshotPrivacyReview(**review))
+            await session.flush()
     finally:
         await db.engine.dispose()
 

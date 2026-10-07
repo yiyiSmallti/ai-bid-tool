@@ -1,6 +1,6 @@
-"""Pending approval, not implemented: org attachment archive contracts.
+"""Approved, not implemented: org attachment archive contracts.
 
-Review-only Pydantic v2 models and service protocols. No runtime registration,
+Approved Pydantic v2 models and service protocols. No runtime registration,
 database/storage writes, renderer execution, grants or confirmation occur here.
 """
 

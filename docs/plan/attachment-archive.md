@@ -4,12 +4,12 @@ kind: plan
 
 # Org attachment archives
 
-Status: **Pending approval, not implemented.** Corresponds to [roadmap](roadmap.md)
+Status: **Approved with all recommended defaults, not implemented.** Corresponds to [roadmap](roadmap.md)
 F03/R05/R06/U01 and the profile/contract prerequisite of B05.
 
 The [Pydantic and service interface draft](attachment-archive/attachment_archive_contracts.py)
-is a review-only contract. It registers no routes, commands, tables, permissions or
-workers. Implementation requires owner approval under [agent.md](../../agent.md#workflow).
+is the approved contract. It registers no routes, commands, tables, permissions or
+workers; implementation follows these decisions under [agent.md](../../agent.md#workflow).
 The approved [cloud annotation contract](annotation.md) remains unchanged; its
 profile/contract source branch stays disabled until this archive chain and the B05
 adapter below pass acceptance.
@@ -605,12 +605,11 @@ Each artifact identifies the scenario and expected gate; never include credentia
 signed URLs or real contract data. Stub storage failure tests do not establish live
 S3 acceptance; record any required isolated S3 run separately and truthfully.
 
-## Open decisions
+## Decisions
 
-All defaults below remain pending owner approval; approval of B05 did not approve
-these archive decisions.
+The owner approved every recommended default; implementation follows these decisions.
 
-| Decision | Recommended default | Reason / enablement consequence |
+| Decision | Approved default | Reason / enablement consequence |
 | --- | --- | --- |
 | First file slice | One unchanged unrotated PDF, all listed attachment categories | Completes responsibility/review/task chain before multipart complexity; scans can initially be supplied as PDFs. |
 | Archive ownership | Uploader is custodian; explicit live admin/bidder reviewer; reassignment under state version | A rejected or blocked item always has a named next actor. |

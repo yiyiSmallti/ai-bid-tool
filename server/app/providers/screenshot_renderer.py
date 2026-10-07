@@ -35,7 +35,7 @@ def _renderer_failure(message: str, *, retryable: bool = False) -> ProviderFailu
     )
 
 
-def validate_png(content: bytes) -> dict[str, Any]:
+def validate_png(content: bytes, *, allow_input_metadata: bool = False) -> dict[str, Any]:
     """Validate a complete renderer PNG and return its immutable descriptor."""
     if not isinstance(content, bytes) or not content:
         raise _renderer_failure("Screenshot renderer returned an empty image")
@@ -97,6 +97,12 @@ def validate_png(content: bytes) -> dict[str, Any]:
             seen_iend = True
             if offset != len(content):
                 raise _renderer_failure("Screenshot renderer returned trailing PNG data")
+        elif (
+            allow_input_metadata and kind == b"pHYs" and seen_ihdr and not seen_idat and length == 9
+        ):
+            # Archived PDF previews from MuPDF retain fixed page resolution.
+            # This is an input-only allowance; renderer output stays metadata-free.
+            pass
         else:
             if seen_idat:
                 ended_idat = True

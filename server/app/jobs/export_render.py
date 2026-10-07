@@ -174,7 +174,13 @@ async def render(execution: JobExecution, storage: Storage) -> None:
             for attachment in manifest["attachments"]:
                 if attachment.get("kind") == "image":
                     asset, rendition = await screenshots.rendition_access(
-                        session, actor, UUID(attachment["rendition_id"])
+                        session,
+                        actor,
+                        UUID(
+                            attachment.get(
+                                "annotation_release_rendition_id", attachment["rendition_id"]
+                            )
+                        ),
                     )
                     content = await screenshots.read_rendition(storage, asset, rendition)
                 else:

@@ -95,6 +95,13 @@ class ApiToken(Tenant, Base):
         ),
         CheckConstraint("NOT (scopes ? 'provider:write')", name="token_no_provider_write"),
         CheckConstraint("NOT (scopes ? 'token:create')", name="token_forbidden_creation_scope"),
+        CheckConstraint(
+            "NOT (scopes ? 'evidence:annotate')", name="token_forbidden_annotation_scope"
+        ),
+        CheckConstraint(
+            "NOT (scopes ?| ARRAY['certificate:lifecycle','profile:lifecycle'])",
+            name="token_forbidden_library_lifecycle_scopes",
+        ),
         CheckConstraint("NOT (scopes ? 'check:decide')", name="token_forbidden_check_scopes"),
         CheckConstraint(
             "NOT (scopes ? 'score:rubric:review')", name="token_forbidden_score_scopes"
@@ -417,6 +424,10 @@ class Job(Tenant, Base):
     invocation_id: Mapped[UUID | None] = mapped_column()
     command: Mapped[str | None] = mapped_column(String(100))
     __table_args__ = (
+        CheckConstraint(
+            "kind NOT IN ('annotation_render','annotation_release') OR (task_id IS NOT NULL AND document_id IS NOT NULL AND actor_user_id IS NOT NULL AND actor_kind='session' AND actor_token_id IS NULL)",
+            name="annotation_job_kind",
+        ),
         *agent_origin_constraints("jobs"),
         UniqueConstraint("org_id", "agent_session_id", "id", name="agent_job_session"),
         ForeignKeyConstraint(
@@ -576,6 +587,24 @@ class AuditLog(Tenant, Base):
                 "action IN ('resource.feature.create','resource.feature.update')"
             ),
         ),
+        Index(
+            "management_certificate_audit_author",
+            "org_id",
+            "resource_revision_id_text",
+            "object_id",
+            postgresql_where=text(
+                "action IN ('resource.certificate.create','resource.certificate.update','resource.certificate.file.create')"
+            ),
+        ),
+        Index(
+            "management_profile_audit_author",
+            "org_id",
+            "resource_revision_id_text",
+            "object_id",
+            postgresql_where=text(
+                "action IN ('resource.profile.create','resource.profile.update')"
+            ),
+        ),
         ForeignKeyConstraint(
             ["org_id", "agent_session_id", "job_id"],
             ["jobs.org_id", "jobs.agent_session_id", "jobs.id"],
@@ -710,6 +739,11 @@ class Certificate(Tenant, Base):
     __tablename__ = "certificates"
     created_by: Mapped[UUID] = mapped_column()
     current_revision: Mapped[int] = mapped_column(Integer, default=1)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(8), default="active", server_default="active"
+    )
+    lifecycle_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    search_vector: Mapped[str] = mapped_column(TSVECTOR, server_default=text("''::tsvector"))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
@@ -728,6 +762,11 @@ class Certificate(Tenant, Base):
             initially="DEFERRED",
         ),
         CheckConstraint("current_revision > 0", name="certificate_revision_positive"),
+        CheckConstraint(
+            "lifecycle_state IN ('active','inactive') AND lifecycle_revision >= 0 "
+            "AND (lifecycle_revision > 0 OR lifecycle_state = 'active')",
+            name="certificate_lifecycle_valid",
+        ),
     )
 
 
@@ -805,6 +844,11 @@ class OrgProfile(Tenant, Base):
     __tablename__ = "org_profiles"
     created_by: Mapped[UUID] = mapped_column()
     current_revision: Mapped[int] = mapped_column(Integer, default=1)
+    lifecycle_state: Mapped[str] = mapped_column(
+        String(8), default="active", server_default="active"
+    )
+    lifecycle_revision: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    search_vector: Mapped[str] = mapped_column(TSVECTOR, server_default=text("''::tsvector"))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         ForeignKeyConstraint(
@@ -823,6 +867,11 @@ class OrgProfile(Tenant, Base):
             initially="DEFERRED",
         ),
         CheckConstraint("current_revision > 0", name="profile_revision_positive"),
+        CheckConstraint(
+            "lifecycle_state IN ('active','inactive') AND lifecycle_revision >= 0 "
+            "AND (lifecycle_revision > 0 OR lifecycle_state = 'active')",
+            name="profile_lifecycle_valid",
+        ),
     )
 
 
@@ -1106,6 +1155,16 @@ class EvidenceSource(Tenant, Base):
     eligible_for_draft_export: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint(
+            "org_id",
+            "id",
+            "task_id",
+            "task_certificate_id",
+            "certificate_id",
+            "certificate_revision_id",
+            "certificate_file_id",
+            name="annotation_certificate_source_scope",
+        ),
         UniqueConstraint("org_id", "task_certificate_id", "page", "render_profile"),
         ForeignKeyConstraint(
             [

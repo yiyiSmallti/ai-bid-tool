@@ -87,6 +87,12 @@ jobs:
       - name: Build the screenshot renderer so image tests run instead of skipping
         if: steps.changes.outputs.code == 'true'
         run: CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" sh scripts/build_screenshot_renderer.sh
+      - name: Install the protected renderer for Linux process-boundary acceptance
+        if: steps.changes.outputs.code == 'true'
+        run: |
+          sudo install -d -o root -g root -m 0755 /usr/local /usr/local/libexec /usr/local/libexec/bid
+          sudo install -o root -g root -m 0555 data/work/bin/bid-screenshot-renderer /usr/local/libexec/bid/bid-screenshot-renderer
+          echo "BID_SCREENSHOT_RENDERER=/usr/local/libexec/bid/bid-screenshot-renderer" >> "$GITHUB_ENV"
       - run: uv run ruff check server cli scripts evals
         if: steps.changes.outputs.code == 'true'
       - run: uv run ruff format --check server cli scripts evals
