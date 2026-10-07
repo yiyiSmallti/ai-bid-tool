@@ -24,6 +24,7 @@ const menus = computed(() => area.value === "platform"
       { key: "templates", to: "/org/templates", title: "模板库", icon: Document },
       { key: "profiles", to: "/org/profiles", title: "单位资料", icon: Memo },
       { key: "memory", to: "/org/memory", title: "单位记忆", icon: Memo },
+      { key: "org-models", to: "/org/settings/models", title: "模型与服务配置", icon: Monitor },
       { key: "confidential", to: "/org/confidential", title: "保密字段", icon: Lock },
       ...(orgAccess.role === "admin" ? [{ key: "billing", to: "/org/billing", title: "余额与充值", icon: Wallet }] : []),
     ]);

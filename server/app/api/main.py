@@ -63,6 +63,13 @@ RESOURCE_MANAGEMENT_READS = {
     "memory_feedback_list",
     "management_memory_show",
     "management_memory_history",
+    "provider_show",
+    "provider_revision_show",
+    "provider_history_page",
+    "provider_catalog",
+    "confidential_field_browse",
+    "confidential_browse",
+    "confidential_history-page",
     "export_binding_browse",
     "export_binding_show",
     "resource_product_browse",
@@ -177,8 +184,11 @@ def create_app(
                 "/management/resources/features",
                 "/management/resources/templates",
                 "/management/export-bindings",
+                "/management/confidential-fields",
+                "/management/confidential-values",
                 "/management/resources/certificates",
                 "/management/resources/profiles",
+                "/management/providers",
             )
         )
         if credential_route:
@@ -415,6 +425,22 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path in {
+            "/providers",
+            "/providers/test",
+            "/management/providers",
+        } or request.url.path.startswith("/management/providers/"):
+            # Unknown property names and dynamic reasoning-option paths are
+            # caller-controlled too; credential paths never reflect even loc.
+            return error_response(
+                request, ServiceError("invalid_input", "Invalid provider input", 422, 2)
+            )
+        if request.url.path.startswith(("/management/confidential-", "/confidential-")):
+            # Even unknown property names may contain a submitted secret. No
+            # validation locations or input values leave confidential routes.
+            return error_response(
+                request, ServiceError("invalid_input", "Invalid confidential input", 422, 2)
+            )
         if request.url.path.startswith("/platform/credentials"):
             from app.services.platform_credentials import (
                 PlatformCredentialService,
@@ -637,6 +663,11 @@ def create_app(
     from app.api.management_templates import create_router as create_management_template_router
 
     app.include_router(create_management_template_router(context, settings))
+    from app.api.management_confidential import (
+        create_router as create_management_confidential_router,
+    )
+
+    app.include_router(create_management_confidential_router(context, settings))
     app.include_router(create_management_binding_router(context, settings))
     from app.api.management_certificates import (
         create_router as create_management_certificate_router,
@@ -645,6 +676,9 @@ def create_app(
 
     app.include_router(create_management_certificate_router(context, settings))
     app.include_router(create_management_profile_router(context, settings))
+    from app.api.management_providers import create_router as create_management_provider_router
+
+    app.include_router(create_management_provider_router(context, settings))
     app.include_router(create_confidential_router(context, settings))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))

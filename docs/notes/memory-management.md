@@ -36,7 +36,7 @@ bytes determine retained rows and the continuation anchor. One server `as_of`
 controls each page's effective expiry. Prefix tokens cover sanitized current text,
 conflict keys and tags; all selected tags must match.
 
-The [migration](../../server/migrations/versions/0055_memory_management.py) stores
+The [migration](../../server/migrations/versions/0057_memory_management.py) stores
 indexed search projections on roots so obsolete revisions cannot become search
 candidates. The root guard retains owner, revision, tombstone and scope-epoch
 checks; derived-only refreshes must equal the exact current revision. Initial

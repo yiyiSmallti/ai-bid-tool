@@ -84472,6 +84472,2874 @@
             "type": "object"
           }
         },
+        "confidential field browse": {
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "field_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Field Id"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              },
+              "archived": {
+                "default": false,
+                "title": "Archived",
+                "type": "boolean"
+              }
+            },
+            "title": "ConfidentialQuery",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "archived": {
+                "title": "Archived",
+                "type": "boolean"
+              },
+              "revision": {
+                "title": "Revision",
+                "type": "integer"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "archived",
+              "revision",
+              "created_at"
+            ],
+            "title": "ConfidentialFieldView",
+            "type": "object"
+          }
+        },
+        "confidential browse": {
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "field_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Field Id"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              },
+              "archived": {
+                "default": false,
+                "title": "Archived",
+                "type": "boolean"
+              }
+            },
+            "title": "ConfidentialQuery",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "description": "One field's current value for the org or a task, never the value itself.",
+            "properties": {
+              "field_id": {
+                "format": "uuid",
+                "title": "Field Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task Id"
+              },
+              "status": {
+                "enum": [
+                  "filled",
+                  "missing"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Value Id"
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Version"
+              },
+              "tail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Tail"
+              },
+              "set_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set By"
+              },
+              "set_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set At"
+              }
+            },
+            "required": [
+              "field_id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "task_id",
+              "status",
+              "value_id",
+              "version",
+              "tail",
+              "set_by",
+              "set_at"
+            ],
+            "title": "ConfidentialValueView",
+            "type": "object"
+          }
+        },
+        "confidential history-page": {
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              }
+            },
+            "title": "ConfidentialHistoryQuery",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "field",
+              "options": [
+                "--field"
+              ],
+              "required": true,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range",
+              "multiple": false,
+              "default": "25"
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "description": "One field's current value for the org or a task, never the value itself.",
+            "properties": {
+              "field_id": {
+                "format": "uuid",
+                "title": "Field Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task Id"
+              },
+              "status": {
+                "enum": [
+                  "filled",
+                  "missing"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Value Id"
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Version"
+              },
+              "tail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Tail"
+              },
+              "set_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set By"
+              },
+              "set_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set At"
+              }
+            },
+            "required": [
+              "field_id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "task_id",
+              "status",
+              "value_id",
+              "version",
+              "tail",
+              "set_by",
+              "set_at"
+            ],
+            "title": "ConfidentialValueView",
+            "type": "object"
+          }
+        },
+        "confidential set-checked": {
+          "input": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Transient input: only the dedicated submit transport serializes the value.",
+            "properties": {
+              "value": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "title": "Value",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              },
+              "expected_field_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "expected_value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expected Value Id"
+              }
+            },
+            "required": [
+              "value",
+              "expected_field_revision",
+              "expected_value_id"
+            ],
+            "title": "ConfidentialValueRevisionSet",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "field",
+              "options": [
+                "--field"
+              ],
+              "required": true,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "expected_field_revision",
+              "options": [
+                "--expected-field-revision"
+              ],
+              "required": true,
+              "type": "integer range",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "expected_value",
+              "options": [
+                "--expected-value"
+              ],
+              "required": false,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "expect_empty",
+              "options": [
+                "--expect-empty"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            },
+            {
+              "name": "value_stdin",
+              "options": [
+                "--value-stdin"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            },
+            {
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "additionalProperties": false,
+            "description": "One field's current value for the org or a task, never the value itself.",
+            "properties": {
+              "field_id": {
+                "format": "uuid",
+                "title": "Field Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task Id"
+              },
+              "status": {
+                "enum": [
+                  "filled",
+                  "missing"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Value Id"
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Version"
+              },
+              "tail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Tail"
+              },
+              "set_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set By"
+              },
+              "set_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set At"
+              }
+            },
+            "required": [
+              "field_id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "task_id",
+              "status",
+              "value_id",
+              "version",
+              "tail",
+              "set_by",
+              "set_at"
+            ],
+            "title": "ConfidentialValueView",
+            "type": "object"
+          }
+        },
+        "provider show": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "CatalogReasoningChoice": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "maxLength": 20,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "CatalogReasoningChoice",
+                "type": "object"
+              },
+              "PlatformModelChoice": {
+                "additionalProperties": false,
+                "properties": {
+                  "default": {
+                    "title": "Default",
+                    "type": "boolean"
+                  },
+                  "default_reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Default Reasoning"
+                  },
+                  "id": {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "model": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "reasoning": {
+                    "items": {
+                      "$ref": "#/$defs/CatalogReasoningChoice"
+                    },
+                    "maxItems": 8,
+                    "title": "Reasoning",
+                    "type": "array"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "sale_input_per_mtok": {
+                    "minimum": 0,
+                    "title": "Sale Input Per Mtok",
+                    "type": "number"
+                  },
+                  "sale_output_per_mtok": {
+                    "minimum": 0,
+                    "title": "Sale Output Per Mtok",
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "model",
+                  "provider",
+                  "sale_input_per_mtok",
+                  "sale_output_per_mtok",
+                  "default",
+                  "reasoning",
+                  "default_reasoning"
+                ],
+                "title": "PlatformModelChoice",
+                "type": "object"
+              },
+              "ProviderConfigInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "base_url": {
+                    "anyOf": [
+                      {
+                        "maxLength": 300,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Base Url"
+                  },
+                  "capability": {
+                    "const": "llm_extract",
+                    "default": "llm_extract",
+                    "title": "Capability",
+                    "type": "string"
+                  },
+                  "default_reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Default Reasoning"
+                  },
+                  "expected_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Revision"
+                  },
+                  "input_usd_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Input Usd Per Mtok"
+                  },
+                  "json_mode": {
+                    "default": "json_schema",
+                    "enum": [
+                      "json_schema",
+                      "json_object"
+                    ],
+                    "title": "Json Mode",
+                    "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
+                  },
+                  "output_usd_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Output Usd Per Mtok"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "provider": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "anthropic",
+                          "openai"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider"
+                  },
+                  "reasoning": {
+                    "items": {
+                      "$ref": "#/$defs/ReasoningLevel"
+                    },
+                    "maxItems": 8,
+                    "title": "Reasoning",
+                    "type": "array"
+                  },
+                  "source": {
+                    "enum": [
+                      "platform",
+                      "org"
+                    ],
+                    "title": "Source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "title": "ProviderConfigInput",
+                "type": "object"
+              },
+              "ProviderRevisionMetadata": {
+                "additionalProperties": false,
+                "properties": {
+                  "catalog_revision": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Revision"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "catalog_state": {
+                    "enum": [
+                      "enabled",
+                      "unavailable",
+                      "not_applicable"
+                    ],
+                    "title": "Catalog State",
+                    "type": "string"
+                  },
+                  "configuration": {
+                    "$ref": "#/$defs/ProviderConfigInput"
+                  },
+                  "credential_state": {
+                    "enum": [
+                      "configured",
+                      "platform_managed"
+                    ],
+                    "title": "Credential State",
+                    "type": "string"
+                  },
+                  "default_reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Default Reasoning"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "model": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "enum": [
+                      "anthropic",
+                      "openai"
+                    ],
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "reasoning": {
+                    "items": {
+                      "$ref": "#/$defs/CatalogReasoningChoice"
+                    },
+                    "maxItems": 8,
+                    "title": "Reasoning",
+                    "type": "array"
+                  },
+                  "revised_at": {
+                    "format": "date-time",
+                    "title": "Revised At",
+                    "type": "string"
+                  },
+                  "revised_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Revised By"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "sale_input_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Sale Input Per Mtok"
+                  },
+                  "sale_output_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Sale Output Per Mtok"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "updated_by": {
+                    "format": "uuid",
+                    "title": "Updated By",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "revision",
+                  "configuration",
+                  "provider",
+                  "model",
+                  "catalog_state",
+                  "credential_state",
+                  "updated_by",
+                  "updated_at",
+                  "revised_at",
+                  "revised_by",
+                  "reasoning",
+                  "default_reasoning"
+                ],
+                "title": "ProviderRevisionMetadata",
+                "type": "object"
+              },
+              "ReasoningLevel": {
+                "additionalProperties": false,
+                "description": "One of the vendor's official reasoning levels for a catalog model.",
+                "properties": {
+                  "batch_chars": {
+                    "default": 8000,
+                    "maximum": 200000,
+                    "minimum": 1000,
+                    "title": "Batch Chars",
+                    "type": "integer"
+                  },
+                  "effort": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z]{1,10}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Effort"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "request_options": {
+                    "additionalProperties": true,
+                    "title": "Request Options",
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "ReasoningLevel",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "billing_currency": {
+                "pattern": "^[A-Z]{3}$",
+                "title": "Billing Currency",
+                "type": "string"
+              },
+              "capability": {
+                "const": "llm_extract",
+                "default": "llm_extract",
+                "title": "Capability",
+                "type": "string"
+              },
+              "connection_status": {
+                "const": "not_checked",
+                "default": "not_checked",
+                "title": "Connection Status",
+                "type": "string"
+              },
+              "current": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ProviderRevisionMetadata"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "default_model": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PlatformModelChoice"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "effective_source": {
+                "enum": [
+                  "org",
+                  "platform",
+                  "unconfigured"
+                ],
+                "title": "Effective Source",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reasoning": {
+                "items": {
+                  "$ref": "#/$defs/CatalogReasoningChoice"
+                },
+                "maxItems": 8,
+                "title": "Reasoning",
+                "type": "array"
+              }
+            },
+            "required": [
+              "org_id",
+              "effective_source",
+              "current",
+              "default_model",
+              "billing_currency",
+              "reasoning",
+              "actions"
+            ],
+            "title": "ProviderSettingsData",
+            "type": "object"
+          }
+        },
+        "provider revision show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "CatalogReasoningChoice": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "maxLength": 20,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "CatalogReasoningChoice",
+                "type": "object"
+              },
+              "ProviderConfigInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "base_url": {
+                    "anyOf": [
+                      {
+                        "maxLength": 300,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Base Url"
+                  },
+                  "capability": {
+                    "const": "llm_extract",
+                    "default": "llm_extract",
+                    "title": "Capability",
+                    "type": "string"
+                  },
+                  "default_reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Default Reasoning"
+                  },
+                  "expected_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Revision"
+                  },
+                  "input_usd_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Input Usd Per Mtok"
+                  },
+                  "json_mode": {
+                    "default": "json_schema",
+                    "enum": [
+                      "json_schema",
+                      "json_object"
+                    ],
+                    "title": "Json Mode",
+                    "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
+                  },
+                  "output_usd_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Output Usd Per Mtok"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "provider": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "anthropic",
+                          "openai"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider"
+                  },
+                  "reasoning": {
+                    "items": {
+                      "$ref": "#/$defs/ReasoningLevel"
+                    },
+                    "maxItems": 8,
+                    "title": "Reasoning",
+                    "type": "array"
+                  },
+                  "source": {
+                    "enum": [
+                      "platform",
+                      "org"
+                    ],
+                    "title": "Source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "title": "ProviderConfigInput",
+                "type": "object"
+              },
+              "ReasoningLevel": {
+                "additionalProperties": false,
+                "description": "One of the vendor's official reasoning levels for a catalog model.",
+                "properties": {
+                  "batch_chars": {
+                    "default": 8000,
+                    "maximum": 200000,
+                    "minimum": 1000,
+                    "title": "Batch Chars",
+                    "type": "integer"
+                  },
+                  "effort": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z]{1,10}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Effort"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "request_options": {
+                    "additionalProperties": true,
+                    "title": "Request Options",
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "ReasoningLevel",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "catalog_revision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "catalog_state": {
+                "enum": [
+                  "enabled",
+                  "unavailable",
+                  "not_applicable"
+                ],
+                "title": "Catalog State",
+                "type": "string"
+              },
+              "configuration": {
+                "$ref": "#/$defs/ProviderConfigInput"
+              },
+              "credential_state": {
+                "enum": [
+                  "configured",
+                  "platform_managed"
+                ],
+                "title": "Credential State",
+                "type": "string"
+              },
+              "default_reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Default Reasoning"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "model": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Model",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provider": {
+                "enum": [
+                  "anthropic",
+                  "openai"
+                ],
+                "title": "Provider",
+                "type": "string"
+              },
+              "reasoning": {
+                "items": {
+                  "$ref": "#/$defs/CatalogReasoningChoice"
+                },
+                "maxItems": 8,
+                "title": "Reasoning",
+                "type": "array"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "sale_input_per_mtok": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sale Input Per Mtok"
+              },
+              "sale_output_per_mtok": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sale Output Per Mtok"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              },
+              "updated_by": {
+                "format": "uuid",
+                "title": "Updated By",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "revision",
+              "configuration",
+              "provider",
+              "model",
+              "catalog_state",
+              "credential_state",
+              "updated_by",
+              "updated_at",
+              "revised_at",
+              "revised_by",
+              "reasoning",
+              "default_reasoning"
+            ],
+            "title": "ProviderRevisionMetadata",
+            "type": "object"
+          }
+        },
+        "provider history-page": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "CatalogReasoningChoice": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "maxLength": 20,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "CatalogReasoningChoice",
+                "type": "object"
+              },
+              "ProviderConfigInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "base_url": {
+                    "anyOf": [
+                      {
+                        "maxLength": 300,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Base Url"
+                  },
+                  "capability": {
+                    "const": "llm_extract",
+                    "default": "llm_extract",
+                    "title": "Capability",
+                    "type": "string"
+                  },
+                  "default_reasoning": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Default Reasoning"
+                  },
+                  "expected_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Revision"
+                  },
+                  "input_usd_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Input Usd Per Mtok"
+                  },
+                  "json_mode": {
+                    "default": "json_schema",
+                    "enum": [
+                      "json_schema",
+                      "json_object"
+                    ],
+                    "title": "Json Mode",
+                    "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
+                  },
+                  "output_usd_per_mtok": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Output Usd Per Mtok"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "provider": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "anthropic",
+                          "openai"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider"
+                  },
+                  "reasoning": {
+                    "items": {
+                      "$ref": "#/$defs/ReasoningLevel"
+                    },
+                    "maxItems": 8,
+                    "title": "Reasoning",
+                    "type": "array"
+                  },
+                  "source": {
+                    "enum": [
+                      "platform",
+                      "org"
+                    ],
+                    "title": "Source",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source"
+                ],
+                "title": "ProviderConfigInput",
+                "type": "object"
+              },
+              "ReasoningLevel": {
+                "additionalProperties": false,
+                "description": "One of the vendor's official reasoning levels for a catalog model.",
+                "properties": {
+                  "batch_chars": {
+                    "default": 8000,
+                    "maximum": 200000,
+                    "minimum": 1000,
+                    "title": "Batch Chars",
+                    "type": "integer"
+                  },
+                  "effort": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[a-z]{1,10}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Effort"
+                  },
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 60,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "request_options": {
+                    "additionalProperties": true,
+                    "title": "Request Options",
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "ReasoningLevel",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "catalog_revision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "catalog_state": {
+                "enum": [
+                  "enabled",
+                  "unavailable",
+                  "not_applicable"
+                ],
+                "title": "Catalog State",
+                "type": "string"
+              },
+              "configuration": {
+                "$ref": "#/$defs/ProviderConfigInput"
+              },
+              "credential_state": {
+                "enum": [
+                  "configured",
+                  "platform_managed"
+                ],
+                "title": "Credential State",
+                "type": "string"
+              },
+              "default_reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Default Reasoning"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "model": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Model",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provider": {
+                "enum": [
+                  "anthropic",
+                  "openai"
+                ],
+                "title": "Provider",
+                "type": "string"
+              },
+              "reasoning": {
+                "items": {
+                  "$ref": "#/$defs/CatalogReasoningChoice"
+                },
+                "maxItems": 8,
+                "title": "Reasoning",
+                "type": "array"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "sale_input_per_mtok": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sale Input Per Mtok"
+              },
+              "sale_output_per_mtok": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Sale Output Per Mtok"
+              },
+              "updated_at": {
+                "format": "date-time",
+                "title": "Updated At",
+                "type": "string"
+              },
+              "updated_by": {
+                "format": "uuid",
+                "title": "Updated By",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "revision",
+              "configuration",
+              "provider",
+              "model",
+              "catalog_state",
+              "credential_state",
+              "updated_by",
+              "updated_at",
+              "revised_at",
+              "revised_by",
+              "reasoning",
+              "default_reasoning"
+            ],
+            "title": "ProviderRevisionMetadata",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "provider catalog": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "q",
+              "options": [
+                "--q"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Catalog identifiers support literal prefix search, never vendor endpoints.",
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ProviderCatalogQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "CatalogReasoningChoice": {
+                "additionalProperties": false,
+                "properties": {
+                  "label": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Label"
+                  },
+                  "name": {
+                    "maxLength": 20,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "CatalogReasoningChoice",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "default": {
+                "title": "Default",
+                "type": "boolean"
+              },
+              "default_reasoning": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Default Reasoning"
+              },
+              "id": {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$",
+                "title": "Id",
+                "type": "string"
+              },
+              "model": {
+                "maxLength": 100,
+                "minLength": 1,
+                "title": "Model",
+                "type": "string"
+              },
+              "provider": {
+                "enum": [
+                  "anthropic",
+                  "openai"
+                ],
+                "title": "Provider",
+                "type": "string"
+              },
+              "reasoning": {
+                "items": {
+                  "$ref": "#/$defs/CatalogReasoningChoice"
+                },
+                "maxItems": 8,
+                "title": "Reasoning",
+                "type": "array"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "sale_input_per_mtok": {
+                "minimum": 0,
+                "title": "Sale Input Per Mtok",
+                "type": "number"
+              },
+              "sale_output_per_mtok": {
+                "minimum": 0,
+                "title": "Sale Output Per Mtok",
+                "type": "number"
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "model",
+              "provider",
+              "sale_input_per_mtok",
+              "sale_output_per_mtok",
+              "default",
+              "reasoning",
+              "default_reasoning"
+            ],
+            "title": "PlatformModelChoice",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
         "memory browse": {
           "input": {
             "$defs": {

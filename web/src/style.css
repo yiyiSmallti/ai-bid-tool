@@ -148,8 +148,10 @@ input[type="checkbox"], input[type="radio"] { accent-color: var(--el-color-prima
 @media (max-width: 640px) {
   .app-shell { flex-direction: column; }
   .app-aside { width: 100%; height: auto; position: static; flex-direction: row; align-items: center; }
-  .brand { width: 56px; height: 52px; border-bottom: none; }
-  .app-nav { flex-direction: row; padding: 6px; }
+  .brand { width: 56px; height: 52px; border-bottom: none; flex: none; }
+  /* Keep additional navigation entries scrollable inside the mobile shell. */
+  .app-nav { flex: 1; min-width: 0; flex-direction: row; padding: 6px; overflow-x: auto; }
+  .nav-item { flex: none; }
   .app-header { position: static; height: auto; min-height: 52px; padding: 8px 12px; }
   .app-main { padding: 16px 12px 32px; }
   .app-header { padding: 0 12px; }

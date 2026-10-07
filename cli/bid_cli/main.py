@@ -68,6 +68,7 @@ from bid_cli.management_features import register as register_management_feature_
 from bid_cli.management_memory import register as register_management_memory_commands
 from bid_cli.management_products import register as register_management_product_commands
 from bid_cli.management_profiles import register as register_management_profile_commands
+from bid_cli.management_providers import register as register_management_provider_commands
 from bid_cli.management_templates import register as register_management_template_commands
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
@@ -1468,6 +1469,7 @@ register_management_binding_commands()
 register_management_certificate_commands(certificate_app)
 register_management_profile_commands(profile_app)
 register_management_memory_commands(memory_app)
+register_management_provider_commands(provider_app)
 register_requirement_confirmation_commands(req_app)
 register_annotation_commands(evidence_app)
 
@@ -1664,10 +1666,14 @@ def main(args: list[str] | None = None):
             from bid_cli.management_certificates import (
                 COMMAND_INPUTS as MANAGEMENT_CERTIFICATE_COMMANDS,
             )
+            from bid_cli.management_confidential import (
+                COMMAND_INPUTS as MANAGEMENT_CONFIDENTIAL_COMMANDS,
+            )
             from bid_cli.management_features import COMMAND_INPUTS as MANAGEMENT_FEATURE_COMMANDS
             from bid_cli.management_memory import COMMAND_INPUTS as MANAGEMENT_MEMORY_COMMANDS
             from bid_cli.management_products import COMMAND_INPUTS as MANAGEMENT_PRODUCT_COMMANDS
             from bid_cli.management_profiles import COMMAND_INPUTS as MANAGEMENT_PROFILE_COMMANDS
+            from bid_cli.management_providers import COMMAND_INPUTS as MANAGEMENT_PROVIDER_COMMANDS
             from bid_cli.management_templates import COMMAND_INPUTS as MANAGEMENT_TEMPLATE_COMMANDS
 
             name = command_name(arguments)
@@ -1682,6 +1688,8 @@ def main(args: list[str] | None = None):
                 or name in MANAGEMENT_CERTIFICATE_COMMANDS
                 or name in MANAGEMENT_PROFILE_COMMANDS
                 or name in MANAGEMENT_MEMORY_COMMANDS
+                or name in MANAGEMENT_PROVIDER_COMMANDS
+                or name in MANAGEMENT_CONFIDENTIAL_COMMANDS
                 or name.startswith("assessment ")
                 or "--view" in arguments
                 or any(argument.startswith("--view=") for argument in arguments)

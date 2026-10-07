@@ -1,0 +1,1034 @@
+{
+  "local:HTTP400:management_cursor_invalid": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_cursor_invalid",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: management_cursor_invalid"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP403": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "forbidden",
+        "exit_code": 4,
+        "message": "Provider metadata operation failed: forbidden"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP404": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "not_found",
+        "exit_code": 4,
+        "message": "Provider metadata operation failed: not_found"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP409:management_cursor_expired": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_cursor_expired",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: management_cursor_expired"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP409:management_integrity_error": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_integrity_error",
+        "exit_code": 4,
+        "message": "Provider metadata operation failed: management_integrity_error"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP413:management_result_too_large": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_result_too_large",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: management_result_too_large"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP422": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "invalid_input",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: invalid_input"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP429": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "rate_limit",
+        "exit_code": 3,
+        "message": "Provider metadata operation failed: rate_limit"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP503": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "exit_code": 3,
+        "message": "Provider metadata operation failed: unavailable"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:HTTP503:management_query_timeout": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_query_timeout",
+        "exit_code": 3,
+        "message": "Provider metadata operation failed: management_query_timeout"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:empty:provider catalog": {
+    "command": "provider catalog",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:empty:provider history-page": {
+    "command": "provider history-page",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:provider catalog": {
+    "command": "provider catalog",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "default": true,
+        "default_reasoning": "high",
+        "id": "enabled-model",
+        "model": "Available model",
+        "provider": "anthropic",
+        "reasoning": [
+          {
+            "label": "High",
+            "name": "high"
+          }
+        ],
+        "revision": 2,
+        "sale_input_per_mtok": 2.0,
+        "sale_output_per_mtok": 4.0
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:provider history-page": {
+    "command": "provider history-page",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "catalog_revision": 1,
+        "catalog_state": "unavailable",
+        "configuration": {
+          "base_url": null,
+          "capability": "llm_extract",
+          "default_reasoning": null,
+          "expected_revision": null,
+          "input_usd_per_mtok": null,
+          "json_mode": "json_schema",
+          "model": null,
+          "output_usd_per_mtok": null,
+          "platform_model_id": "retired-model",
+          "provider": null,
+          "reasoning": [],
+          "source": "platform"
+        },
+        "credential_state": "platform_managed",
+        "default_reasoning": null,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "model": "Saved exact model",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "provider": "openai",
+        "reasoning": [],
+        "revised_at": "2026-10-06T00:00:00Z",
+        "revised_by": null,
+        "revision": 1,
+        "sale_input_per_mtok": 1.0,
+        "sale_output_per_mtok": 2.0,
+        "updated_at": "2026-10-06T00:00:00Z",
+        "updated_by": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:provider revision show": {
+    "command": "provider revision show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "catalog_revision": 1,
+      "catalog_state": "unavailable",
+      "configuration": {
+        "base_url": null,
+        "capability": "llm_extract",
+        "default_reasoning": null,
+        "expected_revision": null,
+        "input_usd_per_mtok": null,
+        "json_mode": "json_schema",
+        "model": null,
+        "output_usd_per_mtok": null,
+        "platform_model_id": "retired-model",
+        "provider": null,
+        "reasoning": [],
+        "source": "platform"
+      },
+      "credential_state": "platform_managed",
+      "default_reasoning": null,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "model": "Saved exact model",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "provider": "openai",
+      "reasoning": [],
+      "revised_at": "2026-10-06T00:00:00Z",
+      "revised_by": null,
+      "revision": 1,
+      "sale_input_per_mtok": 1.0,
+      "sale_output_per_mtok": 2.0,
+      "updated_at": "2026-10-06T00:00:00Z",
+      "updated_by": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:provider show": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actions": [
+        {
+          "action": "configure",
+          "allowed": true,
+          "reason": null
+        }
+      ],
+      "billing_currency": "USD",
+      "capability": "llm_extract",
+      "connection_status": "not_checked",
+      "current": {
+        "catalog_revision": 1,
+        "catalog_state": "unavailable",
+        "configuration": {
+          "base_url": null,
+          "capability": "llm_extract",
+          "default_reasoning": null,
+          "expected_revision": null,
+          "input_usd_per_mtok": null,
+          "json_mode": "json_schema",
+          "model": null,
+          "output_usd_per_mtok": null,
+          "platform_model_id": "retired-model",
+          "provider": null,
+          "reasoning": [],
+          "source": "platform"
+        },
+        "credential_state": "platform_managed",
+        "default_reasoning": null,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "model": "Saved exact model",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "provider": "openai",
+        "reasoning": [],
+        "revised_at": "2026-10-06T00:00:00Z",
+        "revised_by": null,
+        "revision": 1,
+        "sale_input_per_mtok": 1.0,
+        "sale_output_per_mtok": 2.0,
+        "updated_at": "2026-10-06T00:00:00Z",
+        "updated_by": "00000000-0000-4000-8000-000000000001"
+      },
+      "default_model": null,
+      "effective_source": "platform",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "reasoning": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:HTTP400:management_cursor_invalid": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_cursor_invalid",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: management_cursor_invalid"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP403": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "forbidden",
+        "exit_code": 4,
+        "message": "Provider metadata operation failed: forbidden"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP404": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "not_found",
+        "exit_code": 4,
+        "message": "Provider metadata operation failed: not_found"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP409:management_cursor_expired": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_cursor_expired",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: management_cursor_expired"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP409:management_integrity_error": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_integrity_error",
+        "exit_code": 4,
+        "message": "Provider metadata operation failed: management_integrity_error"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP413:management_result_too_large": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_result_too_large",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: management_result_too_large"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP422": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "invalid_input",
+        "exit_code": 2,
+        "message": "Provider metadata operation failed: invalid_input"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP429": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "rate_limit",
+        "exit_code": 3,
+        "message": "Provider metadata operation failed: rate_limit"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP503": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "exit_code": 3,
+        "message": "Provider metadata operation failed: unavailable"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:HTTP503:management_query_timeout": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "management_query_timeout",
+        "exit_code": 3,
+        "message": "Provider metadata operation failed: management_query_timeout"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:empty:provider catalog": {
+    "command": "provider catalog",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:empty:provider history-page": {
+    "command": "provider history-page",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 0
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:provider catalog": {
+    "command": "provider catalog",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "default": true,
+        "default_reasoning": "high",
+        "id": "enabled-model",
+        "model": "Available model",
+        "provider": "anthropic",
+        "reasoning": [
+          {
+            "label": "High",
+            "name": "high"
+          }
+        ],
+        "revision": 2,
+        "sale_input_per_mtok": 2.0,
+        "sale_output_per_mtok": 4.0
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:provider history-page": {
+    "command": "provider history-page",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "as_of": "2026-10-06T00:00:00Z",
+      "has_more": false,
+      "next_cursor": null,
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "catalog_revision": 1,
+        "catalog_state": "unavailable",
+        "configuration": {
+          "base_url": null,
+          "capability": "llm_extract",
+          "default_reasoning": null,
+          "expected_revision": null,
+          "input_usd_per_mtok": null,
+          "json_mode": "json_schema",
+          "model": null,
+          "output_usd_per_mtok": null,
+          "platform_model_id": "retired-model",
+          "provider": null,
+          "reasoning": [],
+          "source": "platform"
+        },
+        "credential_state": "platform_managed",
+        "default_reasoning": null,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "model": "Saved exact model",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "provider": "openai",
+        "reasoning": [],
+        "revised_at": "2026-10-06T00:00:00Z",
+        "revised_by": null,
+        "revision": 1,
+        "sale_input_per_mtok": 1.0,
+        "sale_output_per_mtok": 2.0,
+        "updated_at": "2026-10-06T00:00:00Z",
+        "updated_by": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:provider revision show": {
+    "command": "provider revision show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "catalog_revision": 1,
+      "catalog_state": "unavailable",
+      "configuration": {
+        "base_url": null,
+        "capability": "llm_extract",
+        "default_reasoning": null,
+        "expected_revision": null,
+        "input_usd_per_mtok": null,
+        "json_mode": "json_schema",
+        "model": null,
+        "output_usd_per_mtok": null,
+        "platform_model_id": "retired-model",
+        "provider": null,
+        "reasoning": [],
+        "source": "platform"
+      },
+      "credential_state": "platform_managed",
+      "default_reasoning": null,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "model": "Saved exact model",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "provider": "openai",
+      "reasoning": [],
+      "revised_at": "2026-10-06T00:00:00Z",
+      "revised_by": null,
+      "revision": 1,
+      "sale_input_per_mtok": 1.0,
+      "sale_output_per_mtok": 2.0,
+      "updated_at": "2026-10-06T00:00:00Z",
+      "updated_by": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:provider show": {
+    "command": "provider show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "actions": [
+        {
+          "action": "configure",
+          "allowed": true,
+          "reason": null
+        }
+      ],
+      "billing_currency": "USD",
+      "capability": "llm_extract",
+      "connection_status": "not_checked",
+      "current": {
+        "catalog_revision": 1,
+        "catalog_state": "unavailable",
+        "configuration": {
+          "base_url": null,
+          "capability": "llm_extract",
+          "default_reasoning": null,
+          "expected_revision": null,
+          "input_usd_per_mtok": null,
+          "json_mode": "json_schema",
+          "model": null,
+          "output_usd_per_mtok": null,
+          "platform_model_id": "retired-model",
+          "provider": null,
+          "reasoning": [],
+          "source": "platform"
+        },
+        "credential_state": "platform_managed",
+        "default_reasoning": null,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "model": "Saved exact model",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "provider": "openai",
+        "reasoning": [],
+        "revised_at": "2026-10-06T00:00:00Z",
+        "revised_by": null,
+        "revision": 1,
+        "sale_input_per_mtok": 1.0,
+        "sale_output_per_mtok": 2.0,
+        "updated_at": "2026-10-06T00:00:00Z",
+        "updated_by": "00000000-0000-4000-8000-000000000001"
+      },
+      "default_model": null,
+      "effective_source": "platform",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "reasoning": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

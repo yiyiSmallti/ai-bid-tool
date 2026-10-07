@@ -47,6 +47,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [platform-console.md](notes/platform-console.md): platform operator console (平台运营后台), TOTP, org activation/deactivation and model-catalog billing.
 - [prepaid-billing.md](notes/prepaid-billing.md): prepaid balance (预付余额), recharge cards (充值卡密), charges and admission blocks.
 - [versioned-resources.md](notes/versioned-resources.md): product revisions and task (任务) snapshots.
+- [model-settings.md](notes/model-settings.md): metadata-only org model settings, immutable identity and explicit connection tests.
 - [management-pages.md](notes/management-pages.md): bounded product library reads, independent lifecycle and explicit revision pinning.
 - [versioned-features.md](notes/versioned-features.md): software feature declarations.
 - [versioned-certificates.md](notes/versioned-certificates.md): certificate declarations and date checks.

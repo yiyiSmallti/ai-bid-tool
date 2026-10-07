@@ -40,6 +40,48 @@ the `token_forbidden_confidential_scopes` constraint, and every write or reveal
 also requires a session actor. Audit rows record field, value row and task IDs,
 never the value.
 
+### Bounded management and checked writes
+
+The org confidential page uses `management_confidential.fields/values/history`
+in [management_confidential.py](../../server/app/services/management_confidential.py).
+Definitions are org-wide; task context is authorized before reading even metadata.
+Without a task, current values contain only org fields. With a task, each field
+resolves either its org owner or that exact task owner. History requires the
+field's exact scope. Foreign or unavailable parents are indistinguishable.
+
+Queries use literal casefolded key/label prefix tokens, 25-row default keysets and
+an optional exact `field_id` editor filter. Read SQL limits fields before lateral
+current-value lookup and limits history before joining field metadata. Safe column
+projections omit ciphertext; no list, editor hydration or history read decrypts.
+Only authorized masked views may carry the existing four-character tail. Value
+`set_at`/`set_by` are retained row metadata; field revision is only a concurrency
+counter, with no archived labels or reconstructed metadata authors.
+
+Cursors expire after 15 minutes and bind org, actor, live scopes, task workflow/member
+authority, normalized filters and parent/order. Pages enforce complete Result byte
+budgets and a two-second statement timeout. Migration
+[0055_confidential_management.py](../../server/migrations/versions/0055_confidential_management.py)
+adds generated search metadata, keyset/owner indexes and an AFTER fixed-field guard,
+preserving the existing RLS, composite keys and column-level write privileges.
+Its stored search-column/index build needs a maintenance window sized for the
+existing field table; recovery preserves rows and guards and repairs forward.
+
+`ConfidentialValueRevisionSet` requires the field counter and an explicitly supplied
+current value ID; null asserts absence for that one field/owner. The checked setter
+locks task/workflow before the field, compares both preconditions, then explicitly
+constructs the existing `ConfidentialValueSet`. Saving and `confidential.value.set`
+audit share one transaction. A conflict clears the transient value and requires a
+new deliberate entry. Legacy setters still append without CAS.
+
+The UI and CLI send secret input once through dedicated transports. Generic checked
+command serialization and repr omit it; CLI reads it only from stdin. Forms never
+prefill a value or trigger reveal. Explicit reveal stays in the existing human-only
+audited route and clears on close, blur, hide, navigation, logout and org switch.
+No value, search text or field content enters URL state or persistent browser storage.
+Secret Playwright scenarios disable traces, screenshots and video, and artifact
+assertions record booleans rather than captured values. See the
+[management test plan](../plan/management-pages.md#test-plan-and-repeatable-artifacts).
+
 ### Outbound substitution
 
 `snapshot` in [card_generation.py](../../server/app/services/card_generation.py)
@@ -111,4 +153,5 @@ so a value changed after submission fails with `export_input_changed`.
 - [redaction.py](../../server/app/services/redaction.py), [card_generation.py](../../server/app/services/card_generation.py) and [providers/drafting.py](../../server/app/providers/drafting.py).
 - [exports.py](../../server/app/services/exports.py), [export_render.py](../../server/app/jobs/export_render.py) and [export_renderer.py](../../server/app/services/export_renderer.py).
 - [SecretTextEditor.vue](../../web/src/components/SecretTextEditor.vue) (labelled blocks, drag and click insertion), [ConfidentialPanel.vue](../../web/src/components/ConfidentialPanel.vue), [CardEditor.vue](../../web/src/components/CardEditor.vue) and [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue).
+- [management_confidential.py](../../server/app/api/management_confidential.py), [management CLI](../../cli/bid_cli/management_confidential.py), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue) and [confidential-management.spec.js](../../web/e2e/confidential-management.spec.js).
 - [test_confidential_values.py](../../server/tests/test_confidential_values.py): drafting, export, permission and isolation scenarios with a repeatable DOCX artifact.

@@ -4,7 +4,7 @@ kind: plan
 
 # Contract for org BYOK models and platform model selection
 
-Status: **backend and CLI implemented.** The org (organization/tenant, 单位) console UI belongs to the [org console contract](org-console.md). See [provider-config.md](../notes/provider-config.md) for the mechanism; this page records scope, decisions, and acceptance requirements.
+Status: **backend, CLI and llm_extract org model-settings page implemented; integrated page acceptance pending.** The org (organization/tenant, 单位) page follows the [management-page contract](management-pages.md#provider-and-model-configuration); see [model settings](../notes/model-settings.md). See [provider-config.md](../notes/provider-config.md) for the mechanism; this page records scope, decisions, and acceptance requirements.
 
 ## Delivery scope
 
@@ -15,7 +15,7 @@ Status: **backend and CLI implemented.** The org (organization/tenant, 单位) c
 - `provider set/list/history/test` API and CLI; tests use synthetic connection-check content without tender documents (招标文件).
 - DeepSeek balance queries, BYOK quota-error guidance, and this system's actual recorded tokens and estimated cost for the current UTC month.
 
-Exclude task-level model overrides, OCR/vision/search configuration, web implementation, key-rotation tools, and monthly vendor budget limits.
+Exclude task-level model overrides, OCR/vision/search configuration, key-rotation tools, and monthly vendor budget limits.
 
 ## Inputs and outputs
 
