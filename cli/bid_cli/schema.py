@@ -281,6 +281,9 @@ from bid_cli.management_products import COMMAND_DATA, COMMAND_INPUTS, COMMAND_IT
 from bid_cli.management_profiles import COMMAND_DATA as PROFILE_COMMAND_DATA
 from bid_cli.management_profiles import COMMAND_INPUTS as PROFILE_COMMAND_INPUTS
 from bid_cli.management_profiles import COMMAND_ITEMS as PROFILE_COMMAND_ITEMS
+from bid_cli.management_providers import COMMAND_DATA as PROVIDER_COMMAND_DATA
+from bid_cli.management_providers import COMMAND_INPUTS as PROVIDER_COMMAND_INPUTS
+from bid_cli.management_providers import COMMAND_ITEMS as PROVIDER_COMMAND_ITEMS
 from bid_cli.management_templates import COMMAND_DATA as TEMPLATE_COMMAND_DATA
 from bid_cli.management_templates import COMMAND_INPUTS as TEMPLATE_COMMAND_INPUTS
 from bid_cli.management_templates import COMMAND_ITEMS as TEMPLATE_COMMAND_ITEMS
@@ -773,6 +776,7 @@ COMMANDS.update(TEMPLATE_COMMAND_INPUTS)
 COMMANDS.update(BINDING_COMMAND_INPUTS)
 COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
 COMMANDS.update(PROFILE_COMMAND_INPUTS)
+COMMANDS.update(PROVIDER_COMMAND_INPUTS)
 COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 
 # Registered commands and discovery share one inventory; the legacy snapshot above
@@ -857,6 +861,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | BINDING_COMMAND_DATA
                     | CERTIFICATE_COMMAND_DATA
                     | PROFILE_COMMAND_DATA
+                    | PROVIDER_COMMAND_DATA
                     | CONFIDENTIAL_COMMAND_DATA
                 ).items()
             }
@@ -871,6 +876,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | BINDING_COMMAND_ITEMS
                     | CERTIFICATE_COMMAND_ITEMS
                     | PROFILE_COMMAND_ITEMS
+                    | PROVIDER_COMMAND_ITEMS
                     | CONFIDENTIAL_COMMAND_ITEMS
                 )
             }
@@ -1009,6 +1015,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         | PROFILE_COMMAND_ITEMS
         | TEMPLATE_COMMAND_ITEMS
         | BINDING_COMMAND_ITEMS
+        | PROVIDER_COMMAND_ITEMS
         | CONFIDENTIAL_COMMAND_ITEMS
     ).items():
         if name in schema["commands"]:

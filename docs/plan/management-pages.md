@@ -4,7 +4,7 @@ kind: plan
 
 # Contract: U01 org management pages
 
-Status: **approved; product, feature, certificate/profile, template and confidential slices implemented**.
+Status: **approved; product, feature, certificate/profile, template, model-settings and confidential slices implemented**.
 This contract covers the remaining management-page scope of
 [roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
 The implemented resource slices supply bounded browse/search, creation, exact
@@ -13,8 +13,10 @@ lifecycle events, and explicit task pinning. Features add same-org product and
 implementation-state filters. Certificates/profiles add exact original-file
 inspection, explicit certificate date advisories and bidder/admin lifecycle
 authority. Templates add original DOCX access and human-reviewed immutable export
-bindings. Confidential fields add bounded metadata/current/history reads and guarded
-value writes. Configuration and memory changes remain later slices.
+bindings. Model settings add metadata-only current/exact/history reads, separate
+catalog pages and explicit saved-configuration tests. Confidential fields add bounded
+metadata/current/history reads and guarded value writes. Memory changes remain later
+slices.
 The [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
 remain approval artifacts; [runtime management contracts](../../server/app/schemas/management_pages.py)
 and the [mechanism note](../notes/management-pages.md) define the implemented path.
@@ -69,7 +71,7 @@ page, searching, loading history or editing a form.
 | Platform secrets | [platform_credentials.py](../../server/app/services/platform_credentials.py), [configured.py](../../server/app/providers/configured.py), [ADR 0006](../adr/0006-platform-credentials.md) | Separate platform operator console (平台运营后台), TOTP and restricted connection roles. No org-facing credential resolver or platform-key management. No env fallback |
 | Memory | [api/memory.py](../../server/app/api/memory.py), [memory/access.py](../../server/app/memory/access.py), [crud.py](../../server/app/memory/crud.py), [feedback.py](../../server/app/memory/feedback.py), [candidates.py](../../server/app/memory/candidates.py), [retrieval.py](../../server/app/memory/retrieval.py), [safety.py](../../server/app/memory/safety.py) | Org scope and keyword retrieval only; four-scope schema enums do not enable the other scopes or embeddings. Management list is paged but has no text/tag/expired filter. Retrieval is not a complete library search |
 | Confidential data | [api/confidential.py](../../server/app/api/confidential.py), [confidential.py](../../server/app/services/confidential.py) `update_field/set_value/list_values/history/reveal` | Field label/archive updates mutate a metadata row with a revision counter; there is no field-metadata revision archive. Value versions are immutable and encrypted. Legacy value writes serialize under a field lock without an optimistic precondition; management writes add owner-specific field/value CAS |
-| Console | [router.js](../../web/src/router.js), [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue), [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [api.js](../../web/src/api.js), [task-authority.js](../../web/src/task-authority.js) | Profiles, embedded certificates and confidential fields already have pages. Product, feature, certificate/profile and template management pages are implemented; org provider and memory pages remain deferred. The org path allowlist must gain exact new paths, not an unrestricted API proxy |
+| Console | [router.js](../../web/src/router.js), [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue), [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [api.js](../../web/src/api.js), [task-authority.js](../../web/src/task-authority.js) | Profiles, embedded certificates and confidential fields already have pages. Product, feature, certificate/profile and template management pages are implemented; org model settings are implemented; memory pages remain deferred. The org path allowlist must gain exact new paths, not an unrestricted API proxy |
 | Team and cost | [task_workflow.py](../../server/app/services/task_workflow.py) `live_actor/access`; [task_authorization.py](../../server/app/services/task_authorization.py) `task_authorized`; [contracts.py](../../server/app/schemas/contracts.py) `CONTRACT_VERSION/Cost/Result`; [budget](budget.md) | Task membership/archival and Result 4.0 budgets are present. Earlier passages in memory/assessment plans saying task membership is absent, or in check plans saying budgets are not enforced, cannot describe these pages' gates |
 
 The design says every resource change is versioned. Confidential field metadata
@@ -221,6 +223,29 @@ existing token eligibility. Binding preview/create retain their existing human g
 Providers and memory remain later slices. Database,
 real-browser and measured fixed-scale acceptance of the integrated slices remains
 pending; DB-free checks do not complete that acceptance.
+
+### Model-settings vertical slice
+
+The model-settings slice implements `/app/org/settings/models` and the provider
+section below. Read interfaces use explicit secret-free metadata projections,
+exact revision author/time and independent keyset history/catalog pages. Optional
+`ProviderCatalogQuery.q` searches a literal, casefolded catalog-ID prefix; it
+extends the original `PageQuery` proposal to apply the approved prefix-search
+browse behavior without exposing endpoints or credentials.
+
+New platform saves retain catalog revision and published sale prices alongside
+saved provider/model/reasoning identity. Older immutable revisions without price
+snapshots expose null prices; no live default supplies missing history. Migration
+[0056](../../server/migrations/versions/0056_model_settings.py) adds read indexes
+and preserves declarative constraint rejection before provider business guards.
+Existing human-only `provider:write` and token CHECK remain authoritative; this
+slice introduces no new scope or secret-history table.
+
+[The mechanism note](../notes/model-settings.md) owns implementation details.
+DB/API isolation, fixed-scale and mocked-browser scenarios are implemented;
+database execution, actual browser execution and integrated performance acceptance
+remain pending in the integration runtime. No real provider or paid test is used
+for implementation validation.
 
 ### Confidential management slice
 
@@ -526,8 +551,8 @@ root remains active; check both roots in stable ID order after task locks.
 ## HTTP and Pydantic interfaces
 
 Product, feature, certificate, profile and template query, detail, history and
-lifecycle paths, binding query/detail, and confidential query/history/CAS are
-implemented under `/v4`. Provider and memory additions remain proposed and have no placeholder handlers. Paths in existing tables omit `/v4` for readability; new pages request
+lifecycle paths, binding query/detail, provider metadata/current/history/catalog
+reads and confidential query/history/CAS are implemented under `/v4`. Memory additions remain proposed and have no placeholder handlers. Paths in existing tables omit `/v4` for readability; new pages request
 version 4 explicitly through `orgRequest`/`api.request(contractVersion:4)`. Existing
 unprefixed routes retain compatibility projections. Register fixed query/history
 paths before UUID routes and extend the browser allowlist by exact route pattern.
@@ -553,7 +578,7 @@ second nested envelope or a full-library metadata map. Detail objects occupy
 | `GET /v4/management/providers` | No body → `ProviderSettingsData` | `ManagementProviderReads.settings`; `provider:read`, no balance or decryption |
 | `GET /v4/management/providers/revisions/{id}` | No body → `ProviderRevisionMetadata` | `revision`; exact authorized config ID, including historical/disabled catalog identity |
 | `POST /v4/management/providers/history/query` | `PageQuery` → `PageData` / `ProviderRevisionMetadata[]` | `history`; no per-row usage aggregation |
-| `POST /v4/management/providers/catalog/query` | `PageQuery` → `PageData` / `PlatformModelChoice[]` | `catalog`; enabled org-visible catalog fields only |
+| `POST /v4/management/providers/catalog/query` | `ProviderCatalogQuery` → `PageData` / `PlatformModelChoice[]` | `catalog`; enabled org-visible catalog fields only |
 | `POST /v4/management/memories/query` | `MemoryQuery` → `PageData` / `MemoryView[]` | `ManagementMemoryReads.query`; org scope, original ACL/safety/source redaction |
 | `POST /v4/management/confidential-fields/query` | `ConfidentialQuery` → `PageData` / `ConfidentialFieldView[]` | `ManagementConfidential.fields`; metadata only |
 | `POST /v4/management/confidential-values/query` | `ConfidentialQuery` → `PageData` / `ConfidentialValueView[]` | `values`; authorized org or task owner context |
@@ -607,7 +632,7 @@ silently changed to paginated output.
 | `bid resource <kind> lifecycle set --id R --input STATE.json` | `ResourceLifecycleSet`, human session only |
 | `bid resource <kind> lifecycle history --id R [--cursor C] [--limit N]` | Bounded lifecycle history |
 | `bid export binding browse --template-revision UUID [--cursor C] [--limit N]`, `bid export binding show --id UUID --template-revision UUID` | Bounded binding reads, original human gate |
-| `bid provider show`, `bid provider revision show --id UUID`, `bid provider history-page [--cursor C] [--limit N]`, `bid provider catalog [--cursor C] [--limit N]` | Safe metadata reads, never implicit balance queries |
+| `bid provider show`, `bid provider revision show --id UUID`, `bid provider history-page [--cursor C] [--limit N]`, `bid provider catalog [--q PREFIX] [--cursor C] [--limit N]` | Safe metadata reads, never implicit balance queries |
 | `bid memory browse --input QUERY.json` | `MemoryQuery`; complete management search, not relevance retrieval |
 | `bid confidential field browse --input QUERY.json`, `bid confidential browse --input QUERY.json` | Bounded definitions/masked current values |
 | `bid confidential history-page --field UUID [--task UUID] [--cursor C] [--limit N]` | Masked value history |
@@ -761,7 +786,7 @@ and fixed error code without request/response capture.
 
 ## Test plan and repeatable artifacts
 
-The product, feature, certificate/profile, template and confidential slices have API/PostgreSQL,
+The product, feature, certificate/profile, template, model-settings and confidential slices have API/PostgreSQL,
 CLI, fixed-scale and mocked-browser acceptance tests. The following remain implementation acceptance requirements for their
 respective slices; neither code inspection nor mocked
 Playwright proves database authorization. Use the project's fake Providers and

@@ -6,6 +6,36 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-07: Model-settings browser acceptance fixes
+
+- Give the configuration-history and catalog table groups named region semantics;
+  verify the history headers and revision action inside that region.
+- Isolate each read-only role scenario so its built-app interception remains
+  installed; unexpected task-list navigation remains a test failure.
+- Contain mobile navigation overflow in a scrollable flex child while keeping
+  the brand and navigation targets sized and keyboard reachable.
+
+## 2026-10-06: Org model-settings management slice
+
+- Added `/app/org/settings/models` for effective `llm_extract` configuration,
+  immutable revision inspection, separate bounded catalog/history pages and
+  human-admin BYOK/platform saves using revision preconditions.
+- Added four Result 4.0 metadata read routes and CLI commands, explicit allowlist
+  projections, exact revision authors and catalog-ID prefix search. Reads perform
+  no decryption, balance query, per-revision usage aggregation or provider call.
+- Preserve saved platform identity, reasoning and published price snapshots when
+  catalog entries become unavailable; older missing price snapshots remain null.
+  Migration `0056` adds read indexes and orders provider guards after constraints.
+- Added transient password submission and immediate clearing, safe reread after
+  save, explicit cost preflight/start, and actual tested-revision inspection.
+  BYOK reasoning options reject nested credential/transport slots. Legacy command
+  output shapes, server-only key reuse and immutable history remain intact.
+- Added API/service, role/token/isolation, concurrency, disclosure, fixed-scale,
+  CLI snapshot and mocked-browser acceptance scenarios. PostgreSQL, Chromium and
+  integrated latency execution remain pending; see the
+  [slice status](plan/management-pages.md#model-settings-vertical-slice) and
+  [mechanism](notes/model-settings.md).
+
 ## 2026-10-07: Confidential prefix scans under tenant RLS
 
 - Replace the unusable confidential GIN search path with a tenant-isolated lexeme

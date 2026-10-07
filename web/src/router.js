@@ -60,6 +60,7 @@ export const router = createRouter({
     { path: "/org/profiles", component: OrgProfiles, meta: { area: "org", title: "单位资料", nav: "profiles" } },
     { path: "/org/profiles/:resourceId", component: () => import("./views/OrgQualification.vue"), meta: { area: "org", title: "资料详情", nav: "profiles", resourceKind: "profiles" } },
     { path: "/org/certificates/:resourceId", component: () => import("./views/OrgQualification.vue"), meta: { area: "org", title: "证照详情", nav: "profiles", resourceKind: "certificates" } },
+    { path: "/org/settings/models", component: () => import("./views/OrgModels.vue"), meta: { area: "org", title: "模型与服务配置", nav: "org-models" } },
     { path: "/org/confidential", component: OrgConfidential, meta: { area: "org", title: "保密字段", nav: "confidential" } },
     { path: "/org/billing", component: OrgBilling, meta: { area: "org", admin: true, title: "余额与充值", nav: "billing" } },
     { path: "/:rest(.*)", redirect: "/org/tasks" },
