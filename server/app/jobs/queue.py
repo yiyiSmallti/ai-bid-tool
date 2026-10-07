@@ -52,6 +52,10 @@ class Queue:
 
         self.annotation_cleanup_task = annotation_cleanup
 
+        from app.jobs.attachment_events import register
+
+        self.attachment_invalidation_task = register(self.app, lambda: self.processor)
+
         @self.app.task(name="bid.agent_wake", queue="bid", retry=True)
         async def agent_wake(org_id: str, session_id: str):
             from uuid import UUID
@@ -84,6 +88,11 @@ class Queue:
         return await self.task.configure(connection=connection).defer_async(
             org_id=org_id, job_id=job_id
         )
+
+    async def enqueue_attachment_invalidation_in_transaction(self, session, **arguments):
+        from app.jobs.attachment_events import enqueue
+
+        return await enqueue(self, session, **arguments)
 
     async def enqueue_annotation_cleanup_in_transaction(
         self, session: AsyncSession, org_id: str, job_id: str, *, delay: int = 300

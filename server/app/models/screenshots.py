@@ -157,6 +157,14 @@ class ScreenshotAsset(Scoped, Tenant, Base):
     request_hash: Mapped[str] = mapped_column(String(64))
     __table_args__ = (
         *scope(),
+        Index(
+            "attachment_asset_latest",
+            "org_id",
+            "evidence_source_id",
+            received_at.desc(),
+            text("id DESC"),
+            postgresql_where=text("source_kind='attachment_page'"),
+        ),
         UniqueConstraint("org_id", "task_id", "idempotency_key"),
         fk(["received_by"], "memberships", ["user_id"]),
         fk(
@@ -172,6 +180,12 @@ class ScreenshotAsset(Scoped, Tenant, Base):
         ),
         fk(["product_revision_id"], "product_revisions", ["id"]),
         fk(["evidence_source_id"], "evidence_sources", ["id"]),
+        fk(
+            ["task_id", "evidence_source_id"],
+            "evidence_sources",
+            ["task_id", "id"],
+            name="attachment_asset_source_task",
+        ),
         fk(["task_id", "vendor_archive_id"], "screenshot_vendor_archives", ["task_id", "id"]),
         fk(["task_id", "prototype_run_id"], "screenshot_prototype_runs", ["task_id", "id"]),
         CheckConstraint(
@@ -268,8 +282,19 @@ class ScreenshotPrivacyReview(Scoped, Tenant, Base):
     reviewed_by: Mapped[UUID] = mapped_column()
     rule_version: Mapped[str] = mapped_column(String(40))
     annotation_request_id: Mapped[UUID | None] = mapped_column()
+    attachment_source_id: Mapped[UUID | None] = mapped_column()
+    resolved_hold_id: Mapped[UUID | None] = mapped_column()
     __table_args__ = (
         *scope(),
+        fk(["task_id", "attachment_source_id"], "evidence_sources", ["task_id", "id"]),
+        fk(
+            ["task_id", "attachment_source_id", "resolved_hold_id"],
+            "attachment_privacy_holds",
+            ["task_id", "evidence_source_id", "id"],
+        ),
+        CheckConstraint(
+            "(resolved_hold_id IS NULL OR attachment_source_id IS NOT NULL) AND (attachment_source_id IS NULL OR annotation_request_id IS NULL)"
+        ),
         UniqueConstraint("org_id", "asset_id"),
         fk(["task_id", "annotation_request_id"], "annotation_requests", ["task_id", "id"]),
         UniqueConstraint("org_id", "asset_id", "id"),

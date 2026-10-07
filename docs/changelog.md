@@ -6,6 +6,40 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-07: Attachment archive acceptance fixes
+
+- Cast JSON-constructor seed parameters explicitly so the attachment scale fixture
+  resolves psycopg parameter types without changing its data volume or thresholds.
+- Drive attachment selects through their visible wrapper and controlled popup,
+  preserving exact accessible names without forced pointer events.
+- Declare the real screenshot-renderer dependency for attachment privacy acceptance,
+  using the existing renderer fixture and its explicit unavailable-binary skip.
+  Production render failures retain their existing error mapping.
+- Scope attachment select interactions to combobox roles and expose the archive
+  list as a named region while preserving its mounted table and retention checks.
+- Give current and historical revisions distinct identities in the browser fixture;
+  verify the historical notice without retargeting and its absence on the current
+  revision.
+
+## 2026-10-06: Attachment archive first slice
+
+- Add the reviewed single-PDF attachment path across org API, CLI and console:
+  explicit live reviewer, uploader custody, exact declaration links, active task
+  profile pins, immutable page sources and unchanged-page human privacy receipts.
+- Add tenant-isolated retained tables and attachment branches in the existing
+  EvidenceSource and screenshot chain. Preserve FK/CHECK rejection order, token
+  exclusions, one-way deactivation and encrypted orphan retention without GC.
+- Bound input, page/history reads, prefix browse, revision audit attribution,
+  rendering, authenticated downloads and task-event fan-out. Expose responsible
+  actors, exact-page blockers and later-library notices without retargeting pins.
+- Keep multipart/image inputs, redacted adoption, attachment annotation and model
+  consumers disabled with explicit errors. Safe team-page discovery does not grant
+  raw-original permission or Evidence/export eligibility.
+- Add API/service/storage, two-org, role/token, failure/reconciliation, fixed-scale,
+  CLI schema and mocked browser scenarios. Database, fixed-scale and real-browser
+  integration acceptance remains pending; see the [contract](plan/attachment-archive.md)
+  and [mechanism](notes/attachment-archives.md).
+
 ## 2026-10-06: Template and binding management slice
 
 - Added template browse/search, exact revision detail, content/lifecycle histories

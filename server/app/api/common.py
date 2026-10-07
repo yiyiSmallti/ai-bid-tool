@@ -25,7 +25,7 @@ def result(command: str, data=None, items=None, warnings=None) -> dict:
 
 
 def signed_link(
-    crypto: TokenSigner, path: str, kind: str, org_id: UUID, **identifiers: UUID
+    crypto: TokenSigner, path: str, kind: str, org_id: UUID, **identifiers: UUID | int | str
 ) -> dict:
     """A download URL for `path` that only this org can open for LINK_SECONDS."""
     signature = crypto.issue(
@@ -36,7 +36,7 @@ def signed_link(
 
 
 def check_signature(
-    crypto: TokenSigner, signature: str, kind: str, org_id: UUID, **identifiers: UUID
+    crypto: TokenSigner, signature: str, kind: str, org_id: UUID, **identifiers: UUID | int | str
 ) -> None:
     """Accept only an unexpired link of this kind for this org and these identifiers;
     anything else is indistinguishable from a missing resource."""

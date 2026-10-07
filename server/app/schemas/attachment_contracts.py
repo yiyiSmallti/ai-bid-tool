@@ -1,8 +1,4 @@
-"""Approved attachment archive review snapshot.
-
-Runtime implementations import app.schemas.attachment_contracts. This approval
-artifact does not register routes, tables, grants or workers.
-"""
+"""Runtime contracts for immutable attachment archives and exact page privacy."""
 
 from __future__ import annotations
 
@@ -10,6 +6,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 from uuid import UUID
+
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from app.schemas.certificate_file_contracts import (
     MAX_PARTS,
@@ -27,12 +25,12 @@ from app.schemas.screenshot_contracts import (
     RenditionView,
     Sha256,
 )
-from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from app.providers.storage import Storage
     from app.services.auth import Identity
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 HTTP_JSON_LIMIT = 128 * 1024
 LIST_JSON_LIMIT = 1024 * 1024
@@ -92,8 +90,8 @@ AttachmentBlocker = Literal[
     "annotation_adapter_not_enabled",
 ]
 
-# Metadata read is the only proposed token scope. These are declarations for review,
-# not changes to auth.SCOPES, task ceilings or database token constraints.
+# Only explicit metadata read may enter token grants. Runtime auth and the
+# attachment migration register these ceilings without expanding agent defaults.
 TOKEN_SCOPES = frozenset({"attachment:read"})
 HUMAN_ONLY_SCOPES = frozenset(
     {
@@ -163,6 +161,11 @@ class AttachmentListQuery(PageQuery):
     kind: AttachmentKind | None = None
 
 
+class AttachmentBrowseQuery(AttachmentListQuery):
+    q: str | None = Field(default=None, max_length=100)
+    limit: int = Field(default=25, strict=True, ge=1, le=100)
+
+
 class AttachmentSourceListQuery(PageQuery):
     selection_id: UUID | None = None
 
@@ -199,6 +202,8 @@ class AttachmentSummary(Contract):
     active: bool
     custodian_user_id: UUID
     reviewer_user_id: UUID
+    revised_at: AwareDatetime | None = None
+    revised_by: UUID | None = None
     review_state: ReviewState
     latest_review_id: UUID | None
     created_at: AwareDatetime
@@ -220,6 +225,8 @@ class AttachmentRevisionSummary(Contract):
     metadata_sha256: Sha256
     page_count: PageNumber
     size_bytes: int = Field(strict=True, gt=0, le=FILE_BYTE_LIMIT)
+    revised_at: AwareDatetime | None = None
+    revised_by: UUID | None = None
     review_state: ReviewState
     latest_review_id: UUID | None
     created_by: UUID
@@ -356,6 +363,8 @@ class TaskAttachmentView(Contract):
     lot: str | None = Field(default=None, max_length=100)
     active: bool
     state_version: Revision
+    library_updated: bool = False
+    current_library_revision: Revision | None = None
     selected_by: UUID
     selected_at: AwareDatetime
     readiness: AttachmentReadiness
@@ -423,6 +432,10 @@ class AttachmentSourceSummary(Contract):
     rendered_at: AwareDatetime
     active_selection: bool
     latest_privacy_hold_id: UUID | None = None
+    reviewer_user_id: UUID | None = None
+    custodian_user_id: UUID | None = None
+    cleared_asset_id: UUID | None = None
+    cleared_rendition_id: UUID | None = None
     readiness: AttachmentReadiness
     status: Literal["unconfirmed_source"] = "unconfirmed_source"
     confirmed_by: Literal[None] = None

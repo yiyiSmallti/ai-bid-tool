@@ -26,6 +26,7 @@ from app.schemas.annotation_contracts import (
     AnnotationInput,
     AnnotationReleaseRetry,
 )
+from app.schemas.attachment_contracts import PageData as AttachmentPageData
 from app.schemas.budget_contracts import (
     BudgetPlatformModelTest,
     BudgetProviderTest,
@@ -265,6 +266,9 @@ from app.schemas.team_workflow import PageData as WorkflowPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
+from bid_cli.attachments import COMMAND_DATA as ATTACHMENT_DATA
+from bid_cli.attachments import COMMAND_INPUTS as ATTACHMENT_INPUTS
+from bid_cli.attachments import COMMAND_ITEMS as ATTACHMENT_ITEMS
 from bid_cli.management_bindings import COMMAND_DATA as BINDING_COMMAND_DATA
 from bid_cli.management_bindings import COMMAND_INPUTS as BINDING_COMMAND_INPUTS
 from bid_cli.management_bindings import COMMAND_ITEMS as BINDING_COMMAND_ITEMS
@@ -771,6 +775,11 @@ COMMANDS.update(BINDING_COMMAND_INPUTS)
 COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
 COMMANDS.update(PROFILE_COMMAND_INPUTS)
 
+COMMANDS.update(ATTACHMENT_INPUTS)
+OUTPUTS.update({name: TypeAdapter(model) for name, model in ATTACHMENT_DATA.items()})
+
+OUTPUTS.update({name: TypeAdapter(AttachmentPageData) for name in ATTACHMENT_ITEMS})
+
 # Registered commands and discovery share one inventory; the legacy snapshot above
 # intentionally excludes this Result 4.0-only slice.
 
@@ -1003,6 +1012,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         | PROFILE_COMMAND_ITEMS
         | TEMPLATE_COMMAND_ITEMS
         | BINDING_COMMAND_ITEMS
+        | ATTACHMENT_ITEMS
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()

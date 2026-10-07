@@ -4,15 +4,24 @@ kind: plan
 
 # Org attachment archives
 
-Status: **Approved with all recommended defaults, not implemented.** Corresponds to [roadmap](roadmap.md)
+Status: **Approved; first slice implemented.** Single unchanged PDFs and exact-page
+human privacy clearance are enabled in the implementation; database, fixed-scale and
+browser integration acceptance remains pending. Corresponds to [roadmap](roadmap.md)
 F03/R05/R06/U01 and the profile/contract prerequisite of B05.
 
-The [Pydantic and service interface](attachment-archive/attachment_archive_contracts.py)
-is the approved contract. It registers no routes, commands, tables, permissions or
-workers; implementation follows these decisions under [agent.md](../../agent.md#workflow).
-The approved [cloud annotation contract](annotation.md) remains unchanged; its
-profile/contract source branch stays disabled until this archive chain and the B05
-adapter below pass acceptance.
+The [approved Pydantic and service interface](attachment-archive/attachment_archive_contracts.py)
+retains the review contract. [Runtime schemas](../../server/app/schemas/attachment_contracts.py)
+and the [mechanism note](../notes/attachment-archives.md) define the implemented path.
+The Decisions section remains binding. Multipart/image upload, redacted adoption,
+attachment annotation and vendor annotation sources remain disabled. The approved
+[cloud annotation contract](annotation.md) is unchanged; its attachment source branch
+requires the B05 acceptance below before enablement.
+
+The implementation adds a bounded management browse command, safe category/ID prefix
+search, indexed revision audit attribution and later-library-version notices. Source
+summaries expose optional `cleared_asset_id` and `cleared_rendition_id` solely for
+current team-page discovery; those IDs grant no pixel permission. The task-profile
+list supports optional bounded pagination for the attachment picker.
 
 ## Goal and boundary
 
@@ -53,7 +62,7 @@ All proposed extensions below are requirements, not statements of deployed behav
 | [page_previews.py](../../server/app/services/page_previews.py): `render_pdf_page_async`, `certificate_page`; [pdf_process.py](../../server/app/core/pdf_process.py): `run_pdf_operation_async`; [pdf_raster.py](../../server/app/core/pdf_raster.py): `raster_dimensions` | Reuse temporary PDF preview and bounded PDF subprocess. Temporary zoom previews are not canonical annotation sources: source archives are fixed 150-dpi `pdf-page-preview-v1`. Upload composition currently uses thread execution; move attachment validation/composition behind the same process boundary before accepting untrusted uploads. |
 | [storage.py](../../server/app/providers/storage.py): `Storage`, `FileCipher`, `LocalStorage`, `S3Storage`, `validate_key` | Use the same authenticated encryption bound to object key and immutable `put`; use `read_bounded` before decoding. Current certificate/source reads include unbounded `read` followed by checks. This contract requires bounded attachment reads; it does not claim the older paths already meet that rule. |
 | [api/common.py](../../server/app/api/common.py): `signed_link`, `check_signature`, `attachment`; [api/resources.py](../../server/app/api/resources.py): certificate/source download routes; [api/main.py](../../server/app/api/main.py): `context` | Reuse 300-second application links plus live authentication. Existing signatures bind org, purpose and object IDs, not actor/hash; immutable IDs resolve hashes at download. No S3 presigned/public URL or raw-parts download route exists. New part routes and lineage checks must be explicit. |
-| [screenshots.py](../../server/app/services/screenshots.py): `prepare`, `ingest`, `resolve_source`, `rendition_access`, `withdraw`, `resolve_image_material`; [screenshot_renderer.py](../../server/app/providers/screenshot_renderer.py): `render`, `validate_png` | Reuse `ScreenshotAsset`, `ScreenshotRendition`, `ScreenshotPrivacyReview`, existing privacy plans and renderer. Add a server-bound attachment source, not a client download/re-upload receipt or second redaction engine. This cloud extension is not implemented. |
+| [screenshots.py](../../server/app/services/screenshots.py): `prepare`, `ingest`, `resolve_source`, `rendition_access`, `withdraw`, `resolve_image_material`; [screenshot_renderer.py](../../server/app/providers/screenshot_renderer.py): `render`, `validate_png` | Reuse `ScreenshotAsset`, `ScreenshotRendition`, `ScreenshotPrivacyReview`, existing privacy plans and renderer. Add a server-bound attachment source, not a client download/re-upload receipt or second redaction engine. The attachment branch follows the enabled scope in the first slice. |
 | [response_cards.py](../../server/app/services/response_cards.py): `resolve_material`, `build_evidence`, `confirmation_inputs`; [exports.py](../../server/app/services/exports.py): `build_manifest`, `fresh_manifest`, `download_gate` | Existing `certificate_pdf_page` can contribute to exports after human page review. Do not alias attachments to that kind or to scalar `org_profile` material. New attachment evidence uses the B05 image chain only after its gates are implemented. |
 | [auth.py](../../server/app/services/auth.py): `Identity`, `authenticate`, `membership`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `ROLE_SCOPES`; [task_authorization.py](../../server/app/services/task_authorization.py): `task_authorized`; [task_workflow.py](../../server/app/services/task_workflow.py): `access` | Preserve live org membership, token/role intersection, task membership, write ceilings and archival gates. Same-org resource access is not automatically task access. |
 | [contracts.py](../../server/app/schemas/contracts.py): `CONTRACT_VERSION`, `Result`, `Cost`; [budget_preflight.py](../../server/app/services/budget_preflight.py): `attach` | Task-budget work is present: use Result 4.0. The design's two-field cost example and older draft examples do not define this contract. No new billed Provider is introduced. |
@@ -65,7 +74,7 @@ The `memory/memory_contracts.py` example has moved to
 
 ## First vertical slice
 
-Recommend **one unchanged PDF → archive review → exact declaration link → task pin →
+Implemented scope: **one unchanged PDF → archive review → exact declaration link → task pin →
 one archived source PNG → human privacy clearance → visible B05 readiness**. Accept
 business-licence or contract/performance PDFs with the same path; kind is a descriptive
 category, not a different storage or permission chain. Include API, CLI and console.
@@ -379,7 +388,7 @@ authorize sanitized bytes and preserve confidential-field (保密字段) control
 
 ## HTTP, CLI and Result 4.0
 
-All routes below are proposed authenticated org routes. Request org/actor/review time,
+All routes below require authenticated org access; disabled branches return their explicit blockers. Request org/actor/review time,
 storage key and success status are server-owned. The CLI is a cloud client; upload
 `--file` reads bounded local bytes, `--input` reads bounded metadata JSON. It performs
 no local render or file transformation. Commands support `--json`, missing arguments
@@ -462,9 +471,7 @@ Errors use `data.code`/`data.message`, optional safe IDs and a next-action reaso
 never file text or signed URLs. JSON contains no file/base64/storage key; explicit
 download receipts may contain only the caller's requested local output path and safe
 descriptor, following existing `CertificateFileDownloadReceipt`. The link command's
-ephemeral URL is sensitive transport output, not an audit record. Register schemas
-only during implementation; this draft imports Result 4.0 without changing runtime
-`bid schema` or older command serialization.
+ephemeral URL is sensitive transport output, not an audit record. Runtime schemas register the attachment commands with Result 4.0; older command serialization remains unchanged.
 Sanitize validation errors as well: never echo Pydantic input values, uploaded
 filenames, label text or multipart bodies in a 422 response or log.
 
@@ -579,8 +586,8 @@ projection catches up. No per-dependent-file scan on one dashboard request.
 ## Acceptance plan
 
 Before enabling routes, specify failure scenarios and exercise whole API/CLI/browser
-flows with synthetic documents in two orgs A/B. No live vendor calls are needed. This
-draft adds no runtime tests or service changes; implementation must produce repeatable
+flows with synthetic documents in two orgs A/B. No live vendor calls are needed. The
+implementation must produce repeatable
 artifacts under ignored `data/work/attachment-archive-acceptance/`, never under `docs/`.
 
 | Acceptance surface | Required evidence |

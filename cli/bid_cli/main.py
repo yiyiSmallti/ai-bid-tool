@@ -56,6 +56,8 @@ from pydantic import ValidationError
 from bid_cli.agent import app as agent_app
 from bid_cli.annotation import register as register_annotation_commands
 from bid_cli.assessments import app as assessment_app
+from bid_cli.attachments import COMMAND_INPUTS as ATTACHMENT_COMMANDS
+from bid_cli.attachments import register as register_attachment_commands
 from bid_cli.budget import register as register_budget_commands
 from bid_cli.check import app as check_app
 from bid_cli.check import check_job_exit
@@ -164,6 +166,13 @@ def emit(body: dict, command: str, as_json: bool, exit_code: int = 0):
     body = dict(body)
     body["command"] = command
     body["duration_ms"] = int((time.monotonic() - started) * 1000)
+    if command in ATTACHMENT_COMMANDS and "error" in body.get("data", {}):
+        from app.schemas.attachment_contracts import AttachmentErrorData
+
+        error = body["data"]["error"]
+        body["data"] = AttachmentErrorData(code=error["code"], message=error["message"]).model_dump(
+            mode="json", exclude_none=True
+        )
     if command.startswith("agent ") and "error" in body.get("data", {}):
         from app.schemas.agent_contracts import AgentErrorData, AgentFailureData
 
@@ -198,7 +207,7 @@ def emit(body: dict, command: str, as_json: bool, exit_code: int = 0):
             )
         )
     else:
-        typer.echo(value.data.get("error", {}).get("message", "Request failed"), err=True)
+        typer.echo(value.data.get("error", value.data).get("message", "Request failed"), err=True)
     if exit_code:
         raise SystemExit(exit_code)
 
@@ -1466,6 +1475,8 @@ register_management_template_commands(template_app)
 register_management_binding_commands()
 register_management_certificate_commands(certificate_app)
 register_management_profile_commands(profile_app)
+
+register_attachment_commands(resource_app, profile_app, task_app, evidence_app)
 register_requirement_confirmation_commands(req_app)
 register_annotation_commands(evidence_app)
 
@@ -1678,6 +1689,7 @@ def main(args: list[str] | None = None):
                 or name in MANAGEMENT_BINDING_COMMANDS
                 or name in MANAGEMENT_CERTIFICATE_COMMANDS
                 or name in MANAGEMENT_PROFILE_COMMANDS
+                or name in ATTACHMENT_COMMANDS
                 or name.startswith("assessment ")
                 or "--view" in arguments
                 or any(argument.startswith("--view=") for argument in arguments)

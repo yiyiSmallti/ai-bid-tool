@@ -157,6 +157,8 @@ async def requirement_pin(session, requirement, *, confirmed=False):
 
 
 async def source_binding(session, actor, task_id, source):
+    if source.kind == "attachment_page":
+        fail("annotation_adapter_not_enabled", "Attachment annotation adapter is not enabled")
     if source.kind != "certificate_page":
         fail(
             "annotation_source_unavailable",

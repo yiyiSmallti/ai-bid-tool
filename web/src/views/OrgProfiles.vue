@@ -10,6 +10,7 @@ onUnmounted(()=>reader.stop());
 </script>
 <template>
  <div class="page-header"><div><h2>单位资料</h2><p class="subtitle">由商务审核或单位管理员维护。资料与证照均为自行声明，真实性、业绩和资质未经核验；任务固定所选修订，资料更新不会自动升级任务。</p></div></div>
+ <p><RouterLink to="/org/attachments">打开附件档案：原件审阅与声明关联</RouterLink></p>
  <QualificationList kind="profiles" :reader="reader"/>
  <CertificateSection :reader="reader"/>
 </template>

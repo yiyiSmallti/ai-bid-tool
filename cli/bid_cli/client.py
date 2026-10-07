@@ -227,7 +227,7 @@ class Client:
             if isinstance(data, dict) and ("budget" in data or "result" in data):
                 # Budget stops preserve the complete paid envelope for CLI exit mapping.
                 return body
-            error = data.get("error", {})
+            error = data.get("error", data if isinstance(data, dict) else {})
             job_id = None
             parts = path.split("?", 1)[0].split("/")
             queued_submission = (len(parts) == 4 and parts[1::2] == ["tasks", "checks"]) or (

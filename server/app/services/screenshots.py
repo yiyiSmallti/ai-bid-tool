@@ -206,6 +206,13 @@ def rendition_view(row):
 
 
 async def selection(session, actor, asset):
+    if asset.source_kind == "attachment_page":
+        from app.services.attachment_pages import rendition_gate
+
+        context = await rendition_gate(session, actor, asset)
+        assert context is not None
+        selected, _, _, _, revision, _, _, _ = context
+        return selected.id, revision.id, True, None
     if asset.task_feature_id:
         actor.require("resource:read")
         selected = await session.get(TaskFeature, asset.task_feature_id)
@@ -328,16 +335,23 @@ async def rendition_access(session, actor, rendition_id, *, active=True, storage
 
         await rendition_gate(session, actor, row, storage=storage, active=active)
     if storage is not None:
-        await read_rendition(storage, asset, row)
+        limit = MAX_BYTES
+        if asset.source_kind == "attachment_page":
+            from app.services.attachment_pages import verify_ancestry
+            from app.services.attachments import settings_for
+
+            await verify_ancestry(session, actor, asset, storage)
+            limit = min(limit, settings_for(session).max_upload_bytes)
+        await read_rendition(storage, asset, row, max_bytes=limit)
     return asset, row
 
 
-async def read_rendition(storage, asset, row):
+async def read_rendition(storage, asset, row, *, max_bytes=MAX_BYTES):
     from app.providers.screenshot_renderer import validate_png
 
     try:
         png = await storage.read_bounded(
-            asset.org_id, row.storage_key, min(MAX_BYTES, row.image["size_bytes"])
+            asset.org_id, row.storage_key, min(MAX_BYTES, max_bytes, row.image["size_bytes"])
         )
         descriptor = validate_png(png)
     except ProviderFailure:
@@ -609,7 +623,18 @@ async def ingest(
 async def withdraw(session, actor, asset_id, reason):
     actor = await cards.access(session, actor, "screenshot:ingest")
     ingest_human(actor)
-    asset = await asset_access(session, actor, asset_id)
+    asset = await session.get(ScreenshotAsset, asset_id)
+    if asset is None:
+        raise not_found()
+    if asset.source_kind == "attachment_page":
+        from app.services.attachment_pages import rendition_gate
+
+        context = await rendition_gate(session, actor, asset, history=True)
+        actor.require("attachment:privacy")
+        if context is None or context[3].reviewer_user_id != actor.user_id:
+            fail("forbidden", "Only the assigned reviewer may withdraw attachment privacy", 403, 4)
+    else:
+        asset = await asset_access(session, actor, asset_id)
     await cards.task_lock(session, asset.task_id)
     existing = await session.scalar(
         select(ScreenshotWithdrawal).where(ScreenshotWithdrawal.asset_id == asset.id)
@@ -636,6 +661,21 @@ async def withdraw(session, actor, asset_id, reason):
             "actor_kind": actor.actor_kind,
         },
     )
+    if asset.source_kind == "attachment_page":
+        audit(
+            session,
+            actor,
+            "attachment.privacy.withdraw",
+            asset.id,
+            {
+                "request_id": str(row.id),
+                "payload_hash": digest({"asset_id": str(asset.id), "reason": reason}),
+                "task_id": str(asset.task_id),
+                "source_id": str(asset.evidence_source_id),
+                "withdrawal_id": str(row.id),
+                "reason_sha256": hashlib.sha256(reason.encode()).hexdigest(),
+            },
+        )
     return {"asset_id": str(asset.id), "withdrawal_id": str(row.id), "duplicate": False}
 
 
@@ -649,6 +689,8 @@ async def resolve_image_material(
         or asset.extraction_job_id != extraction_job_id
     ):
         raise not_found()
+    if asset.source_kind == "attachment_page":
+        fail("annotation_adapter_not_enabled", "Attachment annotation adapter is not enabled", 409)
     if row.profile == "annotation-release-v1":
         fail(
             "annotation_release_not_source",
