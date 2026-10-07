@@ -5,6 +5,8 @@ cross-org/task mixing, missing continuation, ciphertext reads, excessive payload
 or SQL work, and warmed p95 above the approved budget. Seed exactly two orgs
 with 10,000 fields and 100,000 encrypted values each. Never start a service.
 Retain actual read plans and reproducible receipts only under data/work.
+Selective prefixes must drive a C-collated token range, rather than scan all
+org tokens or roots and filter afterward; remaining tokens use owner lookups.
 """
 
 import json
@@ -24,9 +26,21 @@ from test_team_workflow_membership import new_task
 ROOTS = 10_000
 VERSIONS = 10
 SAMPLES = 20
+TOKEN_TABLE = "confidential_field_search_tokens"
+SELECTIVE_PREFIXES = {"key_prefix", "label_prefix", "values_prefix"}
 OUTPUT = (
     Path(__file__).resolve().parents[2] / "data/work/management-pages-validation/confidential-scale"
 )
+
+
+def is_select_statement(statement, context):
+    # ORM SELECTs with materialized CTEs start with WITH. Use the executed
+    # statement's compilation metadata; retain plain driver/text SELECTs too.
+    compiled = getattr(context, "compiled", None)
+    query = getattr(compiled, "statement", None)
+    return bool(getattr(query, "is_select", False)) or statement.lstrip().upper().startswith(
+        "SELECT"
+    )
 
 
 def seed_scale(admin_engine, tenants, tasks, settings):
@@ -76,12 +90,31 @@ def seed_scale(admin_engine, tenants, tasks, settings):
                 )
         for table in (
             "confidential_fields",
+            TOKEN_TABLE,
             "confidential_values",
             "memberships",
             "task_members",
             "task_workflows",
         ):
             connection.execute(text(f"ANALYZE {table}"))
+
+
+def plan_nodes(node):
+    return [node, *(row for child in node.get("Plans", []) for row in plan_nodes(child))]
+
+
+def selective_token_ranges(node):
+    """The rare 099 prefix belongs in Index Cond, with both range bounds."""
+    return [
+        item
+        for item in plan_nodes(node)
+        if item.get("Relation Name") == TOKEN_TABLE
+        and item.get("Index Name") == "management_confidential_token_prefix"
+        and "token" in item.get("Index Cond", "")
+        and ">=" in item.get("Index Cond", "")
+        and "<" in item.get("Index Cond", "")
+        and "099" in item.get("Index Cond", "")
+    ]
 
 
 @pytest.mark.latency
@@ -122,7 +155,7 @@ async def test_fixed_scale_confidential_reads(
     captured = []
 
     def capture(connection, cursor, statement, parameters, context, executemany):
-        captured.append((statement, parameters))
+        captured.append((statement, parameters, is_select_statement(statement, context)))
 
     engine = application.state.db.engine
     event.listen(engine.sync_engine, "before_cursor_execute", capture)
@@ -195,9 +228,8 @@ async def test_fixed_scale_confidential_reads(
                 trips.append(len(last_queries))
                 reads.append(
                     sum(
-                        statement.lstrip().upper().startswith("SELECT")
-                        and "set_config(" not in statement
-                        for statement, _ in last_queries
+                        is_read and "set_config(" not in statement
+                        for statement, _, is_read in last_queries
                     )
                 )
                 assert "synthetic-scale-private-value" not in reply.text
@@ -215,10 +247,10 @@ async def test_fixed_scale_confidential_reads(
             plans = []
             async with application.state.db.transaction(tenants["orgs"][0]) as session:
                 connection = await session.connection()
-                for statement, parameters in last_queries:
-                    if not statement.lstrip().upper().startswith("SELECT") or not any(
+                for statement, parameters, is_read in last_queries:
+                    if not is_read or not any(
                         table in statement
-                        for table in ("confidential_fields", "confidential_values")
+                        for table in ("confidential_fields", "confidential_values", TOKEN_TABLE)
                     ):
                         continue
                     assert "encrypted_value" not in statement
@@ -231,11 +263,37 @@ async def test_fixed_scale_confidential_reads(
                     work = plan_work(plan[0]["Plan"])
                     visits = {}
                     for node in work:
-                        if node["relation"] in {"confidential_fields", "confidential_values"}:
+                        if node["relation"] in {
+                            "confidential_fields",
+                            "confidential_values",
+                            TOKEN_TABLE,
+                        }:
                             visits[node["relation"]] = (
                                 visits.get(node["relation"], 0)
                                 + (node["rows"] + node["rows_removed"]) * node["loops"]
                             )
+                    if name in SELECTIVE_PREFIXES and TOKEN_TABLE in statement:
+                        if not selective_token_ranges(plan[0]["Plan"]):
+                            receipt["failures"].append(
+                                f"{name}: no actual token prefix range Index Cond driving rare 099"
+                            )
+                        if visits.get(TOKEN_TABLE, 0) > 200:
+                            receipt["failures"].append(
+                                f"{name}: {TOKEN_TABLE} visits exceed 200: {visits[TOKEN_TABLE]}"
+                            )
+                        for node in plan_nodes(plan[0]["Plan"]):
+                            if (
+                                node.get("Relation Name") == TOKEN_TABLE
+                                and node.get("Index Name") == "management_confidential_token_owner"
+                            ):
+                                condition = node.get("Index Cond", "")
+                                if not all(
+                                    column in condition
+                                    for column in ("org_id", "field_id", "token")
+                                ):
+                                    receipt["failures"].append(
+                                        f"{name}: other-token owner index lacks org/field/token bounds"
+                                    )
                     if visits.get("confidential_values", 0) > 200:
                         receipt["failures"].append(
                             f"{name}: confidential_values visits exceed 200: {visits['confidential_values']}"
@@ -251,6 +309,10 @@ async def test_fixed_scale_confidential_reads(
                         {"sql": statement, "plan": plan, "work": work, "relation_visits": visits}
                     )
             assert plans, f"{name}: no actual confidential SQL plan captured"
+            if name in SELECTIVE_PREFIXES and not any(
+                TOKEN_TABLE in item["relation_visits"] for item in plans
+            ):
+                receipt["failures"].append(f"{name}: no actual search token projection plan")
             p95 = sorted(timings)[math.ceil(SAMPLES * 0.95) - 1]
             receipt["measurements"].append(
                 {

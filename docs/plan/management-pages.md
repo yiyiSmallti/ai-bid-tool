@@ -257,8 +257,9 @@ historical-label restore or invented revision author. Value rows retain their re
 `set_at`/`set_by` metadata. Reveal uses the existing audited human action.
 
 Migration [0055](../../server/migrations/versions/0055_confidential_management.py)
-adds generated key/label search metadata, owner-specific bounded-read indexes and
-an AFTER metadata-update guard. Existing FORCE RLS, composite keys, column grants,
+adds generated key/label search metadata, a derived tenant-isolated lexeme
+projection with C-collated prefix-range indexes, owner-specific bounded-read indexes
+and an AFTER metadata-update guard. Existing FORCE RLS, composite keys, column grants,
 append-only value grants and human-only token checks remain in force.
 `ConfidentialQuery.field_id` is an additive exact filter for editor hydration:
 prefix matches can exceed one page, so a selected field must not be resolved by
