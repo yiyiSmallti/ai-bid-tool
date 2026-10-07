@@ -258,7 +258,9 @@ maintaining an exact allow list. Never configure this on a production node.
    `BID_SANDBOX_FETCH_QUOTA` to a ledger path inside the directory, and
    `BID_SANDBOX_DEV_OPEN_EGRESS=1`, then restart both processes. Without the flag, an
    open revision makes the policy file invalid and every capture fails closed. The open
-   revision also skips the organization's 60-requests-per-minute window.
+   revision uses its own per-organization window, `BID_SANDBOX_OPEN_FETCH_PER_MINUTE`
+   requests a minute (default 600, a positive integer), instead of the 60 that named
+   vendor policies use, because a whole page loads many resources.
 
 Run the opt-in check against a public page and a public PDF of your choice:
 

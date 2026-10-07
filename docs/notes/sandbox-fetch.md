@@ -30,7 +30,9 @@ and no URLs. It admits every canonical public HTTPS URL as a main URL or resourc
 The file is valid only while the node environment sets
 `BID_SANDBOX_DEV_OPEN_EGRESS=1`; otherwise every load fails with `policy_invalid`.
 An exact policy match still takes precedence over the open revision. Requests under
-the open revision skip the organization minute window; origin leases still apply. Each mapped revision must exist, list that URL as a main URL, and not be
+the open revision count against the organization's minute window at its own limit,
+`BID_SANDBOX_OPEN_FETCH_PER_MINUTE` (default 600), while named vendor policies keep 60;
+both share one per-organization counter, and origin leases still apply. Each mapped revision must exist, list that URL as a main URL, and not be
 revoked. Without an explicit selection, exactly one non-revoked policy must match.
 This selector is operator configuration and has no client parameter or edit API.
 

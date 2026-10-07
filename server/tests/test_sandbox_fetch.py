@@ -300,9 +300,16 @@ async def test_persistent_org_quota_and_origin_leases(tmp_path):
     with pytest.raises(FetchDenied, match="org_rate_limit"):
         async with SQLiteFetchQuota(path).acquire(org, "https://vendor.example"):
             pass
-    # Only an open development policy skips the organization window.
-    async with SQLiteFetchQuota(path).acquire(org, "https://vendor.example", org_window=False):
-        pass
+    # An open policy keeps an organization window, at its own configured limit.
+    open_quota = SQLiteFetchQuota(path, open_requests_per_minute=62)
+    for _ in range(2):
+        async with open_quota.acquire(org, "https://vendor.example", open_egress=True):
+            pass
+    with pytest.raises(FetchDenied, match="org_rate_limit"):
+        async with open_quota.acquire(org, "https://vendor.example", open_egress=True):
+            pass
+    with pytest.raises(ValueError):
+        SQLiteFetchQuota(path, open_requests_per_minute=0)
     impatient = SQLiteFetchQuota(path, origin_wait_seconds=0.2)
     async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
         async with SQLiteFetchQuota(path).acquire(uuid4(), "https://vendor.example"):
@@ -485,3 +492,16 @@ async def test_a_denied_resource_leaves_the_run_open_but_revocation_closes_it(tm
         await fetch.fetch(MAIN)
     with pytest.raises(FetchDenied, match="run_closed"):
         await fetch.fetch(MAIN)
+
+
+def test_open_fetch_limit_comes_from_operator_environment(tmp_path, monkeypatch):
+    from app.providers.sandbox_fetch import quota_from_env
+
+    monkeypatch.setenv("BID_SANDBOX_OPEN_FETCH_PER_MINUTE", "250")
+    assert quota_from_env(tmp_path / "q.sqlite3").open_requests_per_minute == 250
+    monkeypatch.delenv("BID_SANDBOX_OPEN_FETCH_PER_MINUTE")
+    assert quota_from_env(tmp_path / "q.sqlite3").open_requests_per_minute == 600
+    for bad in ("0", "-5", "many", ""):
+        monkeypatch.setenv("BID_SANDBOX_OPEN_FETCH_PER_MINUTE", bad)
+        with pytest.raises(FetchDenied, match="policy_invalid"):
+            quota_from_env(tmp_path / "q.sqlite3")
