@@ -4,14 +4,14 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Pending approval, not implemented**.
+Status: **Approved with all recommended defaults, not implemented**.
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
 [roadmap](roadmap.md), with B04/B05 evidence, P03 vision and E01/E02 evaluation
 dependencies. The importable [Pydantic v2 contract](bid-review/bid_review_contracts.py)
 defines payloads and service/Provider Protocols. It registers no routes, CLI commands,
-jobs, permissions or tables. The [Open decisions](#open-decisions) are recommended
-defaults for approval, not decisions already adopted.
+jobs, permissions or tables. Implementation follows the approved
+[decisions](#open-decisions) under [agent.md](../../agent.md#workflow).
 
 ## Objective and input boundary
 
@@ -232,7 +232,7 @@ by the cited tender formula. Without these, estimate only technical/commercial p
 or forecast rank from public data. Availability of prices alone does not make an
 unsupported formula executable. Formula evaluation requires a reviewed bounded local
 algorithm ID/version and confirmed parameters; arbitrary formula text is never `eval`ed.
-No new price algorithm is approved by this draft. Until separately enabled, price
+No new price algorithm is approved by this contract. Until separately enabled, price
 inputs are retained as supplied and price scores stay unsupported. Comparative results
 mean arithmetic under supplied data, not predictions about the actual committee.
 
@@ -389,7 +389,7 @@ or shared ledger history, nor assume the storage Protocol implements deletion.
 
 ## Preflight, HTTP and CLI
 
-Proposed metadata routes use `/v4`; none are registered by this draft. A standalone
+Proposed metadata routes use `/v4`; none are registered by this contract. A standalone
 console wizard atomically uploads the tender and bid files as one immutable submission,
 then explicitly previews/submits preparation and review. Upload validates bounded bytes
 without model calls; local preparation parses/renders, discovers redaction candidates
