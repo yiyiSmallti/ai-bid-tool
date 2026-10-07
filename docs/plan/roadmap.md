@@ -58,7 +58,7 @@ Terminology follows [the glossary](../glossary.md).
 | B11 export | Human export of Word response sections, final sections/review copies (审阅件), certificate-page attachments and audit; Gotenberg conversion to PDF for online page previews; see [human-section-exports.md](../notes/human-section-exports.md) and [page-previews.md](../notes/page-previews.md) | WPS visual pagination and isolated S3-download acceptance; see [export.md](export.md) | Approved |
 
 Standalone extension: [uploaded-bid review and score estimate](bid-review.md) is
-**approved with all recommended defaults, not implemented**. It accepts uploaded
+**approved with Clef triage on by default, not implemented**. It accepts uploaded
 tender/bid files without a DraftRun and preserves the confirmed-draft input boundaries of
 B09/B10. The first slice and the adopted decisions are in its
 [Open decisions](bid-review.md#open-decisions).

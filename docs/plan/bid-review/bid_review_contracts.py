@@ -1109,7 +1109,7 @@ class BidReviewManifest(Contract):
     rubric_input_hash: Sha256 | None = None
     opening_price_input_sha256: Sha256 | None = None
     price_release_id: UUID | None = None
-    clef_enabled: bool = False
+    clef_enabled: bool = True
     limits: BidReviewLimits = Field(default_factory=BidReviewLimits)
 
     @model_validator(mode="after")
@@ -1768,7 +1768,7 @@ class BidReviewProvider(Protocol):
 
 
 class ClefTriageProvider(Protocol):
-    """Optional platform-configured triage; never a source of final findings.
+    """Default-on platform-configured triage; never a source of final findings.
 
     Verify every byte/hash/privacy receipt before dispatch. Reject full serialized
     requests above 13 MiB or conservative context+output above 65,536 tokens, without

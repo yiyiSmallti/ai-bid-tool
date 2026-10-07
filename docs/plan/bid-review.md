@@ -4,7 +4,8 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved with all recommended defaults, not implemented**.
+Status: **Approved, not implemented. Recommended defaults are adopted, except that Clef
+triage is on by default.**
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
 [roadmap](roadmap.md), with B04/B05 evidence, P03 vision and E01/E02 evaluation
@@ -266,9 +267,14 @@ confirmation or score. Basis-requiring conclusions go to cited LLM/OCR/local rul
 and human review. Escalate ambiguous and all rejection-critical missing-mark checks;
 no confidence threshold alone closes them.
 
-Clef is disabled by default and requires explicit platform configuration, credential
-binding, capability validation, a versioned fixed **per-call sale quote**, request
-bounds and pricing policy. Initial Clef has no org BYOK path. LLM BYOK remains governed
+Clef is enabled by default. Every review includes Clef triage once the platform has
+configured the adapter, both gateway credentials, capability validation, a versioned
+fixed **per-call sale quote**, request bounds and pricing policy. The submitter may turn
+it off for a single review in preflight, which shows the planned Clef calls and their
+fixed price under the same budget admission. When that platform configuration is missing
+or invalid, or the gateway check fails, the review runs without Clef and the report states
+that triage was unavailable; local checks, cited LLM paths and human review still cover
+every required location. Initial Clef has no org BYOK path. LLM BYOK remains governed
 by the existing budget contract. Provider image limits are stricter than general page
 rendering: at most 4 MiB and 16 million pixels per image, 8 MiB total decoded image
 bytes and 13 MiB complete serialized request; no remote URLs. Questions are bounded
@@ -594,7 +600,7 @@ return the same authorized receipt without duplicated decisions/charges.
 | Redaction missing, privacy review stale, price page excluded, identity required but hidden | Block external dispatch for that scope; local/human work or explicit unknown. Never fall back to raw pages. |
 | Wrong org/task/source, changed membership or token | Uniform 404 or existing identity error before content disclosure; recheck each call, read and publication. |
 | Wrong/ambiguous/unsent quote, forged bounding box or changed image hash | Reject conclusion, retain fixed reason and unresolved coverage; no source repair or nearest-page substitution. |
-| Clef disabled, quote absent, malformed probability or high-confidence error | No implicit fallback billing or final verdict; retain triage failure and route to the configured cited/human path within budget. |
+| Clef turned off or unavailable, quote absent, malformed probability or high-confidence error | No implicit fallback billing or final verdict; retain triage failure and route to the configured cited/human path within budget. |
 | Budget/call ceiling reached or later independent Provider batch fails | Stop new calls; retain safely validated partial coverage and full usage where permitted. Unknown sends keep holds. |
 | Cancellation, lease/input change, accounting mismatch or bound overrun | Hard publication fence; no partial-report bypass. Prior completed artifacts/history remain intact. |
 | Word render failure or stale decision snapshot | Console report remains available under access; artifact job fails, no partial Word; explicit retry/current snapshot creates a new artifact. |
@@ -618,7 +624,7 @@ measurements, general accuracy, calibrated confidence, pricing evidence or an SL
 Faint/greyscale scans, partial/misplaced seals, wrong-company seals, required-position
 checks and seam seals are **not yet covered**. A page-level presence result does not
 measure end-to-end required-location recall. Freeze those cases in the acceptance set
-before enabling automated triage. Repeat identical requests to measure answer/token
+before default-on triage ships. Repeat identical requests to measure answer/token
 variation, but never charge from aggregate or nondeterministic token observations.
 
 | Acceptance track | Required scenario and repeatable artifact |
@@ -646,11 +652,13 @@ database, cryptographic-validator, visual-model or runtime acceptance.
 
 1. Upload and immutable local preparation, privacy gates, signature checklist and
    local PDF signature validation, rule/LLM compliance checks, append-only dismissal,
-   and the complete console/Word report. Scoring is explicitly unavailable; evidence
-   review can be human/local. The signing checklist must work without Clef.
+   and the complete console/Word report, with Clef seal/signature presence, date-filled
+   and page-type triage on by default once fixed-call billing and the frozen triage
+   acceptance set pass. Scoring is explicitly unavailable; evidence review can be
+   human/local. The signing checklist must work without Clef.
 2. Confirmed rubric plus uploaded-evidence scoring, bounded supported local price
-   formulas only after explicit opening inputs, and optional Clef evidence/presence
-   triage after fixed-call billing and benchmark gates. Retain all human evidence
+   formulas only after explicit opening inputs, and default-on Clef
+   image-supports-claim triage after its benchmark gate. Retain all human evidence
    confirmation and no-citation restrictions.
 3. Broader scan/seam-seal coverage, larger measured limits and optional B04/B05
    adoption adapter. Retention/purge or online certificate revocation requires its
@@ -661,10 +669,10 @@ database, cryptographic-validator, visual-model or runtime acceptance.
 | Topic | Recommended default | Approval consequence |
 | --- | --- | --- |
 | Input/command scope | Independent `uploaded_bid`, `bid review …`, immutable multi-file submission; no DraftRun prerequisite | Keeps confirmed-draft services and agent permissions unchanged. |
-| First slice | Upload + local preparation + signature completeness including local PDF validation + rule/LLM compliance + console/Word | Score and Clef remain next-slice capabilities, visibly unavailable. |
+| First slice | Upload + local preparation + signature completeness including local PDF validation + default-on Clef presence/page-type triage + rule/LLM compliance + console/Word | Score and Clef image-supports-claim triage remain next-slice capabilities, visibly unavailable. |
 | Limits | 20 files, 100 MiB/file, 500 MiB/submission, 1,000 combined pages; lower deployment limits win; 200 external calls with 100/60/40 stage ceilings | Benchmark maximum accepted inputs before raising actual deployment settings. |
 | PDF validator/trust | Vetted offline library, pinned trust anchors, separate validity/modification/trust/revocation; unknown when proof unavailable | Approve dependency and supported signature profiles before implementation; no online checks or automatic trust. |
-| Clef | Disabled; explicit platform adapter/credential and versioned fixed per-call sale price; no initial BYOK | No dispatch until accounting and capability bounds pass; provider token telemetry never sets user charges. |
+| Clef | **On by default** for every review once the platform adapter, gateway credentials and versioned fixed per-call sale price are configured; per-review opt-out in preflight; no initial BYOK | Missing configuration or a failed gateway check runs the review without Clef and reports triage unavailable; no dispatch until accounting and capability bounds pass; provider token telemetry never sets user charges. |
 | Clef transport | Only through an authenticated Cloudflare AI Gateway with log collection, log push, caching and gateway retries off and a rate limit set; unified billing; separate model and gateway credentials | A gateway in any other state blocks Clef; 429 is a retryable non-completion. |
 | Confidentiality | Mandatory external redaction including bid-derived names and exact reviewed image derivatives | Local/human handling when necessary identity/value is masked. |
 | Price pages and opening data | Price pages excluded unless human task owner explicitly permits exact sanitized pages; opening prices processed locally | No full score or competitor comparison from missing/guessed input; no strategic pricing. |
