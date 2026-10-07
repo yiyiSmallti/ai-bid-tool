@@ -8,6 +8,7 @@ from pydantic import AwareDatetime, Field, StringConstraints, model_validator
 
 from app.schemas.certificate_contracts import CertificateRevision
 from app.schemas.certificate_file_contracts import CertificateFileRevision
+from app.schemas.confidential_contracts import ConfidentialValueSet
 from app.schemas.contracts import Contract
 from app.schemas.feature_contracts import FeatureRevision
 from app.schemas.profile_contracts import OrgProfileRevision
@@ -72,6 +73,27 @@ class ActionHint(Contract):
 class PageQuery(Contract):
     cursor: Cursor | None = None
     limit: int = Field(default=25, strict=True, ge=1, le=100)
+
+
+class ConfidentialQuery(PageQuery):
+    q: SearchText | None = None
+    # Exact editor hydration must not depend on where a prefix match falls in a page.
+    field_id: UUID | None = None
+    task_id: UUID | None = None
+    archived: bool = False
+
+
+class ConfidentialHistoryQuery(PageQuery):
+    task_id: UUID | None = None
+
+
+class ConfidentialValueRevisionSet(ConfidentialValueSet):
+    """Transient input: only the dedicated submit transport serializes the value."""
+
+    value: str = Field(min_length=1, max_length=2000, exclude=True, repr=False)
+    expected_field_revision: Revision
+    # Required-null asserts absence for this exact field/owner, not every task.
+    expected_value_id: UUID | None
 
 
 class PageData(Contract):
