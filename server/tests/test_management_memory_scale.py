@@ -102,6 +102,10 @@ def seed_scale(admin_engine, tenants):
                 ),
                 values,
             )
+        # The deferred current-revision FK still queues constraint events while
+        # the transition guards are disabled. Validate them after both orgs are
+        # fully loaded, before ALTER TABLE, without committing disabled guards.
+        connection.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         for table, trigger in (
             ("memories", "memory_parent_gate"),
             ("memory_revisions", "memory_revision_gate"),

@@ -14,6 +14,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Preserve the management feedback flag in cursor regression requests and assert
   the separate management and legacy error codes.
 - Name the feedback recovery dialog confirmation distinctly from its opener.
+- Drain deferred constraints after the memory scale fixture's bulk load and before
+  restoring transition triggers, keeping seed data and guard restoration atomic.
 
 ## 2026-10-07: Model-settings browser acceptance fixes
 
