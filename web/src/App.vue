@@ -60,7 +60,7 @@ async function signOut() {
         <main id="main-content" class="app-main" tabindex="-1">
           <template v-if="area === 'org'">
             <el-alert v-if="orgAccess.error" :title="orgAccess.error" type="error" show-icon :closable="false" role="alert" />
-            <RouterView v-else-if="orgAccess.role" :key="`${route.path}:${route.query.job ?? ''}:${['products', 'features', 'templates'].includes(route.meta.nav) ? `${route.query.revision ?? ''}:${route.query.task ?? ''}` : ''}:${org?.orgId}`" />
+            <RouterView v-else-if="orgAccess.role" :key="`${route.path}:${route.query.job ?? ''}:${['products', 'features', 'templates', 'profiles'].includes(route.meta.nav) ? `${route.query.revision ?? ''}:${route.query.task ?? ''}` : ''}:${org?.orgId}`" />
           </template>
           <RouterView v-else />
         </main>

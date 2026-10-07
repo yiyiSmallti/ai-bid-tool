@@ -198,7 +198,15 @@ async def test_source_role_matrix_preserves_all_prior_grants(
     assert ROLE_SCOPES[role] & requirement_scopes == (
         requirement_scopes if role in {"admin", "bidder", "technical"} else set()
     )
+    assert requirement_scopes <= HUMAN_ONLY_SCOPES
     assert requirement_scopes.isdisjoint(SCOPES)
+
+    lifecycle_scopes = {"certificate:lifecycle", "profile:lifecycle"}
+    assert ROLE_SCOPES[role] & lifecycle_scopes == (
+        lifecycle_scopes if role in {"admin", "bidder"} else set()
+    )
+    assert lifecycle_scopes <= HUMAN_ONLY_SCOPES
+    assert lifecycle_scopes.isdisjoint(SCOPES)
 
     _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
     source = (await add(api, headers[0], task, choice["id"])).json()["data"]["source"]
@@ -214,6 +222,8 @@ async def test_source_role_matrix_preserves_all_prior_grants(
     ).status_code == 200
     later = {
         "template:file:read",
+        "certificate:lifecycle",
+        "profile:lifecycle",
         "evidence:source:read",
         "evidence:source:write",
         "billing:read",
@@ -264,6 +274,7 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "sandbox:capture",
         "req:confirm",
         "req:manual",
+        "evidence:annotate",
     }
     assert ROLE_SCOPES[role] - later == set(BASELINE[role])
     # Export is a human bidder responsibility; source-read remains unchanged.

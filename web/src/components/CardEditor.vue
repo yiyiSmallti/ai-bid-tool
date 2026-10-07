@@ -9,8 +9,10 @@ import SecretTextEditor from "./SecretTextEditor.vue";
 import SourcePreview from "./SourcePreview.vue";
 import TaskCollaboration from "./TaskCollaboration.vue";
 import CoSignPanel from "./CoSignPanel.vue";
-const props = defineProps({ row: Object, taskId: String, jobId: String, documentName: String });
+const props = defineProps({ row: Object, taskId: String, jobId: String, documentName: String, annotationCandidate: {type: Object, default: null} });
 const emit = defineEmits(["updated", "dirty", "next", "close", "materials", "denied"]);
+const annotationObservation=ref(""), annotationAdded=ref(false);
+function addAnnotation(){const candidate=props.annotationCandidate;if(!candidate||!editable.value||!annotationObservation.value.trim()||annotationAdded.value)return;if(candidate.manifest.target.card_id!==card.value?.id||candidate.task_id!==props.taskId||candidate.manifest.target.extraction_job_id!==props.jobId){error.value="标注候选与响应卡不匹配";return;}const mapping=candidate.rendering.canvas.mapping;content.value.response_kind="evidence";add({kind:"image_region",asset_id:candidate.asset_id,rendition_id:candidate.rendition_id,expected_image_sha256:candidate.rendering.image.sha256,region:{x:0,y:0,width:mapping.content_width,height:mapping.content_height},claim_scope:"document_excerpt",visual_observation:annotationObservation.value.trim()});annotationAdded.value=true;}
 const cosign = ref(null), cosignPolicy = ref(null), cosignReview = ref(null), cosignDirty = ref(false);
 const tab = ref("response"), discussionOpened = ref(false), discussionDirty = ref(false);
 function reportDirty(){emit("dirty", dirty.value || discussionDirty.value || cosignDirty.value);}
@@ -59,6 +61,7 @@ function emptyContent() { return { response_kind: "commitment", response_text: "
 function clearReview() { reviewed.value = []; warnings.value = []; }
 watch(() => authority.value?.workflow.access_epoch, clearReview);
 function install(value) {
+  annotationAdded.value=false; annotationObservation.value="";
   card.value = value; content.value = value ? JSON.parse(JSON.stringify(value.content)) : emptyContent();
   for (const key of ["response_text", "deviation_note"]) content.value[key] ??= "";
   content.value.response_kind ??= "commitment"; content.value.deviation ??= "none";
@@ -194,7 +197,8 @@ onMounted(async () => {
         <el-card v-for="(evidence, index) in card?.evidence ?? []" :key="evidence.id" shadow="never" class="evidence">
           <div class="tags"><span class="tag primary">材料 {{ index + 1 }}</span><span class="tag">{{ label(materialKinds, evidence.material_kind) }}</span><span class="tag">{{ label(quoteChecks, evidence.quote_check) }}</span><span class="tag" :class="evidence.active_selection ? 'success' : 'danger'">{{ evidence.active_selection ? "有效选择" : "已失效" }}</span><span v-if="marks.has(evidence.selection_id)" class="tag warning">模拟材料</span></div>
           <p class="hint mono">{{ evidence.input.field_path ?? `第 ${evidence.source_archive?.page} 页` }} · 选择 {{ evidence.selection_id.slice(0, 8) }} · 资源修订 {{ evidence.resource_revision_id.slice(0, 8) }}</p>
-          <blockquote class="quote">{{ evidence.input.quote }}</blockquote>
+          <blockquote class="quote">{{ evidence.input.quote ?? evidence.input.visual_observation }}</blockquote>
+          <DocumentPreview v-if="evidence.input.kind==='image_region'" :source="{kind:'screenshot_rendition',assetId:evidence.input.asset_id,renditionId:evidence.input.rendition_id,expectedHash:evidence.input.expected_image_sha256}" name="响应卡实际材料图" label="核对关联图片" />
           <SourcePreview v-if="evidence.source_archive" :source="evidence.source_archive" />
           <label v-if="canSignReview && card.state === 'pending_review' && !dispositionReview" class="check"><input v-model="reviewed" type="checkbox" :value="evidence.id" :disabled="dirty || invalid || !!conflict" />已逐项核对材料 {{ index + 1 }}</label>
         </el-card>
@@ -217,9 +221,11 @@ onMounted(async () => {
           </el-form-item>
           <p v-if="content.deviation === 'negative'" class="notice danger">负偏离：将如实保留在响应与初稿中。</p>
           <el-form-item label="对应关系或具体偏离说明"><SecretTextEditor v-model="content.deviation_note" :fields="secretFields" :disabled="!editable" label="对应关系或具体偏离说明" :maxlength="10000" :rows="2" @change="edit" /></el-form-item>
-          <ol v-if="content.evidence.length" class="candidates"><li v-for="(input, index) in content.evidence" :key="index"><span class="hint">{{ input.kind }} · {{ input.field_path ?? input.evidence_source_id }}</span><blockquote class="quote">{{ input.quote }}</blockquote><el-button v-if="editable" size="small" type="danger" link @click="content.evidence.splice(index, 1); edit()">移除候选材料 {{ index + 1 }}</el-button></li></ol>
+          <ol v-if="content.evidence.length" class="candidates"><li v-for="(input, index) in content.evidence" :key="index"><span class="hint">{{ input.kind }} · {{ input.field_path ?? input.evidence_source_id }}</span><blockquote class="quote">{{ input.quote ?? input.visual_observation }}</blockquote><el-button v-if="editable" size="small" type="danger" link @click="content.evidence.splice(index, 1); edit()">移除候选材料 {{ index + 1 }}</el-button></li></ol>
           <div class="actions"><el-button v-if="editable" type="primary" native-type="submit" :loading="busy">保存草稿</el-button><span v-if="dirty" class="hint">有未保存编辑；保存和提交审阅是两个动作。</span></div>
         </el-form>
+        <RouterLink v-if="card && editable && !dirty" :to="`/org/tasks/${taskId}/cards/${card.id}/annotation?job=${jobId}`">标注真实证书页</RouterLink>
+        <section v-if="annotationCandidate" aria-label="标注候选关联"><h4>已核对的标注候选图</h4><p class="hint">关联完整已标注内容区域，不含生成页脚；人工观察说明随响应草稿保存。</p><el-input v-model="annotationObservation" type="textarea" aria-label="视觉观察说明" maxlength="4000" :disabled="!editable||annotationAdded" /><el-button :disabled="!editable||annotationAdded||!annotationObservation.trim()" @click="addAnnotation">加入本次响应编辑</el-button></section>
         <MaterialPanel :task-id="taskId" :editable="editable && content.response_kind === 'evidence'" @add="add" @changed="materialChanged" />
 
         <h4>警示与人工操作</h4>

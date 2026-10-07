@@ -15,7 +15,16 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
-from app.models.entities import AuditLog, Feature, FeatureRevision, Product, Task, Template
+from app.models.entities import (
+    AuditLog,
+    Certificate,
+    Feature,
+    FeatureRevision,
+    OrgProfile,
+    Product,
+    Task,
+    Template,
+)
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
 
@@ -376,11 +385,14 @@ async def select_revision(
             "duplicate": True,
             "replaced_snapshot_id": None,
         }
-    # An inactive library resource preserves an exact active pin replay, but cannot create
+    # An inactive library root preserves an exact active pin replay, but cannot create
     # any new pin (including an old revision or a different normalized lot). Keep
     # this check before retiring the previous selection; both share the root lock
     # with lifecycle transitions after the task/workflow authorization locks.
-    if kind.root in (Product, Feature, Template) and root.lifecycle_state != "active":
+    if (
+        kind.root in (Product, Feature, Certificate, OrgProfile, Template)
+        and root.lifecycle_state != "active"
+    ):
         raise ServiceError(
             "resource_inactive",
             f"{kind.label} is inactive; existing selections are preserved",

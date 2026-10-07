@@ -315,8 +315,8 @@ def test_management_products_schema_and_legacy_list(monkeypatch, capsys):
     for command in ("browse", "show", "history", "lifecycle set", "lifecycle history"):
         entry = commands["resource product " + command]
         assert entry["input"] is not None and entry["output"] is not None
-        for kind in ("certificate", "profile"):
-            assert "resource " + kind + " " + command not in commands
+        for kind in ("product", "feature", "certificate", "profile", "template"):
+            assert "resource " + kind + " " + command in commands
     assert "ResourceQuery" in json.dumps(commands["resource product browse"])
     cli.main(["--contract-version", "3.0", "schema", "--json"])
     legacy = json.loads(capsys.readouterr().out)["data"]["commands"]

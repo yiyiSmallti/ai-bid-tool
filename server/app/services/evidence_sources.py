@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pymupdf
-from sqlalchemy import and_, select
+from sqlalchemy import and_, literal, select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import PDFSettings
@@ -297,31 +297,84 @@ async def create_source(
 
 @task_authorized("evidence:source:read")
 async def list_sources(
-    session: AsyncSession, actor: Identity, task_id: UUID, *, history: bool = False
+    session: AsyncSession,
+    actor: Identity,
+    task_id: UUID,
+    *,
+    history: bool = False,
+    cursor: str | None = None,
+    limit: int | None = None,
+    settings=None,
 ):
     require_access(actor, "evidence:source:read")
     if await session.get(Task, task_id) is None:
         raise not_found()
-    rows = (
-        await session.execute(
-            joined_sources()
-            .where(EvidenceSource.task_id == task_id)
-            .order_by(EvidenceSource.created_at, EvidenceSource.page, EvidenceSource.id)
+    query = joined_sources().where(EvidenceSource.task_id == task_id)
+    if not history:
+        query = query.where(TaskCertificate.active.is_(True))
+    workflow = None
+    if limit is not None:
+        from app.services import task_events, task_workflow
+
+        if not 1 <= limit <= 100:
+            raise ServiceError("invalid_source_limit", "Source limit must be 1 through 100", 422, 2)
+        _, workflow, _ = await task_workflow.access(session, actor, task_id)
+        if cursor:
+            value = task_events.open_cursor(
+                cursor, actor, task_id, workflow, settings, purpose="annotation-sources"
+            )
+            if value.get("history") != history:
+                raise ServiceError("invalid_source_cursor", "Source filters changed", 409, 2)
+            try:
+                when, ident = datetime.fromisoformat(value["at"]), UUID(value["id"])
+            except (KeyError, ValueError, TypeError) as exc:
+                raise ServiceError(
+                    "invalid_source_cursor", "Invalid source cursor", 422, 2
+                ) from exc
+            query = query.where(
+                tuple_(EvidenceSource.created_at, EvidenceSource.id)
+                > tuple_(literal(when), literal(ident))
+            )
+        query = query.order_by(EvidenceSource.created_at, EvidenceSource.id).limit(limit + 1)
+    else:
+        if cursor:
+            raise ServiceError("invalid_source_cursor", "A cursor requires a page limit", 422, 2)
+        query = query.order_by(EvidenceSource.created_at, EvidenceSource.page, EvidenceSource.id)
+    rows = (await session.execute(query)).all()
+    more = limit is not None and len(rows) > limit
+    rows = rows[:limit] if limit is not None else rows
+    data = {
+        "history": history,
+        "active_source_ids": [str(row.id) for row, snapshot, _ in rows if snapshot.active],
+    }
+    if limit is not None:
+        from app.services import task_events
+
+        last = rows[-1][0] if more else None
+        data.update(
+            next_cursor=task_events.issue_cursor(
+                actor,
+                task_id,
+                workflow,
+                settings,
+                purpose="annotation-sources",
+                history=history,
+                at=last.created_at.isoformat(),
+                id=str(last.id),
+            )
+            if last
+            else None,
+            returned=len(rows),
+            has_more=more,
         )
-    ).all()
-    active = [str(row.id) for row, snapshot, _ in rows if snapshot.active]
     warnings = (
         [*WARNINGS, HISTORY_WARNING]
         if history and any(not snapshot.active for _, snapshot, _ in rows)
         else WARNINGS
     )
     return (
-        {"history": history, "active_source_ids": active},
-        [
-            source_data(row, snapshot, original)
-            for row, snapshot, original in rows
-            if history or snapshot.active
-        ],
+        data,
+        [source_data(row, snapshot, original) for row, snapshot, original in rows],
         warnings,
     )
 
@@ -338,6 +391,8 @@ async def require_source(session: AsyncSession, actor: Identity, source_id: UUID
 async def read_preview(session: AsyncSession, actor: Identity, source_id: UUID, storage: Storage):
     row, snapshot, original = await require_source(session, actor, source_id)
     descriptor = EvidenceSourcePreview.model_validate(row.preview)
-    content = await storage.read(actor.org_id, row.storage_key)
+    content = await storage.read_bounded(
+        actor.org_id, row.storage_key, min(MAX_PREVIEW_BYTES, descriptor.size_bytes)
+    )
     await asyncio.to_thread(check_png, content, descriptor)
     return content, descriptor

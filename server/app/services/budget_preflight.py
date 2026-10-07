@@ -74,6 +74,8 @@ async def attach(
             "score rubric generate": "score_rubric",
             "draft": "draft",
             "screenshot annotate": "screenshot_render",
+            "evidence stamp": "annotation_render",
+            "evidence annotation release": "annotation_release",
             "screenshot analyze": "screenshot_analyze",
             "ui mock": "prototype_generate",
             "evidence search": "screenshot_search",

@@ -2,8 +2,8 @@
 
 from alembic import op
 
-revision = "0052"
-down_revision = "0051"
+revision = "0054"
+down_revision = "0053"
 branch_labels = None
 depends_on = None
 
@@ -45,7 +45,7 @@ CREATE INDEX management_bindings_browse ON public.export_template_bindings(org_i
 ALTER TABLE public.resource_lifecycle_events
  ADD COLUMN template_id uuid,
  DROP CONSTRAINT lifecycle_one_root,
- ADD CONSTRAINT lifecycle_one_root CHECK(num_nonnulls(product_id,feature_id,template_id)=1),
+ ADD CONSTRAINT lifecycle_one_root CHECK(num_nonnulls(product_id,feature_id,certificate_id,profile_id,template_id)=1),
  ADD CONSTRAINT lifecycle_template_root FOREIGN KEY(org_id,template_id) REFERENCES public.templates(org_id,id),
  ADD CONSTRAINT lifecycle_template_revision FOREIGN KEY(org_id,template_id,resource_revision)
    REFERENCES public.template_revisions(org_id,template_id,revision);
@@ -125,21 +125,31 @@ BEGIN
  IF TG_OP<>'INSERT' THEN RAISE EXCEPTION 'lifecycle history is immutable' USING ERRCODE='42501'; END IF;
  IF NEW.template_id IS NOT NULL THEN
   PERFORM public.management_template_human(NEW.org_id,NEW.actor_user_id);
- ELSE
-  PERFORM public.management_product_human(NEW.org_id,NEW.actor_user_id);
- END IF;
+ ELSIF NEW.certificate_id IS NOT NULL THEN
+  PERFORM public.management_bidder_human(NEW.org_id,NEW.actor_user_id,'certificate');
+ ELSIF NEW.profile_id IS NOT NULL THEN
+  PERFORM public.management_bidder_human(NEW.org_id,NEW.actor_user_id,'profile');
+ ELSE PERFORM public.management_product_human(NEW.org_id,NEW.actor_user_id); END IF;
  IF NEW.product_id IS NOT NULL THEN
   SELECT p.id,p.lifecycle_revision,p.current_revision,p.lifecycle_state
   INTO root_id,root_sequence,root_revision,root_state FROM public.products p
   WHERE p.org_id=NEW.org_id AND p.id=NEW.product_id FOR UPDATE;
+ ELSIF NEW.feature_id IS NOT NULL THEN
+  SELECT f.id,f.lifecycle_revision,f.current_revision,f.lifecycle_state
+  INTO root_id,root_sequence,root_revision,root_state FROM public.features f
+  WHERE f.org_id=NEW.org_id AND f.id=NEW.feature_id FOR UPDATE;
+ ELSIF NEW.certificate_id IS NOT NULL THEN
+  SELECT c.id,c.lifecycle_revision,c.current_revision,c.lifecycle_state
+  INTO root_id,root_sequence,root_revision,root_state FROM public.certificates c
+  WHERE c.org_id=NEW.org_id AND c.id=NEW.certificate_id FOR UPDATE;
  ELSIF NEW.template_id IS NOT NULL THEN
   SELECT t.id,t.lifecycle_revision,t.current_revision,t.lifecycle_state
   INTO root_id,root_sequence,root_revision,root_state FROM public.templates t
   WHERE t.org_id=NEW.org_id AND t.id=NEW.template_id FOR UPDATE;
  ELSE
-  SELECT f.id,f.lifecycle_revision,f.current_revision,f.lifecycle_state
-  INTO root_id,root_sequence,root_revision,root_state FROM public.features f
-  WHERE f.org_id=NEW.org_id AND f.id=NEW.feature_id FOR UPDATE;
+  SELECT p.id,p.lifecycle_revision,p.current_revision,p.lifecycle_state
+  INTO root_id,root_sequence,root_revision,root_state FROM public.org_profiles p
+  WHERE p.org_id=NEW.org_id AND p.id=NEW.profile_id FOR UPDATE;
  END IF;
  IF root_id IS NULL OR NEW.revision<>root_sequence+1 OR NEW.resource_revision<>root_revision
     OR NEW.before_state<>root_state OR NEW.after_state=NEW.before_state THEN
@@ -155,12 +165,18 @@ BEGIN
  IF NEW.product_id IS NOT NULL THEN
   UPDATE public.products p SET lifecycle_state=NEW.after_state,lifecycle_revision=NEW.revision
    WHERE p.org_id=NEW.org_id AND p.id=NEW.product_id;
+ ELSIF NEW.feature_id IS NOT NULL THEN
+  UPDATE public.features f SET lifecycle_state=NEW.after_state,lifecycle_revision=NEW.revision
+   WHERE f.org_id=NEW.org_id AND f.id=NEW.feature_id;
+ ELSIF NEW.certificate_id IS NOT NULL THEN
+  UPDATE public.certificates c SET lifecycle_state=NEW.after_state,lifecycle_revision=NEW.revision
+   WHERE c.org_id=NEW.org_id AND c.id=NEW.certificate_id;
  ELSIF NEW.template_id IS NOT NULL THEN
   UPDATE public.templates t SET lifecycle_state=NEW.after_state,lifecycle_revision=NEW.revision
    WHERE t.org_id=NEW.org_id AND t.id=NEW.template_id;
  ELSE
-  UPDATE public.features f SET lifecycle_state=NEW.after_state,lifecycle_revision=NEW.revision
-   WHERE f.org_id=NEW.org_id AND f.id=NEW.feature_id;
+  UPDATE public.org_profiles p SET lifecycle_state=NEW.after_state,lifecycle_revision=NEW.revision
+   WHERE p.org_id=NEW.org_id AND p.id=NEW.profile_id;
  END IF;
  RETURN NEW;
 END $$;
@@ -172,8 +188,10 @@ LANGUAGE plpgsql SET search_path=pg_catalog AS $$
 DECLARE root_id uuid; resource_kind text;
 BEGIN
  IF NEW.product_id IS NOT NULL THEN root_id:=NEW.product_id; resource_kind:='product';
+ ELSIF NEW.feature_id IS NOT NULL THEN root_id:=NEW.feature_id; resource_kind:='feature';
+ ELSIF NEW.certificate_id IS NOT NULL THEN root_id:=NEW.certificate_id; resource_kind:='certificate';
  ELSIF NEW.template_id IS NOT NULL THEN root_id:=NEW.template_id; resource_kind:='template';
- ELSE root_id:=NEW.feature_id; resource_kind:='feature'; END IF;
+ ELSE root_id:=NEW.profile_id; resource_kind:='profile'; END IF;
  IF NOT EXISTS(SELECT 1 FROM public.audit_logs a WHERE a.org_id=NEW.org_id AND a.object_id=root_id
    AND a.action='resource.' || resource_kind || '.' || CASE WHEN NEW.after_state='inactive' THEN 'deactivate' ELSE 'restore' END
    AND a.actor_user_id=NEW.actor_user_id AND a.actor_token_id IS NULL AND a.actor_kind='session'

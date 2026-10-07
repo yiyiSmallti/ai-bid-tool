@@ -557,11 +557,15 @@ def create_router(
         "/tasks/{task_id}/evidence-sources", name="evidence_source_list", response_model=Result
     )
     async def evidence_source_list(
-        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+        task_id: UUID,
+        history: bool = False,
+        cursor: str | None = None,
+        limit: int | None = None,
+        ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
         data, items, warnings = await evidence_sources.list_sources(
-            session, actor, task_id, history=history
+            session, actor, task_id, history=history, cursor=cursor, limit=limit, settings=settings
         )
         return result("evidence source list", data, items, warnings)
 

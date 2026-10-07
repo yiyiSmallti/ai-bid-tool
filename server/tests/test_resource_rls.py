@@ -29,7 +29,7 @@ from app.models.entities import (
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
-from task_fixtures import finish_scope, seed_task
+from task_fixtures import actor_context_async, finish_scope, seed_task
 
 TABLES = (
     "products",
@@ -1152,24 +1152,27 @@ async def test_source_sql_binding_limits_and_permanent_unconfirmed_state(
         values["preview"] = {**values["preview"], **patches[change]}
     db = Database(Settings())
     try:
-        with pytest.raises(DBAPIError) as error:
-            async with db.transaction(org) as session:
-                session.add(
-                    TaskCertificate(
-                        id=fresh_snapshot,
-                        org_id=org,
-                        task_id=own["task"],
-                        certificate_id=own["certificate"],
-                        certificate_revision_id=own["certificate_revision"],
-                        lot="Synthetic SQL check",
-                    )
-                )
-                await session.flush()
-                await session.execute(table.insert().values(**values))
-        assert error.value.orig.sqlstate == (
-            "23503" if change in key_changes or change == "actor" else "23514"
-        )
         async with db.transaction(org) as session:
+            # This valid pin is setup, not the rejected source under test. The
+            # library selection guard requires its real task owner's authority.
+            await actor_context_async(session, org, resource_rows["users"][0])
+            session.add(
+                TaskCertificate(
+                    id=fresh_snapshot,
+                    org_id=org,
+                    task_id=own["task"],
+                    certificate_id=own["certificate"],
+                    certificate_revision_id=own["certificate_revision"],
+                    lot="Synthetic SQL check",
+                )
+            )
+            await session.flush()
+            with pytest.raises(DBAPIError) as error:
+                async with session.begin_nested():
+                    await session.execute(table.insert().values(**values))
+            assert error.value.orig.sqlstate == (
+                "23503" if change in key_changes or change == "actor" else "23514"
+            )
             assert (await session.execute(select(table.c.id))).scalars().all() == [
                 own["evidence_source"]
             ]

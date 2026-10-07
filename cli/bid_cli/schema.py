@@ -19,6 +19,13 @@ from app.schemas.agent_contracts import (
     ExtractionArguments,
     JobStatusArguments,
 )
+from app.schemas.annotation_contracts import (
+    COMMAND_PAYLOADS as ANNOTATION_PAYLOADS,
+)
+from app.schemas.annotation_contracts import (
+    AnnotationInput,
+    AnnotationReleaseRetry,
+)
 from app.schemas.budget_contracts import (
     BudgetPlatformModelTest,
     BudgetProviderTest,
@@ -261,10 +268,16 @@ from pydantic import TypeAdapter
 from bid_cli.management_bindings import COMMAND_DATA as BINDING_COMMAND_DATA
 from bid_cli.management_bindings import COMMAND_INPUTS as BINDING_COMMAND_INPUTS
 from bid_cli.management_bindings import COMMAND_ITEMS as BINDING_COMMAND_ITEMS
+from bid_cli.management_certificates import COMMAND_DATA as CERTIFICATE_COMMAND_DATA
+from bid_cli.management_certificates import COMMAND_INPUTS as CERTIFICATE_COMMAND_INPUTS
+from bid_cli.management_certificates import COMMAND_ITEMS as CERTIFICATE_COMMAND_ITEMS
 from bid_cli.management_features import COMMAND_DATA as FEATURE_COMMAND_DATA
 from bid_cli.management_features import COMMAND_INPUTS as FEATURE_COMMAND_INPUTS
 from bid_cli.management_features import COMMAND_ITEMS as FEATURE_COMMAND_ITEMS
 from bid_cli.management_products import COMMAND_DATA, COMMAND_INPUTS, COMMAND_ITEMS
+from bid_cli.management_profiles import COMMAND_DATA as PROFILE_COMMAND_DATA
+from bid_cli.management_profiles import COMMAND_INPUTS as PROFILE_COMMAND_INPUTS
+from bid_cli.management_profiles import COMMAND_ITEMS as PROFILE_COMMAND_ITEMS
 from bid_cli.management_templates import COMMAND_DATA as TEMPLATE_COMMAND_DATA
 from bid_cli.management_templates import COMMAND_INPUTS as TEMPLATE_COMMAND_INPUTS
 from bid_cli.management_templates import COMMAND_ITEMS as TEMPLATE_COMMAND_ITEMS
@@ -755,6 +768,15 @@ COMMANDS.update(COMMAND_INPUTS)
 COMMANDS.update(FEATURE_COMMAND_INPUTS)
 COMMANDS.update(TEMPLATE_COMMAND_INPUTS)
 COMMANDS.update(BINDING_COMMAND_INPUTS)
+COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
+COMMANDS.update(PROFILE_COMMAND_INPUTS)
+
+# Registered commands and discovery share one inventory; the legacy snapshot above
+# intentionally excludes this Result 4.0-only slice.
+
+COMMANDS.update({name: None for name in ANNOTATION_PAYLOADS if "--dry-run" not in name})
+COMMANDS["evidence stamp"] = AnnotationInput
+COMMANDS["evidence annotation release retry"] = AnnotationReleaseRetry
 
 
 def command_schema(app=None, version: str = "4.0") -> dict:
@@ -829,6 +851,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | FEATURE_COMMAND_DATA
                     | TEMPLATE_COMMAND_DATA
                     | BINDING_COMMAND_DATA
+                    | CERTIFICATE_COMMAND_DATA
+                    | PROFILE_COMMAND_DATA
                 ).items()
             }
         )
@@ -840,6 +864,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | FEATURE_COMMAND_ITEMS
                     | TEMPLATE_COMMAND_ITEMS
                     | BINDING_COMMAND_ITEMS
+                    | CERTIFICATE_COMMAND_ITEMS
+                    | PROFILE_COMMAND_ITEMS
                 )
             }
         )
@@ -971,10 +997,43 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
     for name, model in (
-        COMMAND_ITEMS | FEATURE_COMMAND_ITEMS | TEMPLATE_COMMAND_ITEMS | BINDING_COMMAND_ITEMS
+        COMMAND_ITEMS
+        | FEATURE_COMMAND_ITEMS
+        | CERTIFICATE_COMMAND_ITEMS
+        | PROFILE_COMMAND_ITEMS
+        | TEMPLATE_COMMAND_ITEMS
+        | BINDING_COMMAND_ITEMS
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
+    if version == "4.0":
+        from app.schemas.annotation_contracts import (
+            COMMAND_PAYLOADS,
+            AnnotationCandidateView,
+            AnnotationPreflight,
+            AnnotationPreflightRequest,
+            AnnotationSubmit,
+        )
+
+        for name, (data_model, item_model) in COMMAND_PAYLOADS.items():
+            if name.endswith(" --dry-run"):
+                continue
+            schema["commands"][name]["output"] = data_model.model_json_schema()
+            if item_model:
+                schema["commands"][name]["items"] = item_model.model_json_schema()
+        from app.schemas.annotation_contracts import ENABLED_SOURCE_KINDS
+
+        schema["commands"]["evidence stamp"]["enabled_source_kinds"] = list(ENABLED_SOURCE_KINDS)
+        schema["commands"]["evidence stamp"]["wait_output"] = (
+            AnnotationCandidateView.model_json_schema()
+        )
+        schema["commands"]["evidence stamp"]["preflight"] = AnnotationPreflight.model_json_schema()
+        schema["commands"]["evidence stamp"]["http_preflight_input"] = (
+            AnnotationPreflightRequest.model_json_schema()
+        )
+        schema["commands"]["evidence stamp"]["http_submit_input"] = (
+            AnnotationSubmit.model_json_schema()
+        )
     if version == "4.0":
         from app.schemas.budget_contracts import (
             BudgetPreflightData,

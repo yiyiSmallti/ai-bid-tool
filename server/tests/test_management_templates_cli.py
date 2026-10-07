@@ -332,8 +332,8 @@ def test_management_templates_schema_and_legacy_list(monkeypatch, capsys):
     for command in ("browse", "show", "history", "lifecycle set", "lifecycle history"):
         entry = commands["resource template " + command]
         assert entry["input"] is not None and entry["output"] is not None
-        for kind in ("certificate", "profile"):
-            assert "resource " + kind + " " + command not in commands
+        for kind in ("product", "feature", "certificate", "profile", "template"):
+            assert "resource " + kind + " " + command in commands
     assert "ResourceQuery" in json.dumps(commands["resource template browse"])
     assert "revision_id" in json.dumps(commands["resource template show"])
     cli.main(["--contract-version", "3.0", "schema", "--json"])

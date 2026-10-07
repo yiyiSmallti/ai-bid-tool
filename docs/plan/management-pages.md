@@ -4,18 +4,23 @@ kind: plan
 
 # Contract: U01 org management pages
 
-Status: **approved; product, feature and template slices implemented**. This contract covers the remaining
-management-page scope of [roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
-The product, feature and template slices supply bounded browse/search, creation, exact
+Status: **approved; product, feature, certificate/profile and template slices implemented**.
+This contract covers the remaining management-page scope of
+[roadmap U01](roadmap.md#coverage-matrix-providers-memory-dashboard-agent-and-cli).
+The implemented resource slices supply bounded browse/search, creation, exact
 revision detail, revision history, human deactivate/restore with independent
 lifecycle events, and explicit task pinning. Features add same-org product and
-implementation-state filters. Templates add original DOCX access and human-reviewed
-immutable export bindings. Other resource kinds and settings remain later slices.
+implementation-state filters. Certificates/profiles add exact original-file
+inspection, explicit certificate date advisories and bidder/admin lifecycle
+authority. Templates add original DOCX access and human-reviewed immutable export
+bindings. Configuration, memory and confidential-page changes remain later slices.
 The [Pydantic v2 models and service interfaces](management-pages/management_pages_contracts.py)
 remain approval artifacts; [runtime management contracts](../../server/app/schemas/management_pages.py)
 and the [mechanism note](../notes/management-pages.md) define the implemented path.
-Database, real-browser and fixed-scale acceptance require execution in the main
-integration environment; static checks and mocked fixtures do not establish that acceptance.
+Merged database, real-browser and fixed-scale acceptance remains pending. Earlier
+slice checks do not establish acceptance of the integrated migration chain;
+[shipped changes](../changelog.md#2026-10-06-template-and-binding-management-slice)
+record the template scope and its acceptance limitation.
 
 ## Goal and boundary
 
@@ -56,14 +61,14 @@ page, searching, loading history or editing a form.
 | --- | --- | --- |
 | Resource routes | `create_router` in [api/resources.py](../../server/app/api/resources.py) registers products/features/certificates/profiles/templates, revision writes, task selections and file access | No `resources*` split module is assumed. Legacy library lists retain full revisions and a full `current_revisions` map; the implemented management slices add bounded projections and lifecycle without changing these outputs |
 | Product/feature/profile/certificate services | [resources.py](../../server/app/services/resources.py) `create_product/update_product/list_products`; [features.py](../../server/app/services/features.py) `create_feature/update_feature/list_features`; [certificates.py](../../server/app/services/certificates.py) `create_certificate/update_certificate/inspect_dates`; [profiles.py](../../server/app/services/profiles.py) `create_profile/update_profile` | Preserve declaration warnings. Product/feature data is not proof; feature status literals are `implemented/developing/planned`. Certificate date checks require explicit `as_of` and do not certify authenticity |
-| Shared revisions | [versioned.py](../../server/app/services/versioned.py) `create/update/list_revisions/select_revision/list_selections/check_placeholders` | Root pointers, immutable revisions and task pins already exist. There is no root lifecycle state. Existing updates can fail `affected_task_limit` above 100 associated tasks, including historical selections; the UI must not promise arbitrary fan-out |
+| Shared revisions | [versioned.py](../../server/app/services/versioned.py) `create/update/list_revisions/select_revision/list_selections/check_placeholders` | Root pointers, immutable revisions and task pins already exist. Management adds independent root lifecycle state for all five library kinds. Existing updates can fail `affected_task_limit` above 100 associated tasks, including historical selections; the UI must not promise arbitrary fan-out |
 | Certificate originals | [certificate_files.py](../../server/app/services/certificate_files.py) `create_file/list_files/read_revision`; [certificate_file_contracts.py](../../server/app/schemas/certificate_file_contracts.py) | File replacement creates a new metadata revision plus original/parts. A metadata-only revision does not inherit the old file |
 | Templates and bindings | [templates.py](../../server/app/services/templates.py), [template_files.py](../../server/app/services/template_files.py) `validate_template`; [exports.py](../../server/app/services/exports.py) `human_access/create_binding/list_bindings/build_manifest/release/download_gate` | DOCX revisions and immutable bindings are separate. Template upload does not create a reviewed binding. Old adapter bindings remain visible with `current=false`; legacy lists are unbounded, while management routes add bounded template/binding reads |
 | Configuration | [api/providers.py](../../server/app/api/providers.py); [provider_configs.py](../../server/app/services/provider_configs.py) `require_access/set_config/list_configs/config_view/catalog_view/balance_view/submit_test/preview_test` | Only `llm_extract`, org BYOK and platform model selection exist. The design's OCR/vision/search/embedding configuration and task provider profiles are deferred. Existing `GET /providers` can query vendor balance; history includes unbounded per-revision usage aggregation |
 | Platform secrets | [platform_credentials.py](../../server/app/services/platform_credentials.py), [configured.py](../../server/app/providers/configured.py), [ADR 0006](../adr/0006-platform-credentials.md) | Separate platform operator console (平台运营后台), TOTP and restricted connection roles. No org-facing credential resolver or platform-key management. No env fallback |
 | Memory | [api/memory.py](../../server/app/api/memory.py), [memory/access.py](../../server/app/memory/access.py), [crud.py](../../server/app/memory/crud.py), [feedback.py](../../server/app/memory/feedback.py), [candidates.py](../../server/app/memory/candidates.py), [retrieval.py](../../server/app/memory/retrieval.py), [safety.py](../../server/app/memory/safety.py) | Org scope and keyword retrieval only; four-scope schema enums do not enable the other scopes or embeddings. Management list is paged but has no text/tag/expired filter. Retrieval is not a complete library search |
 | Confidential data | [api/confidential.py](../../server/app/api/confidential.py), [confidential.py](../../server/app/services/confidential.py) `update_field/set_value/list_values/history/reveal` | Field label/archive updates mutate a metadata row with a revision counter; there is no field-metadata revision archive. Value versions are immutable and encrypted. Existing value writes serialize under a field lock but have no optimistic value precondition |
-| Console | [router.js](../../web/src/router.js), [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue), [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [api.js](../../web/src/api.js), [task-authority.js](../../web/src/task-authority.js) | Profiles, embedded certificates and confidential fields already have pages. Product, feature and template management slices add separate pages; org provider and memory pages remain deferred. The org path allowlist must gain exact new paths, not an unrestricted API proxy |
+| Console | [router.js](../../web/src/router.js), [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue), [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [api.js](../../web/src/api.js), [task-authority.js](../../web/src/task-authority.js) | Profiles, embedded certificates and confidential fields already have pages. Product, feature, certificate/profile and template management pages are implemented; org provider and memory pages remain deferred. The org path allowlist must gain exact new paths, not an unrestricted API proxy |
 | Team and cost | [task_workflow.py](../../server/app/services/task_workflow.py) `live_actor/access`; [task_authorization.py](../../server/app/services/task_authorization.py) `task_authorized`; [contracts.py](../../server/app/schemas/contracts.py) `CONTRACT_VERSION/Cost/Result`; [budget](budget.md) | Task membership/archival and Result 4.0 budgets are present. Earlier passages in memory/assessment plans saying task membership is absent, or in check plans saying budgets are not enforced, cannot describe these pages' gates |
 
 The design says every resource change is versioned. Confidential field metadata
@@ -95,7 +100,7 @@ Resolve authors for only the page's revision IDs through one indexed audit query
 Do not invent an assigned person or derive ownership from the last editor. Task
 owners/assignees remain in team workflow.
 
-The implemented product, feature and template detail projections add `revised_at` and nullable
+The implemented resource detail projections add `revised_at` and nullable
 `revised_by` for the exact viewed revision. This avoids walking content-history
 pages to find a historical author; the existing resource revision write receipts
 and legacy list outputs remain unchanged.
@@ -166,9 +171,30 @@ material; feature maintenance never replaces screenshots or confirms evidence.
 Migration [0050](../../server/migrations/versions/0050_feature_library.py) adds the
 feature lifecycle baseline and extends lifecycle events with nullable product and
 feature arms, exactly one root per event, composite root/revision foreign keys and
-per-arm unique sequence indexes. Other resource arms remain deferred. An inactive
+per-arm unique sequence indexes. Certificate/profile and template arms are added
+by their respective slices below. An inactive
 parent product blocks new feature associations and new/replacement feature pins;
 existing exact active pins remain idempotent and historical pins stay intact.
+
+### Third vertical slice
+
+The certificate/profile slice extends `/app/org/profiles` and `CertificateSection`
+with bounded prefix search and lifecycle filtering, plus `/app/org/profiles/:id`
+and `/app/org/certificates/:id` for exact declarations, complete revisions, separate
+histories and explicit authorized task pins. Certificate detail includes only its
+selected revision's original/parts. Metadata-only revisions explicitly have no
+original; uploads return a new revision for deliberate inspection. Date advice uses
+an explicit `as_of`, and original downloads preserve the existing same-org signature,
+authentication and file scopes. No confidential values are loaded into these forms.
+
+Migration [0052](../../server/migrations/versions/0052_certificate_profile_library.py)
+extends the retained lifecycle table with certificate/profile arms, exactly-one-root
+and composite revision constraints, per-arm indexes, FORCE RLS and human bidder/admin
+guards. It adds safe prefix indexes and page-revision audit indexes, including
+certificate-file creation authors. New human-only lifecycle scopes are guarded in
+both application identity checks and the database token CHECK. Selection guards keep
+task-first locking and run business checks after RLS/composite foreign keys. Existing
+pins, file bytes and evidence-source archives are retained.
 
 ### Template vertical slice
 
@@ -180,7 +206,7 @@ sections, preview against the template hash, inspect the original's static conte
 and explicitly create against the returned static hash. Human bidders inspect
 existing bindings; legacy bindings remain visible with `current=false`.
 
-Migration [0052](../../server/migrations/versions/0052_template_library.py) adds the
+Migration [0054](../../server/migrations/versions/0054_template_library.py) adds the
 template lifecycle arm, bounded-read indexes and original-file human scope guard.
 Inactive templates reject new or replacement task pins while preserving an exact
 active-pin replay and historical selections. Direct binding links resolve their path revision UUID with the additive bounded
@@ -191,9 +217,9 @@ Original reads require
 `template:read` and human-only `template:file:read`; template upload retains its
 existing token eligibility. Binding preview/create retain their existing human gates.
 
-Certificate/profile page integration, providers, memory and confidential-page
-changes remain later slices. Database, real-browser and measured fixed-scale
-acceptance for the implemented slices remain integration checks.
+Providers, memory and confidential-page changes remain later slices. Database,
+real-browser and measured fixed-scale acceptance of the integrated slices remains
+pending; DB-free checks do not complete that acceptance.
 
 ## Permission and task boundaries
 
@@ -210,7 +236,7 @@ Read-only `org_id` in projections comes from the authenticated context.
 | Create/revise org profile | Yes | Yes | No | No | `profile:write` |
 | Create/revise template file | Yes | No | No | No | Existing `template:write` may be issued; upload itself is not human-only |
 | Open template original | Yes | Yes | Yes | Yes | Never; human `template:file:read` plus `template:read` |
-| Proposed library deactivate/restore | Yes | Certificates/profiles only | Products/features only | No | Refused by explicit human-session gate, even with a resource write scope |
+| Library deactivate/restore | Yes | Certificates/profiles only | Products/features only | No | Refused by explicit human-session gate, even with a resource write scope |
 | Read/create export binding | Both | Read | Neither | Neither | Neither; preserve `exports.human_access` |
 | Read model config/catalog/history | Yes | Yes | Yes | Yes | `provider:read`; no platform secrets |
 | Set provider config/test connection | Yes | No | No | No | Never; human `provider:write` |
@@ -224,8 +250,10 @@ The same service rules apply from UI, CLI and API. Tokens never receive **any**
 human-only scope, including `evidence:confirm`, `export`, `template:file:read`, `provider:write`,
 `confidential:write/reveal`, `memory:approve/manage/eval:read/eval:review`, or team
 human scopes. Token creation and database CHECK protections remain in force.
-Proposed lifecycle uses a session gate plus the resource's existing write scope;
-it does not add a broadly issuable management scope. Built-in agents have their
+Lifecycle uses a session gate plus the resource's existing write scope;
+it does not add a broadly issuable management scope. Certificate/profile lifecycle
+also requires the matching human-only `certificate:lifecycle` or `profile:lifecycle`
+role scope; both are refused by token issuance and the database CHECK. Built-in agents have their
 own narrower `AGENT_SCOPES`; token eligibility does not expand that allowlist.
 
 Org library permission confers no task permission. Any source link, feedback,
@@ -473,9 +501,9 @@ root remains active; check both roots in stable ID order after task locks.
 
 ## HTTP and Pydantic interfaces
 
-Product, feature and template query, detail, history and lifecycle paths, plus
-binding query/detail, are implemented under `/v4`; paths for other kinds and areas
-remain proposed and have no placeholder handlers. Paths in existing tables omit `/v4` for readability; new pages request
+Product, feature, certificate, profile and template query, detail, history and
+lifecycle paths, plus binding query/detail, are implemented under `/v4`. Paths for
+other areas remain proposed and have no placeholder handlers. Paths in existing tables omit `/v4` for readability; new pages request
 version 4 explicitly through `orgRequest`/`api.request(contractVersion:4)`. Existing
 unprefixed routes retain compatibility projections. Register fixed query/history
 paths before UUID routes and extend the browser allowlist by exact route pattern.
@@ -491,7 +519,8 @@ second nested envelope or a full-library metadata map. Detail objects occupy
 | Proposed HTTP route | Request → data/items | Service Protocol / authority |
 | --- | --- | --- |
 | `POST /v4/management/resources/{K}/query` | `ResourceQuery` → `PageData` / `ResourceRow[]` | `ManagementResourceReads.query`; kind's read scope |
-| `GET /v4/management/resources/{K}/{R}?revision=N` | `ResourceDetailQuery` → `ResourceDetailData` | `detail`; latest when revision omitted, exact historical revision otherwise |
+| `GET /v4/management/resources/{K}/{R}?revision=N` | `ResourceDetailQuery` → `ResourceDetailData` | `detail`; latest when revision omitted, exact historical revision otherwise; certificate detail accepts optional explicit `as_of` |
+| `GET /v4/management/resources/templates/{R}?revision_id=UUID` | `TemplateDetailQuery` → `TemplateDetailData` | Exact same-org root/revision UUID; numeric `revision` and UUID are mutually exclusive |
 | `POST /v4/management/resources/{K}/{R}/history/query` | `PageQuery` → `PageData` / `ResourceHistoryRow[]` | `history`; one root only, fetch full content by exact detail |
 | `POST /v4/management/resources/{K}/{R}/lifecycle` | `ResourceLifecycleSet` → `ResourceLifecycleData` | `ManagementResourceLifecycle.set_state`; human + kind's write scope |
 | `POST /v4/management/resources/{K}/{R}/lifecycle/history/query` | `PageQuery` → `PageData` / `ResourceLifecycleEvent[]` | `lifecycle_history`; kind's read scope |
@@ -707,8 +736,8 @@ and fixed error code without request/response capture.
 
 ## Test plan and repeatable artifacts
 
-The product, feature and template slices have API/PostgreSQL, CLI, fixed-scale and
-mocked-browser acceptance tests. The following remain implementation acceptance requirements for their
+The product, feature, certificate/profile and template slices have API/PostgreSQL,
+CLI, fixed-scale and mocked-browser acceptance tests. The following remain implementation acceptance requirements for their
 respective slices; neither code inspection nor mocked
 Playwright proves database authorization. Use the project's fake Providers and
 synthetic files; no real external services or secrets. The main integration
@@ -750,14 +779,15 @@ Use a canary input only in memory and assert its absence from outputs/logs/artif
 ### Playwright mocked-API and real integration
 
 Use [product scenarios](../../web/e2e/management-pages.spec.js),
-[feature scenarios](../../web/e2e/feature-management.spec.js) and
+[feature scenarios](../../web/e2e/feature-management.spec.js),
+[certificate/profile scenarios](../../web/e2e/qualification-management.spec.js) and
 [template scenarios](../../web/e2e/template-management.spec.js), following
 [console-assessments.spec.js](../../web/e2e/console-assessments.spec.js) and
 [team-workflow.spec.js](../../web/e2e/team-workflow.spec.js), using the built app and
 stateful intercepted `/v4` API calls. Fixtures are test-only; production pages
 must have no mock/sample/fixture fallback.
 
-Cover product and feature slices and old task pins; filters/cursors/cancelled responses;
+Cover product, feature, certificate/profile and template slices and old task pins; filters/cursors/cancelled responses;
 empty/error/oversize pages; two org switch with late response; all role/task matrices;
 conflict with unsaved edits; revision/file/history distinction; inactive selection;
 binding preview and static-hash mismatch; provider key submission once and absence
@@ -780,7 +810,7 @@ built app is:
 
 ```sh
 cd web
-E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js e2e/feature-management.spec.js e2e/template-management.spec.js
+E2E_BASE_URL=http://127.0.0.1:8000 E2E_OUTPUT=../data/work/management-pages-validation/browser npx playwright test e2e/management-pages.spec.js e2e/feature-management.spec.js e2e/qualification-management.spec.js e2e/template-management.spec.js
 ```
 
 Each spec must validate that its resolved output directory is inside the

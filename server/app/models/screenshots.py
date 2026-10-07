@@ -7,10 +7,12 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKeyConstraint,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -193,6 +195,8 @@ class ScreenshotRendition(Scoped, Tenant, Base):
     mapping: Mapped[dict] = mapped_column(JSONB)
     image: Mapped[dict] = mapped_column(JSONB)
     profile: Mapped[str] = mapped_column(String(40))
+    renderer_identity: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True))
+    provenance_sha256: Mapped[str | None] = mapped_column(String(64))
     storage_key: Mapped[str] = mapped_column(Text)
     generation_job_id: Mapped[UUID | None] = mapped_column()
     actor_user_id: Mapped[UUID] = mapped_column()
@@ -200,7 +204,36 @@ class ScreenshotRendition(Scoped, Tenant, Base):
         *scope(),
         UniqueConstraint("org_id", "asset_id", "id"),
         UniqueConstraint("org_id", "asset_id", "id", "image_sha256"),
-        UniqueConstraint("org_id", "asset_id", "parent_rendition_id", "plan_sha256", "profile"),
+        UniqueConstraint(
+            "org_id",
+            "task_id",
+            "extraction_job_id",
+            "asset_id",
+            "id",
+            name="annotation_rendition_scope",
+        ),
+        Index(
+            "screenshot_rendition_legacy_identity",
+            "org_id",
+            "asset_id",
+            "parent_rendition_id",
+            "plan_sha256",
+            "profile",
+            unique=True,
+            postgresql_where=text("profile IN ('screenshot-markup-v1','prototype-clean-v1')"),
+        ),
+        Index(
+            "screenshot_rendition_annotation_identity",
+            "org_id",
+            "asset_id",
+            "parent_rendition_id",
+            "plan_sha256",
+            "profile",
+            "renderer_identity",
+            "provenance_sha256",
+            unique=True,
+            postgresql_where=text("profile IN ('annotation-candidate-v1','annotation-release-v1')"),
+        ),
         fk(["task_id", "asset_id"], "screenshot_assets", ["task_id", "id"]),
         fk(["asset_id", "parent_rendition_id"], "screenshot_renditions", ["asset_id", "id"]),
         fk(
@@ -217,7 +250,12 @@ class ScreenshotRendition(Scoped, Tenant, Base):
         CheckConstraint(
             "image_sha256 ~ '^[0-9a-f]{64}$' AND upload_sha256 ~ '^[0-9a-f]{64}$' AND plan_sha256 ~ '^[0-9a-f]{64}$'"
         ),
-        CheckConstraint("profile IN ('screenshot-markup-v1','prototype-clean-v1')"),
+        CheckConstraint(
+            "profile IN ('screenshot-markup-v1','prototype-clean-v1','annotation-candidate-v1','annotation-release-v1')"
+        ),
+        CheckConstraint(
+            "profile NOT IN ('annotation-candidate-v1','annotation-release-v1') OR (renderer_identity IS NOT NULL AND provenance_sha256 IS NOT NULL AND provenance_sha256 ~ '^[0-9a-f]{64}$')"
+        ),
     )
 
 
@@ -229,9 +267,11 @@ class ScreenshotPrivacyReview(Scoped, Tenant, Base):
     stored_image_sha256: Mapped[str] = mapped_column(String(64))
     reviewed_by: Mapped[UUID] = mapped_column()
     rule_version: Mapped[str] = mapped_column(String(40))
+    annotation_request_id: Mapped[UUID | None] = mapped_column()
     __table_args__ = (
         *scope(),
         UniqueConstraint("org_id", "asset_id"),
+        fk(["task_id", "annotation_request_id"], "annotation_requests", ["task_id", "id"]),
         UniqueConstraint("org_id", "asset_id", "id"),
         fk(["task_id", "asset_id"], "screenshot_assets", ["task_id", "id"]),
         fk(

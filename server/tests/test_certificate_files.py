@@ -300,10 +300,17 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
     assert "template:file:read" in HUMAN_ONLY_SCOPES
     assert "template:file:read" not in SCOPES
 
-    requirement_scopes = {"req:confirm", "req:manual"}
+    lifecycle_scopes = {"certificate:lifecycle", "profile:lifecycle"}
+    assert ROLE_SCOPES[role] & lifecycle_scopes == (
+        lifecycle_scopes if role in {"admin", "bidder"} else set()
+    )
+    assert lifecycle_scopes <= HUMAN_ONLY_SCOPES
+    assert lifecycle_scopes.isdisjoint(SCOPES)
+    requirement_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
     assert ROLE_SCOPES[role] & requirement_scopes == (
         requirement_scopes if role in {"admin", "bidder", "technical"} else set()
     )
+    assert requirement_scopes <= HUMAN_ONLY_SCOPES
     assert requirement_scopes.isdisjoint(SCOPES)
 
     row, task = await setup(api, headers[0])
@@ -319,10 +326,13 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
     old = OLD_ROLE_SCOPES
     assert ROLE_SCOPES[role] - {
         "template:file:read",
+        "certificate:lifecycle",
+        "profile:lifecycle",
         "certificate:file:read",
         "certificate:file:write",
         "evidence:source:read",
         "evidence:source:write",
+        "evidence:annotate",
         "billing:read",
         "billing:redeem",
         "provider:read",
