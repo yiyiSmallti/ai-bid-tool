@@ -80,9 +80,9 @@ export function simulatedSelections(taskId) {
   }
   return simulated.get(taskId);
 }
-export async function downloadOriginal(linkPath, name) {
-  const signed = await orgRequest("GET", linkPath);
-  const blob = await orgRequest("GET", signed.data.url, undefined, { binary: true });
+export async function downloadOriginal(linkPath, name, authenticatedRequest = orgRequest) {
+  const signed = await authenticatedRequest("GET", linkPath);
+  const blob = await authenticatedRequest("GET", signed.data.url, undefined, { binary: true });
   if (!["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"].includes(blob.type)) throw new Error("原件类型不符合约定");
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click();

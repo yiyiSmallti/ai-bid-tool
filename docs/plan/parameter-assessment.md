@@ -4,14 +4,14 @@ kind: plan
 
 # B03 typed parameter assessment contract
 
-Status: **pending approval, not implemented**.
+Status: **Approved with all recommended defaults, not implemented**.
 
-This draft covers B03 in [the roadmap](roadmap.md), with consumption boundaries for
+This contract covers B03 in [the roadmap](roadmap.md), with consumption boundaries for
 B02/B04/B07–B11, R02/R03/R06, C01/C02 and E01/E02. The importable
 [Pydantic v2 contract](parameter-assessment/parameter_assessment_contracts.py) declares
 payloads, Provider/service interfaces and Result projections. It registers no runtime
-behavior. Recommended defaults in [open decisions](#open-decisions) need owner approval
-under [agent.md](../../agent.md#workflow) before implementation.
+behavior. Implementation follows the approved [decisions](#decisions) under
+[agent.md](../../agent.md#workflow).
 
 ## Goal and boundary
 
@@ -45,7 +45,7 @@ by the deterministic comparator.
 
 ## Current code basis and design differences
 
-The following paths describe the integration baseline, not implementation of this draft.
+The following paths describe the integration baseline, not implementation of this contract.
 
 | Current code anchor | Existing behavior and B03 difference |
 | --- | --- |
@@ -185,7 +185,7 @@ Versioned release manifests pin parameter aliases, dimensions, unit aliases, con
 entries, grammar and comparator independently, plus a manifest SHA256. Store every
 version used in immutable assessment inputs. Releases are reviewed repository artifacts
 under a future `server/app/data/parameter_rules/` package, with source references and
-golden boundary vectors. This draft adds no tables of executable rules and no dependency.
+golden boundary vectors. This contract adds no tables of executable rules and no dependency.
 Runtime rejects unknown versions/checksum mismatches. A later release cannot mutate a
 historical table or silently upgrade a task's accepted assessment.
 
@@ -352,7 +352,7 @@ worker is delayed.
 
 ## Data model and migration outline
 
-These are proposed org business tables, not migrations in this draft. Every row has
+These are proposed org business tables, not migrations in this contract. Every row has
 `org_id UUID NOT NULL`, `task_id UUID NOT NULL`, primary key `id`, unique `(org_id,id)`
 and `(org_id,task_id,id)` where referenced. Task, requirement, job, resource revision,
 selection, archive, card revision and decision references use composite org keys;
@@ -607,7 +607,7 @@ source/history views, without disabled controls suggesting they can grant approv
 ## Verification and evaluation plan
 
 Before implementation, enumerate failure cases above and freeze contract/schema/CLI
-examples. This draft's verification is limited to ruff, format, pyright and import;
+examples. This contract's own verification is limited to ruff, format, pyright and import;
 it does not claim runtime, database, provider effectiveness or browser acceptance.
 Implementation should prioritize end-to-end acceptance against the actual routes and
 roles, with fake Providers in CI. No post-implementation unit tests that merely mirror
@@ -638,7 +638,7 @@ comes from guessing. Fake Providers drive CI reproducibly.
 Public evaluation uses a separately acquired and hashed set of publicly available
 hardware tender PDFs/Word documents and matching official vendor specifications, with
 source URLs, publication/capture dates, permitted reuse/attribution, exact models and
-human annotations. No documents are downloaded or real models called by this draft.
+human annotations. No documents are downloaded or real models called by this contract.
 Use two annotators, adjudicate disagreement, and split by procurement/project/vendor
 family so near-duplicate templates do not leak between development and held-out sets.
 Record unmatchable models and missing official materials rather than excluding them to
@@ -660,11 +660,11 @@ human labels and metric reports as versioned artifacts. Prompt/model/table chang
 the same frozen set and compare regressions; evaluation never auto-approves production
 requirements or imports one org's private data into a global test set.
 
-## Open decisions
+## Decisions
 
-All entries are recommendations pending owner approval, not accepted implementation choices.
+The owner approved every recommended default; implementation follows these decisions.
 
-| Decision | Recommended default | Reason |
+| Decision | Approved default | Reason |
 | --- | --- | --- |
 | First vocabulary and expression scope | Six registry keys listed above, finite aliases, flat all/any, explicit numeric/range/set/Boolean semantics. | Delivers useful hardware/feature cases without pretending to understand every specification. |
 | Legacy `Requirement.condition` | Preserve as historical free JSON; typed sidecar with explicit source/B02 bindings. | Avoids retroactive approval and a breaking extraction contract. |

@@ -50,6 +50,11 @@ INVALID_IMAGE_CODES = frozenset(
         "vendor_provenance_integrity",
         "missing_privacy_review",
         "source_integrity",
+        "source_inactive",
+        "source_withdrawn",
+        "source_integrity_failure",
+        "requirement_review_not_current",
+        "privacy_lineage_invalid",
     }
 )
 
@@ -183,6 +188,8 @@ async def resolve_source(session, actor, task_id, extraction_id, source, crypto=
 
 
 def rendition_view(row):
+    if row.profile.startswith("annotation-"):
+        fail("annotation_route_required", "Use the typed annotation view for this rendition", 400)
     return {
         "id": str(row.id),
         "asset_id": str(row.asset_id),
@@ -274,7 +281,9 @@ async def asset_view(session, actor, asset):
         "org_id": str(asset.org_id),
         "task_id": str(asset.task_id),
         "extraction_job_id": str(asset.extraction_job_id),
-        "source": asset.source,
+        "source": {
+            key: value for key, value in asset.source.items() if key != "annotation_request_id"
+        },
         "image_kind": asset.image_kind,
         "origin": asset.origin,
         "selection_id": str(selected_id),
@@ -314,6 +323,10 @@ async def rendition_access(session, actor, rendition_id, *, active=True, storage
     review = await session.get(ScreenshotPrivacyReview, row.privacy_review_id)
     if review is None or review.asset_id != asset.id:
         fail("missing_privacy_review", "Privacy review is missing", 409, 4)
+    if row.profile.startswith("annotation-"):
+        from app.services.annotations import rendition_gate
+
+        await rendition_gate(session, actor, row, storage=storage, active=active)
     if storage is not None:
         await read_rendition(storage, asset, row)
     return asset, row
@@ -323,12 +336,14 @@ async def read_rendition(storage, asset, row):
     from app.providers.screenshot_renderer import validate_png
 
     try:
-        png = await storage.read(asset.org_id, row.storage_key)
+        png = await storage.read_bounded(
+            asset.org_id, row.storage_key, min(MAX_BYTES, row.image["size_bytes"])
+        )
         descriptor = validate_png(png)
     except ProviderFailure:
         fail("image_integrity", "Stored image failed integrity checks", 409, 4)
     except ServiceError as exc:
-        if exc.code in {"missing_file", "unreadable_file", "storage_conflict"}:
+        if exc.code in {"missing_file", "unreadable_file", "storage_conflict", "file_size_limit"}:
             fail("image_integrity", "Stored image failed integrity checks", 409, 4)
         raise
     if descriptor != row.image or descriptor["sha256"] != row.image_sha256:
@@ -347,7 +362,7 @@ async def show(session, actor, asset_id):
     ).all()
     return {
         "asset": await asset_view(session, actor, asset),
-        "renditions": [rendition_view(r) for r in rows],
+        "renditions": [rendition_view(r) for r in rows if not r.profile.startswith("annotation-")],
     }
 
 
@@ -634,6 +649,12 @@ async def resolve_image_material(
         or asset.extraction_job_id != extraction_job_id
     ):
         raise not_found()
+    if row.profile == "annotation-release-v1":
+        fail(
+            "annotation_release_not_source",
+            "A confirmed release cannot be used as new Evidence",
+            400,
+        )
     if row.image_sha256 != item.expected_image_sha256:
         fail("image_hash_mismatch", "Image changed", 409)
     mapping = ContentMapping.model_validate(row.mapping)
@@ -714,8 +735,30 @@ async def image_evidence_view(session, actor, row):
     rendition = await session.get(ScreenshotRendition, row.screenshot_rendition_id)
     if rendition is None:
         raise not_found()
+    if rendition.profile == "annotation-candidate-v1":
+        from app.models.annotations import AnnotationMaterial
+        from app.schemas.screenshot_contracts import AnnotationEvidenceRendition
+        from app.services.annotations import material_validity
+
+        material = await session.scalar(
+            select(AnnotationMaterial).where(AnnotationMaterial.rendition_id == rendition.id)
+        )
+        current = await material_validity(session, actor, material) if material else None
+        active = active and current is not None and current.validity == "current"
+        image_view = AnnotationEvidenceRendition(
+            id=rendition.id,
+            asset_id=asset.id,
+            image=rendition.image,
+            plan=rendition.plan,
+            plan_sha256=rendition.plan_sha256,
+            profile=rendition.profile,
+            mapping=rendition.mapping,
+            privacy_review_id=rendition.privacy_review_id,
+        ).model_dump(mode="json")
+    else:
+        image_view = rendition_view(rendition)
     return {
-        "image_rendition": rendition_view(rendition),
+        "image_rendition": image_view,
         "id": str(row.id),
         "org_id": str(row.org_id),
         "task_id": str(row.task_id),
@@ -787,7 +830,7 @@ async def review_warnings(session, evidence):
         row = await session.get(ScreenshotRendition, rendition_id)
         if row is None or row.asset_id != asset.id:
             fail("image_integrity", "Image lineage changed", 409, 4)
-        if row.plan["redact"]:
+        if row.plan.get("redact"):
             warnings.add("image_redaction_review")
         if row.plan["crop"] is not None:
             warnings.add("image_crop_review")

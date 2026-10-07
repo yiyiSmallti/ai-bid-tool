@@ -1,4 +1,4 @@
-"""B03 parameter assessment: pending approval, not implemented.
+"""B03 parameter assessment: approved, not implemented.
 
 Payload validation and interface declarations only. Importing this module registers
 no routes, jobs, tables, unit tables or comparison implementations. Database-backed

@@ -467,6 +467,11 @@ class ProvenanceItem(Contract):
 
 
 class ProvenanceAttachment(Contract):
+    annotation_release_id: UUID | None = None
+    annotation_approval_sha256: Sha256 | None = None
+    annotation_release_rendition_id: UUID | None = None
+    annotation_release_image_sha256: Sha256 | None = None
+    annotation_content_pixel_sha256: Sha256 | None = None
     label: str = Field(pattern=r"^E\d{3}$")
     kind: Literal["certificate_page", "image"]
     title: str | None

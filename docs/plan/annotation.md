@@ -4,16 +4,19 @@ kind: plan
 
 # Cloud evidence annotation jobs
 
-Status: **Approved with all recommended defaults, not implemented.** Corresponds to [roadmap](roadmap.md)
-B05 and its B07/F03 dependencies.
+Status: **Approved; first slice implemented.** Certificate pages are enabled;
+database and browser integration acceptance remains pending. Corresponds to
+[roadmap](roadmap.md) B05 and its B07/F03 dependencies.
 
 The owner's cloud-hosted team workflow direction supersedes the earlier, unimplemented
 local-CLI annotation draft.
 
 The [Pydantic and interface draft](annotation/annotation_contracts.py) and
-[JSON schema inventory](annotation/annotation-schemas.json) are review-only contracts,
-not registered routes, commands, database models or renderer features. Approval under
-[agent.md](../../agent.md#workflow) is required before implementation.
+[JSON schema inventory](annotation/annotation-schemas.json) retain the approved review contracts;
+[the runtime schemas](../../server/app/schemas/annotation_contracts.py) and
+[mechanism note](../notes/annotation.md) describe the implemented certificate-page
+path. Vendor and profile/contract attachment enablement require their separate
+source acceptance or archive contract.
 
 ## Goal and boundary
 
@@ -41,7 +44,9 @@ clean-image and human keep/replace policy in [screenshots.md](screenshots.md).
 
 ## Code basis and design differences
 
-These are integration points, not claims that the proposed feature already runs.
+These integration requirements are implemented for certificate pages; vendor and
+profile/contract attachment source enablement remains deferred. The
+[mechanism note](../notes/annotation.md) names the runtime ownership and recovery paths.
 
 | Current basis | Reuse or required difference |
 | --- | --- |
@@ -64,7 +69,7 @@ archived PNG inputs, without adding a binary, dependency, font download or host 
 
 ## First vertical slice and source eligibility
 
-The recommended first slice is one **certificate source page → preview → cloud job →
+The implemented first slice is one **certificate source page → preview → cloud job →
 persisted candidate → human card attachment/review → confirmed release → draft/export**.
 Include console/API/CLI, roles, B02/co-sign, jobs/events and export binding; an image-only
 endpoint is not completion. One request targets one editable card in an explicit
@@ -191,7 +196,11 @@ Review/release validity instead follows the exact revision that actually links E
 
 Reuse `PixelRect`, `PNGDescriptor`, `ContentMapping` and `Sha256` from
 [screenshot_contracts.py](../../server/app/schemas/screenshot_contracts.py), adding
-cross-field checks in the draft. Request models forbid extra fields.
+cross-field checks in the runtime schemas. Request models forbid extra fields.
+`AnnotationRenderer.predict` uses the same trusted binary with
+`--annotation-describe` to measure the full content/padding/footer canvas without
+producing PNG bytes, creating jobs or calling Providers. See the
+[renderer ownership](../notes/annotation.md#code).
 
 - Plan: `crop: PixelRect|null`, `boxes: PixelRect[]`, at most 20; explicit defaults
   `null`/`[]` mean watermark-only. Strict integer x/y ≥ 0, width/height ≥ 1, endpoints
@@ -356,7 +365,7 @@ Membership`. Evidence/release references include the exact card revision link. P
 signature and B02 review references use org composite keys and exact parent binding.
 Every JSON-manifest reference is checked in addition to these relational constraints.
 
-After approval, migrate in this order:
+The migration preserves this ordering:
 
 1. Add parent composite keys, tables, indexes, constraints, RLS and minimal grants.
    Extend job/profile CHECKs and `screenshot_rendition_gate` from
@@ -389,7 +398,9 @@ After approval, migrate in this order:
 
 ## HTTP, CLI and JSON contract
 
-Use the existing authenticated org transaction dependency. All path/body IDs must
+Use the existing authenticated org transaction dependency and the Result 4.0 `/v4`
+HTTP prefix for metadata requests. The paths below are relative to that prefix;
+signed binary handlers also retain their authenticated unversioned links. All path/body IDs must
 resolve to one authorized task. No caller-provided org, actor, confirmer, storage key,
 arbitrary provenance, job kind or release status. Models reuse runtime schema types.
 
@@ -410,7 +421,8 @@ arbitrary provenance, job kind or release status. Models reuse runtime schema ty
 selector and plan. CLI wraps it for preflight/submit. Required arguments fail immediately,
 without questions; `--dry-run` rejects retry/submit-only fields. `--wait` polls safe job
 status and maps terminal errors. No image crosses the CLI for computation. Register
-new commands in `bid schema` only after approval; the JSON inventory is review-only.
+the implemented commands and enabled source kinds in `bid schema`; the documentation
+JSON inventory retains the approved contract baseline.
 
 Preflight is metadata/overlay preview. Persisted PNG links use application download
 handlers requiring current identity and underlying task/source access, not public
@@ -521,7 +533,7 @@ complete. `BoardNextAction`/target/schema updates are implementation dependencie
 
 ## Console outline and bounded reads
 
-Proposed route: `/app/org/tasks/{task_id}/cards/{card_id}/annotation?job={extraction_job_id}`.
+Console route: `/app/org/tasks/{task_id}/cards/{card_id}/annotation?job={extraction_job_id}`.
 Enter from a card material panel/dashboard action with explicit extraction scope.
 Show owner, required domain/reviewer, blocker and one primary next action. Keep unsent
 geometry only in current-tab memory; clear material/preview data on org/task switch.
@@ -563,8 +575,10 @@ visible focus and text errors make state understandable without color alone.
 | Unsupported/untrusted renderer | Explicit configuration failure; no Python or old-profile fallback |
 | UI read failure/org switch | Cancel old reads, remove stale images, require authorized refresh, retain unsent input only in the active context |
 
-Implementation acceptance must prove the full flow; these runtime checks have not run
-as part of this draft.
+Implementation acceptance must prove the full flow. PostgreSQL/API and mocked-browser
+regression cases require rerun after the approval-binding and fixture corrections.
+DB-free transport, collection and renderer-only checks do not establish the complete
+isolation, publication and browser path.
 
 | Area | Required acceptance and repeatable artifact |
 | --- | --- |
@@ -586,8 +600,16 @@ real-service/renderer acceptance. Synthetic data/Providers only, no external ser
 Define failure scenarios and end-to-end cases first; do not add after-the-fact unit
 tests that merely repeat implementation.
 
-Draft validation is limited to ruff, format check, explicit pyright on the documentation
-module, import and schema consistency. No runtime implementation or migration is included.
+Runtime implementation includes the certificate-page API/service/jobs, migration,
+renderer protocol, CLI/schema and console path. The process launcher supports non-root Linux x86_64/aarch64; the local macOS
+`/usr/bin/sandbox-exec` deny-network probe returns `Operation not permitted`, so
+macOS production rendering is explicitly unsupported rather than an unconfined
+fallback. Raw Rust protocol checks are distinct from Linux process containment.
+Container construction and Linux sandbox execution remain pending.
+Local verification excludes network,
+new dependencies, PostgreSQL, service startup and Chromium execution; those acceptance
+limits do not disable any production gate. Keep pending integrated acceptance distinct
+from DB-free transport, build and test-collection results.
 
 ## Decisions
 

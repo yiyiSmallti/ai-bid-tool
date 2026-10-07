@@ -710,6 +710,9 @@ async def sign(session, actor, card_id, body, settings, *, storage=None):
             from app.memory.feedback import record_feedback
 
             await record_feedback(session, actor, card, revision, final, "card_confirmed", reason)
+            from app.services.annotations import enqueue_releases
+
+            await enqueue_releases(session, actor, card, final)
         else:
             reason = Secrets.for_data(settings).decrypt(row.reason_ciphertext)
             if sha256(reason.encode()).hexdigest() != row.reason_sha256:

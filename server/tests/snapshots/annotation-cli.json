@@ -1,0 +1,489 @@
+{
+  "job-status-id": {
+    "ok": true,
+    "command": "job status",
+    "data": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "kind": "annotation_render",
+      "status": "succeeded",
+      "result": {
+        "annotation_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "error": null
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "actual",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "job-wait-id": {
+    "ok": true,
+    "command": "job wait",
+    "data": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "kind": "annotation_render",
+      "status": "succeeded",
+      "result": {
+        "annotation_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "error": null
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "actual",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "job-cancel-id": {
+    "ok": true,
+    "command": "job cancel",
+    "data": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "status": "cancelled"
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "dry-run": {
+    "ok": true,
+    "command": "evidence stamp",
+    "data": {
+      "dry_run": true,
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "blocker_codes": []
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "queued": {
+    "ok": true,
+    "command": "evidence stamp",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "card_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "annotation_render",
+      "status": "queued",
+      "duplicate": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "duplicate": {
+    "ok": true,
+    "command": "evidence stamp",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "card_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "annotation_render",
+      "status": "queued",
+      "duplicate": true
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "retry": {
+    "ok": true,
+    "command": "evidence stamp",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "card_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "annotation_render",
+      "status": "queued",
+      "duplicate": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "list": {
+    "ok": true,
+    "command": "evidence annotation list",
+    "data": {
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 0,
+      "has_more": false,
+      "next_cursor": null
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "show": {
+    "ok": true,
+    "command": "evidence annotation show",
+    "data": {
+      "candidate": {
+        "id": "00000000-0000-4000-8000-000000000001",
+        "status": "unconfirmed_material"
+      },
+      "current": {
+        "validity": "current"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "preview": {
+    "ok": true,
+    "command": "evidence annotation preview",
+    "data": {
+      "annotation_id": "00000000-0000-4000-8000-000000000001",
+      "rendition_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "candidate",
+      "url": "/annotations/00000000-0000-4000-8000-000000000001/preview/download?signature=synthetic",
+      "expires_in": 300
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "releases": {
+    "ok": true,
+    "command": "evidence annotation releases",
+    "data": {
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "returned": 0,
+      "has_more": false,
+      "next_cursor": null
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "release-preview": {
+    "ok": true,
+    "command": "evidence annotation release preview",
+    "data": {
+      "annotation_id": "00000000-0000-4000-8000-000000000001",
+      "rendition_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "candidate",
+      "url": "/annotations/00000000-0000-4000-8000-000000000001/preview/download?signature=synthetic",
+      "expires_in": 300
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "release-retry": {
+    "ok": true,
+    "command": "evidence annotation release retry",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "card_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "annotation_release",
+      "status": "queued",
+      "duplicate": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "succeeded": {
+    "ok": true,
+    "command": "evidence stamp",
+    "data": {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "status": "unconfirmed_material"
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "actual",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "failed": {
+    "ok": false,
+    "command": "evidence stamp",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "status": "failed",
+      "error": {
+        "code": "renderer_unavailable",
+        "message": "Unavailable",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "actual",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "cancelled": {
+    "ok": false,
+    "command": "evidence stamp",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "status": "cancelled",
+      "error": {
+        "code": "job_cancelled",
+        "message": "Annotation job was cancelled",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "actual",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "retryable-failed": {
+    "ok": false,
+    "command": "evidence stamp",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "status": "failed",
+      "error": {
+        "code": "renderer_timeout",
+        "message": "Unavailable",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "actual",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "wait-timeout": {
+    "ok": false,
+    "command": "evidence stamp",
+    "data": {
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "task_id": "00000000-0000-4000-8000-000000000001",
+      "card_id": "00000000-0000-4000-8000-000000000001",
+      "kind": "annotation_render",
+      "status": "queued",
+      "duplicate": false,
+      "error": {
+        "code": "wait_timeout",
+        "message": "Job is still active; query status or cancel explicitly",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "CNY",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "error": {
+    "ok": false,
+    "command": "evidence stamp",
+    "data": {
+      "error": {
+        "code": "annotation_input_changed",
+        "message": "Review again",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "usd": 0.0,
+      "basis": "zero",
+      "charge": "0",
+      "billing_currency": "USD",
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  }
+}
