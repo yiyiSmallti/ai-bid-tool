@@ -157,6 +157,18 @@ and block-to-page mappings. Report labels distinguish “original PDF page” fr
 explicit gaps under [PDF parsing](../notes/pdf-parsing.md) and Word parsing limits.
 No successful report may claim complete visual coverage without that page mapping.
 
+Pages are read by kind, not OCR'd by default. A page with a usable text layer uses that
+text for retrieval, rules and verbatim citations. An image page (certificate, license,
+screenshot, seal or signature page) gets no full-page OCR; it is sent, redacted, to a
+multimodal model only for the specific questions its checks ask, and findings on it
+anchor to the page image and region rather than to quoted text, subject to human review
+like other visual evidence. Only a submission whose pages lack text layers throughout
+needs transcription for retrieval and citations. That uses local OCR (the existing
+Tesseract provider) or a multimodal transcription that is labelled unverified model
+text: it can locate pages but cannot serve as a verbatim citation, because a model
+cannot verify its own transcription. Local OCR language data is a deployment
+prerequisite for that fallback only.
+
 Every finding carries a tender citation and bid citation or visual anchor: original
 page/block and verbatim quote, or pinned page PNG plus bounding box and observation.
 Missing text/marks instead retain the tender obligation and an explicit searched-bid
