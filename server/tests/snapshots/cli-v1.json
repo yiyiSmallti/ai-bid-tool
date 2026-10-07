@@ -79207,6 +79207,3088 @@
             "title": "PrototypeGenerateInput",
             "type": "object"
           }
+        },
+        "resource certificate browse": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "implementation_status": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "implemented",
+                      "developing",
+                      "planned"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Implementation Status"
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "product_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Product Id"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  {
+                    "const": "all",
+                    "type": "string"
+                  }
+                ],
+                "default": "active",
+                "title": "State"
+              }
+            },
+            "title": "ResourceQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "CertificateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "certificates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "CertificateRef",
+                "type": "object"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "const": "declared",
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/CertificateRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "name",
+              "revision_id",
+              "revision",
+              "lifecycle",
+              "provenance",
+              "created_at",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "CertificateRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource certificate history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "CertificateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "certificates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "CertificateRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Created By"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "has_file": {
+                "title": "Has File",
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/CertificateRef"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "revision_id",
+              "revision",
+              "name",
+              "created_at",
+              "created_by",
+              "current",
+              "has_file"
+            ],
+            "title": "CertificateHistoryRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource certificate lifecycle history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "CertificateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "certificates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "CertificateRef",
+                "type": "object"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "actor_user_id": {
+                "format": "uuid",
+                "title": "Actor User Id",
+                "type": "string"
+              },
+              "after": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "before": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "ref": {
+                "$ref": "#/$defs/CertificateRef"
+              },
+              "resource_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "ref",
+              "revision",
+              "resource_revision",
+              "before",
+              "after",
+              "reason_code",
+              "actor_user_id",
+              "created_at"
+            ],
+            "title": "CertificateLifecycleEvent",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource certificate lifecycle set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_lifecycle_revision": {
+                "$ref": "#/$defs/LifecycleRevision"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "state": {
+                "$ref": "#/$defs/LifecycleState"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_lifecycle_revision",
+              "state",
+              "reason_code"
+            ],
+            "title": "ResourceLifecycleSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "CertificateLifecycleEvent": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "const": "session",
+                    "default": "session",
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_user_id": {
+                    "format": "uuid",
+                    "title": "Actor User Id",
+                    "type": "string"
+                  },
+                  "after": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "before": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reason_code": {
+                    "$ref": "#/$defs/ReasonCode"
+                  },
+                  "ref": {
+                    "$ref": "#/$defs/CertificateRef"
+                  },
+                  "resource_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "ref",
+                  "revision",
+                  "resource_revision",
+                  "before",
+                  "after",
+                  "reason_code",
+                  "actor_user_id",
+                  "created_at"
+                ],
+                "title": "CertificateLifecycleEvent",
+                "type": "object"
+              },
+              "CertificateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "certificates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "CertificateRef",
+                "type": "object"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "event": {
+                "$ref": "#/$defs/CertificateLifecycleEvent"
+              },
+              "existing_selections": {
+                "const": "preserved",
+                "default": "preserved",
+                "title": "Existing Selections",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              }
+            },
+            "required": [
+              "event",
+              "lifecycle"
+            ],
+            "title": "CertificateLifecycleData",
+            "type": "object"
+          }
+        },
+        "resource certificate show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision",
+              "options": [
+                "--revision"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "as_of",
+              "options": [
+                "--as-of"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "as_of": {
+                "anyOf": [
+                  {
+                    "format": "date",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "As Of"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "CertificateDetailQuery",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "CertificateData": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "qualification",
+                      "personnel"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "number": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Number",
+                    "type": "string"
+                  },
+                  "valid_from": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid From"
+                  },
+                  "valid_until": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Valid Until"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "name",
+                  "number"
+                ],
+                "title": "CertificateData",
+                "type": "object"
+              },
+              "CertificateDateAdvisory": {
+                "additionalProperties": false,
+                "description": "Declared-date classification; absent as_of never implies the current date.",
+                "properties": {
+                  "as_of": {
+                    "anyOf": [
+                      {
+                        "format": "date",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "As Of"
+                  },
+                  "state": {
+                    "enum": [
+                      "unknown",
+                      "expired",
+                      "not_yet_valid",
+                      "valid"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "as_of",
+                  "state"
+                ],
+                "title": "CertificateDateAdvisory",
+                "type": "object"
+              },
+              "CertificateDetail": {
+                "additionalProperties": false,
+                "properties": {
+                  "file": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/CertificateFileRevision"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "kind": {
+                    "const": "certificates",
+                    "default": "certificates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/CertificateRevision"
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "title": "CertificateDetail",
+                "type": "object"
+              },
+              "CertificateFileRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "certificate_id": {
+                    "format": "uuid",
+                    "title": "Certificate Id",
+                    "type": "string"
+                  },
+                  "certificate_revision_id": {
+                    "format": "uuid",
+                    "title": "Certificate Revision Id",
+                    "type": "string"
+                  },
+                  "data": {
+                    "$ref": "#/$defs/CertificateData"
+                  },
+                  "file": {
+                    "$ref": "#/$defs/CertificateScanFile"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "parts": {
+                    "items": {
+                      "$ref": "#/$defs/CertificatePart"
+                    },
+                    "title": "Parts",
+                    "type": "array"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "certificate_id",
+                  "certificate_revision_id",
+                  "revision",
+                  "data",
+                  "file"
+                ],
+                "title": "CertificateFileRevision",
+                "type": "object"
+              },
+              "CertificatePart": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "image/png",
+                      "image/jpeg"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "ordinal": {
+                    "maximum": 20,
+                    "minimum": 1,
+                    "title": "Ordinal",
+                    "type": "integer"
+                  },
+                  "page_count": {
+                    "maximum": 200,
+                    "minimum": 1,
+                    "title": "Page Count",
+                    "type": "integer"
+                  },
+                  "page_start": {
+                    "maximum": 200,
+                    "minimum": 1,
+                    "title": "Page Start",
+                    "type": "integer"
+                  },
+                  "rotation": {
+                    "enum": [
+                      0,
+                      90,
+                      180,
+                      270
+                    ],
+                    "title": "Rotation",
+                    "type": "integer"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 41943040,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "ordinal",
+                  "name",
+                  "media_type",
+                  "sha256",
+                  "size_bytes",
+                  "page_start",
+                  "page_count",
+                  "rotation"
+                ],
+                "title": "CertificatePart",
+                "type": "object"
+              },
+              "CertificateRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "certificates",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "CertificateRef",
+                "type": "object"
+              },
+              "CertificateRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "certificate_id": {
+                    "format": "uuid",
+                    "title": "Certificate Id",
+                    "type": "string"
+                  },
+                  "data": {
+                    "$ref": "#/$defs/CertificateData"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "certificate_id",
+                  "revision",
+                  "data"
+                ],
+                "title": "CertificateRevision",
+                "type": "object"
+              },
+              "CertificateScanFile": {
+                "additionalProperties": false,
+                "properties": {
+                  "media_type": {
+                    "const": "application/pdf",
+                    "default": "application/pdf",
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "page_count": {
+                    "maximum": 200,
+                    "minimum": 1,
+                    "title": "Page Count",
+                    "type": "integer"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 41943040,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "name",
+                  "sha256",
+                  "size_bytes",
+                  "page_count"
+                ],
+                "title": "CertificateScanFile",
+                "type": "object"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "current_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "date_advisory": {
+                "$ref": "#/$defs/CertificateDateAdvisory"
+              },
+              "detail": {
+                "$ref": "#/$defs/CertificateDetail"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "const": "declared",
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/CertificateRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "current_revision",
+              "lifecycle",
+              "provenance",
+              "detail",
+              "date_advisory",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "CertificateDetailData",
+            "type": "object"
+          }
+        },
+        "resource profile browse": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "implementation_status": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "implemented",
+                      "developing",
+                      "planned"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Implementation Status"
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "product_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Product Id"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  {
+                    "const": "all",
+                    "type": "string"
+                  }
+                ],
+                "default": "active",
+                "title": "State"
+              }
+            },
+            "title": "ResourceQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "ProfileRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "profiles",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ProfileRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "const": "declared",
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/ProfileRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "name",
+              "revision_id",
+              "revision",
+              "lifecycle",
+              "provenance",
+              "created_at",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "ProfileRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource profile history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "ProfileRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "profiles",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ProfileRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "created_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Created By"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "has_file": {
+                "title": "Has File",
+                "type": "boolean"
+              },
+              "name": {
+                "maxLength": 200,
+                "minLength": 1,
+                "title": "Name",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/ProfileRef"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision_id": {
+                "format": "uuid",
+                "title": "Revision Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "revision_id",
+              "revision",
+              "name",
+              "created_at",
+              "created_by",
+              "current",
+              "has_file"
+            ],
+            "title": "ProfileHistoryRow",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource profile lifecycle history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "25",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "PageQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ProfileRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "profiles",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ProfileRef",
+                "type": "object"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "actor_user_id": {
+                "format": "uuid",
+                "title": "Actor User Id",
+                "type": "string"
+              },
+              "after": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "before": {
+                "$ref": "#/$defs/LifecycleState"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "ref": {
+                "$ref": "#/$defs/ProfileRef"
+              },
+              "resource_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "revision": {
+                "$ref": "#/$defs/Revision"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "ref",
+              "revision",
+              "resource_revision",
+              "before",
+              "after",
+              "reason_code",
+              "actor_user_id",
+              "created_at"
+            ],
+            "title": "ProfileLifecycleEvent",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          }
+        },
+        "resource profile lifecycle set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_lifecycle_revision": {
+                "$ref": "#/$defs/LifecycleRevision"
+              },
+              "expected_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "reason_code": {
+                "$ref": "#/$defs/ReasonCode"
+              },
+              "state": {
+                "$ref": "#/$defs/LifecycleState"
+              }
+            },
+            "required": [
+              "expected_revision",
+              "expected_lifecycle_revision",
+              "state",
+              "reason_code"
+            ],
+            "title": "ResourceLifecycleSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "ProfileLifecycleEvent": {
+                "additionalProperties": false,
+                "properties": {
+                  "actor_kind": {
+                    "const": "session",
+                    "default": "session",
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "actor_user_id": {
+                    "format": "uuid",
+                    "title": "Actor User Id",
+                    "type": "string"
+                  },
+                  "after": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "before": {
+                    "$ref": "#/$defs/LifecycleState"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reason_code": {
+                    "$ref": "#/$defs/ReasonCode"
+                  },
+                  "ref": {
+                    "$ref": "#/$defs/ProfileRef"
+                  },
+                  "resource_revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "ref",
+                  "revision",
+                  "resource_revision",
+                  "before",
+                  "after",
+                  "reason_code",
+                  "actor_user_id",
+                  "created_at"
+                ],
+                "title": "ProfileLifecycleEvent",
+                "type": "object"
+              },
+              "ProfileRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "profiles",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ProfileRef",
+                "type": "object"
+              },
+              "ReasonCode": {
+                "enum": [
+                  "obsolete",
+                  "duplicate",
+                  "unavailable",
+                  "restored",
+                  "other"
+                ],
+                "type": "string"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "event": {
+                "$ref": "#/$defs/ProfileLifecycleEvent"
+              },
+              "existing_selections": {
+                "const": "preserved",
+                "default": "preserved",
+                "title": "Existing Selections",
+                "type": "string"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              }
+            },
+            "required": [
+              "event",
+              "lifecycle"
+            ],
+            "title": "ProfileLifecycleData",
+            "type": "object"
+          }
+        },
+        "resource profile show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "revision",
+              "options": [
+                "--revision"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "revision": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ResourceDetailQuery",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ActionCode": {
+                "enum": [
+                  "create",
+                  "revise",
+                  "deactivate",
+                  "restore",
+                  "select",
+                  "upload",
+                  "download",
+                  "bind",
+                  "configure",
+                  "test",
+                  "propose",
+                  "approve",
+                  "reject",
+                  "disable",
+                  "set_value",
+                  "reveal"
+                ],
+                "type": "string"
+              },
+              "ActionHint": {
+                "additionalProperties": false,
+                "properties": {
+                  "action": {
+                    "$ref": "#/$defs/ActionCode"
+                  },
+                  "allowed": {
+                    "title": "Allowed",
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BlockerCode"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  }
+                },
+                "required": [
+                  "action",
+                  "allowed"
+                ],
+                "title": "ActionHint",
+                "type": "object"
+              },
+              "BlockerCode": {
+                "enum": [
+                  "role_required",
+                  "human_required",
+                  "task_access_required",
+                  "task_archived",
+                  "resource_inactive",
+                  "not_candidate",
+                  "missing_file",
+                  "binding_required",
+                  "unsupported_capability",
+                  "provider_unavailable"
+                ],
+                "type": "string"
+              },
+              "LifecycleRevision": {
+                "minimum": 0,
+                "type": "integer"
+              },
+              "LifecycleState": {
+                "enum": [
+                  "active",
+                  "inactive"
+                ],
+                "type": "string"
+              },
+              "LifecycleView": {
+                "additionalProperties": false,
+                "properties": {
+                  "revision": {
+                    "$ref": "#/$defs/LifecycleRevision"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/LifecycleState"
+                  }
+                },
+                "required": [
+                  "state",
+                  "revision"
+                ],
+                "title": "LifecycleView",
+                "type": "object"
+              },
+              "OrgProfileData": {
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "title": "Name",
+                    "type": "string"
+                  },
+                  "performance_summary": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Performance Summary"
+                  },
+                  "registration_details": {
+                    "anyOf": [
+                      {
+                        "maxLength": 10000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Registration Details"
+                  },
+                  "standard_wording": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Standard Wording"
+                  }
+                },
+                "required": [
+                  "name"
+                ],
+                "title": "OrgProfileData",
+                "type": "object"
+              },
+              "OrgProfileRevision": {
+                "additionalProperties": false,
+                "properties": {
+                  "data": {
+                    "$ref": "#/$defs/OrgProfileData"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "profile_id": {
+                    "format": "uuid",
+                    "title": "Profile Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "profile_id",
+                  "revision",
+                  "data"
+                ],
+                "title": "OrgProfileRevision",
+                "type": "object"
+              },
+              "ProfileDetail": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "profiles",
+                    "default": "profiles",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/OrgProfileRevision"
+                  }
+                },
+                "required": [
+                  "revision"
+                ],
+                "title": "ProfileDetail",
+                "type": "object"
+              },
+              "ProfileRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "profiles",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "resource_id": {
+                    "format": "uuid",
+                    "title": "Resource Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "resource_id"
+                ],
+                "title": "ProfileRef",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "$ref": "#/$defs/ActionHint"
+                },
+                "maxItems": 16,
+                "title": "Actions",
+                "type": "array"
+              },
+              "current_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "detail": {
+                "$ref": "#/$defs/ProfileDetail"
+              },
+              "lifecycle": {
+                "$ref": "#/$defs/LifecycleView"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "provenance": {
+                "const": "declared",
+                "title": "Provenance",
+                "type": "string"
+              },
+              "ref": {
+                "$ref": "#/$defs/ProfileRef"
+              },
+              "revised_at": {
+                "format": "date-time",
+                "title": "Revised At",
+                "type": "string"
+              },
+              "revised_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Revised By"
+              }
+            },
+            "required": [
+              "org_id",
+              "ref",
+              "current_revision",
+              "lifecycle",
+              "provenance",
+              "detail",
+              "revised_at",
+              "revised_by",
+              "actions"
+            ],
+            "title": "ProfileDetailData",
+            "type": "object"
+          }
         }
       },
       "exit_codes": {

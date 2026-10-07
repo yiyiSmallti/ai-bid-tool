@@ -133,7 +133,7 @@ attach or retry.
 - [annotation_contracts.py](../../server/app/schemas/annotation_contracts.py):
   `AnnotationInput`, input manifests, preflight, candidate and release contracts.
 - [annotations.py](../../server/app/models/annotations.py): immutable request,
-  material and release storage; [0052_cloud_annotations.py](../../server/migrations/versions/0052_cloud_annotations.py):
+  material and release storage; [0053_cloud_annotations.py](../../server/migrations/versions/0053_cloud_annotations.py):
   RLS, composite bindings and mutation guards.
 - [annotations.py](../../server/app/services/annotations.py): `preflight`, `submit`,
   `approval_binding`, `enqueue_releases`, `retry_release`, `release_for_evidence`.

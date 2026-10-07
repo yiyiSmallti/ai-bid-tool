@@ -265,10 +265,16 @@ from app.schemas.team_workflow import PageData as WorkflowPageData
 from app.schemas.template_contracts import TaskTemplateSelection, TemplateCreate, TemplateUpdate
 from pydantic import TypeAdapter
 
+from bid_cli.management_certificates import COMMAND_DATA as CERTIFICATE_COMMAND_DATA
+from bid_cli.management_certificates import COMMAND_INPUTS as CERTIFICATE_COMMAND_INPUTS
+from bid_cli.management_certificates import COMMAND_ITEMS as CERTIFICATE_COMMAND_ITEMS
 from bid_cli.management_features import COMMAND_DATA as FEATURE_COMMAND_DATA
 from bid_cli.management_features import COMMAND_INPUTS as FEATURE_COMMAND_INPUTS
 from bid_cli.management_features import COMMAND_ITEMS as FEATURE_COMMAND_ITEMS
 from bid_cli.management_products import COMMAND_DATA, COMMAND_INPUTS, COMMAND_ITEMS
+from bid_cli.management_profiles import COMMAND_DATA as PROFILE_COMMAND_DATA
+from bid_cli.management_profiles import COMMAND_INPUTS as PROFILE_COMMAND_INPUTS
+from bid_cli.management_profiles import COMMAND_ITEMS as PROFILE_COMMAND_ITEMS
 from bid_cli.requirement_confirmation import RequirementProgressInvocation
 
 # Only implemented commands are advertised; future commands are deliberately absent.
@@ -754,6 +760,8 @@ COMMANDS.update(
 )
 COMMANDS.update(COMMAND_INPUTS)
 COMMANDS.update(FEATURE_COMMAND_INPUTS)
+COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
+COMMANDS.update(PROFILE_COMMAND_INPUTS)
 
 # Registered commands and discovery share one inventory; the legacy snapshot above
 # intentionally excludes this Result 4.0-only slice.
@@ -830,13 +838,23 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         outputs.update(
             {
                 name: TypeAdapter(model)
-                for name, model in (COMMAND_DATA | FEATURE_COMMAND_DATA).items()
+                for name, model in (
+                    COMMAND_DATA
+                    | FEATURE_COMMAND_DATA
+                    | CERTIFICATE_COMMAND_DATA
+                    | PROFILE_COMMAND_DATA
+                ).items()
             }
         )
         outputs.update(
             {
                 name: TypeAdapter(ManagementPageData)
-                for name in (COMMAND_ITEMS | FEATURE_COMMAND_ITEMS)
+                for name in (
+                    COMMAND_ITEMS
+                    | FEATURE_COMMAND_ITEMS
+                    | CERTIFICATE_COMMAND_ITEMS
+                    | PROFILE_COMMAND_ITEMS
+                )
             }
         )
         commands.update(
@@ -966,7 +984,9 @@ def command_schema(app=None, version: str = "4.0") -> dict:
     for name, model in workflow_items.items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
-    for name, model in (COMMAND_ITEMS | FEATURE_COMMAND_ITEMS).items():
+    for name, model in (
+        COMMAND_ITEMS | FEATURE_COMMAND_ITEMS | CERTIFICATE_COMMAND_ITEMS | PROFILE_COMMAND_ITEMS
+    ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
     if version == "4.0":

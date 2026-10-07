@@ -52,6 +52,51 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   [annotation plan](plan/annotation.md#failure-modes-and-test-plan).
   See the [mechanism note](notes/annotation.md).
 
+## 2026-10-06: Certificate and org-profile management slice
+
+- Keep qualification list tables mounted across page loads so clearing their data
+  releases the previous page; table-column teardown must not retain old pages in
+  rearmed layout callbacks.
+- Enforce the raw 16 KiB HTTP body limit on certificate/profile management POSTs
+  and reject profile historical-pin reactivation after database constraints.
+  Align acceptance setup with authorized pin creation, the established member
+  removal route and the approved human-only lifecycle role grants; keep source
+  constraint and removed-member access assertions intact.
+- Extended profile and certificate management with bounded prefix browse/search,
+  exact revision details, separate content/lifecycle history, complete declaration
+  editing and explicit authorized task pins. Certificate originals remain bound to
+  their upload revision, with ordered parts/rotation, signed same-org inspection,
+  explicit date advisories and a metadata-only no-original state.
+- Added certificate/profile lifecycle arms, exactly-one-root and org composite
+  constraints, indexed page-revision authors, task selection guards and human-only
+  bidder/admin lifecycle scopes in migration `0052`. RLS and composite keys reject
+  forged relationships before business guards; existing pins and source archives
+  remain intact. See [management mechanisms](notes/management-pages.md).
+- Added v4 CLI browse/show/history/lifecycle commands and schema snapshots without
+  changing legacy command output. Added API/service, storage, role/token, isolation,
+  fixed-scale and mocked Playwright acceptance coverage with artifacts under
+  `data/work`. Database, Chromium and measured scale acceptance remain for the main
+  integration environment, as tracked in the [contract](plan/management-pages.md).
+
+## 2026-10-06: Drafting identity, enum serialization and sandbox queue recovery
+
+- Bind no-card drafting inputs directly to the pinned source chunk/block hash,
+  supplementing the existing indirect requirement-preparation binding. Preserve
+  existing card cache identities and carry the new hash through model-generated
+  cards so unchanged resubmissions still reuse their result. The input manifest
+  changes invalidate old no-card keys without a prompt or schema version bump.
+- Preserve validated category enums in response-card string trimming, preventing
+  draft result serialization warnings for technical and scoring response rows.
+- Reconcile abandoned sandbox queue deliveries at worker startup and on the
+  existing recovery schedule. Check application jobs under their tenant context,
+  retain live workers and nonterminal jobs, and finish terminal or missing jobs'
+  deliveries through Procrastinate's terminal-state function. Retain application
+  data and queue history, and log reconciliation counts.
+- Add source identity and warning regressions, plus PostgreSQL scenarios for
+  terminal/missing jobs, live work, tenant isolation, renewed heartbeats and
+  concurrent/idempotent recovery. PostgreSQL execution remains an integration
+  check; no migration is required.
+
 ## 2026-10-06: Bounded product and feature revision authors
 
 - Resolve product and feature authors with explicit page-revision filters on a
