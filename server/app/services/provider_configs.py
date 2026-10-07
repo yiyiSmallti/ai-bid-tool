@@ -61,7 +61,19 @@ def config_view(row: ProviderConfig) -> dict:
         key_last4=row.key_last4,
         updated_by=row.updated_by,
         updated_at=row.created_at,
-        **row.data,
+        **{
+            field: row.data[field]
+            for field in (
+                "provider",
+                "model",
+                "base_url",
+                "json_mode",
+                "reasoning",
+                "default_reasoning",
+                "input_usd_per_mtok",
+                "output_usd_per_mtok",
+            )
+        },
     ).model_dump(mode="json")
 
 
@@ -123,6 +135,11 @@ async def set_config(session, actor, body: ProviderConfigSet, settings):
             "default_reasoning": entry.default_reasoning,
             "input_usd_per_mtok": None,
             "output_usd_per_mtok": None,
+            # Save published terms with this immutable choice; later catalog
+            # changes must not replace an old revision's displayed identity.
+            "catalog_revision": entry.revision,
+            "sale_input_per_mtok": float(entry.sale_input_per_mtok),
+            "sale_output_per_mtok": float(entry.sale_output_per_mtok),
         }
     config = ProviderConfig(
         id=config_id,

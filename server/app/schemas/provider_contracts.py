@@ -11,6 +11,98 @@ from pydantic import Field, SecretStr, field_validator, model_validator
 from app.schemas.contracts import Contract
 from app.schemas.platform_contracts import ReasoningLevel
 
+PROVIDER_PRIVATE_OPTION_FIELDS = frozenset(
+    {
+        "key",
+        "keys",
+        "apikey",
+        "xapikey",
+        "encryptedkey",
+        "ciphertext",
+        "keylast4",
+        "lastfour",
+        "fingerprint",
+        "credential",
+        "credentials",
+        "credentialid",
+        "credentialname",
+        "authorization",
+        "proxyauthorization",
+        "authentication",
+        "auth",
+        "bearer",
+        "token",
+        "apitoken",
+        "accesstoken",
+        "refreshtoken",
+        "sessiontoken",
+        "cookie",
+        "cookies",
+        "setcookie",
+        "password",
+        "secret",
+        "secretkey",
+        "clientsecret",
+        "accesskey",
+        "accesskeyid",
+        "secretaccesskey",
+        "headers",
+        "httpheaders",
+        "transport",
+        "transportoptions",
+        "baseurl",
+        "endpoint",
+        "vendorinputusdpermtok",
+        "vendoroutputusdpermtok",
+        "wholesaleprices",
+    }
+)
+
+
+def validate_provider_options(options):
+    """Reasoning options cannot create a second credential/transport input path."""
+    pending = [(options, 0)]
+    visited = 0
+    while pending:
+        value, depth = pending.pop()
+        visited += 1
+        if visited > 4096 or depth > 16:
+            raise ValueError("provider reasoning options exceed their structural bounds")
+        if isinstance(value, dict):
+            if len(value) > 4096 - visited - len(pending):
+                raise ValueError("provider reasoning options exceed their structural bounds")
+            for key, child in value.items():
+                normalized = re.sub(r"[^a-z0-9]", "", str(key).casefold())
+                if (
+                    normalized in PROVIDER_PRIVATE_OPTION_FIELDS
+                    or any(
+                        private in normalized
+                        for private in (
+                            "apikey",
+                            "encryptedkey",
+                            "ciphertext",
+                            "keylast4",
+                            "fingerprint",
+                            "credential",
+                            "authorization",
+                            "clientsecret",
+                            "secretkey",
+                            "password",
+                            "wholesale",
+                        )
+                    )
+                    or normalized.endswith("headers")
+                ):
+                    raise ValueError(
+                        "provider reasoning options cannot carry credentials or transport fields"
+                    )
+                pending.append((child, depth + 1))
+        elif isinstance(value, list):
+            if len(value) > 4096 - visited - len(pending):
+                raise ValueError("provider reasoning options exceed their structural bounds")
+            pending.extend((child, depth + 1) for child in value)
+    return options
+
 
 class ProviderConfigInput(Contract):
     capability: Literal["llm_extract"] = "llm_extract"
@@ -25,6 +117,25 @@ class ProviderConfigInput(Contract):
     input_usd_per_mtok: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     output_usd_per_mtok: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     expected_revision: int | None = Field(default=None, ge=1)
+
+    @field_validator("reasoning", mode="before")
+    @classmethod
+    def nonsecret_reasoning(cls, value):
+        # Validate raw trees before ReasoningLevel's recursive output-limit
+        # walker, so deeply nested or cyclic input cannot evade these bounds.
+        if isinstance(value, list):
+            if len(value) > 8:
+                raise ValueError("provider reasoning accepts at most eight levels")
+            for level in value:
+                options = (
+                    level.get("request_options", {})
+                    if isinstance(level, dict)
+                    else level.request_options
+                    if isinstance(level, ReasoningLevel)
+                    else {}
+                )
+                validate_provider_options(options)
+        return value
 
     @field_validator("base_url")
     @classmethod
