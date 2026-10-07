@@ -29,6 +29,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [Built-in agent orchestration](notes/builtin-agent.md): bounded command tools, owner authority, durable pauses and recovery.
 - [platform-credentials.md](notes/platform-credentials.md): platform credential authority, resolution before each call, import and root-key rotation.
 - [tenant-isolation.md](notes/tenant-isolation.md): RLS, org (organization/tenant; 单位) context and file isolation.
+- [memory-management.md](notes/memory-management.md): bounded org memory pages, exact revision actions and recorded task feedback recovery.
 - [memory.md](notes/memory.md): human approval of org memory (记忆), keyword retrieval, per-call traceability, cache invalidation and feedback candidates.
 - [requirement-confirmation.md](notes/requirement-confirmation.md): independently reviewed requirements, verified manual recovery, source-bound acceptance and stale-output gates.
 - [response-cards.md](notes/response-cards.md): human response cards (响应卡), evidence confirmation, atomic disposition and three-table drafts (初稿).

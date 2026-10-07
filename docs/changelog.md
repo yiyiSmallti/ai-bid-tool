@@ -6,6 +6,34 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-07: Memory management regression fixes
+
+- Require an actual, exact-current search projection change for the memory root
+  guard's derived-update exception. Reject direct no-op root updates and skip
+  unchanged internal refreshes when appending a real revision.
+- Preserve the management feedback flag in cursor regression requests and assert
+  the separate management and legacy error codes.
+- Name the feedback recovery dialog confirmation distinctly from its opener.
+
+## 2026-10-06: Org memory pages and task feedback recovery
+
+- Added org memory browse, exact revision detail and separate history pages, plus
+  task-authorized feedback queue and explicit recovery of saved candidate jobs.
+  Active edits warn that they withdraw effectiveness immediately; reasons remain
+  hash-only and approval retains the exact revision and conflict-key gates.
+- Added Result 4.0 `memory browse`, current-root prefix/tag/filter indexes, bounded
+  query projections and indexed revision-author lookup in migration `0055`.
+  Existing CLI schemas remain unchanged except the new command entry; enriched
+  feedback reads use an explicit management projection.
+- Enforced task membership and archival during candidate retry and worker checks.
+  Preserved card decisions on dispatch failure and added a durable job recovery
+  link. Restricted deleted memory history to human org administrators.
+- Added DB-backed API/service, role/token/isolation, concurrency, expiry, fixed-scale,
+  CLI snapshot and mocked Playwright scenarios. PostgreSQL, browser execution and
+  scale acceptance remain pending in the integrated environment. See the
+  [memory slice](plan/management-pages.md#memory-vertical-slice) and
+  [mechanism](notes/memory-management.md).
+
 ## 2026-10-06: Template and binding management slice
 
 - Added template browse/search, exact revision detail, content/lifecycle histories

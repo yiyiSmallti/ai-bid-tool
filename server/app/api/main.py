@@ -59,6 +59,10 @@ CONSOLE_HEADERS = {
 }
 
 RESOURCE_MANAGEMENT_READS = {
+    "memory_browse",
+    "memory_feedback_list",
+    "management_memory_show",
+    "management_memory_history",
     "export_binding_browse",
     "export_binding_show",
     "resource_product_browse",
@@ -168,6 +172,7 @@ def create_app(
         credential_route = request.url.path.startswith("/platform/credentials")
         resource_management_route = request.method == "POST" and request.url.path.startswith(
             (
+                "/management/memories",
                 "/management/resources/products",
                 "/management/resources/features",
                 "/management/resources/templates",
@@ -646,6 +651,9 @@ def create_app(
     from app.api.memory import create_router as create_memory_router
 
     app.include_router(create_memory_router(context, db, queue, settings, storage))
+    from app.api.management_memory import create_router as create_management_memory_router
+
+    app.include_router(create_management_memory_router(context, settings))
     app.include_router(create_agent_router(context, settings, queue, llm, resolve, storage))
     app.include_router(create_job_router(context, storage))
     return app

@@ -10,6 +10,13 @@ from app.schemas.certificate_contracts import CertificateRevision
 from app.schemas.certificate_file_contracts import CertificateFileRevision
 from app.schemas.contracts import Contract
 from app.schemas.feature_contracts import FeatureRevision
+from app.schemas.memory_contracts import (
+    MemoryFeedbackView,
+    MemoryKind,
+    MemoryStatus,
+    MemoryView,
+    Tag,
+)
 from app.schemas.profile_contracts import OrgProfileRevision
 from app.schemas.resource_contracts import ProductRevision
 from app.schemas.template_contracts import TemplateRevision
@@ -694,3 +701,43 @@ class BindingQuery(PageQuery):
 
 class BindingDetailQuery(Contract):
     template_revision_id: UUID
+
+
+class MemoryQuery(PageQuery):
+    scope: Literal["org"] = "org"
+    q: SearchText | None = None
+    kind: MemoryKind | None = None
+    status: MemoryStatus | None = None
+    tags: list[Tag] = Field(default_factory=list, max_length=20)
+    expiry: Literal["all", "expired", "unexpired"] = "all"
+    include_deleted: bool = False
+
+    @model_validator(mode="after")
+    def normalized_tags(self) -> Self:
+        from app.memory.access import normalize
+
+        normalized = [normalize(tag) for tag in self.tags]
+        if any(not tag for tag in normalized) or len(normalized) != len(set(normalized)):
+            raise ValueError("search tags must be nonblank and unique")
+        self.tags = sorted(normalized)
+        return self
+
+
+type MemoryEffectiveStatus = Literal["candidate", "active", "disabled", "expired", "deleted"]
+
+
+class MemoryDetailData(Contract):
+    memory: MemoryView
+    current_revision: Revision
+    current_effective_status: MemoryEffectiveStatus
+    as_of: AwareDatetime
+    revised_at: AwareDatetime
+    revised_by: UUID | None
+    actions: list[ActionHint] = Field(max_length=16)
+
+
+class MemoryFeedbackRow(MemoryFeedbackView):
+    candidate_job_id: UUID | None = None
+    candidate_job_status: str | None = None
+    candidate_event_ids: list[UUID] = Field(default_factory=list, max_length=100)
+    candidate_memory_id: UUID | None = None

@@ -39,12 +39,13 @@ const TEMPLATE_MANAGEMENT_PATH = /^\/management\/(?:resources\/templates(?:\/que
 const TEMPLATE_WRITE_PATH = /^\/resources\/templates(?:\/[^/?]+\/revisions|\/revisions\/[^/?]+\/(?:download-link|download))?$/;
 const TEMPLATE_TASK_PATH = /^\/tasks\/[^/?]+\/templates$/;
 const TEMPLATE_BINDING_PATH = /^\/export-template-bindings$/;
+const MEMORY_PATH = /^\/(?:management\/memories(?:\/query|\/[^/?]+(?:\/history\/query)?)|memories(?:\/[^/?]+(?:\/decisions|\/disable)?)?|tasks\/[^/?]+\/(?:memory-feedback|memory-candidates))$/;
 const ANNOTATION_PATH = /^\/(?:screenshot-renditions\/[^/?]+\/(?:preview-link|content)|tasks\/[^/?]+\/annotations|annotations\/[^/?]+(?:\/(?:preview|releases|content))?|annotation-releases\/[^/?]+\/(?:preview|content))$/;
 const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:workflow|progress|members(?:\/[^/?]+(?:\/remove)?)?|member-candidates|handover|archive|unarchive|board|activity|events(?:\/poll)?|documents|jobs|extractions|requirements|products|features|certificates|profiles|certificate-files|evidence-sources|cards(?:\/(?:dispositions|generations))?|drafts|exports|product-simulations|simulated-resources|model-redaction))?)?|documents\/[^/?]+(?:\/(?:chunks|parse|extract|download-link|download|pages\/\d+\/preview))?|exports\/[^/?]+(?:\/(?:download-link|download|preview(?:\/pages\/\d+)?))?|jobs\/[^/?]+(?:\/cancel)?|cards\/[^/?]+(?:\/(?:actions|classification))?|drafts\/[^/?]+|resources\/(?:products|features|certificates|profiles)(?:\/revisions\/[^/?]+\/file\/(?:download-link|download|pages\/\d+\/preview))?|evidence-sources\/[^/?]+\/preview\/(?:download-link|download)|resources\/profiles\/[^/?]+\/revisions|resources\/certificates\/(?:files|[^/?]+\/(?:revisions|file-revisions))|billing(?:\/redeem)?|confidential-fields(?:\/[^/?]+\/(?:revisions|values))?|confidential-values(?:\/[^/?]+\/reveal)?)$/;
 function checkedPath(path, org) {
   if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   const url = new URL(path, window.location.origin);
-  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ORG_PATH.test(url.pathname) || ANNOTATION_PATH.test(url.pathname) || QUALIFICATION_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || FEATURE_MANAGEMENT_PATH.test(url.pathname) || FEATURE_WRITE_PATH.test(url.pathname) || TEMPLATE_MANAGEMENT_PATH.test(url.pathname) || TEMPLATE_WRITE_PATH.test(url.pathname) || TEMPLATE_TASK_PATH.test(url.pathname) || TEMPLATE_BINDING_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
+  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ORG_PATH.test(url.pathname) || MEMORY_PATH.test(url.pathname) || ANNOTATION_PATH.test(url.pathname) || QUALIFICATION_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || FEATURE_MANAGEMENT_PATH.test(url.pathname) || FEATURE_WRITE_PATH.test(url.pathname) || TEMPLATE_MANAGEMENT_PATH.test(url.pathname) || TEMPLATE_WRITE_PATH.test(url.pathname) || TEMPLATE_TASK_PATH.test(url.pathname) || TEMPLATE_BINDING_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   return url.pathname;
 }
 function retryDelay(value) {
@@ -67,11 +68,11 @@ async function parseResult(response, pathname, org, version4 = false) {
       ["unavailable", "range_only"].includes(payload.data.total_status) ||
       (typeof payload.data.snapshot === "string" && typeof payload.data.parent_id === "string" && Number.isInteger(payload.data.returned)));
   const assessmentHistory = ["check list", "score list", "score rubric list"].includes(payload.command) && typeof payload.data.task_id === "string" && Number.isInteger(payload.data.total) && payload.items.length > 0 && payload.items.every(item => typeof (item.report?.id ?? item.id) === "string") && payload.items.some(item => item.report?.completion === "partial" || ["unavailable", "range_only"].includes(item.total_status));
-  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release"].includes(payload.data.kind) &&
+  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release", "memory_candidate"].includes(payload.data.kind) &&
     ((payload.data.status === "succeeded" && payload.data.result?.completion === "partial") ||
       (payload.data.status === "cancelled" && (payload.data.error === null || payload.data.error?.code)) ||
       (payload.data.status === "failed" && payload.data.error?.code && [2, 3, 4, 5].includes(payload.data.error.exit_code)));
-  const partial = (!payload.data.error && (assessmentRead || assessmentHistory)) || assessmentJob || (payload.command === "draft show" && payload.data.completion === "partial") || (payload.command === "job status" && payload.data.result?.completion === "partial" && ["draft", "card_generate"].includes(payload.data.kind));
+  const partial = (!payload.data.error && (assessmentRead || assessmentHistory)) || assessmentJob || (payload.command === "draft show" && payload.data.completion === "partial") || (payload.command === "job status" && payload.data.result?.completion === "partial" && ["draft", "card_generate", "memory_candidate"].includes(payload.data.kind));
   if (!response.ok || (!payload.ok && !partial)) {
     const error = payload.data?.error ?? {};
     if ((response.status === 401 || (org && error.code === "org_inactive")) && !PUBLIC.has(pathname)) {
@@ -87,7 +88,7 @@ export async function request(method, path, body, { org = false, signal, binary 
   // The unversioned API deliberately projects legacy v3 costs. Assessment pages
   // and job receipts require enforced budget preflight and actual Result 4 costs.
   const assessmentJobs = /^\/tasks\/[^/]+\/jobs$/.test(pathname) && ["check", "score_rubric", "score"].includes(new URL(path, window.location.origin).searchParams.get("kind"));
-  const apiPath = org && (ANNOTATION_PATH.test(pathname) || QUALIFICATION_MANAGEMENT_PATH.test(pathname) || PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || TEMPLATE_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
+  const apiPath = org && (MEMORY_PATH.test(pathname) || ANNOTATION_PATH.test(pathname) || QUALIFICATION_MANAGEMENT_PATH.test(pathname) || PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || TEMPLATE_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
   const headers = {};
   const epoch = orgEpoch;
   const controller = new AbortController();

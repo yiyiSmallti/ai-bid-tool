@@ -84471,6 +84471,624 @@
             "title": "TemplateDetailData",
             "type": "object"
           }
+        },
+        "memory browse": {
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "MemoryKind": {
+                "enum": [
+                  "rule",
+                  "preference"
+                ],
+                "type": "string"
+              },
+              "MemoryStatus": {
+                "enum": [
+                  "candidate",
+                  "active",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "Tag": {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "scope": {
+                "const": "org",
+                "default": "org",
+                "title": "Scope",
+                "type": "string"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "kind": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MemoryKind"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/MemoryStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "tags": {
+                "items": {
+                  "$ref": "#/$defs/Tag"
+                },
+                "maxItems": 20,
+                "title": "Tags",
+                "type": "array"
+              },
+              "expiry": {
+                "default": "all",
+                "enum": [
+                  "all",
+                  "expired",
+                  "unexpired"
+                ],
+                "title": "Expiry",
+                "type": "string"
+              },
+              "include_deleted": {
+                "default": false,
+                "title": "Include Deleted",
+                "type": "boolean"
+              }
+            },
+            "title": "MemoryQuery",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "Digest": {
+                "pattern": "^[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "MemoryContent": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "$ref": "#/$defs/MemoryKind"
+                  },
+                  "conflict_key": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "pattern": "^[a-z0-9][a-z0-9_.-]*$",
+                    "title": "Conflict Key",
+                    "type": "string"
+                  },
+                  "text": {
+                    "maxLength": 2000,
+                    "minLength": 1,
+                    "title": "Text",
+                    "type": "string"
+                  },
+                  "tags": {
+                    "items": {
+                      "$ref": "#/$defs/Tag"
+                    },
+                    "maxItems": 20,
+                    "title": "Tags",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "conflict_key",
+                  "text"
+                ],
+                "title": "MemoryContent",
+                "type": "object"
+              },
+              "MemoryKind": {
+                "enum": [
+                  "rule",
+                  "preference"
+                ],
+                "type": "string"
+              },
+              "MemoryOrigin": {
+                "enum": [
+                  "human",
+                  "system",
+                  "platform_release"
+                ],
+                "type": "string"
+              },
+              "MemoryRevisionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "memory_id": {
+                    "format": "uuid",
+                    "title": "Memory Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "$ref": "#/$defs/Revision"
+                  },
+                  "target": {
+                    "$ref": "#/$defs/MemoryTarget"
+                  },
+                  "content": {
+                    "$ref": "#/$defs/MemoryContent"
+                  },
+                  "status": {
+                    "$ref": "#/$defs/MemoryStatus"
+                  },
+                  "source": {
+                    "$ref": "#/$defs/MemorySourceView"
+                  },
+                  "content_sha256": {
+                    "$ref": "#/$defs/Digest"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "created_by": {
+                    "format": "uuid",
+                    "title": "Created By",
+                    "type": "string"
+                  },
+                  "actor_kind": {
+                    "enum": [
+                      "session",
+                      "token",
+                      "agent",
+                      "worker"
+                    ],
+                    "title": "Actor Kind",
+                    "type": "string"
+                  },
+                  "confirmed_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed By"
+                  },
+                  "confirmed_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confirmed At"
+                  },
+                  "decision": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "approve",
+                          "reject",
+                          "disable",
+                          "delete"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Decision"
+                  },
+                  "decision_reason_sha256": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Digest"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "expires_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expires At"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "memory_id",
+                  "revision",
+                  "target",
+                  "content",
+                  "status",
+                  "source",
+                  "content_sha256",
+                  "created_at",
+                  "created_by",
+                  "actor_kind"
+                ],
+                "title": "MemoryRevisionView",
+                "type": "object"
+              },
+              "MemoryScope": {
+                "enum": [
+                  "global",
+                  "org",
+                  "user",
+                  "project"
+                ],
+                "type": "string"
+              },
+              "MemorySourceView": {
+                "additionalProperties": false,
+                "properties": {
+                  "origin": {
+                    "$ref": "#/$defs/MemoryOrigin"
+                  },
+                  "provenance_redacted": {
+                    "default": false,
+                    "title": "Provenance Redacted",
+                    "type": "boolean"
+                  },
+                  "task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Task Id"
+                  },
+                  "card_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Card Id"
+                  },
+                  "card_revision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Card Revision Id"
+                  },
+                  "feedback_event_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Feedback Event Id"
+                  },
+                  "proposal_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Proposal Job Id"
+                  },
+                  "proposal_run_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Proposal Run Id"
+                  },
+                  "platform_release_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Release Id"
+                  }
+                },
+                "required": [
+                  "origin"
+                ],
+                "title": "MemorySourceView",
+                "type": "object"
+              },
+              "MemoryStatus": {
+                "enum": [
+                  "candidate",
+                  "active",
+                  "disabled"
+                ],
+                "type": "string"
+              },
+              "MemoryTarget": {
+                "additionalProperties": false,
+                "properties": {
+                  "scope": {
+                    "$ref": "#/$defs/MemoryScope"
+                  },
+                  "user_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "User Id"
+                  },
+                  "task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Task Id"
+                  }
+                },
+                "required": [
+                  "scope"
+                ],
+                "title": "MemoryTarget",
+                "type": "object"
+              },
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "Tag": {
+                "maxLength": 40,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "current": {
+                "$ref": "#/$defs/MemoryRevisionView"
+              },
+              "effective_status": {
+                "enum": [
+                  "candidate",
+                  "active",
+                  "disabled",
+                  "expired",
+                  "deleted"
+                ],
+                "title": "Effective Status",
+                "type": "string"
+              },
+              "deleted_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Deleted At"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "current",
+              "effective_status"
+            ],
+            "title": "MemoryView",
+            "type": "object"
+          }
         }
       },
       "exit_codes": {

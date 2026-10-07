@@ -8,6 +8,9 @@ selected memory IDs also misses newly approved rules when the previous retrieval
 
 ## Usage
 
+The [management pages](memory-management.md) provide bounded org browse, exact
+revision detail and task feedback recovery over these services.
+
 Create an organization candidate with `bid memory add --input FILE --json`, inspect it with
 `memory show` and `memory history`, then approve its exact revision through an administrator human
 session using `memory approve --id UUID --input FILE`. Editing active content creates a new candidate

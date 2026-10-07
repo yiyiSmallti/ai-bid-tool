@@ -91,6 +91,31 @@ async def live_actor(session, actor):
     return replace(actor, scopes=scopes, role=member.role)
 
 
+def require_read_authority(
+    live: Identity,
+    workflow: TaskWorkflow | None,
+    member: TaskMember | None,
+    scope: str,
+    *,
+    require_member: bool = False,
+) -> bool:
+    """Shared task visibility gate for locked writes and joined read projections.
+
+    Callers must first refresh the identity and select this task's active membership.
+    """
+    recovery = live.actor_kind == "session" and live.token_id is None and live.role == "admin"
+    if workflow is None or (
+        member is None and (require_member or scope == "card:comment" or not recovery)
+    ):
+        raise not_found()
+    # A visible object is established before scope errors reveal which action was denied.
+    live.require("task:read")
+    live.require(scope)
+    if scope in HUMAN_SCOPES and (live.actor_kind != "session" or live.token_id is not None):
+        fail("forbidden", "Human session required", 403, 4)
+    return recovery
+
+
 async def access(
     session: AsyncSession,
     actor: Identity,
@@ -103,7 +128,7 @@ async def access(
     management=False,
     require_member=False,
     bind_context=True,
-):
+) -> tuple[Task, TaskWorkflow, TaskMember | None]:
     # Preparation paths may check write authority without holding a task lock;
     # they must repeat this gate with the default write lock before publication.
     should_lock = write if lock is None else lock
@@ -130,16 +155,8 @@ async def access(
         )
         .execution_options(populate_existing=True)
     )
-    recovery = live.actor_kind == "session" and live.token_id is None and live.role == "admin"
-    if workflow is None or (
-        member is None and (require_member or scope == "card:comment" or not recovery)
-    ):
-        raise not_found()
-    # A visible object is established before scope errors reveal which action was denied.
-    live.require("task:read")
-    live.require(scope)
-    if scope in HUMAN_SCOPES and (live.actor_kind != "session" or live.token_id is not None):
-        fail("forbidden", "Human session required", 403, 4)
+    recovery = require_read_authority(live, workflow, member, scope, require_member=require_member)
+    assert workflow is not None  # Established by the shared visibility gate.
     if management:
         if not recovery and (member is None or member.role != "owner"):
             fail("forbidden", "Task owner required", 403, 4)

@@ -14,8 +14,9 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.entities import Base, Tenant
@@ -32,6 +33,11 @@ class Memory(Tenant, Base):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     source_feedback_event_id: Mapped[UUID | None] = mapped_column()
     generator_version: Mapped[str | None] = mapped_column(String(100))
+    search_vector: Mapped[str] = mapped_column(TSVECTOR, server_default=text("''::tsvector"))
+    search_tags: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default=text("'{}'::text[]"))
+    search_kind: Mapped[str | None] = mapped_column(Text)
+    search_status: Mapped[str | None] = mapped_column(Text)
+    search_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "source_feedback_event_id", "generator_version"),

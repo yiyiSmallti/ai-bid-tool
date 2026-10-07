@@ -1,12 +1,13 @@
 """Memory API: human approval and durable candidate job submission."""
 
+import time
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
-from app.core.errors import ServiceError
+from app.core.errors import ServiceError, not_found
 from app.memory import candidates, crud, feedback, retrieval
 from app.schemas.contracts import Result
 from app.schemas.memory_contracts import (
@@ -149,12 +150,32 @@ def create_router(context, db, queue, settings, storage):
         "/tasks/{task_id}/memory-feedback", name="memory_feedback_list", response_model=Result
     )
     async def feedback_list(
+        request: Request,
         task_id: UUID,
-        cursor: str | None = None,
-        limit: int = Query(50, ge=1, le=100),
+        management_view: bool = Query(False, alias="management"),
+        cursor: str | None = Query(None, max_length=2048),
+        limit: int | None = Query(None, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
-        return await feedback.list_feedback(ctx[0], ctx[1], task_id, cursor=cursor, limit=limit)
+        if management_view:
+            if getattr(request.state, "contract_version", None) != "4.0":
+                raise not_found()
+            from app.memory import management
+            from app.schemas.management_pages import PageQuery
+
+            started = time.monotonic()
+            page = await management.feedback_page(
+                ctx[0], ctx[1], task_id, PageQuery(cursor=cursor, limit=limit or 25), settings
+            )
+            return management.page_result(
+                "memory feedback list",
+                page,
+                settings.billing_currency,
+                round((time.monotonic() - started) * 1000),
+            )
+        return await feedback.list_feedback(
+            ctx[0], ctx[1], task_id, cursor=cursor, limit=limit or 50
+        )
 
     @router.get(
         "/tasks/{task_id}/memory-evaluations", name="memory_samples_list", response_model=Result
