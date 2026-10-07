@@ -63,7 +63,7 @@ The [existing save service](../../server/app/services/provider_configs.py) locks
 the org sequence, compares `expected_revision`, encrypts a new revision and
 records the key-free audit in the same transaction.
 
-[Migration 0055](../../server/migrations/versions/0055_model_settings.py) adds
+[Migration 0056](../../server/migrations/versions/0056_model_settings.py) adds
 bounded read indexes and orders the existing provider write guard after RLS,
 foreign-key and CHECK rejection. It preserves the existing human-admin and
 append-only rules, including ADR 0006's narrowly scoped owner rewrapping path.

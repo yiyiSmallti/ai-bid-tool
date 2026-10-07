@@ -1664,6 +1664,9 @@ def main(args: list[str] | None = None):
             from bid_cli.management_certificates import (
                 COMMAND_INPUTS as MANAGEMENT_CERTIFICATE_COMMANDS,
             )
+            from bid_cli.management_confidential import (
+                COMMAND_INPUTS as MANAGEMENT_CONFIDENTIAL_COMMANDS,
+            )
             from bid_cli.management_features import COMMAND_INPUTS as MANAGEMENT_FEATURE_COMMANDS
             from bid_cli.management_products import COMMAND_INPUTS as MANAGEMENT_PRODUCT_COMMANDS
             from bid_cli.management_profiles import COMMAND_INPUTS as MANAGEMENT_PROFILE_COMMANDS
@@ -1682,6 +1685,7 @@ def main(args: list[str] | None = None):
                 or name in MANAGEMENT_CERTIFICATE_COMMANDS
                 or name in MANAGEMENT_PROFILE_COMMANDS
                 or name in MANAGEMENT_PROVIDER_COMMANDS
+                or name in MANAGEMENT_CONFIDENTIAL_COMMANDS
                 or name.startswith("assessment ")
                 or "--view" in arguments
                 or any(argument.startswith("--view=") for argument in arguments)

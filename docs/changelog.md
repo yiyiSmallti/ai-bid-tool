@@ -25,7 +25,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   no decryption, balance query, per-revision usage aggregation or provider call.
 - Preserve saved platform identity, reasoning and published price snapshots when
   catalog entries become unavailable; older missing price snapshots remain null.
-  Migration `0055` adds read indexes and orders provider guards after constraints.
+  Migration `0056` adds read indexes and orders provider guards after constraints.
 - Added transient password submission and immediate clearing, safe reread after
   save, explicit cost preflight/start, and actual tested-revision inspection.
   BYOK reasoning options reject nested credential/transport slots. Legacy command
@@ -35,6 +35,26 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   integrated latency execution remain pending; see the
   [slice status](plan/management-pages.md#model-settings-vertical-slice) and
   [mechanism](notes/model-settings.md).
+
+## 2026-10-06: Confidential field management slice
+
+- Extended the org confidential page with bounded definitions/current values,
+  archive/unarchive, masked history, blank value entry and explicit audited reveal.
+  Task links carry a nonsecret task ID; blur, hide, navigation and session changes
+  clear revealed text. Value entry is cleared after submission and on conflict.
+- Added v4 query/history and checked-value routes with Result 4.0 CLI commands.
+  Compare field revision and the exact owner's current value ID under the existing
+  field lock; legacy append clients retain their behavior. Exact `field_id` query
+  filtering prevents editor hydration from missing a field beyond a prefix page.
+- Added migration `0055` for generated key/label prefix search, field/current/history
+  indexes and fixed-field metadata guards. Read projections never load ciphertext.
+  Existing token scopes, org isolation and encrypted append-only values are retained.
+  Field-create audits now contain revisions and fixed kind/scope codes, not keys.
+- Added DB-backed role/isolation/CAS/non-disclosure and fixed-scale tests, CLI
+  snapshots and mocked Playwright scenarios. PostgreSQL, real-browser and measured
+  scale acceptance remain pending; DB-free checks do not establish those gates.
+  Scope and mechanisms are in the [contract](plan/management-pages.md#confidential-management-slice)
+  and [confidential note](notes/confidential-values.md#bounded-management-and-checked-writes).
 
 ## 2026-10-06: Template and binding management slice
 

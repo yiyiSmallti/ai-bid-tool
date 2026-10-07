@@ -5,6 +5,7 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Computed,
     Index,
     Integer,
     String,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.entities import Base, Tenant
@@ -27,6 +29,9 @@ class ConfidentialField(Tenant, Base):
     scope: Mapped[str] = mapped_column(String(10))
     archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("public.management_confidential_vector(key, label)", persisted=True)
+    )
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "key"),

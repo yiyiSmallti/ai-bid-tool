@@ -84472,6 +84472,1072 @@
             "type": "object"
           }
         },
+        "confidential field browse": {
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "field_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Field Id"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              },
+              "archived": {
+                "default": false,
+                "title": "Archived",
+                "type": "boolean"
+              }
+            },
+            "title": "ConfidentialQuery",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "archived": {
+                "title": "Archived",
+                "type": "boolean"
+              },
+              "revision": {
+                "title": "Revision",
+                "type": "integer"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "archived",
+              "revision",
+              "created_at"
+            ],
+            "title": "ConfidentialFieldView",
+            "type": "object"
+          }
+        },
+        "confidential browse": {
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              },
+              "SearchText": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "q": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/SearchText"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "field_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Field Id"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              },
+              "archived": {
+                "default": false,
+                "title": "Archived",
+                "type": "boolean"
+              }
+            },
+            "title": "ConfidentialQuery",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "description": "One field's current value for the org or a task, never the value itself.",
+            "properties": {
+              "field_id": {
+                "format": "uuid",
+                "title": "Field Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task Id"
+              },
+              "status": {
+                "enum": [
+                  "filled",
+                  "missing"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Value Id"
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Version"
+              },
+              "tail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Tail"
+              },
+              "set_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set By"
+              },
+              "set_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set At"
+              }
+            },
+            "required": [
+              "field_id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "task_id",
+              "status",
+              "value_id",
+              "version",
+              "tail",
+              "set_by",
+              "set_at"
+            ],
+            "title": "ConfidentialValueView",
+            "type": "object"
+          }
+        },
+        "confidential history-page": {
+          "input": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              }
+            },
+            "title": "ConfidentialHistoryQuery",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "field",
+              "options": [
+                "--field"
+              ],
+              "required": true,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range",
+              "multiple": false,
+              "default": "25"
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "$defs": {
+              "Cursor": {
+                "maxLength": 2048,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Live keyset page, not a snapshot or an authorization grant; no global counts.",
+            "properties": {
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "as_of": {
+                "format": "date-time",
+                "title": "As Of",
+                "type": "string"
+              },
+              "returned": {
+                "maximum": 100,
+                "minimum": 0,
+                "title": "Returned",
+                "type": "integer"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Cursor"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "has_more": {
+                "title": "Has More",
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "org_id",
+              "as_of",
+              "returned",
+              "has_more"
+            ],
+            "title": "PageData",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "description": "One field's current value for the org or a task, never the value itself.",
+            "properties": {
+              "field_id": {
+                "format": "uuid",
+                "title": "Field Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task Id"
+              },
+              "status": {
+                "enum": [
+                  "filled",
+                  "missing"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Value Id"
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Version"
+              },
+              "tail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Tail"
+              },
+              "set_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set By"
+              },
+              "set_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set At"
+              }
+            },
+            "required": [
+              "field_id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "task_id",
+              "status",
+              "value_id",
+              "version",
+              "tail",
+              "set_by",
+              "set_at"
+            ],
+            "title": "ConfidentialValueView",
+            "type": "object"
+          }
+        },
+        "confidential set-checked": {
+          "input": {
+            "$defs": {
+              "Revision": {
+                "minimum": 1,
+                "type": "integer"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Transient input: only the dedicated submit transport serializes the value.",
+            "properties": {
+              "value": {
+                "maxLength": 2000,
+                "minLength": 1,
+                "title": "Value",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Task Id"
+              },
+              "expected_field_revision": {
+                "$ref": "#/$defs/Revision"
+              },
+              "expected_value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expected Value Id"
+              }
+            },
+            "required": [
+              "value",
+              "expected_field_revision",
+              "expected_value_id"
+            ],
+            "title": "ConfidentialValueRevisionSet",
+            "type": "object"
+          },
+          "cli_parameters": [
+            {
+              "name": "field",
+              "options": [
+                "--field"
+              ],
+              "required": true,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "expected_field_revision",
+              "options": [
+                "--expected-field-revision"
+              ],
+              "required": true,
+              "type": "integer range",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "expected_value",
+              "options": [
+                "--expected-value"
+              ],
+              "required": false,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "expect_empty",
+              "options": [
+                "--expect-empty"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            },
+            {
+              "name": "value_stdin",
+              "options": [
+                "--value-stdin"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            },
+            {
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": false,
+              "type": "uuid",
+              "multiple": false,
+              "default": null
+            },
+            {
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean",
+              "multiple": false,
+              "default": "False"
+            }
+          ],
+          "output": {
+            "additionalProperties": false,
+            "description": "One field's current value for the org or a task, never the value itself.",
+            "properties": {
+              "field_id": {
+                "format": "uuid",
+                "title": "Field Id",
+                "type": "string"
+              },
+              "key": {
+                "title": "Key",
+                "type": "string"
+              },
+              "placeholder": {
+                "title": "Placeholder",
+                "type": "string"
+              },
+              "label": {
+                "title": "Label",
+                "type": "string"
+              },
+              "kind": {
+                "enum": [
+                  "amount",
+                  "contact",
+                  "identity",
+                  "bank_account",
+                  "other"
+                ],
+                "title": "Kind",
+                "type": "string"
+              },
+              "scope": {
+                "enum": [
+                  "org",
+                  "task"
+                ],
+                "title": "Scope",
+                "type": "string"
+              },
+              "task_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Task Id"
+              },
+              "status": {
+                "enum": [
+                  "filled",
+                  "missing"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "value_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Value Id"
+              },
+              "version": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Version"
+              },
+              "tail": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Tail"
+              },
+              "set_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set By"
+              },
+              "set_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Set At"
+              }
+            },
+            "required": [
+              "field_id",
+              "key",
+              "placeholder",
+              "label",
+              "kind",
+              "scope",
+              "task_id",
+              "status",
+              "value_id",
+              "version",
+              "tail",
+              "set_by",
+              "set_at"
+            ],
+            "title": "ConfidentialValueView",
+            "type": "object"
+          }
+        },
         "provider show": {
           "cli_parameters": [
             {

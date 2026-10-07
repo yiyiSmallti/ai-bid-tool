@@ -271,6 +271,9 @@ from bid_cli.management_bindings import COMMAND_ITEMS as BINDING_COMMAND_ITEMS
 from bid_cli.management_certificates import COMMAND_DATA as CERTIFICATE_COMMAND_DATA
 from bid_cli.management_certificates import COMMAND_INPUTS as CERTIFICATE_COMMAND_INPUTS
 from bid_cli.management_certificates import COMMAND_ITEMS as CERTIFICATE_COMMAND_ITEMS
+from bid_cli.management_confidential import COMMAND_DATA as CONFIDENTIAL_COMMAND_DATA
+from bid_cli.management_confidential import COMMAND_INPUTS as CONFIDENTIAL_COMMAND_INPUTS
+from bid_cli.management_confidential import COMMAND_ITEMS as CONFIDENTIAL_COMMAND_ITEMS
 from bid_cli.management_features import COMMAND_DATA as FEATURE_COMMAND_DATA
 from bid_cli.management_features import COMMAND_INPUTS as FEATURE_COMMAND_INPUTS
 from bid_cli.management_features import COMMAND_ITEMS as FEATURE_COMMAND_ITEMS
@@ -774,6 +777,7 @@ COMMANDS.update(BINDING_COMMAND_INPUTS)
 COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
 COMMANDS.update(PROFILE_COMMAND_INPUTS)
 COMMANDS.update(PROVIDER_COMMAND_INPUTS)
+COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 
 # Registered commands and discovery share one inventory; the legacy snapshot above
 # intentionally excludes this Result 4.0-only slice.
@@ -858,6 +862,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | CERTIFICATE_COMMAND_DATA
                     | PROFILE_COMMAND_DATA
                     | PROVIDER_COMMAND_DATA
+                    | CONFIDENTIAL_COMMAND_DATA
                 ).items()
             }
         )
@@ -872,6 +877,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | CERTIFICATE_COMMAND_ITEMS
                     | PROFILE_COMMAND_ITEMS
                     | PROVIDER_COMMAND_ITEMS
+                    | CONFIDENTIAL_COMMAND_ITEMS
                 )
             }
         )
@@ -1010,6 +1016,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         | TEMPLATE_COMMAND_ITEMS
         | BINDING_COMMAND_ITEMS
         | PROVIDER_COMMAND_ITEMS
+        | CONFIDENTIAL_COMMAND_ITEMS
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
