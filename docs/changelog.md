@@ -6,6 +6,21 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-07: Confidential prefix scans under tenant RLS
+
+- Replace the unusable confidential GIN search path with a tenant-isolated lexeme
+  projection and C-collated B-tree prefix ranges in migration `0055`. Materialized
+  candidates and parameterized field point reads preserve prefix AND semantics,
+  keyset ordering and filtering before current-value lookup without changing RLS.
+- Keep the original confidential scale bounds and add projection range-index and
+  row-visit checks, plus projection isolation, trigger-write and label-refresh
+  acceptance. Integration acceptance remains pending; see the
+  [mechanism](notes/confidential-values.md#bounded-management-and-checked-writes).
+- Permit token cleanup after a real parent deletion independently of FK cascade
+  trigger depth, while retaining checks against forged writes to live parents.
+  Identify executed CTE SELECTs from SQLAlchemy compilation metadata for both
+  read counts and EXPLAIN capture; retain all index and row-visit bounds.
+
 ## 2026-10-06: Confidential field management slice
 
 - Extended the org confidential page with bounded definitions/current values,

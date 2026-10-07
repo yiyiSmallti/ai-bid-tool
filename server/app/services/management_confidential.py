@@ -18,6 +18,7 @@ from sqlalchemy.orm import aliased
 from app.core.errors import not_found
 from app.core.security import Secrets, TokenSigner
 from app.models.confidential import ConfidentialField as Field
+from app.models.confidential import ConfidentialFieldSearchToken as SearchToken
 from app.models.confidential import ConfidentialValue as Value
 from app.models.entities import Task
 from app.models.team_workflow import TaskMember, TaskWorkflow
@@ -236,6 +237,43 @@ def build_page(session, actor, purpose, parent, normalized, items, anchors, more
     )
 
 
+def prefix_bounds(lexeme, prefix: str):
+    """Literal UTF-8/C range; increment a Unicode scalar, never emit a surrogate."""
+    for index in range(len(prefix) - 1, -1, -1):
+        point = ord(prefix[index])
+        if point < 0x10FFFF:
+            successor = 0xE000 if point == 0xD7FF else point + 1
+            upper = prefix[:index] + chr(successor)
+            return lexeme >= prefix, lexeme < upper
+    return (lexeme >= prefix,)
+
+
+def prefix_candidates(actor: Identity, tokens: list[str]):
+    statement = select(SearchToken.field_id).where(
+        SearchToken.org_id == actor.org_id,
+        *prefix_bounds(SearchToken.token, tokens[0]),
+    )
+    for index, token in enumerate(tokens[1:]):
+        other = aliased(SearchToken, name=f"prefix_{index}")
+        statement = statement.where(
+            select(other.field_id)
+            .where(
+                other.org_id == actor.org_id,
+                other.field_id == SearchToken.field_id,
+                *prefix_bounds(other.token, token),
+            )
+            .correlate(SearchToken)
+            # Preserve an indexed owner lookup for each candidate instead of
+            # flattening EXISTS into a hash join over a broad remaining token.
+            .limit(1)
+            .offset(0)
+            .exists()
+        )
+    # A field can contain several lexemes with the same prefix. Deduplicate
+    # before hydration, but never LIMIT candidates before all field filters.
+    return statement.distinct().cte("matching_fields").prefix_with("MATERIALIZED")
+
+
 def fields_statement(actor: Identity, body: ConfidentialQuery, anchor=None, *, values=False):
     statement = select(Field).where(Field.org_id == actor.org_id)
     if body.field_id is not None:
@@ -244,21 +282,35 @@ def fields_statement(actor: Identity, body: ConfidentialQuery, anchor=None, *, v
         statement = statement.where(Field.archived.is_(False))
     if values and body.task_id is None:
         statement = statement.where(Field.scope == "org")
-    if body.q is not None:
-        tokens = search_tokens(body.q)
-        statement = (
-            statement.where(
-                Field.search_vector.op("@@")(
-                    func.to_tsquery("simple", " & ".join(token + ":*" for token in tokens))
-                )
-            )
-            if tokens
-            else statement.where(text("false"))
-        )
     if anchor:
         statement = statement.where(tuple_(Field.key, Field.id) > tuple_(*anchor))
+    projected = Field
+    if body.q is not None:
+        tokens = search_tokens(body.q)
+        if tokens:
+            candidates = prefix_candidates(actor, tokens)
+            # @@ is not leakproof: under FORCE RLS it cannot drive the GIN
+            # scan. Use leakproof scalar token ranges to choose candidates,
+            # then keep @@ only as the original semantic check on point reads.
+            # OFFSET 0 prevents flattening this parameterized lookup back into
+            # an all-fields join/scan. All filters still precede the page LIMIT.
+            point = (
+                statement.where(
+                    Field.id == candidates.c.field_id,
+                    Field.search_vector.op("@@")(
+                        func.to_tsquery("simple", " & ".join(token + ":*" for token in tokens))
+                    ),
+                )
+                .correlate(candidates)
+                .offset(0)
+                .lateral("matching_field")
+            )
+            projected = aliased(Field, point)
+            statement = select(projected).select_from(candidates).join(point, true())
+        else:
+            statement = statement.where(text("false"))
     return (
-        statement.order_by(Field.key, Field.id)
+        statement.order_by(projected.key, projected.id)
         .limit(body.limit + 1)
         .execution_options(populate_existing=True)
     )

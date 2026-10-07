@@ -23,7 +23,7 @@ its decisions are in [confidential-values.md](../plan/confidential-values.md).
 
 ### Storage and access
 
-[confidential.py](../../server/app/models/confidential.py) holds two FORCE RLS
+[confidential.py](../../server/app/models/confidential.py) holds the authoritative field/value FORCE RLS
 tables created by migration `0030`. `confidential_fields` fixes `key`, `kind`
 and `scope` (`org` or `task`); only `label`, `archived` and `revision` can be
 updated. `confidential_values` is append-only: each set adds a version for the
@@ -61,8 +61,30 @@ Cursors expire after 15 minutes and bind org, actor, live scopes, task workflow/
 authority, normalized filters and parent/order. Pages enforce complete Result byte
 budgets and a two-second statement timeout. Migration
 [0055_confidential_management.py](../../server/migrations/versions/0055_confidential_management.py)
-adds generated search metadata, keyset/owner indexes and an AFTER fixed-field guard,
-preserving the existing RLS, composite keys and column-level write privileges.
+adds generated search metadata, a derived lexeme projection, keyset/owner indexes
+and an AFTER fixed-field guard, preserving the existing RLS, composite keys and
+field/value column-level write privileges.
+
+PostgreSQL's `tsvector @@ tsquery` function is not leakproof, so a GIN predicate
+cannot be promoted ahead of the field table's RLS barrier. The derived
+`confidential_field_search_tokens` table stores only `tsvector_to_array` lexemes
+from key/label metadata. Its `(org_id, token, field_id)` B-tree uses `C` collation;
+literal prefix bounds use leakproof text comparisons. Remaining query tokens use
+bounded `(org_id, field_id, token)` probes. Materialized candidate IDs feed
+parameterized field point reads, with `OFFSET 0` preventing join flattening;
+archive/scope/exact-ID/keyset filters and the original `@@` semantic check precede
+page LIMIT. The values path reads only that retained field page.
+
+The projection has FORCE RLS and an org/field composite FK. An invoker-rights
+AFTER trigger refreshes it on field insertion or label change; another AFTER
+guard refuses direct projection writes and checks nested changes against the real
+parent vector under a shared row lock. Trigger depth alone is not a provenance
+check: caller-owned temporary triggers must not insert fake lexemes or remove
+current ones. FK cascade cleanup is allowed when the parent no longer exists;
+queued AFTER triggers do not have a fixed cascade nesting depth.
+Runtime INSERT/DELETE grants serve derived maintenance, with no
+privileged function owner, new bypass role or change to PostgreSQL's leakproof flags. The scale acceptance checks both root
+and lexeme relation visits and the actual range index conditions.
 Its stored search-column/index build needs a maintenance window sized for the
 existing field table; recovery preserves rows and guards and repairs forward.
 

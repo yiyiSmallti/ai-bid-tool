@@ -6,6 +6,8 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
+    ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -44,6 +46,23 @@ class ConfidentialField(Tenant, Base):
         ),
         CheckConstraint("scope IN ('org', 'task')", name="confidential_field_scope"),
         CheckConstraint("revision >= 1", name="confidential_field_revision"),
+    )
+
+
+class ConfidentialFieldSearchToken(Base):
+    """Derived key/label lexemes, never values; maintained only by field triggers."""
+
+    __tablename__ = "confidential_field_search_tokens"
+    org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id"), primary_key=True)
+    token: Mapped[str] = mapped_column(Text(collation="C"), primary_key=True)
+    field_id: Mapped[UUID] = mapped_column(primary_key=True)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "field_id"],
+            ["confidential_fields.org_id", "confidential_fields.id"],
+            ondelete="CASCADE",
+        ),
+        Index("management_confidential_token_owner", "org_id", "field_id", "token"),
     )
 
 
