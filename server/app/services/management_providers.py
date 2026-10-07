@@ -463,8 +463,11 @@ async def catalog(
         actor = await reader(session, actor)
         normalized = {"id_prefix": body.q.casefold() if body.q else None}
         anchor = open_cursor(session, actor, body, "catalog", normalized)
+        # Keep this fixed predicate identical to migration 0056's partial index,
+        # including IS TRUE (not bare enabled). Literal capability also lets
+        # generic prepared plans prove the predicate before applying LIMIT.
         statement = select(*CATALOG_COLUMNS).where(
-            text("platform_models.capability = 'llm_extract'"), PlatformModel.enabled.is_(True)
+            text("platform_models.enabled IS TRUE AND platform_models.capability = 'llm_extract'")
         )
         ordered_id = PlatformModel.id.collate("C")
         if body.q:

@@ -22,8 +22,10 @@ CREATE INDEX management_provider_history
  ON public.provider_configs(org_id,capability,revision DESC,id DESC);
 CREATE INDEX management_provider_audit_author
  ON public.audit_logs(org_id,object_id) WHERE action='provider.set';
+-- Match the catalog query's BooleanTest exactly. A bare `enabled` predicate
+-- is not the same planner expression as `enabled IS TRUE` for partial-index use.
 CREATE INDEX management_provider_catalog
- ON public.platform_models(id COLLATE "C") WHERE enabled AND capability='llm_extract';
+ ON public.platform_models(id COLLATE "C") WHERE enabled IS TRUE AND capability='llm_extract';
 """
 
 GUARD_SQL = r"""
