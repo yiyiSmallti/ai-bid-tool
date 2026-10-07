@@ -394,6 +394,12 @@ def create_app(
                 }
             },
         )
+        if "attachment" in name.split():
+            from app.schemas.attachment_contracts import AttachmentErrorData
+
+            body.data = AttachmentErrorData(code=error.code, message=error.message).model_dump(
+                mode="json", exclude_none=True
+            )
         if name.startswith("agent "):
             from app.schemas.agent_contracts import AgentErrorData, AgentFailureData
 
@@ -653,6 +659,9 @@ def create_app(
         create_tender_router(context, settings, db, storage, queue, crypto, llm, resolve, ocr)
     )
     app.include_router(create_resource_router(context, settings, storage, crypto))
+    from app.api.attachments import create_router as create_attachment_router
+
+    app.include_router(create_attachment_router(context, settings, storage, crypto, queue))
     from app.api.management_products import create_router as create_management_product_router
 
     app.include_router(create_management_product_router(context, settings))

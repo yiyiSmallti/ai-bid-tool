@@ -189,6 +189,22 @@ async def test_source_role_matrix_preserves_all_prior_grants(
 ):
     from app.services.auth import HUMAN_ONLY_SCOPES, SCOPES
 
+    attachment_human = {
+        "attachment:write",
+        "attachment:review",
+        "attachment:manage",
+        "attachment:original:read",
+        "attachment:privacy",
+        "task:attachment",
+    }
+    assert ROLE_SCOPES[role] & attachment_human == (
+        attachment_human if role in {"admin", "bidder"} else set()
+    )
+    assert {"attachment:read", "attachment:page:read"} <= ROLE_SCOPES[role]
+    assert attachment_human | {"attachment:page:read"} <= HUMAN_ONLY_SCOPES
+    assert (attachment_human | {"attachment:page:read"}).isdisjoint(SCOPES)
+    assert "attachment:read" in SCOPES
+
     # U01 permits every human org role to open originals, never API tokens.
     assert "template:file:read" in ROLE_SCOPES[role]
     assert "template:file:read" in HUMAN_ONLY_SCOPES
@@ -229,6 +245,14 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         await api.get(f"/evidence-sources/{source['id']}/preview/download-link", headers=headers[0])
     ).status_code == 200
     later = {
+        "attachment:read",
+        "attachment:write",
+        "attachment:review",
+        "attachment:manage",
+        "attachment:original:read",
+        "attachment:page:read",
+        "attachment:privacy",
+        "task:attachment",
         "template:file:read",
         "certificate:lifecycle",
         "profile:lifecycle",

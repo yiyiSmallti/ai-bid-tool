@@ -28,7 +28,9 @@ class Contract(BaseContract):
 
 
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-ImageKind = Literal["screenshot", "diagram", "prototype", "certificate_page", "vendor_page"]
+ImageKind = Literal[
+    "screenshot", "diagram", "prototype", "certificate_page", "vendor_page", "attachment_page"
+]
 Environment = Literal["production", "test", "development", "prototype", "unknown"]
 AnalysisPurpose = Literal["match_requirements", "propose_regions", "read_text"]
 
@@ -98,6 +100,11 @@ class ArchiveDescriptor(Contract):
     media_type: Literal["application/pdf", "application/zip", "text/html"]
 
 
+class AttachmentPageSource(Contract):
+    kind: Literal["attachment_page"]
+    evidence_source_id: UUID
+
+
 class VendorSource(Contract):
     """A page image published by a succeeded vendor_capture sandbox run.
 
@@ -115,7 +122,12 @@ class PrototypeSource(Contract):
 
 
 ScreenshotSource = Annotated[
-    UploadSource | BrowserSource | CertificateSource | VendorSource | PrototypeSource,
+    UploadSource
+    | BrowserSource
+    | CertificateSource
+    | AttachmentPageSource
+    | VendorSource
+    | PrototypeSource,
     Field(discriminator="kind"),
 ]
 
@@ -242,7 +254,11 @@ class ContentMapping(Contract):
 
 
 class PreparedScreenshot(Contract):
-    source: ScreenshotSource
+    # Attachment pages are ingested only by the server-bound privacy endpoint.
+    source: Annotated[
+        UploadSource | BrowserSource | CertificateSource | VendorSource | PrototypeSource,
+        Field(discriminator="kind"),
+    ]
     source_sha256: Sha256
     source_width: int = Field(strict=True, ge=1, le=8192)
     source_height: int = Field(strict=True, ge=1, le=8192)
@@ -309,7 +325,7 @@ class ScreenshotView(Contract):
     extraction_job_id: UUID
     source: ScreenshotSource
     image_kind: ImageKind
-    origin: Literal["user", "browser", "certificate", "vendor", "prototype"]
+    origin: Literal["user", "browser", "certificate", "vendor", "prototype", "attachment"]
     selection_id: UUID
     resource_revision_id: UUID
     source_sha256: Sha256

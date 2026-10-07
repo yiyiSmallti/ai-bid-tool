@@ -1,5 +1,6 @@
 """Authenticated cloud annotation routes; source/render bytes never enter CLI plans."""
 
+import json
 from time import monotonic
 from uuid import UUID
 
@@ -27,8 +28,18 @@ async def bounded_input(request, adapter=BODY):
         if len(content) > schema.HTTP_INPUT_LIMIT:
             raise ServiceError("annotation_input_limit", "Annotation JSON exceeds 128 KiB", 413, 2)
     try:
+        raw = json.loads(content)
+        if isinstance(raw, dict) and isinstance(raw.get("input"), dict):
+            source = raw["input"].get("source")
+            if isinstance(source, dict) and source.get("kind") == "attachment_page":
+                raise ServiceError(
+                    "annotation_adapter_not_enabled",
+                    "Attachment annotation adapter is not enabled",
+                    409,
+                    2,
+                )
         return adapter.validate_json(content)
-    except ValidationError as exc:
+    except (ValidationError, ValueError) as exc:
         raise ServiceError(
             "invalid_annotation_input",
             "Invalid annotation input; unknown fields and noninteger coordinates are forbidden",

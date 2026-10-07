@@ -95,6 +95,10 @@ async def create_job(session, actor, task_id, extraction, kind, manifest, retry,
 
 async def render_manifest(session, actor, asset_id, parent_id, expected_hash, plan, storage=None):
     asset, parent = await images.rendition_access(session, actor, parent_id, storage=storage)
+    if asset.source_kind == "attachment_page":
+        images.fail(
+            "annotation_adapter_not_enabled", "Attachment annotation adapter is not enabled", 409
+        )
     if asset.id != asset_id:
         raise not_found()
     if parent.profile.startswith("annotation-"):
@@ -161,6 +165,10 @@ async def submit_render(session, actor, asset_id, body, storage, billing_currenc
         ), None
     await cards.task_lock(session, asset.task_id)
     await images.asset_access(session, actor, asset.id, active=True)
+    if asset.source_kind == "attachment_page":
+        images.fail(
+            "annotation_adapter_not_enabled", "Attachment annotation adapter is not enabled", 409
+        )
     return await create_job(
         session, actor, asset.task_id, extraction, "screenshot_render", manifest, body.retry
     )
@@ -373,6 +381,12 @@ async def analysis_inputs(session, actor, task_id, body, storage, provider):
     total_bytes = 0
     for index, request in enumerate(body.images):
         asset, row = await images.rendition_access(session, actor, request.rendition_id)
+        if asset.source_kind == "attachment_page":
+            images.fail(
+                "attachment_model_consumer_not_enabled",
+                "Attachment model processing is not enabled",
+                409,
+            )
         if asset.task_id != task_id or asset.extraction_job_id != extraction.id:
             raise not_found()
         if request.expected_image_sha256 != row.image_sha256:

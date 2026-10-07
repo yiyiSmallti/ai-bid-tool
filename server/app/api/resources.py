@@ -279,10 +279,24 @@ def create_router(
 
     @router.get("/tasks/{task_id}/profiles", name="task_profile_list", response_model=Result)
     async def task_profile_list(
-        task_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
+        task_id: UUID,
+        history: bool = False,
+        cursor: str | None = None,
+        limit: int | None = Query(None, ge=1, le=100),
+        ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
-        data, items = await profiles.list_selections(session, actor, task_id, history=history)
+        if limit is not None:
+            from app.services.attachments import profile_candidates
+
+            session.info["attachment_settings"] = settings
+            data, items = await profile_candidates(
+                session, actor, task_id, history=history, cursor=cursor, limit=limit
+            )
+        else:
+            if cursor:
+                raise ServiceError("invalid_input", "Cursor requires a page limit", 422, 2)
+            data, items = await profiles.list_selections(session, actor, task_id, history=history)
         return result("task profile list", data, items, profile_warnings)
 
     @router.post(

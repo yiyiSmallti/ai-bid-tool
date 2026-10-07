@@ -166,6 +166,7 @@ def source_data(row: EvidenceSource, snapshot: TaskCertificate, original: Certif
 def joined_sources():
     return (
         select(EvidenceSource, TaskCertificate, CertificateFile)
+        .where(EvidenceSource.source_kind == "user_supplied_certificate_pdf")
         .join(
             TaskCertificate,
             and_(

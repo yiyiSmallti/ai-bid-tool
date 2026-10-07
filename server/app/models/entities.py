@@ -79,6 +79,10 @@ class ApiToken(Tenant, Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (
         CheckConstraint(
+            "NOT (scopes ?| ARRAY['attachment:write','attachment:review','attachment:manage','attachment:original:read','task:attachment','attachment:privacy','attachment:page:read'])",
+            name="token_forbidden_attachment_scopes",
+        ),
+        CheckConstraint(
             "NOT (scopes ?| ARRAY['agent:read','agent:run','agent:cancel'])",
             name="token_forbidden_agent_scopes",
         ),
@@ -925,6 +929,14 @@ class TaskOrgProfile(Tenant, Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint(
+            "org_id",
+            "id",
+            "task_id",
+            "profile_revision_id",
+            "lot",
+            name="attachment_task_profile_binding",
+        ),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
         ForeignKeyConstraint(
             ["org_id", "profile_id", "profile_revision_id"],
@@ -1154,11 +1166,24 @@ class CertificateFilePart(Tenant, Base):
 
 class EvidenceSource(Tenant, Base):
     __tablename__ = "evidence_sources"
+    source_kind: Mapped[str] = mapped_column(
+        String(40),
+        default="user_supplied_certificate_pdf",
+        server_default="user_supplied_certificate_pdf",
+    )
+    task_attachment_id: Mapped[UUID | None] = mapped_column()
+    task_org_profile_id: Mapped[UUID | None] = mapped_column()
+    profile_revision_id: Mapped[UUID | None] = mapped_column()
+    profile_attachment_link_id: Mapped[UUID | None] = mapped_column()
+    attachment_id: Mapped[UUID | None] = mapped_column()
+    attachment_revision_id: Mapped[UUID | None] = mapped_column()
+    attachment_file_id: Mapped[UUID | None] = mapped_column()
+    approval_id: Mapped[UUID | None] = mapped_column()
     task_id: Mapped[UUID] = mapped_column()
-    task_certificate_id: Mapped[UUID] = mapped_column()
-    certificate_id: Mapped[UUID] = mapped_column()
-    certificate_revision_id: Mapped[UUID] = mapped_column()
-    certificate_file_id: Mapped[UUID] = mapped_column()
+    task_certificate_id: Mapped[UUID | None] = mapped_column()
+    certificate_id: Mapped[UUID | None] = mapped_column()
+    certificate_revision_id: Mapped[UUID | None] = mapped_column()
+    certificate_file_id: Mapped[UUID | None] = mapped_column()
     created_by: Mapped[UUID] = mapped_column()
     page: Mapped[int] = mapped_column(Integer)
     render_profile: Mapped[str] = mapped_column(String(40), default="pdf-page-preview-v1")
@@ -1171,6 +1196,58 @@ class EvidenceSource(Tenant, Base):
     eligible_for_draft_export: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        UniqueConstraint("org_id", "task_id", "id"),
+        ForeignKeyConstraint(
+            [
+                "org_id",
+                "task_attachment_id",
+                "task_id",
+                "task_org_profile_id",
+                "profile_revision_id",
+                "profile_attachment_link_id",
+                "attachment_id",
+                "attachment_revision_id",
+                "attachment_file_id",
+                "approval_id",
+            ],
+            [
+                "task_attachments." + c
+                for c in [
+                    "org_id",
+                    "id",
+                    "task_id",
+                    "task_org_profile_id",
+                    "profile_revision_id",
+                    "profile_attachment_link_id",
+                    "attachment_id",
+                    "attachment_revision_id",
+                    "file_id",
+                    "approval_id",
+                ]
+            ],
+            name="attachment_source_exact_selection",
+        ),
+        CheckConstraint(
+            "(source_kind='user_supplied_certificate_pdf' AND num_nonnulls(task_certificate_id,certificate_id,certificate_revision_id,certificate_file_id)=4 AND num_nonnulls(task_attachment_id,task_org_profile_id,profile_revision_id,profile_attachment_link_id,attachment_id,attachment_revision_id,attachment_file_id,approval_id)=0) OR (source_kind='user_supplied_attachment_pdf' AND num_nonnulls(task_certificate_id,certificate_id,certificate_revision_id,certificate_file_id)=0 AND num_nonnulls(task_attachment_id,task_org_profile_id,profile_revision_id,profile_attachment_link_id,attachment_id,attachment_revision_id,attachment_file_id,approval_id)=8)",
+            name="attachment_source_branches",
+        ),
+        Index(
+            "attachment_source_identity",
+            "org_id",
+            "task_attachment_id",
+            "page",
+            "render_profile",
+            unique=True,
+            postgresql_where=text("source_kind='user_supplied_attachment_pdf'"),
+        ),
+        Index(
+            "attachment_source_page",
+            "org_id",
+            "task_id",
+            "created_at",
+            "id",
+            postgresql_where=text("source_kind='user_supplied_attachment_pdf'"),
+        ),
         UniqueConstraint(
             "org_id",
             "id",
@@ -1181,7 +1258,15 @@ class EvidenceSource(Tenant, Base):
             "certificate_file_id",
             name="annotation_certificate_source_scope",
         ),
-        UniqueConstraint("org_id", "task_certificate_id", "page", "render_profile"),
+        Index(
+            "certificate_source_identity",
+            "org_id",
+            "task_certificate_id",
+            "page",
+            "render_profile",
+            unique=True,
+            postgresql_where=text("source_kind='user_supplied_certificate_pdf'"),
+        ),
         ForeignKeyConstraint(
             [
                 "org_id",

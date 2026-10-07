@@ -22,6 +22,7 @@ const menus = computed(() => area.value === "platform"
       { key: "products", to: "/org/products", title: "产品库", icon: Files },
       { key: "features", to: "/org/features", title: "功能库", icon: Files },
       { key: "templates", to: "/org/templates", title: "模板库", icon: Document },
+      { key: "attachments", to: "/org/attachments", title: "附件档案", icon: Memo },
       { key: "profiles", to: "/org/profiles", title: "单位资料", icon: Memo },
       { key: "memory", to: "/org/memory", title: "单位记忆", icon: Memo },
       { key: "org-models", to: "/org/settings/models", title: "模型与服务配置", icon: Monitor },
@@ -62,7 +63,7 @@ async function signOut() {
         <main id="main-content" class="app-main" tabindex="-1">
           <template v-if="area === 'org'">
             <el-alert v-if="orgAccess.error" :title="orgAccess.error" type="error" show-icon :closable="false" role="alert" />
-            <RouterView v-else-if="orgAccess.role" :key="`${route.path}:${route.query.job ?? ''}:${['products', 'features', 'templates', 'profiles', 'memory'].includes(route.meta.nav) ? `${route.query.revision ?? ''}:${route.query.task ?? ''}` : ''}:${org?.orgId}`" />
+            <RouterView v-else-if="orgAccess.role" :key="`${route.path}:${route.query.job ?? ''}:${['products', 'features', 'templates', 'profiles', 'memory', 'attachments'].includes(route.meta.nav) ? `${route.query.revision ?? ''}:${route.query.task ?? ''}` : ''}:${org?.orgId}`" />
           </template>
           <RouterView v-else />
         </main>

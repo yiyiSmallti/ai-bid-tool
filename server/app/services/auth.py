@@ -10,6 +10,7 @@ from app.core.errors import ServiceError, not_found
 from app.core.password_attempts import PasswordAttempts, invalid_login
 from app.core.security import TokenSigner, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
+from app.schemas.attachment_contracts import HUMAN_ONLY_SCOPES as ATTACHMENT_HUMAN_SCOPES
 
 AGENT_SCOPES = {
     "task:read",
@@ -243,6 +244,14 @@ HUMAN_ONLY_SCOPES = {
     "memory:eval:read",
     "memory:eval:review",
 }
+
+
+HUMAN_ONLY_SCOPES.update(ATTACHMENT_HUMAN_SCOPES)
+SCOPES.add("attachment:read")
+for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.update({"attachment:read", "attachment:page:read"})
+    if _role in {"admin", "bidder"}:
+        _scopes.update(ATTACHMENT_HUMAN_SCOPES)
 
 
 @dataclass

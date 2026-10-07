@@ -175,9 +175,22 @@ def _evidence(content: bytes, arguments: dict) -> dict:
     }
 
 
+def _attachment_validate(content: bytes, arguments: dict) -> dict:
+    # Reuse the established validator only inside this resource-limited child.
+    from app.core.pdf_files import validate_file
+
+    descriptor = validate_file(content, arguments["name"])
+    return descriptor.model_dump(mode="json")
+
+
 def run(operation: str, content: bytes, arguments: dict) -> dict:
     """Dispatch one operation after the child process has installed resource limits."""
-    handlers = {"preview": _preview, "page_count": _page_count, "evidence": _evidence}
+    handlers = {
+        "preview": _preview,
+        "page_count": _page_count,
+        "evidence": _evidence,
+        "attachment_validate": _attachment_validate,
+    }
     try:
         handler = handlers[operation]
     except KeyError:

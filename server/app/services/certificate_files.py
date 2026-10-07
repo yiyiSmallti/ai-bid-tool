@@ -15,6 +15,7 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
+from app.core.pdf_files import validate_file as validate_file
 from app.models.entities import (
     Certificate,
     CertificateFile,
@@ -46,42 +47,6 @@ WARNINGS = [
 MISSING_WARNING = (
     "Selected/current certificate revision has no original PDF; no prior file is inherited"
 )
-
-
-def validate_file(content: bytes, name: str) -> CertificateScanFile:
-    try:
-        if (
-            not content
-            or len(content) > MAX_FILE_BYTES
-            or not content.lstrip().startswith(b"%PDF-")
-        ):
-            raise ValueError("invalid PDF")
-        with pymupdf.open(stream=content, filetype="pdf") as pdf:
-            if (
-                not pdf.is_pdf
-                or pdf.is_repaired
-                or pdf.is_encrypted
-                or pdf.needs_pass
-                or pdf.xref_get_key(-1, "Encrypt")[0] != "null"
-                or not 1 <= len(pdf) <= 200
-            ):
-                raise ValueError("unsupported PDF")
-            for page in pdf:
-                if page.rect.is_empty:
-                    raise ValueError("invalid page")
-            return CertificateScanFile(
-                name=name,
-                sha256=hashlib.sha256(content).hexdigest(),
-                size_bytes=len(content),
-                page_count=len(pdf),
-            )
-    except Exception as exc:
-        raise ServiceError(
-            "invalid_certificate_file",
-            "File must be a readable unencrypted PDF within file/page limits",
-            400,
-            2,
-        ) from exc
 
 
 # Decoding happens only after the header's dimensions pass this bound, so a small

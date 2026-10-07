@@ -271,6 +271,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     )
     async def preview_link(rendition_id: UUID, ctx=Depends(context, scope="function")):
         session, actor = ctx
+        session.info["attachment_settings"] = settings
         asset, row = await screenshots.rendition_access(
             session, actor, rendition_id, storage=storage
         )
@@ -286,6 +287,15 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         audit(
             session, actor, "screenshot.preview.issue", row.id, {"image_sha256": row.image_sha256}
         )
+        if asset.source_kind == "attachment_page":
+            audit(
+                session,
+                actor,
+                "attachment.download.issue",
+                row.id,
+                {"image_sha256": row.image_sha256},
+            )
+            await session.flush()
         return result(
             "screenshot preview",
             {
@@ -299,6 +309,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     @router.get("/screenshot-renditions/{rendition_id}/content", name="screenshot_content")
     async def content(rendition_id: UUID, signature: str, ctx=Depends(context, scope="function")):
         session, actor = ctx
+        session.info["attachment_settings"] = settings
         asset, row = await screenshots.rendition_access(session, actor, rendition_id)
         try:
             signed = tokens.open(signature)
@@ -314,8 +325,28 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
             }.items()
         ):
             raise not_found()
-        png = await screenshots.read_rendition(storage, asset, row)
+        if asset.source_kind == "attachment_page":
+            from app.services.attachment_pages import verify_ancestry
+
+            await verify_ancestry(session, actor, asset, storage)
+        png = await screenshots.read_rendition(
+            storage,
+            asset,
+            row,
+            max_bytes=settings.max_upload_bytes
+            if asset.source_kind == "attachment_page"
+            else screenshots.MAX_BYTES,
+        )
         audit(session, actor, "screenshot.preview.read", row.id, {"image_sha256": row.image_sha256})
+        if asset.source_kind == "attachment_page":
+            audit(
+                session,
+                actor,
+                "attachment.download.read",
+                row.id,
+                {"image_sha256": row.image_sha256},
+            )
+            await session.flush()
         return Response(
             png,
             media_type="image/png",
