@@ -210,6 +210,14 @@ async def test_certificate_roles_preserve_old_grants(
     assert "template:file:read" in HUMAN_ONLY_SCOPES
     assert "template:file:read" not in SCOPES
 
+    # Model metadata is readable by every role and scoped tokens; writes/tests are human-admin.
+    assert "provider:read" in ROLE_SCOPES[role]
+    assert "provider:read" in SCOPES
+    assert "provider:read" not in HUMAN_ONLY_SCOPES
+    assert ("provider:write" in ROLE_SCOPES[role]) == (role == "admin")
+    assert "provider:write" in HUMAN_ONLY_SCOPES
+    assert "provider:write" not in SCOPES
+
     human_workflow_scopes = {"req:confirm", "req:manual", "evidence:annotate"}
     assert ROLE_SCOPES[role] & human_workflow_scopes == (
         human_workflow_scopes if role in {"admin", "bidder", "technical"} else set()

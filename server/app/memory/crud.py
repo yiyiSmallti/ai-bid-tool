@@ -68,12 +68,12 @@ def revision_view(memory, revision, source=None):
     )
 
 
-def memory_view(memory, revision, source=None):
+def memory_view(memory, revision, source=None, *, as_of=None):
     state = "deleted" if memory.deleted_at else revision.status
     if (
         state == "active"
         and revision.expires_at is not None
-        and revision.expires_at <= datetime.now(UTC)
+        and revision.expires_at <= (as_of or datetime.now(UTC))
     ):
         state = "expired"
     return MemoryView(
@@ -462,6 +462,8 @@ async def list_memories(session, actor, body, settings):
 
 async def history(session, actor, identifier, settings, *, cursor=None, limit=50):
     memory, _ = await load(session, actor, identifier, deleted=True)
+    if memory.deleted_at is not None:
+        human_admin(await access(session, actor, "memory:manage"), "memory:manage")
     filters = {"history": str(identifier)}
     anchor = read_cursor(settings, actor, filters, cursor)
     query = select(MemoryRevision).where(

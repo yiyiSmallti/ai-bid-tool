@@ -86,7 +86,11 @@ def value_view(
 async def require_field(
     session: AsyncSession, field_id: UUID, *, lock: bool = False
 ) -> ConfidentialField:
-    query = select(ConfidentialField).where(ConfidentialField.id == field_id)
+    query = (
+        select(ConfidentialField)
+        .where(ConfidentialField.id == field_id)
+        .execution_options(populate_existing=True)
+    )
     row = await session.scalar(query.with_for_update() if lock else query)
     if row is None:
         raise not_found()
@@ -138,7 +142,7 @@ async def create_field(
         actor,
         "confidential.field.create",
         row.id,
-        {"key": row.key, "kind": row.kind, "scope": row.scope},
+        {"revision": row.revision, "kind": row.kind, "scope": row.scope},
     )
     return field_view(row)
 

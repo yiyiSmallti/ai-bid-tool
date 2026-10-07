@@ -37,15 +37,19 @@ const QUALIFICATION_MANAGEMENT_PATH = /^\/management\/resources\/(?:certificates
 const PRODUCT_WRITE_PATH = /^\/resources\/products(?:\/[^/?]+\/revisions)?$/;
 const TEMPLATE_MANAGEMENT_PATH = /^\/management\/(?:resources\/templates(?:\/query|\/[^/?]+(?:\/history\/query|\/lifecycle(?:\/history\/query)?)?)|export-bindings(?:\/query|\/[^/?]+))$/;
 const TEMPLATE_WRITE_PATH = /^\/resources\/templates(?:\/[^/?]+\/revisions|\/revisions\/[^/?]+\/(?:download-link|download))?$/;
+const PROVIDER_MANAGEMENT_PATH = /^\/management\/providers(?:\/revisions\/[^/?]+|\/(?:history|catalog)\/query)?$/;
+const PROVIDER_WRITE_PATH = /^\/providers(?:\/test)?$/;
 const TEMPLATE_TASK_PATH = /^\/tasks\/[^/?]+\/templates$/;
 const TEMPLATE_BINDING_PATH = /^\/export-template-bindings$/;
+const MEMORY_PATH = /^\/(?:management\/memories(?:\/query|\/[^/?]+(?:\/history\/query)?)|memories(?:\/[^/?]+(?:\/decisions|\/disable)?)?|tasks\/[^/?]+\/(?:memory-feedback|memory-candidates))$/;
+const CONFIDENTIAL_MANAGEMENT_PATH = /^\/management\/(?:confidential-fields\/(?:query|[^/?]+\/values(?:\/history\/query)?)|confidential-values\/query)$/;
 const ANNOTATION_PATH = /^\/(?:screenshot-renditions\/[^/?]+\/(?:preview-link|content)|tasks\/[^/?]+\/annotations|annotations\/[^/?]+(?:\/(?:preview|releases|content))?|annotation-releases\/[^/?]+\/(?:preview|content))$/;
 const ATTACHMENT_PATH = /^\/(?:management\/resources\/attachments\/query|resources\/attachments(?:\/[^/?]+(?:\/(?:revisions|assignment|deactivate))?|\/revisions\/[^/?]+(?:\/(?:reviews|file\/(?:download-link|download)|parts\/\d+\/(?:download-link|download)|pages\/\d+\/(?:preview-link|preview)))?)?|resources\/profiles\/revisions\/[^/?]+\/attachments|profile-attachment-links\/[^/?]+\/deactivate|tasks\/[^/?]+\/(?:attachments|attachment-sources)|task-attachments\/[^/?]+\/deactivate|attachment-sources\/[^/?]+(?:\/(?:privacy|preview\/(?:download-link|download)))?)$/;
 const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:workflow|progress|members(?:\/[^/?]+(?:\/remove)?)?|member-candidates|handover|archive|unarchive|board|activity|events(?:\/poll)?|documents|jobs|extractions|requirements|products|features|certificates|profiles|certificate-files|evidence-sources|cards(?:\/(?:dispositions|generations))?|drafts|exports|product-simulations|simulated-resources|model-redaction))?)?|documents\/[^/?]+(?:\/(?:chunks|parse|extract|download-link|download|pages\/\d+\/preview))?|exports\/[^/?]+(?:\/(?:download-link|download|preview(?:\/pages\/\d+)?))?|jobs\/[^/?]+(?:\/cancel)?|cards\/[^/?]+(?:\/(?:actions|classification))?|drafts\/[^/?]+|resources\/(?:products|features|certificates|profiles)(?:\/revisions\/[^/?]+\/file\/(?:download-link|download|pages\/\d+\/preview))?|evidence-sources\/[^/?]+\/preview\/(?:download-link|download)|resources\/profiles\/[^/?]+\/revisions|resources\/certificates\/(?:files|[^/?]+\/(?:revisions|file-revisions))|billing(?:\/redeem)?|confidential-fields(?:\/[^/?]+\/(?:revisions|values))?|confidential-values(?:\/[^/?]+\/reveal)?)$/;
 function checkedPath(path, org) {
   if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   const url = new URL(path, window.location.origin);
-  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ATTACHMENT_PATH.test(url.pathname) || ORG_PATH.test(url.pathname) || ANNOTATION_PATH.test(url.pathname) || QUALIFICATION_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || FEATURE_MANAGEMENT_PATH.test(url.pathname) || FEATURE_WRITE_PATH.test(url.pathname) || TEMPLATE_MANAGEMENT_PATH.test(url.pathname) || TEMPLATE_WRITE_PATH.test(url.pathname) || TEMPLATE_TASK_PATH.test(url.pathname) || TEMPLATE_BINDING_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
+  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ORG_PATH.test(url.pathname) || ATTACHMENT_PATH.test(url.pathname) || MEMORY_PATH.test(url.pathname) || CONFIDENTIAL_MANAGEMENT_PATH.test(url.pathname) || ANNOTATION_PATH.test(url.pathname) || QUALIFICATION_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || FEATURE_MANAGEMENT_PATH.test(url.pathname) || FEATURE_WRITE_PATH.test(url.pathname) || TEMPLATE_MANAGEMENT_PATH.test(url.pathname) || PROVIDER_MANAGEMENT_PATH.test(url.pathname) || PROVIDER_WRITE_PATH.test(url.pathname) || TEMPLATE_WRITE_PATH.test(url.pathname) || TEMPLATE_TASK_PATH.test(url.pathname) || TEMPLATE_BINDING_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   return url.pathname;
 }
 function retryDelay(value) {
@@ -68,11 +72,11 @@ async function parseResult(response, pathname, org, version4 = false) {
       ["unavailable", "range_only"].includes(payload.data.total_status) ||
       (typeof payload.data.snapshot === "string" && typeof payload.data.parent_id === "string" && Number.isInteger(payload.data.returned)));
   const assessmentHistory = ["check list", "score list", "score rubric list"].includes(payload.command) && typeof payload.data.task_id === "string" && Number.isInteger(payload.data.total) && payload.items.length > 0 && payload.items.every(item => typeof (item.report?.id ?? item.id) === "string") && payload.items.some(item => item.report?.completion === "partial" || ["unavailable", "range_only"].includes(item.total_status));
-  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release"].includes(payload.data.kind) &&
+  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release", "memory_candidate"].includes(payload.data.kind) &&
     ((payload.data.status === "succeeded" && payload.data.result?.completion === "partial") ||
       (payload.data.status === "cancelled" && (payload.data.error === null || payload.data.error?.code)) ||
       (payload.data.status === "failed" && payload.data.error?.code && [2, 3, 4, 5].includes(payload.data.error.exit_code)));
-  const partial = (!payload.data.error && (assessmentRead || assessmentHistory)) || assessmentJob || (payload.command === "draft show" && payload.data.completion === "partial") || (payload.command === "job status" && payload.data.result?.completion === "partial" && ["draft", "card_generate"].includes(payload.data.kind));
+  const partial = (!payload.data.error && (assessmentRead || assessmentHistory)) || assessmentJob || (payload.command === "draft show" && payload.data.completion === "partial") || (payload.command === "job status" && payload.data.result?.completion === "partial" && ["draft", "card_generate", "memory_candidate"].includes(payload.data.kind));
   if (!response.ok || (!payload.ok && !partial)) {
     const error = payload.data?.error ?? payload.data ?? {};
     if ((response.status === 401 || (org && error.code === "org_inactive")) && !PUBLIC.has(pathname)) {
@@ -83,12 +87,12 @@ async function parseResult(response, pathname, org, version4 = false) {
   }
   return payload;
 }
-export async function request(method, path, body, { org = false, signal, binary = false, contractVersion } = {}) {
+export async function request(method, path, body, { org = false, signal, binary = false, contractVersion, providerWrite = false } = {}) {
   const pathname = checkedPath(path, org);
   // The unversioned API deliberately projects legacy v3 costs. Assessment pages
   // and job receipts require enforced budget preflight and actual Result 4 costs.
   const assessmentJobs = /^\/tasks\/[^/]+\/jobs$/.test(pathname) && ["check", "score_rubric", "score"].includes(new URL(path, window.location.origin).searchParams.get("kind"));
-  const apiPath = org && (ATTACHMENT_PATH.test(pathname) || ANNOTATION_PATH.test(pathname) || QUALIFICATION_MANAGEMENT_PATH.test(pathname) || PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || TEMPLATE_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
+  const apiPath = org && (CONFIDENTIAL_MANAGEMENT_PATH.test(pathname) || ATTACHMENT_PATH.test(pathname) || MEMORY_PATH.test(pathname) || ANNOTATION_PATH.test(pathname) || QUALIFICATION_MANAGEMENT_PATH.test(pathname) || PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || TEMPLATE_MANAGEMENT_PATH.test(pathname) || PROVIDER_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
   const headers = {};
   const epoch = orgEpoch;
   const controller = new AbortController();
@@ -106,7 +110,7 @@ export async function request(method, path, body, { org = false, signal, binary 
   if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
   try {
     const response = await fetch(apiPath, { method, headers, credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal, body: body === undefined ? undefined : multipart ? body : JSON.stringify(body) });
-    const value = binary && response.ok ? await response.blob() : await parseResult(response, pathname, org, apiPath.startsWith("/v4/"));
+    const value = providerWrite ? await discardProviderWrite(response) : binary && response.ok ? await response.blob() : await parseResult(response, pathname, org, apiPath.startsWith("/v4/"));
     if (controller.signal.aborted || (org && epoch !== orgEpoch)) throw new DOMException("单位会话已改变", "AbortError");
     return value;
   } finally { orgRequests.delete(controller); signal?.removeEventListener("abort", abort); }
@@ -158,4 +162,34 @@ export async function orgEventStream(path, cursor, signal, onMessage) {
     await reader?.cancel().catch(() => {});
     orgRequests.delete(controller); signal?.removeEventListener("abort", abort);
   }
+}
+
+// This write channel discards the legacy suffix-bearing receipt, including all
+// arbitrary server error text. The page rereads only management metadata.
+async function discardProviderWrite(response) {
+  let payload;
+  try { payload = await response.json(); } catch { throw new ApiError(response.status, "invalid_response", "保存响应无法核验，请重新读取配置"); }
+  if (response.ok && payload?.ok === true) {
+    if (typeof payload.data?.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(payload.data.id) || !Number.isInteger(payload.data.revision) || payload.data.revision < 1) throw new ApiError(response.status, "invalid_response", "保存响应无法核验，请重新读取配置");
+    return { id: payload.data.id, revision: payload.data.revision };
+  }
+  const code = payload?.data?.error?.code;
+  const messages = { revision_conflict: "修订已变化，请核对当前配置", provider_key_required: "首次设置或更换供应商、端点需输入新密钥", invalid_input: "配置参数无效", forbidden: "当前身份无权维护配置", human_required: "需要管理员本人登录", not_found: "模型不可访问", org_inactive: "单位已停用", session_required: "请重新登录单位" };
+  if (response.status === 401 || code === "org_inactive") { orgSession.clear(); window.dispatchEvent(new CustomEvent("bid:signed-out", {detail:"org"})); }
+  throw new ApiError(response.status, Object.hasOwn(messages, code) ? code : "provider_save_failed", messages[code] ?? "保存结果无法核验，请重新读取配置");
+}
+// A credential never becomes component state or a read-view serialization. The
+// password DOM value is consumed once, cleared before fetch, and the temporary
+// wire object is cleared as soon as request has serialized its body.
+export function submitProviderConfiguration(fields, control, options = {}) {
+  const wire = {capability:"llm_extract",source:fields.source,expected_revision:fields.expected_revision};
+  try {
+    if (fields.source === "platform") wire.platform_model_id = fields.platform_model_id;
+    else if (fields.source === "org") {
+      Object.assign(wire, {provider:fields.provider,model:fields.model,base_url:fields.base_url,json_mode:fields.json_mode,reasoning:fields.reasoning,default_reasoning:fields.default_reasoning,input_usd_per_mtok:fields.input_usd_per_mtok,output_usd_per_mtok:fields.output_usd_per_mtok});
+      if (control?.value) wire.api_key = control.value;
+    } else throw new ApiError(400,"invalid_input","配置来源无效");
+    if (control) control.value = "";
+    return request("POST","/providers",wire,{...options,org:true,contractVersion:4,providerWrite:true});
+  } finally { if (control) control.value = ""; delete wire.api_key; }
 }

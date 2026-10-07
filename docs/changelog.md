@@ -40,6 +40,111 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   integration acceptance remains pending; see the [contract](plan/attachment-archive.md)
   and [mechanism](notes/attachment-archives.md).
 
+## 2026-10-07: Memory management regression fixes
+
+- Require an actual, exact-current search projection change for the memory root
+  guard's derived-update exception. Reject direct no-op root updates and skip
+  unchanged internal refreshes when appending a real revision.
+- Preserve the management feedback flag in cursor regression requests and assert
+  the separate management and legacy error codes.
+- Name the feedback recovery dialog confirmation distinctly from its opener.
+- Drain deferred constraints after the memory scale fixture's bulk load and before
+  restoring transition triggers, keeping seed data and guard restoration atomic.
+
+## 2026-10-07: Model-settings browser acceptance fixes
+
+- Give the configuration-history and catalog table groups named region semantics;
+  verify the history headers and revision action inside that region.
+- Isolate each read-only role scenario so its built-app interception remains
+  installed; unexpected task-list navigation remains a test failure.
+- Contain mobile navigation overflow in a scrollable flex child while keeping
+  the brand and navigation targets sized and keyboard reachable.
+
+## 2026-10-06: Org memory pages and task feedback recovery
+
+- Added org memory browse, exact revision detail and separate history pages, plus
+  task-authorized feedback queue and explicit recovery of saved candidate jobs.
+  Active edits warn that they withdraw effectiveness immediately; reasons remain
+  hash-only and approval retains the exact revision and conflict-key gates.
+- Added Result 4.0 `memory browse`, current-root prefix/tag/filter indexes, bounded
+  query projections and indexed revision-author lookup in migration `0057`.
+  Existing CLI schemas remain unchanged except the new command entry; enriched
+  feedback reads use an explicit management projection.
+- Enforced task membership and archival during candidate retry and worker checks.
+  Preserved card decisions on dispatch failure and added a durable job recovery
+  link. Restricted deleted memory history to human org administrators.
+- Added DB-backed API/service, role/token/isolation, concurrency, expiry, fixed-scale,
+  CLI snapshot and mocked Playwright scenarios. PostgreSQL, browser execution and
+  scale acceptance remain pending in the integrated environment. See the
+  [memory slice](plan/management-pages.md#memory-vertical-slice) and
+  [mechanism](notes/memory-management.md).
+
+## 2026-10-06: Org model-settings management slice
+
+- Added `/app/org/settings/models` for effective `llm_extract` configuration,
+  immutable revision inspection, separate bounded catalog/history pages and
+  human-admin BYOK/platform saves using revision preconditions.
+- Added four Result 4.0 metadata read routes and CLI commands, explicit allowlist
+  projections, exact revision authors and catalog-ID prefix search. Reads perform
+  no decryption, balance query, per-revision usage aggregation or provider call.
+- Preserve saved platform identity, reasoning and published price snapshots when
+  catalog entries become unavailable; older missing price snapshots remain null.
+  Migration `0056` adds read indexes and orders provider guards after constraints.
+- Added transient password submission and immediate clearing, safe reread after
+  save, explicit cost preflight/start, and actual tested-revision inspection.
+  BYOK reasoning options reject nested credential/transport slots. Legacy command
+  output shapes, server-only key reuse and immutable history remain intact.
+- Added API/service, role/token/isolation, concurrency, disclosure, fixed-scale,
+  CLI snapshot and mocked-browser acceptance scenarios. PostgreSQL, Chromium and
+  integrated latency execution remain pending; see the
+  [slice status](plan/management-pages.md#model-settings-vertical-slice) and
+  [mechanism](notes/model-settings.md).
+
+## 2026-10-07: Confidential prefix scans under tenant RLS
+
+- Replace the unusable confidential GIN search path with a tenant-isolated lexeme
+  projection and C-collated B-tree prefix ranges in migration `0055`. Materialized
+  candidates and parameterized field point reads preserve prefix AND semantics,
+  keyset ordering and filtering before current-value lookup without changing RLS.
+- Keep the original confidential scale bounds and add projection range-index and
+  row-visit checks, plus projection isolation, trigger-write and label-refresh
+  acceptance. Integration acceptance remains pending; see the
+  [mechanism](notes/confidential-values.md#bounded-management-and-checked-writes).
+- Permit token cleanup after a real parent deletion independently of FK cascade
+  trigger depth, while retaining checks against forged writes to live parents.
+  Identify executed CTE SELECTs from SQLAlchemy compilation metadata for both
+  read counts and EXPLAIN capture; retain all index and row-visit bounds.
+
+- Replace the unordered token candidate scan with recursive ordered B-tree
+  windows, preserving all matching fields across batches. Use a fresh pair of
+  scale-fixture orgs per run without truncating prior data, retain per-run
+  receipts, and check both range probes and conservative row-visit bounds.
+  Add multi-batch API regression coverage for duplicate lexemes, late matches,
+  filters and keyset pagination.
+- Accept prefix B-tree range access through either streaming or bitmap index
+  scans in scale-plan assertions. Associate bitmap index conditions with their
+  heap-scan probe; retain actual token/field/value visit bounds and p95 limits.
+
+## 2026-10-06: Confidential field management slice
+
+- Extended the org confidential page with bounded definitions/current values,
+  archive/unarchive, masked history, blank value entry and explicit audited reveal.
+  Task links carry a nonsecret task ID; blur, hide, navigation and session changes
+  clear revealed text. Value entry is cleared after submission and on conflict.
+- Added v4 query/history and checked-value routes with Result 4.0 CLI commands.
+  Compare field revision and the exact owner's current value ID under the existing
+  field lock; legacy append clients retain their behavior. Exact `field_id` query
+  filtering prevents editor hydration from missing a field beyond a prefix page.
+- Added migration `0055` for generated key/label prefix search, field/current/history
+  indexes and fixed-field metadata guards. Read projections never load ciphertext.
+  Existing token scopes, org isolation and encrypted append-only values are retained.
+  Field-create audits now contain revisions and fixed kind/scope codes, not keys.
+- Added DB-backed role/isolation/CAS/non-disclosure and fixed-scale tests, CLI
+  snapshots and mocked Playwright scenarios. PostgreSQL, real-browser and measured
+  scale acceptance remain pending; DB-free checks do not establish those gates.
+  Scope and mechanisms are in the [contract](plan/management-pages.md#confidential-management-slice)
+  and [confidential note](notes/confidential-values.md#bounded-management-and-checked-writes).
+
 ## 2026-10-06: Template and binding management slice
 
 - Added template browse/search, exact revision detail, content/lifecycle histories

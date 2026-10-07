@@ -5,6 +5,9 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Computed,
+    ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -12,6 +15,7 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.entities import Base, Tenant
@@ -27,6 +31,9 @@ class ConfidentialField(Tenant, Base):
     scope: Mapped[str] = mapped_column(String(10))
     archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
     revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    search_vector: Mapped[str] = mapped_column(
+        TSVECTOR, Computed("public.management_confidential_vector(key, label)", persisted=True)
+    )
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "key"),
@@ -39,6 +46,23 @@ class ConfidentialField(Tenant, Base):
         ),
         CheckConstraint("scope IN ('org', 'task')", name="confidential_field_scope"),
         CheckConstraint("revision >= 1", name="confidential_field_revision"),
+    )
+
+
+class ConfidentialFieldSearchToken(Base):
+    """Derived key/label lexemes, never values; maintained only by field triggers."""
+
+    __tablename__ = "confidential_field_search_tokens"
+    org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id"), primary_key=True)
+    token: Mapped[str] = mapped_column(Text(collation="C"), primary_key=True)
+    field_id: Mapped[UUID] = mapped_column(primary_key=True)
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["org_id", "field_id"],
+            ["confidential_fields.org_id", "confidential_fields.id"],
+            ondelete="CASCADE",
+        ),
+        Index("management_confidential_token_owner", "org_id", "field_id", "token"),
     )
 
 

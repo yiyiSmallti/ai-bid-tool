@@ -210,6 +210,14 @@ async def test_source_role_matrix_preserves_all_prior_grants(
     assert "template:file:read" in HUMAN_ONLY_SCOPES
     assert "template:file:read" not in SCOPES
 
+    # Model metadata is readable by every role and scoped tokens; writes/tests are human-admin.
+    assert "provider:read" in ROLE_SCOPES[role]
+    assert "provider:read" in SCOPES
+    assert "provider:read" not in HUMAN_ONLY_SCOPES
+    assert ("provider:write" in ROLE_SCOPES[role]) == (role == "admin")
+    assert "provider:write" in HUMAN_ONLY_SCOPES
+    assert "provider:write" not in SCOPES
+
     requirement_scopes = {"req:confirm", "req:manual"}
     assert ROLE_SCOPES[role] & requirement_scopes == (
         requirement_scopes if role in {"admin", "bidder", "technical"} else set()

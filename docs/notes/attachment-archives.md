@@ -80,7 +80,7 @@ model call or charge is created for deterministic archive operations.
 
 - [Runtime contracts](../../server/app/schemas/attachment_contracts.py) and
   [HTTP routes](../../server/app/api/attachments.py).
-- [Attachment migration](../../server/migrations/versions/0055_attachment_archive.py)
+- [Attachment migration](../../server/migrations/versions/0058_attachment_archive.py)
   and [models](../../server/app/models/attachments.py).
 - [API acceptance](../../server/tests/test_attachment_archive.py),
   [storage/isolation acceptance](../../server/tests/test_attachment_storage.py),

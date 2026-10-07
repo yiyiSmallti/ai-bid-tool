@@ -275,13 +275,21 @@ from bid_cli.management_bindings import COMMAND_ITEMS as BINDING_COMMAND_ITEMS
 from bid_cli.management_certificates import COMMAND_DATA as CERTIFICATE_COMMAND_DATA
 from bid_cli.management_certificates import COMMAND_INPUTS as CERTIFICATE_COMMAND_INPUTS
 from bid_cli.management_certificates import COMMAND_ITEMS as CERTIFICATE_COMMAND_ITEMS
+from bid_cli.management_confidential import COMMAND_DATA as CONFIDENTIAL_COMMAND_DATA
+from bid_cli.management_confidential import COMMAND_INPUTS as CONFIDENTIAL_COMMAND_INPUTS
+from bid_cli.management_confidential import COMMAND_ITEMS as CONFIDENTIAL_COMMAND_ITEMS
 from bid_cli.management_features import COMMAND_DATA as FEATURE_COMMAND_DATA
 from bid_cli.management_features import COMMAND_INPUTS as FEATURE_COMMAND_INPUTS
 from bid_cli.management_features import COMMAND_ITEMS as FEATURE_COMMAND_ITEMS
+from bid_cli.management_memory import COMMAND_INPUTS as MEMORY_COMMAND_INPUTS
+from bid_cli.management_memory import COMMAND_ITEMS as MEMORY_COMMAND_ITEMS
 from bid_cli.management_products import COMMAND_DATA, COMMAND_INPUTS, COMMAND_ITEMS
 from bid_cli.management_profiles import COMMAND_DATA as PROFILE_COMMAND_DATA
 from bid_cli.management_profiles import COMMAND_INPUTS as PROFILE_COMMAND_INPUTS
 from bid_cli.management_profiles import COMMAND_ITEMS as PROFILE_COMMAND_ITEMS
+from bid_cli.management_providers import COMMAND_DATA as PROVIDER_COMMAND_DATA
+from bid_cli.management_providers import COMMAND_INPUTS as PROVIDER_COMMAND_INPUTS
+from bid_cli.management_providers import COMMAND_ITEMS as PROVIDER_COMMAND_ITEMS
 from bid_cli.management_templates import COMMAND_DATA as TEMPLATE_COMMAND_DATA
 from bid_cli.management_templates import COMMAND_INPUTS as TEMPLATE_COMMAND_INPUTS
 from bid_cli.management_templates import COMMAND_ITEMS as TEMPLATE_COMMAND_ITEMS
@@ -774,6 +782,9 @@ COMMANDS.update(TEMPLATE_COMMAND_INPUTS)
 COMMANDS.update(BINDING_COMMAND_INPUTS)
 COMMANDS.update(CERTIFICATE_COMMAND_INPUTS)
 COMMANDS.update(PROFILE_COMMAND_INPUTS)
+COMMANDS.update(MEMORY_COMMAND_INPUTS)
+COMMANDS.update(PROVIDER_COMMAND_INPUTS)
+COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 
 COMMANDS.update(ATTACHMENT_INPUTS)
 OUTPUTS.update({name: TypeAdapter(model) for name, model in ATTACHMENT_DATA.items()})
@@ -862,6 +873,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | BINDING_COMMAND_DATA
                     | CERTIFICATE_COMMAND_DATA
                     | PROFILE_COMMAND_DATA
+                    | PROVIDER_COMMAND_DATA
+                    | CONFIDENTIAL_COMMAND_DATA
                 ).items()
             }
         )
@@ -875,6 +888,9 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                     | BINDING_COMMAND_ITEMS
                     | CERTIFICATE_COMMAND_ITEMS
                     | PROFILE_COMMAND_ITEMS
+                    | MEMORY_COMMAND_ITEMS
+                    | PROVIDER_COMMAND_ITEMS
+                    | CONFIDENTIAL_COMMAND_ITEMS
                 )
             }
         )
@@ -1013,6 +1029,9 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         | TEMPLATE_COMMAND_ITEMS
         | BINDING_COMMAND_ITEMS
         | ATTACHMENT_ITEMS
+        | MEMORY_COMMAND_ITEMS
+        | PROVIDER_COMMAND_ITEMS
+        | CONFIDENTIAL_COMMAND_ITEMS
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
