@@ -1,0 +1,11 @@
+[Unit]
+Description=bid tool pull-based deployment of the newest green main commit
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/opt/bid-tool/autodeploy.sh
+TimeoutStartSec=1h
+Nice=10

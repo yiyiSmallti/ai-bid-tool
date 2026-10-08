@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Pull-based automatic deployment
+
+- [autodeploy.sh](../deploy/pilot/autodeploy.sh) with a systemd timer deploys the newest
+  `main` merge commit whose pull request passed the `python` and `web` checks: source
+  archive, console and image builds, `pg_dump` before new migrations, health check, and
+  rollback when no migration ran. See [the guide](guides/pilot-autodeploy.md).
+
 ## 2026-10-08: Rate-limited open vendor egress
 
 - Open vendor-egress policies now keep a per-organization minute window instead of
