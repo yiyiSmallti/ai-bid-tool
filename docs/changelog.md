@@ -6,6 +6,13 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Deploy rollback health
+
+- A failed pilot deploy now keeps the last server and worker logs in `deploy-state/`
+  and checks health again after rolling back, reporting "service down" when the
+  previous release cannot start either. Changes limited to `deploy/pilot/` no longer
+  run the Python suite.
+
 ## 2026-10-08: Platform operator browser enrollment
 
 - Add host and console enrollment links for deployment-allowlisted operators,
