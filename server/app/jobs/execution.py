@@ -69,6 +69,7 @@ JOB_SCOPES = {
     "memory_candidate": "memory:candidate:run",
     "sandbox": "sandbox:render",
     "bid_review_prepare": "bid-review:prepare",
+    "bid_review": "bid-review:run",
 }
 
 
@@ -228,6 +229,7 @@ class JobExecution:
         self.org_id, self.job_id, self.run_id = org_id, job_id, run_id
         self.stopped: ProviderFailure | None = None
         self.planned_calls = 0
+        self.absolute_call_ceiling: int | None = None
         self.before_admit: Callable[[AsyncSession], Awaitable[None]] | None = None
         self.intervention: BudgetIntervention | None = None
         self.call_deadline: datetime | None = None
@@ -240,7 +242,12 @@ class JobExecution:
         # A fixed ceiling alone would stop large documents part-way through their first pass;
         # scaling it with the planned batches still stops runaway halving and gap filling.
         scaled = math.ceil(self.planned_calls * self.settings.job_vendor_calls_per_batch)
-        return max(self.settings.job_max_vendor_calls, scaled)
+        value = max(self.settings.job_max_vendor_calls, scaled)
+        return (
+            min(value, self.absolute_call_ceiling)
+            if self.absolute_call_ceiling is not None
+            else value
+        )
 
     def stop(self, code: str, message: str) -> ProviderFailure:
         # A check may publish partial coverage after an admission cap. A later
@@ -824,7 +831,13 @@ class JobExecution:
             if job.status == "succeeded":
                 published.extend(
                     result[key]
-                    for key in ("report_id", "rubric_id", "analysis_run_id", "draft_id")
+                    for key in (
+                        "report_id",
+                        "rubric_id",
+                        "analysis_run_id",
+                        "draft_id",
+                        "review_id",
+                    )
                     if result.get(key)
                 )
                 published.extend(
@@ -833,6 +846,8 @@ class JobExecution:
                     if isinstance(result.get(key), dict) and result[key].get("id")
                 )
             remaining = list(result.get("remaining_ids", []))
+            if job.kind == "bid_review":
+                remaining.extend(result.get("coverage", {}).get("unassessed_page_ids", []))
             if job.kind == "card_generate":
                 from app.services.card_generation import PROTECTED
 

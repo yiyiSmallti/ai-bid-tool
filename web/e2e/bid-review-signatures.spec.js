@@ -48,6 +48,7 @@ async function fixture(page, { platform = false, restricted = false } = {}) {
       else if (path === `/tasks/${task}/workflow`) response = result("task workflow", { workflow: { org_id: org, task_id: task, state: "active" } });
       else if (path === `/tasks/${task}/members`) response = result("task member list", { org_id: org, task_id: task, next_cursor: null }, [{ user_id: user, role: restricted ? "observer" : "contributor", active: true }]);
       else if (path === `/bid-submissions/${submission}` && method === "GET") response = result("review submission show", detail);
+      else if (path === `/tasks/${task}/bid-reviews` && method === "GET") { expect(url.pathname.startsWith("/v4/")).toBe(true); response = result("review list", { task_id: task, next_cursor: null }, []); }
       else if (path === `/bid-submissions/${submission}/signing-candidates` && method === "GET") { expect(url.pathname.startsWith("/v4/")).toBe(true); expect(url.searchParams.get("cursor")).toBe("2"); expect(url.searchParams.get("limit")).toBe("20"); state.candidateReads++; response = result("review signing-candidates", { items: [candidate(2)], total: 2, next_cursor: null }); }
     }
     if (!response) { state.unexpected.push(`${method} ${path}`); return route.abort(); }

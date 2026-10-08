@@ -408,6 +408,7 @@ class Job(Tenant, Base):
     )
     task_id: Mapped[UUID | None] = mapped_column()
     document_id: Mapped[UUID | None] = mapped_column()
+    bid_submission_document_id: Mapped[UUID | None] = mapped_column()
     provider_config_id: Mapped[UUID | None] = mapped_column()
     provider_identity: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     kind: Mapped[str] = mapped_column(String(20))
@@ -443,6 +444,18 @@ class Job(Tenant, Base):
             "kind NOT IN ('annotation_render','annotation_release') OR (task_id IS NOT NULL AND document_id IS NOT NULL AND actor_user_id IS NOT NULL AND actor_kind='session' AND actor_token_id IS NULL)",
             name="annotation_job_kind",
         ),
+        ForeignKeyConstraint(
+            ["org_id", "task_id", "bid_submission_document_id"],
+            [
+                "bid_submission_documents.org_id",
+                "bid_submission_documents.task_id",
+                "bid_submission_documents.id",
+            ],
+        ),
+        CheckConstraint(
+            "(kind='bid_review')=(bid_submission_document_id IS NOT NULL)",
+            name="bid_review_uploaded_document",
+        ),
         *agent_origin_constraints("jobs"),
         UniqueConstraint("org_id", "agent_session_id", "id", name="agent_job_session"),
         ForeignKeyConstraint(
@@ -475,7 +488,7 @@ class Job(Tenant, Base):
             ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
         ),
         CheckConstraint(
-            "(kind = 'provider_test' AND task_id IS NULL AND document_id IS NULL) OR (kind='bid_review_prepare' AND task_id IS NOT NULL AND document_id IS NULL) OR (kind NOT IN ('provider_test','bid_review_prepare') AND task_id IS NOT NULL AND document_id IS NOT NULL)",
+            "(kind = 'provider_test' AND task_id IS NULL AND document_id IS NULL) OR (kind='bid_review_prepare' AND task_id IS NOT NULL AND document_id IS NULL) OR (kind='bid_review' AND task_id IS NOT NULL AND document_id IS NULL AND bid_submission_document_id IS NOT NULL) OR (kind NOT IN ('provider_test','bid_review_prepare','bid_review') AND task_id IS NOT NULL AND document_id IS NOT NULL)",
             name="job_document_binding",
         ),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),

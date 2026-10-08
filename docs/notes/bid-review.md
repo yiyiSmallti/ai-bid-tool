@@ -2,7 +2,7 @@
 kind: reference
 ---
 
-# Uploaded-bid submissions and local preparation
+# Uploaded-bid preparation and authorized text review
 
 ## Problem
 
@@ -31,6 +31,14 @@ Prepare submission requires the exact preview hash and signed receipt. Retrying 
 failed or cancelled job requires a fresh request ID, a current preview and explicit
 `retry`; replaying that retry request returns the existing job. All responses use
 Result 4.0, and these commands have no legacy Result 3.0 route.
+
+The prepared submission also offers a cleared-text review and a separate review-run
+preflight. A human admin or bidder who owns the task reviews the actual sanitized
+native text, selects exact pages and confirms its external use before submission.
+The review extracts cited tender obligations and classifies signing-clause
+applicability. It does not determine whether the uploaded bid satisfies an
+obligation or contains a required mark. Runs remain advisory and record those
+unassessed areas explicitly.
 
 ## How it works
 
@@ -129,6 +137,73 @@ quotes. Technical/viewer sessions and tokens receive safe status/identity metada
 without signer names, field names, serial numbers or quotes. All HTTP responses
 retain the existing no-store policy; jobs/audits contain only fixed metadata.
 
+### Authorized native-text review
+
+[Privacy snapshot construction](../../server/app/services/bid_review_privacy.py)
+loads fixed prepared pages, registered confidential-value bindings, task redaction
+settings and pinned model configuration. Registered values become placeholders
+before pattern masking; bidder and staff names derived from labelled bid text,
+local certificate subjects and human additions are also masked. The preview
+returns only the cleared native text to authorized human task owners. Image,
+price, mixed and uncertain pages cannot be authorized for external text calls.
+Original filenames, storage locations, identifiers and pixels are absent from
+provider requests.
+
+The human grant fixes exact page IDs and sanitized-text hashes, submission and
+preparation identity, redaction/confidential/name-list hashes, provider bindings
+and its specific text-review purpose. Grants and revocations append history;
+changing any fixed input invalidates the grant. Tokens cannot inspect cleared
+text, maintain name lists or create/revoke grants. A token with explicit
+`bid-review:run` may execute only a current human-authorized snapshot under live
+task authority. Its review and job projections contain safe metadata only.
+
+[Review preflight and admission](../../server/app/services/bid_review_run.py) use a
+write-free actor-bound receipt and exact-request budget quotes. Missing preparation,
+human authorization or provider configuration appear as admission blockers without
+external discovery. Submission verifies the receipt and live bindings, deduplicates
+request identity and enqueues the existing durable worker. Before every model
+admission and publication, the worker checks authority, cancellation, lease,
+provider identity and the exact grant again.
+
+The [review adapter](../../server/app/providers/bid_reviewing.py) sends complete
+sanitized tender-page text with local refs and corresponding deterministic
+signing candidates. Candidate quotes must survive masking unchanged. The
+[local acceptance path](../../server/app/services/bid_review_text.py) accepts only
+unique contiguous citations in both the sent page and fixed original page.
+Unsent refs, fabricated or joined quotes, ambiguity and privacy placeholders are
+explicit gaps. Rejected model strings do not enter diagnostics. Accepted
+obligations retain original PDF-page or mapped Word-block citations, and signing
+requirements retain candidate identity, applicability and required-location rules.
+Every-page and seam groups expand against the full prepared bid inventory; each
+required occurrence remains unresolved because mark presence is not checked.
+
+The job's `bid_submission_document_id` binds the real uploaded tender row through
+an org/task foreign key. It does not create an ordinary tender `Document` or open
+legacy parsing/download routes. [Migration 0063](../../server/migrations/versions/0063_bid_review_privacy.py)
+owns local privacy snapshots and exact grants; [migration 0064](../../server/migrations/versions/0064_bid_review_run.py)
+owns review inputs, normalized tender-page/signing-location links and atomic
+publication. Both retain immutable tenant rows with forced RLS; rollback disables
+admission and repairs forward without removing encrypted history or charges.
+
+Each call contains one whole authorized tender page. A page above the configured
+context bound blocks submission instead of being truncated. The request plan
+quotes only calls within the lower deployment/run ceiling and explicitly retains
+uncovered pages. Deterministic price classification treats four numeric values
+covering at least eight percent of native text as price content, or three covering
+at least four percent as uncertain; both are excluded, as are keyword matches.
+Human-reviewed text does not authorize image disclosure. Local identity lists are
+bounded to 1,000 values; oversized local input or response items fail explicitly.
+
+Calls reuse `JobExecution` admission and the shared task/prepaid accounting ledger.
+Refusal, malformed/truncated output and completed calls after cancellation retain
+actual usage; uncertain outcomes retain their holds. Budget or provider stops may
+retain a partial report with explicit unfinished coverage. Changed input, cancelled
+or lost attempts and accounting-bound violations fence publication. Report bodies
+are encrypted; bounded protected sections serve cited obligations and signing
+requirements to authorized humans, while token projections disclose only IDs,
+counts and fixed coverage codes. The
+[budget mechanism](task-budgets.md#how-it-works) owns settlement and exposure rules.
+
 ## Pitfalls
 
 - Synthetic fixtures alone missed the real 点聚 layout (embedded content digest,
@@ -137,6 +212,9 @@ retain the existing no-store policy; jobs/audits contain only fixed metadata.
   to external tools. An unreadable CMS is `unsupported`, never `invalid`.
 - Pure-Python SM3 takes seconds per megabyte; hashing goes through OpenSSL in
   `cryptography`, and only SM2 point arithmetic uses gmssl.
+- Extracted obligations and classified signing clauses do not establish bid compliance,
+  visible-signature presence, image support, scoring or a complete console/Word report.
+  Missing native text and unreviewed locations remain explicit coverage gaps.
 - A prepared inventory is not a compliance result, OCR transcript, visible-signature
   completeness assessment, privacy clearance or permission to transmit a page externally.
   Local digital validity does not establish visible mark completeness or revocation.
@@ -172,3 +250,11 @@ retain the existing no-store policy; jobs/audits contain only fixed metadata.
   [trust-anchor console](../../web/src/views/TrustAnchors.vue),
   [HTTP/worker signature acceptance](../../server/tests/test_bid_review_signatures_db.py)
   and [signature browser acceptance](../../web/e2e/bid-review-signatures.spec.js).
+
+- [Authorized text schemas](../../server/app/schemas/bid_review_privacy.py),
+  [review-run schemas](../../server/app/schemas/bid_review_run.py),
+  [privacy persistence](../../server/app/models/bid_review_privacy.py),
+  [review persistence](../../server/app/models/bid_review_run.py) and
+  [review worker](../../server/app/jobs/bid_review_run.py).
+- [HTTP-to-worker review acceptance](../../server/tests/test_bid_review_run_db.py)
+  captures synthetic provider requests and sanitized result receipts.

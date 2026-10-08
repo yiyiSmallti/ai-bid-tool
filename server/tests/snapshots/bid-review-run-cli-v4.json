@@ -1,0 +1,836 @@
+{
+  "local: review list": {
+    "command": "review list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "advisory_only": true,
+        "completion": "complete",
+        "coverage": {
+          "processed_pages": 1,
+          "tender_pages": 1
+        },
+        "created_at": "2026-10-08T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "job_id": "00000000-0000-4000-8000-000000000001",
+        "review_slice": "compliance",
+        "status": "succeeded",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncovered_codes": [],
+        "validity": "current"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review outbound authorize": {
+    "command": "review outbound authorize",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "allow_external": true,
+      "allowed_capabilities": [
+        "llm"
+      ],
+      "authorized_at": "2026-10-08T00:00:00Z",
+      "authorized_by": "00000000-0000-4000-8000-000000000001",
+      "authorized_sanitized_context_sha256": "57085efc41bfc4ec277ce2c389cf654debe768afb211c80ae76f3b5e59a4ebd2",
+      "current": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "pages": [
+        {
+          "page_id": "00000000-0000-4000-8000-000000000003",
+          "sanitized_text_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "prior_authorization_id": null,
+      "provider_bindings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purposes": [
+        "bid_review_text"
+      ],
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "redaction_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 1,
+      "submission_id": "00000000-0000-4000-8000-000000000002",
+      "submission_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review outbound list": {
+    "command": "review outbound list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "allow_external": true,
+        "allowed_capabilities": [
+          "llm"
+        ],
+        "authorized_at": "2026-10-08T00:00:00Z",
+        "authorized_by": "00000000-0000-4000-8000-000000000001",
+        "authorized_sanitized_context_sha256": "57085efc41bfc4ec277ce2c389cf654debe768afb211c80ae76f3b5e59a4ebd2",
+        "current": true,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "pages": [
+          {
+            "page_id": "00000000-0000-4000-8000-000000000003",
+            "sanitized_text_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "prior_authorization_id": null,
+        "provider_bindings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "purposes": [
+          "bid_review_text"
+        ],
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "redaction_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "submission_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review outbound revoke": {
+    "command": "review outbound revoke",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "allow_external": false,
+      "allowed_capabilities": [
+        "llm"
+      ],
+      "authorized_at": "2026-10-08T00:00:00Z",
+      "authorized_by": "00000000-0000-4000-8000-000000000001",
+      "authorized_sanitized_context_sha256": "57085efc41bfc4ec277ce2c389cf654debe768afb211c80ae76f3b5e59a4ebd2",
+      "current": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "pages": [
+        {
+          "page_id": "00000000-0000-4000-8000-000000000003",
+          "sanitized_text_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "prior_authorization_id": null,
+      "provider_bindings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purposes": [
+        "bid_review_text"
+      ],
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "redaction_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 1,
+      "submission_id": "00000000-0000-4000-8000-000000000002",
+      "submission_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review run": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "cached": false,
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "status": "queued"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review run --dry-run": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "admission_blockers": [],
+      "budget": {
+        "admission_blocker": null,
+        "as_of": "2026-10-08T00:00:00Z",
+        "cached_job_id": null,
+        "cached_result_cost": null,
+        "command": "review run",
+        "dry_run": true,
+        "duration_basis": "unknown",
+        "estimate": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "estimated_duration_ms": null,
+        "first_pass_fits": true,
+        "full_run_guaranteed": false,
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "maximum_calls": 1,
+        "next_call": null,
+        "planned_calls": 1,
+        "task_budget": null,
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncertainty": []
+      },
+      "dry_run": true,
+      "expires_at": "2026-10-08T00:15:00Z",
+      "external_price_pages": false,
+      "input": {
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "preflight_token": "synthetic-review-receipt",
+      "preflight_ttl_seconds": 900,
+      "uncovered_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review run --wait": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "completion": "complete",
+      "coverage": {
+        "processed_pages": 1,
+        "tender_pages": 1
+      },
+      "review_id": "00000000-0000-4000-8000-000000000004",
+      "stop_reason": null,
+      "uncovered_codes": [],
+      "usage_record_ids": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review run --wait partial": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "completion": "partial",
+      "coverage": {
+        "processed_pages": 1,
+        "tender_pages": 1
+      },
+      "review_id": "00000000-0000-4000-8000-000000000004",
+      "stop_reason": null,
+      "uncovered_codes": [
+        "signing_unresolved"
+      ],
+      "usage_record_ids": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local: review show": {
+    "command": "review show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "obligations": [],
+      "run": {
+        "advisory_only": true,
+        "completion": "complete",
+        "coverage": {
+          "processed_pages": 1,
+          "tender_pages": 1
+        },
+        "created_at": "2026-10-08T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "job_id": "00000000-0000-4000-8000-000000000001",
+        "review_slice": "compliance",
+        "status": "succeeded",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncovered_codes": [],
+        "validity": "current"
+      },
+      "signing_requirements": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review show partial": {
+    "command": "review show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "obligations": [],
+      "run": {
+        "advisory_only": true,
+        "completion": "partial",
+        "coverage": {
+          "processed_pages": 1,
+          "tender_pages": 1
+        },
+        "created_at": "2026-10-08T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "job_id": "00000000-0000-4000-8000-000000000001",
+        "review_slice": "compliance",
+        "status": "succeeded",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncovered_codes": [],
+        "validity": "current"
+      },
+      "signing_requirements": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote: review list": {
+    "command": "review list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "advisory_only": true,
+        "completion": "complete",
+        "coverage": {
+          "processed_pages": 1,
+          "tender_pages": 1
+        },
+        "created_at": "2026-10-08T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "job_id": "00000000-0000-4000-8000-000000000001",
+        "review_slice": "compliance",
+        "status": "succeeded",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncovered_codes": [],
+        "validity": "current"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review outbound authorize": {
+    "command": "review outbound authorize",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "allow_external": true,
+      "allowed_capabilities": [
+        "llm"
+      ],
+      "authorized_at": "2026-10-08T00:00:00Z",
+      "authorized_by": "00000000-0000-4000-8000-000000000001",
+      "authorized_sanitized_context_sha256": "57085efc41bfc4ec277ce2c389cf654debe768afb211c80ae76f3b5e59a4ebd2",
+      "current": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "pages": [
+        {
+          "page_id": "00000000-0000-4000-8000-000000000003",
+          "sanitized_text_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "prior_authorization_id": null,
+      "provider_bindings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purposes": [
+        "bid_review_text"
+      ],
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "redaction_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 1,
+      "submission_id": "00000000-0000-4000-8000-000000000002",
+      "submission_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review outbound list": {
+    "command": "review outbound list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "total": 1
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "allow_external": true,
+        "allowed_capabilities": [
+          "llm"
+        ],
+        "authorized_at": "2026-10-08T00:00:00Z",
+        "authorized_by": "00000000-0000-4000-8000-000000000001",
+        "authorized_sanitized_context_sha256": "57085efc41bfc4ec277ce2c389cf654debe768afb211c80ae76f3b5e59a4ebd2",
+        "current": true,
+        "id": "00000000-0000-4000-8000-000000000001",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "pages": [
+          {
+            "page_id": "00000000-0000-4000-8000-000000000003",
+            "sanitized_text_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "prior_authorization_id": null,
+        "provider_bindings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "purposes": [
+          "bid_review_text"
+        ],
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "redaction_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "revision": 1,
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "submission_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review outbound revoke": {
+    "command": "review outbound revoke",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "allow_external": false,
+      "allowed_capabilities": [
+        "llm"
+      ],
+      "authorized_at": "2026-10-08T00:00:00Z",
+      "authorized_by": "00000000-0000-4000-8000-000000000001",
+      "authorized_sanitized_context_sha256": "57085efc41bfc4ec277ce2c389cf654debe768afb211c80ae76f3b5e59a4ebd2",
+      "current": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "org_id": "00000000-0000-4000-8000-000000000001",
+      "pages": [
+        {
+          "page_id": "00000000-0000-4000-8000-000000000003",
+          "sanitized_text_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        }
+      ],
+      "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "prior_authorization_id": null,
+      "provider_bindings_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purposes": [
+        "bid_review_text"
+      ],
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "redaction_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "revision": 1,
+      "submission_id": "00000000-0000-4000-8000-000000000002",
+      "submission_manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review run": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "cached": false,
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "status": "queued"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review run --dry-run": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "admission_blockers": [],
+      "budget": {
+        "admission_blocker": null,
+        "as_of": "2026-10-08T00:00:00Z",
+        "cached_job_id": null,
+        "cached_result_cost": null,
+        "command": "review run",
+        "dry_run": true,
+        "duration_basis": "unknown",
+        "estimate": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "estimated_duration_ms": null,
+        "first_pass_fits": true,
+        "full_run_guaranteed": false,
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "maximum_calls": 1,
+        "next_call": null,
+        "planned_calls": 1,
+        "task_budget": null,
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncertainty": []
+      },
+      "dry_run": true,
+      "expires_at": "2026-10-08T00:15:00Z",
+      "external_price_pages": false,
+      "input": {
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "preflight_token": "synthetic-review-receipt",
+      "preflight_ttl_seconds": 900,
+      "uncovered_codes": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review run --wait": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "completion": "complete",
+      "coverage": {
+        "processed_pages": 1,
+        "tender_pages": 1
+      },
+      "review_id": "00000000-0000-4000-8000-000000000004",
+      "stop_reason": null,
+      "uncovered_codes": [],
+      "usage_record_ids": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review run --wait partial": {
+    "command": "review run",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "completion": "partial",
+      "coverage": {
+        "processed_pages": 1,
+        "tender_pages": 1
+      },
+      "review_id": "00000000-0000-4000-8000-000000000004",
+      "stop_reason": null,
+      "uncovered_codes": [
+        "signing_unresolved"
+      ],
+      "usage_record_ids": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote: review show": {
+    "command": "review show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "obligations": [],
+      "run": {
+        "advisory_only": true,
+        "completion": "complete",
+        "coverage": {
+          "processed_pages": 1,
+          "tender_pages": 1
+        },
+        "created_at": "2026-10-08T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "job_id": "00000000-0000-4000-8000-000000000001",
+        "review_slice": "compliance",
+        "status": "succeeded",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncovered_codes": [],
+        "validity": "current"
+      },
+      "signing_requirements": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review show partial": {
+    "command": "review show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "next_cursor": null,
+      "obligations": [],
+      "run": {
+        "advisory_only": true,
+        "completion": "partial",
+        "coverage": {
+          "processed_pages": 1,
+          "tender_pages": 1
+        },
+        "created_at": "2026-10-08T00:00:00Z",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "job_id": "00000000-0000-4000-8000-000000000001",
+        "review_slice": "compliance",
+        "status": "succeeded",
+        "submission_id": "00000000-0000-4000-8000-000000000002",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncovered_codes": [],
+        "validity": "current"
+      },
+      "signing_requirements": []
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  }
+}

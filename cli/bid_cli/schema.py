@@ -1074,6 +1074,10 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         schema["commands"]["review upload"]["preflight"] = BidUploadPreview.model_json_schema()
         schema["commands"]["review prepare"]["preflight"] = BidPreparePreview.model_json_schema()
         schema["commands"]["review prepare"]["wait_output"] = BidSubmissionView.model_json_schema()
+        from app.schemas.bid_review_run import BidReviewJobResult, BidReviewPreview
+
+        schema["commands"]["review run"]["preflight"] = BidReviewPreview.model_json_schema()
+        schema["commands"]["review run"]["wait_output"] = BidReviewJobResult.model_json_schema()
         from app.schemas.annotation_contracts import (
             COMMAND_PAYLOADS,
             AnnotationCandidateView,

@@ -123,7 +123,11 @@ class Processor:
             document = (
                 await session.get(Document, current.document_id) if current.document_id else None
             )
-            if document is None and current.kind not in {"provider_test", "bid_review_prepare"}:
+            if document is None and current.kind not in {
+                "provider_test",
+                "bid_review_prepare",
+                "bid_review",
+            }:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, current.document_id
             reasoning = current.reasoning
@@ -157,6 +161,7 @@ class Processor:
                     "prototype_generate",
                     "screenshot_search",
                     "bid_review_prepare",
+                    "bid_review",
                 }
                 else [
                     dict(
@@ -182,6 +187,11 @@ class Processor:
             rejected: list[dict[str, str]] = []
 
             try:
+                if kind == "bid_review":
+                    from app.jobs.bid_review_run import process as review_bid
+
+                    await review_bid(execution, self.storage)
+                    return
                 if kind == "bid_review_prepare":
                     from app.jobs.bid_review_prepare import process as prepare_bid
                     from app.providers.converter import create_converter
@@ -546,7 +556,7 @@ class Processor:
                     should_retry = (
                         retryable
                         and current.attempts < 3
-                        and kind != "provider_test"
+                        and kind not in {"provider_test", "bid_review"}
                         and current.agent_session_id is None
                     )
                     current.status = "queued" if should_retry else "failed"
@@ -583,6 +593,13 @@ class Processor:
                         from app.jobs.export_render import failure_audit
 
                         await failure_audit(session, current, error["code"])
+                    if kind == "bid_review":
+                        from app.jobs.bid_review_run import failure_audit
+
+                        try:
+                            await failure_audit(session, current, error["code"])
+                        except (ServiceError, ProviderFailure):
+                            pass
                     if kind == "bid_review_prepare":
                         from app.jobs.bid_review_prepare import failure_audit
 

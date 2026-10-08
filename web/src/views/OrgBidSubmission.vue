@@ -4,8 +4,10 @@ import { useRoute } from "vue-router";
 import TaskNavigation from "../components/TaskNavigation.vue";
 import JobPanel from "../components/JobPanel.vue";
 import BidSignatureResults from "../components/BidSignatureResults.vue";
+import BidOutboundAuthorization from "../components/BidOutboundAuthorization.vue";
+import BidReviewRuns from "../components/BidReviewRuns.vue";
 import { formatTime, orgRequest } from "../org.js";
-import { fileKinds, mib, preparationStatuses, reviewAuthority, reviewError, safeWarning, submissionPath, submissionStates } from "../bid-review.js";
+import { fileKinds, mib, preparationStatuses, reviewAuthorityInfo, reviewError, safeWarning, submissionPath, submissionStates } from "../bid-review.js";
 const route = useRoute();
 const taskId = computed(() => String(route.params.taskId)), submissionId = computed(() => String(route.params.submissionId));
 const detail = ref(null), preview = ref(null), consent = ref(false), writable = ref(false), busy = ref(false), error = ref(""), activeJob = ref(""), retry = ref(false);
@@ -13,6 +15,7 @@ const submission = computed(() => detail.value?.submission), documents = compute
 const canPrepare = computed(() => writable.value && submission.value?.state === "uploaded" && !["queued", "running"].includes(detail.value?.preparation?.status));
 const expired = computed(() => preview.value && Date.parse(preview.value.expires_at) <= Date.now());
 const candidatesBusy = ref(false);
+const owner = ref(false), runWritable = ref(false), authorizationEpoch = ref(0);
 let serial = 0, controller, requestId = crypto.randomUUID(), expiryTimer;
 function invalidate() { clearTimeout(expiryTimer); preview.value = null; consent.value = false; requestId = crypto.randomUUID(); }
 async function reread() {
@@ -22,7 +25,9 @@ async function reread() {
 }
 async function load() {
   const run = ++serial; controller?.abort(); controller = new AbortController(); detail.value = null; writable.value = false; busy.value = false; candidatesBusy.value = false; activeJob.value = ""; retry.value = false; error.value = ""; invalidate();
-  try { const allowed = await reviewAuthority(taskId.value); if (run !== serial) return; writable.value = allowed; await reread(); }
+  owner.value = false;
+  runWritable.value = false;
+  try { const allowed = await reviewAuthorityInfo(taskId.value); if (run !== serial) return; writable.value = allowed.writable; runWritable.value = allowed.runWritable; owner.value = allowed.owner; await reread(); }
   catch (exc) { if (exc.name !== "AbortError") error.value = reviewError(exc); }
 }
 async function inspect() {
@@ -107,6 +112,8 @@ onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.valu
         <el-table-column label="解析警示" min-width="220"><template #default="{ row }"><p v-for="(warning, index) in row.parsing_warnings" :key="index">{{ safeWarning(warning) }}</p><span v-if="!row.parsing_warnings.length">无警示</span></template></el-table-column>
       </el-table>
     </el-card>
+    <BidOutboundAuthorization :task-id="taskId" :submission-id="submissionId" :owner="owner" :prepared="submission.state === 'prepared'" @changed="authorizationEpoch++" />
+    <BidReviewRuns :task-id="taskId" :submission-id="submissionId" :writable="runWritable" :prepared="submission.state === 'prepared'" :authorization-epoch="authorizationEpoch" />
   </template>
 </template>
 <style scoped>
