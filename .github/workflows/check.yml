@@ -93,12 +93,12 @@ jobs:
   latency:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    name: latency (${{ matrix.shard }}/3)
+    name: latency (${{ matrix.shard }}/4)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -109,7 +109,7 @@ jobs:
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d bid_test" --health-interval 5s --health-timeout 5s --health-retries 12
     env:
-      BID_TEST_SHARD: ${{ matrix.shard }}/3
+      BID_TEST_SHARD: ${{ matrix.shard }}/4
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/python-test-env

@@ -262,7 +262,7 @@ async def build_snapshot(session, actor, run, publication, settings):
     rows["signatures"].append(
         notice(
             "签章位置",
-            "Clef 仅提供页面初筛概率，所有所需位置均需人工确认；主体、日期与具体位置仍未核实。数字签名有效性单独判断。",
+            "所需位置均需人工确认：未初筛的位置为 unresolved（presence_not_checked），Clef 仅提供页面初筛概率；主体、日期与具体位置仍未核实。数字签名有效性单独判断。",
         )
     )
     clef_status = publication.coverage.get("clef", "unavailable")

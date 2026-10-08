@@ -130,7 +130,7 @@ test("failed render requires an explicit retry under a fresh preview request and
 });
 for (const historyStatus of ["pending", "failed"]) test(`${historyStatus} history cannot be selected while the current console report stays readable`, async ({ page }) => {
   const state = await fixture(page, { historyStatus }); await open(page);
-  const wrapper = page.locator(".el-select").filter({ has: page.getByRole("combobox", { name: "报告快照选择", exact: true }) }).locator(".el-select__wrapper"); await wrapper.click(); const option = page.getByRole("option").filter({ hasText: ids.snapshot }); await expect(option).toHaveClass(/is-disabled/); await option.click({ force: true });
+  const wrapper = page.locator(".el-select").filter({ has: page.getByRole("combobox", { name: "报告快照选择", exact: true }) }).locator(".el-select__wrapper"); await wrapper.click(); const option = page.getByRole("option").filter({ hasText: ids.snapshot }); await expect(option).toHaveClass(/is-disabled/); await option.dispatchEvent("click");
   expect(state.reads.some(path => path.includes("snapshot_id="))).toBe(false); await expect(page.getByTestId("report-section-overall")).toContainText("未评分"); await page.getByRole("option", { name: "当前决定（待渲染）", exact: true }).click(); await expect(page.getByTestId("report-section-overall")).toContainText("未评分"); await evidence(page, state, `10-history-${historyStatus}`);
 });
 test("later decisions mark fixed history stale without rewriting its finding decision", async ({ page }) => {

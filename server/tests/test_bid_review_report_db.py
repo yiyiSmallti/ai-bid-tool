@@ -335,7 +335,12 @@ async def test_expired_tampered_links_and_stale_preview_are_rejected(
         )
         assert response.status_code == 404
     assert (await api.get(parsed.path, headers=headers[0])).status_code in {404, 422}
-    assert (await api.get(link["url"])).status_code in {401, 403}
+    # Without session or org headers the request is refused before any bytes; like
+    # other authenticated routes this is 401 or a missing-header 422.
+    bare = await api.get(link["url"])
+    assert bare.status_code in {401, 422} and bare.headers.get("content-type", "").startswith(
+        "application/json"
+    )
 
 
 async def test_unpublished_run_cannot_create_report_snapshot(
