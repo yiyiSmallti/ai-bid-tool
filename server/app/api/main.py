@@ -346,7 +346,12 @@ def create_app(
             )
             payload = json.loads(raw)
             if isinstance(payload, dict) and "command" in payload and "duration_ms" in payload:
-                payload["duration_ms"] = int((time.monotonic() - start) * 1000)
+                # Public signup receipts carry no per-request timing discriminator.
+                payload["duration_ms"] = (
+                    0
+                    if path == "/auth/org-applications"
+                    else int((time.monotonic() - start) * 1000)
+                )
                 if "budget_preflight" in payload.get("data", {}):
                     payload["cost"] = payload["data"]["budget_preflight"]["estimate"]
                 cost = payload.get("cost", {})
@@ -410,12 +415,16 @@ def create_app(
                     retryable=error.exit_code == 3,
                 )
             ).model_dump(mode="json")
+        if request.url.path == "/auth/org-applications":
+            body.command = "auth org-application submit"
         retry = {
             "auth_busy": "1",
             "too_many_attempts": "900",
             "stream_limit": "1",
             "board_busy": "1",
         }.get(error.code)
+        if request.url.path == "/auth/org-applications" and error.code == "too_many_attempts":
+            retry = "86400"
         return JSONResponse(
             status_code=error.status,
             content=body.model_dump(mode="json"),
@@ -431,6 +440,22 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path == "/auth/org-applications" or request.url.path.startswith(
+            "/platform/org-applications"
+        ):
+            # Never reflect caller-controlled field names or password input.
+            disabled = (
+                request.url.path == "/auth/org-applications" and not settings.org_signup_enabled
+            )
+            return error_response(
+                request,
+                ServiceError(
+                    "signup_disabled" if disabled else "invalid_input",
+                    "Organization signup is disabled" if disabled else "Invalid application input",
+                    404 if disabled else 400,
+                    4 if disabled else 2,
+                ),
+            )
         if request.url.path in {
             "/providers",
             "/providers/test",

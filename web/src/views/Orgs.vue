@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { Plus } from "@element-plus/icons-vue";
 import { count, money, request } from "../api.js";
 import { confirmAction } from "../ui.js";
+import OrgApplications from "../components/OrgApplications.vue";
 
 const orgs = ref([]);
 const usage = ref({});
@@ -14,6 +15,7 @@ const error = ref("");
 const creating = ref(false);
 const form = ref({ name: "", admin_email: "" });
 const created = ref(null);
+const tab = ref("orgs"), pendingApplications = ref(0);
 
 const activeCount = computed(() => orgs.value.filter((org) => org.active).length);
 
@@ -25,6 +27,7 @@ async function load() {
       request("GET", "/platform/usage"),
     ]);
     orgs.value = list.items;
+    pendingApplications.value = list.data.pending_applications ?? 0;
     totals.value = month.data.totals;
     currency.value = month.data.currency;
     const byOrg = {};
@@ -97,7 +100,7 @@ onMounted(load);
 <template>
   <div class="page-header">
     <div><h2>单位</h2><p class="subtitle">这里只显示账号与汇总数据，不显示任何单位的任务、文件或要求。</p></div>
-    <el-button type="primary" :icon="Plus" @click="creating = !creating">开通单位</el-button>
+    <el-button type="primary" :icon="Plus" @click="tab = 'orgs'; creating = !creating">开通单位</el-button>
   </div>
   <div class="stat-grid">
     <div class="stat"><span class="label">启用中单位</span><span class="value">{{ activeCount }}</span></div>
@@ -105,6 +108,12 @@ onMounted(load);
     <div class="stat"><span class="label">本月应收</span><span class="value">{{ money(totals.charge, currency) }}</span></div>
   </div>
   <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
+  <el-tabs v-model="tab" aria-label="单位与申请">
+    <el-tab-pane label="单位" name="orgs" />
+    <el-tab-pane name="applications"><template #label>申请 <el-tag size="small" type="warning" data-testid="pending-applications">待审核 {{ pendingApplications }}</el-tag></template></el-tab-pane>
+  </el-tabs>
+  <OrgApplications v-if="tab === 'applications'" @decided="load" />
+  <template v-else>
   <el-card v-if="creating" shadow="never" class="section">
     <template #header><h3 class="card-title">开通单位</h3></template>
     <form class="panel el-form el-form--label-top" @submit.prevent="create">
@@ -156,6 +165,7 @@ onMounted(load);
       </tbody>
     </table>
   </div>
+  </template>
 </template>
 <style scoped>
 .card-title { margin: 0; }

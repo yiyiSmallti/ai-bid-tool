@@ -95050,6 +95050,529 @@
             "title": "AttachmentSummary",
             "type": "object"
           }
+        },
+        "platform org application approve": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "application_id",
+              "options": [
+                "application_id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "org_name",
+              "options": [
+                "--org-name"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "attach_existing_user",
+              "options": [
+                "--attach-existing-user"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "attach_existing_user": {
+                "default": false,
+                "title": "Attach Existing User",
+                "type": "boolean"
+              },
+              "org_name": {
+                "anyOf": [
+                  {
+                    "maxLength": 200,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Org Name"
+              }
+            },
+            "title": "OrgApplicationApprove",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "admin_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Admin User Id"
+              },
+              "application_id": {
+                "format": "uuid",
+                "title": "Application Id",
+                "type": "string"
+              },
+              "attached_existing_user": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Attached Existing User"
+              },
+              "org_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Org Id"
+              },
+              "status": {
+                "enum": [
+                  "approved",
+                  "rejected"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "user_created": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "User Created"
+              }
+            },
+            "required": [
+              "application_id",
+              "status"
+            ],
+            "title": "OrgApplicationDecision",
+            "type": "object"
+          }
+        },
+        "platform org application list": {
+          "cli_parameters": [
+            {
+              "default": "pending",
+              "multiple": false,
+              "name": "status",
+              "options": [
+                "--status"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "before": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Before"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 200,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "status": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "pending",
+                      "approved",
+                      "rejected",
+                      "expired"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": "pending",
+                "title": "Status"
+              }
+            },
+            "title": "OrgApplicationListQuery",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "description": "Platform-only projection. Never includes the password hash or the raw client address.",
+            "properties": {
+              "admin_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Admin User Id"
+              },
+              "attached_existing_user": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Attached Existing User"
+              },
+              "contact_name": {
+                "title": "Contact Name",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "decided_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Decided At"
+              },
+              "decided_by": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Decided By"
+              },
+              "decision_reason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Decision Reason"
+              },
+              "email": {
+                "title": "Email",
+                "type": "string"
+              },
+              "existing_user": {
+                "title": "Existing User",
+                "type": "boolean"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "title": "Expires At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "note": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Note"
+              },
+              "org_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Org Id"
+              },
+              "org_name": {
+                "title": "Org Name",
+                "type": "string"
+              },
+              "phone": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Phone"
+              },
+              "source_submissions_24h": {
+                "minimum": 1,
+                "title": "Source Submissions 24H",
+                "type": "integer"
+              },
+              "status": {
+                "enum": [
+                  "pending",
+                  "approved",
+                  "rejected",
+                  "expired"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "user_created": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "User Created"
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "org_name",
+              "contact_name",
+              "email",
+              "phone",
+              "note",
+              "created_at",
+              "expires_at",
+              "existing_user",
+              "source_submissions_24h"
+            ],
+            "title": "OrgApplicationView",
+            "type": "object"
+          }
+        },
+        "platform org application reject": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "application_id",
+              "options": [
+                "application_id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "reason",
+              "options": [
+                "--reason"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "reason": {
+                "maxLength": 500,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              }
+            },
+            "required": [
+              "reason"
+            ],
+            "title": "OrgApplicationReject",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "admin_user_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Admin User Id"
+              },
+              "application_id": {
+                "format": "uuid",
+                "title": "Application Id",
+                "type": "string"
+              },
+              "attached_existing_user": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Attached Existing User"
+              },
+              "org_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Org Id"
+              },
+              "status": {
+                "enum": [
+                  "approved",
+                  "rejected"
+                ],
+                "title": "Status",
+                "type": "string"
+              },
+              "user_created": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "User Created"
+              }
+            },
+            "required": [
+              "application_id",
+              "status"
+            ],
+            "title": "OrgApplicationDecision",
+            "type": "object"
+          }
         }
       },
       "exit_codes": {
@@ -95851,6 +96374,98 @@
       "scopes": [
         "task:read"
       ]
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "platform org application approve": {
+    "command": "platform org application approve",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "admin_user_id": "00000000-0000-0000-0000-000000000003",
+      "application_id": "00000000-0000-0000-0000-000000000001",
+      "attached_existing_user": true,
+      "org_id": "00000000-0000-0000-0000-000000000002",
+      "status": "approved",
+      "user_created": false
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "platform org application list": {
+    "command": "platform org application list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "admin_user_id": null,
+        "attached_existing_user": null,
+        "contact_name": "Applicant",
+        "created_at": "2026-10-07T00:00:00Z",
+        "decided_at": null,
+        "decided_by": null,
+        "decision_reason": null,
+        "email": "applicant@example.test",
+        "existing_user": false,
+        "expires_at": "2026-11-06T00:00:00Z",
+        "id": "00000000-0000-0000-0000-000000000001",
+        "note": null,
+        "org_id": null,
+        "org_name": "Synthetic applicant org",
+        "phone": null,
+        "source_submissions_24h": 1,
+        "status": "pending",
+        "user_created": null
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "platform org application reject": {
+    "command": "platform org application reject",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "admin_user_id": null,
+      "application_id": "00000000-0000-0000-0000-000000000001",
+      "attached_existing_user": null,
+      "org_id": null,
+      "status": "rejected",
+      "user_created": null
     },
     "duration_ms": 0,
     "items": [],

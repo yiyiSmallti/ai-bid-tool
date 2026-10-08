@@ -6,6 +6,7 @@ import logging
 from collections.abc import Awaitable, Callable
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
+from typing import Any
 
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
@@ -13,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import Database
 from app.core.errors import ServiceError, log_unexpected
-from app.core.security import verify_password
+from app.core.security import hash_password, verify_password
 from app.models.entities import PlatformAuditLog, User
 
 MAX_FAILURES = 5
@@ -48,7 +49,7 @@ class PasswordAttempts:
             max_workers=PASSWORD_WORKERS, thread_name_prefix="password"
         )
         self.slots = asyncio.Semaphore(PASSWORD_WORKERS)
-        self.tasks: set[asyncio.Task[User]] = set()
+        self.tasks: set[asyncio.Task[Any]] = set()
         self.closed = False
 
     @property
@@ -61,7 +62,7 @@ class PasswordAttempts:
             await asyncio.gather(*self.tasks, return_exceptions=True)
         self.executor.shutdown(wait=True)
 
-    def finished(self, task: asyncio.Task[User]) -> None:
+    def finished(self, task: asyncio.Task[Any]) -> None:
         self.tasks.remove(task)
         # Disconnected requests still finish/account for work. Retrieve their
         # exception as well; connected requests receive it through shield().
@@ -69,6 +70,39 @@ class PasswordAttempts:
             error = task.exception()
             if error is not None and not isinstance(error, ServiceError):
                 log_unexpected(logger, "Password attempt", error)
+
+    async def hash_password(self, password: str) -> str:
+        """Share sign-in admission, executor and deployment-wide CPU slots."""
+        if self.closed or self.pending >= PASSWORD_WORKERS + PASSWORD_QUEUE:
+            raise busy()
+        task = asyncio.create_task(self.run_hash(password))
+        self.tasks.add(task)
+        task.add_done_callback(self.finished)
+        return await asyncio.shield(task)
+
+    async def acquire_database_slot(self, session: AsyncSession) -> None:
+        for slot in range(PASSWORD_WORKERS):
+            if await session.scalar(
+                text("SELECT pg_try_advisory_xact_lock(:key)"),
+                {"key": lock_key(f"password-slot:{slot}")},
+            ):
+                return
+        raise busy()
+
+    async def run_hash(self, password: str) -> str:
+        try:
+            await asyncio.wait_for(self.slots.acquire(), timeout=QUEUE_SECONDS)
+        except TimeoutError:
+            raise busy() from None
+        try:
+            # This task owns its transaction, including after client cancellation.
+            async with self.db.transaction() as session:
+                await self.acquire_database_slot(session)
+                return await asyncio.get_running_loop().run_in_executor(
+                    self.executor, hash_password, password
+                )
+        finally:
+            self.slots.release()
 
     async def authenticate(
         self,
@@ -152,14 +186,7 @@ class PasswordAttempts:
 
             # Deployment-wide PBKDF2 slots also bound separate API processes.
             # Never queue threads/connections on these slots when all are occupied.
-            for slot in range(PASSWORD_WORKERS):
-                if await session.scalar(
-                    text("SELECT pg_try_advisory_xact_lock(:key)"),
-                    {"key": lock_key(f"password-slot:{slot}")},
-                ):
-                    break
-            else:
-                raise busy()
+            await self.acquire_database_slot(session)
 
             user = await session.scalar(
                 select(User).where(User.email == email, User.active.is_(True))

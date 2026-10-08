@@ -45,6 +45,7 @@ export async function fixture(page, options = {}) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
+    if (method === "GET" && path === "/health") return route.fulfill({ json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0} });
     const body = request.postData() ? request.postDataJSON() : undefined;
     state.requests.push({ method, path, versioned_path: versionedPath, query: Object.fromEntries(url.searchParams), ...(body ? { body } : {}) });
     try {

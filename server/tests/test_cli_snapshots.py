@@ -700,6 +700,53 @@ async def fake_request(self, method, path, **kwargs):
             "email": "ops@example.test",
             "expires_in": 1800,
         }
+    elif path == "/platform/org-applications":
+        assert kwargs["platform"] is True
+        assert kwargs["params"] == {"status": "pending", "limit": 50}
+        items = [
+            {
+                "id": IDENTIFIER,
+                "status": "pending",
+                "org_name": "Synthetic applicant org",
+                "contact_name": "Applicant",
+                "email": "applicant@example.test",
+                "phone": None,
+                "note": None,
+                "created_at": "2026-10-07T00:00:00Z",
+                "expires_at": "2026-11-06T00:00:00Z",
+                "existing_user": False,
+                "source_submissions_24h": 1,
+                "decided_at": None,
+                "decided_by": None,
+                "decision_reason": None,
+                "org_id": None,
+                "admin_user_id": None,
+                "user_created": None,
+                "attached_existing_user": None,
+            }
+        ]
+    elif path == f"/platform/org-applications/{IDENTIFIER}/approve":
+        assert kwargs["platform"] is True
+        assert kwargs["json"] == {"org_name": "Corrected org", "attach_existing_user": True}
+        data = {
+            "application_id": IDENTIFIER,
+            "status": "approved",
+            "org_id": IDENTIFIER_2,
+            "admin_user_id": IDENTIFIER_3,
+            "user_created": False,
+            "attached_existing_user": True,
+        }
+    elif path == f"/platform/org-applications/{IDENTIFIER}/reject":
+        assert kwargs["platform"] is True
+        assert kwargs["json"] == {"reason": "Unable to verify applicant"}
+        data = {
+            "application_id": IDENTIFIER,
+            "status": "rejected",
+            "org_id": None,
+            "admin_user_id": None,
+            "user_created": None,
+            "attached_existing_user": None,
+        }
     elif path == "/platform/orgs" and method == "POST":
         data = {
             "org_id": IDENTIFIER,
@@ -1601,6 +1648,9 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         ],
         "platform login": ["platform", "login", "--email", "ops@example.test", "--totp", "123456"],
         "platform org list": ["platform", "org", "list"],
+        "platform org application list": ["platform", "org", "application", "list"],
+        "platform org application approve": ["platform", "org", "application", "approve", IDENTIFIER, "--org-name", "Corrected org", "--attach-existing-user"],
+        "platform org application reject": ["platform", "org", "application", "reject", IDENTIFIER, "--reason", "Unable to verify applicant"],
         "platform org create": [
             "platform", "org", "create", "--name", "Synthetic tenant", "--admin-email", "boss@example.test",
         ],

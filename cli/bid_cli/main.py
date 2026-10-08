@@ -21,6 +21,11 @@ from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import Contract, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
+from app.schemas.org_signup import (
+    OrgApplicationApprove,
+    OrgApplicationListQuery,
+    OrgApplicationReject,
+)
 from app.schemas.platform_contracts import (
     CardRedeem,
     OrgLookup,
@@ -1348,6 +1353,8 @@ platform_app, platform_org_app, platform_model_app, auth_app = (typer.Typer() fo
 app.add_typer(platform_app, name="platform")
 app.add_typer(auth_app, name="auth")
 platform_app.add_typer(platform_org_app, name="org")
+platform_org_application_app = typer.Typer()
+platform_org_app.add_typer(platform_org_application_app, name="application")
 platform_app.add_typer(platform_model_app, name="model")
 platform_app.add_typer(platform_credential_app, name="credential")
 
@@ -1379,6 +1386,64 @@ def platform_login(
 @platform_org_app.command("list")
 def platform_org_list(json_output: JsonOption = False):
     emit(call("GET", "/platform/orgs", platform=True), "platform org list", json_output)
+
+
+@platform_org_application_app.command("list")
+def platform_org_application_list(
+    status: Annotated[str, typer.Option()] = "pending",
+    limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
+    json_output: JsonOption = False,
+):
+    query = OrgApplicationListQuery.model_validate({"status": status, "limit": limit})
+    emit(
+        call(
+            "GET",
+            "/platform/org-applications",
+            platform=True,
+            params=query.model_dump(mode="json", exclude_none=True),
+        ),
+        "platform org application list",
+        json_output,
+    )
+
+
+@platform_org_application_app.command("approve")
+def platform_org_application_approve(
+    application_id: Annotated[UUID, typer.Argument()],
+    org_name: Annotated[str | None, typer.Option()] = None,
+    attach_existing_user: Annotated[bool, typer.Option()] = False,
+    json_output: JsonOption = False,
+):
+    body = OrgApplicationApprove(org_name=org_name, attach_existing_user=attach_existing_user)
+    emit(
+        call(
+            "POST",
+            f"/platform/org-applications/{application_id}/approve",
+            platform=True,
+            json=body.model_dump(mode="json"),
+        ),
+        "platform org application approve",
+        json_output,
+    )
+
+
+@platform_org_application_app.command("reject")
+def platform_org_application_reject(
+    application_id: Annotated[UUID, typer.Argument()],
+    reason: Annotated[str, typer.Option()],
+    json_output: JsonOption = False,
+):
+    body = OrgApplicationReject(reason=reason)
+    emit(
+        call(
+            "POST",
+            f"/platform/org-applications/{application_id}/reject",
+            platform=True,
+            json=body.model_dump(mode="json"),
+        ),
+        "platform org application reject",
+        json_output,
+    )
 
 
 @platform_org_app.command("create")

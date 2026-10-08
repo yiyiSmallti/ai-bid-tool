@@ -120,6 +120,13 @@ from app.schemas.memory_contracts import (
     MemoryRetrievalRequest,
     MemoryUpdate,
 )
+from app.schemas.org_signup import (
+    OrgApplicationApprove,
+    OrgApplicationDecision,
+    OrgApplicationListQuery,
+    OrgApplicationReject,
+    OrgApplicationView,
+)
 from app.schemas.platform_contracts import (
     CardRedeem,
     OrgLookup,
@@ -403,6 +410,9 @@ COMMANDS = {
     "token create": TokenCreate,
     "platform login": PlatformLogin,
     "platform org list": None,
+    "platform org application list": OrgApplicationListQuery,
+    "platform org application approve": OrgApplicationApprove,
+    "platform org application reject": OrgApplicationReject,
     "platform org create": PlatformOrgCreate,
     "platform org set-active": PlatformOrgActive,
     "platform model list": None,
@@ -860,6 +870,12 @@ def command_schema(app=None, version: str = "4.0") -> dict:
 
     commands = dict(LEGACY_COMMANDS if version == "3.0" else COMMANDS)
     outputs = dict(OUTPUTS)
+    outputs.update(
+        {
+            "platform org application approve": TypeAdapter(OrgApplicationDecision),
+            "platform org application reject": TypeAdapter(OrgApplicationDecision),
+        }
+    )
     if version == "4.0":
         from app.schemas.management_pages import PageData as ManagementPageData
 
@@ -1004,6 +1020,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         },
     }
     workflow_items = {
+        "platform org application list": OrgApplicationView,
         "req review-list": RequirementReviewView,
         "req review-history": RequirementReviewEvent,
         "req rejected": RejectedItemView,

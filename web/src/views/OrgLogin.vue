@@ -3,6 +3,7 @@ import { Coin, OfficeBuilding } from "@element-plus/icons-vue";
 import { computed, onBeforeUnmount, ref } from "vue";
 import { useRouter } from "vue-router";
 import { orgSession, request } from "../api.js";
+import SignupLink from "../components/SignupLink.vue";
 
 const router = useRouter();
 const email = ref("");
@@ -80,6 +81,7 @@ async function enter(org) {
       </el-button>
       <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" />
     </div>
+    <SignupLink />
   </el-card>
 </template>
 

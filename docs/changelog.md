@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Organization self-service applications
+
+- Add the opt-in public application form, uniform receipt, bounded password hashing,
+  source admission and manual platform review through HTTP, CLI and the console.
+- Create the restricted global application table and approval/rejection/expiry
+  functions. Approval reuses organization provisioning, requires explicit existing
+  account attachment and never replaces an existing password; terminal decisions
+  clear the submitted hash.
+- Add daily expiry, platform audit events and pending-review counts. See
+  [Organization self-service application](notes/org-signup.md).
+
 ## 2026-10-08: Pull-based automatic deployment
 
 - [autodeploy.sh](../deploy/pilot/autodeploy.sh) with a systemd timer deploys the newest

@@ -67,6 +67,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [attachment-archives.md](notes/attachment-archives.md): immutable PDF review, exact declaration/task pins, page privacy and retained-object reconciliation.
 - [annotation.md](notes/annotation.md): source-bound cloud certificate-page candidates, exact-approval confirmed releases, and explicit human attachment.
 - [screenshot-evidence.md](notes/screenshot-evidence.md): screenshot pixel redaction and privacy clearance, vendor web/PDF capture and archival, vendor-source search, response-card image evidence, prototype (原型) delivery decisions, analysis admission and billing, and invalidation/recomputation.
+- [Organization self-service application](notes/org-signup.md): public admission, platform review and expiry.
 
 ## Decision records
 
@@ -77,6 +78,8 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [0005 Response cards separating model proposals from human confirmation (人工确认)](adr/0005-human-confirmed-responses.md) (adr)
 - [0006 Platform-managed service credentials](adr/0006-platform-credentials.md) (adr)
 - [0007 Task liability and prepaid reservations](adr/0007-task-budget-reservations.md) (adr)
+
+- [0008 Organization self-service applications](adr/0008-org-signup.md) (adr)
 
 ## Plans and records
 
