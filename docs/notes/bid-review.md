@@ -327,6 +327,62 @@ preview. Submission uses the same input with `--expected-input-hash` and
 --json` saves only a verified DOCX through the shared private temporary-file,
 no-redirect and atomic no-overwrite download path. JSON contracts remain Result 4.0.
 
+### Presence-only Clef triage
+
+The [presence service](../../server/app/services/bid_review_presence.py) derives
+images only after a published review has established applicable required locations.
+Human task owners explicitly create the derivatives; review preflight remains
+write-free and never renders pages. Non-price bid pages are selected locally;
+price/mixed/uncertain pages, tender pages and unmapped locations cannot enter the
+image inventory. A later review intersects its new required locations with the
+already cleared pages instead of broadening the original human grant.
+
+The [Gaussian profile](../../server/app/services/bid_presence_blur.py) preserves the
+whole page at a maximum side of 256 pixels, applies a separable Gaussian kernel
+with sigma 4 and radius 12, and re-encodes JPEG at quality 80 using PyMuPDF. It
+creates a new raster without imported metadata. Each descriptor retains the source
+PNG hash, output hash, dimensions, algorithm parameters and privacy receipt. The
+whole-page scale is derivable from the source and output dimensions; no region is
+cropped. The [blur experiment](../../scripts/check_bid_presence_blur.py) measures
+text-band edge-energy and variance ratios while checking retained red shape pixels.
+It is a regression proxy, not proof that arbitrary text, large glyphs or identity
+features are hidden. Human owners must inspect the actual pixels and refuse any
+unsafe image; a later mask profile must have a new hash and review.
+
+Image grants have a separate purpose and append-only revision chain. They bind
+submission/preparation/source-review, current redaction/name/confidential settings,
+platform configuration/credential generations, exact derivative hashes and selected
+image IDs. Revocation or changed bindings invalidates preflight and subsequent
+admissions. Authenticated JPEG reads require a human admin/bidder task owner,
+return neutral no-store bytes and never expose storage keys or pixels to API tokens.
+The console verifies the returned hash before presenting the grant action.
+
+Platform Clef configuration occupies the reserved vision entry in the existing
+approved model catalog. Dedicated fixed functions isolate management; the existing
+platform credential reader resolves the two purpose-bound encrypted tokens. No
+new global business-data table or org BYOK path is introduced. Settings changes
+clear the gateway check. The gateway metadata parser requires explicit safe
+properties and rejects unknown/missing fields. Its wire field mapping is defined
+by [the checker](../../server/app/providers/clef_gateway.py); deployment acceptance
+must confirm that the real metadata response matches it.
+
+The [Clef adapter](../../server/app/providers/clef.py) sends one authorized JPEG
+with the two fixed noul questions through AI Gateway, without internal IDs, source
+text or filenames. Every dispatch uses a versioned fixed sale quote and the shared
+budget admission ledger. Returned token counts and gateway IDs are reconciliation
+telemetry. A gateway 429 is non-completed, releases its hold and re-admits after
+Retry-After within the attempt ceiling; unknown timeouts retain their reservation
+and do not automatically retry. Completed malformed output still incurs its fixed
+charge. The approved [threshold and human boundaries](../plan/bid-review.md#slice-5-default-on-presence-triage)
+apply to both live console rows and immutable Word snapshots.
+
+The enabled request default does not manufacture clearance. Unconfigured, unchecked,
+unpriced, stale or unauthorized Clef stays undispatched while the text review
+continues with triage-unavailable coverage. Missing/uncertain marks remain escalated,
+and even high-probability presence still requires human confirmation. Faint,
+greyscale, partial, wrong-company, prescribed-position, seam and signature-identity
+cases have not been validated by the reported seal-presence feasibility experiment.
+
 ## Pitfalls
 
 - Synthetic fixtures alone missed the real 点聚 layout (embedded content digest,
@@ -394,3 +450,11 @@ no-redirect and atomic no-overwrite download path. JSON contracts remain Result 
   [HTTP/worker report acceptance](../../server/tests/test_bid_review_report_db.py),
   [CLI report snapshots](../../server/tests/test_bid_review_report_cli.py) and
   [mocked report browser acceptance](../../web/e2e/bid-review-report.spec.js).
+
+- [Presence persistence](../../server/app/models/bid_review_presence.py),
+  [Clef stage](../../server/app/services/bid_review_clef.py),
+  [platform configuration](../../server/app/services/platform_clef.py),
+  [migration 0067](../../server/migrations/versions/0067_bid_review_clef.py),
+  [image authorization console](../../web/src/components/BidPresenceAuthorization.vue),
+  [Clef HTTP/worker acceptance](../../server/tests/test_bid_review_clef_db.py) and
+  [mocked browser acceptance](../../web/e2e/bid-review-clef.spec.js).

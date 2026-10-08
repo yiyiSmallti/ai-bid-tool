@@ -223,7 +223,17 @@ def signing_requirement(document, requirement):
                 ("所需文件", location.get("document_id")),
                 ("所需页码", location.get("page")),
                 ("骑缝组", location.get("group_id")),
-                ("位置状态", "未核实（unresolved）；未判定存在"),
+                (
+                    "位置状态",
+                    {
+                        "unresolved": "未核实（unresolved）",
+                        "triage_present": "初筛可能存在（triage_present）",
+                        "triage_absent": "初筛疑似缺失（triage_absent）",
+                        "triage_uncertain": "初筛无法判断（triage_uncertain）",
+                    }.get(location["status"], location["status"]),
+                ),
+                ("初筛概率", location.get("presence_probabilities", {})),
+                ("人工确认", "需人工确认；主体、日期与具体位置仍未核实"),
                 ("未知原因", location["reason_code"]),
             ],
         )

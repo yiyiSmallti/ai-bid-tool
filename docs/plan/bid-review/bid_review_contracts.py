@@ -996,6 +996,8 @@ class BidReviewLimits(Contract):
 
 
 class BidReviewRequest(Contract):
+    clef_enabled: bool = True
+    presence_authorization_id: UUID | None = None
     request_id: UUID
     submission_id: UUID
     assessment_date: date

@@ -6,6 +6,27 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Default-on Clef presence triage
+
+- Add platform-only Clef settings, separate Workers AI/gateway credentials, a
+  versioned fixed call price and fail-closed gateway hardening checks. The runtime
+  uses only the authenticated AI Gateway route with log collection disabled.
+- Add source-bound Gaussian JPEG derivatives for confirmed non-price signing
+  locations and separate exact-pixel human authorization/revocation. Migration
+  0067 adds tenant RLS/composite-parent/immutable image and grant records, platform
+  catalog configuration and bounded gateway usage telemetry.
+- Add default-on per-review triage with explicit opt-out, fixed-price budget
+  admission/settlement, three-call concurrency and a forty-attempt visual ceiling.
+  Gateway 429 retries re-admit; unknown timeouts retain liability. Returned tokens
+  are telemetry and never determine charges.
+- Show 初筛 probabilities, human escalation, usage, cost and unvalidated cases in
+  the run and immutable console/Word report. No triage result confirms a required
+  mark, owner, date, box location or seam completeness.
+- Add platform and image-authorization console/CLI flows, snapshots, synthetic
+  blur checks, HTTP/worker and strict HTTPS mocked browser acceptance. Database
+  and browser execution remain pending. See [slice 5](plan/bid-review.md#slice-5-default-on-presence-triage)
+  and [the mechanism](notes/bid-review.md#presence-only-clef-triage).
+
 ## 2026-10-08: Uploaded-bid console reports and Word artifacts
 
 - Add immutable report snapshots bound to a published review and the human decision

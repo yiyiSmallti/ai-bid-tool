@@ -1,0 +1,260 @@
+{
+  "local: check": {
+    "command": "platform clef check",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "blockers": [],
+      "config": {
+        "account_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "currency": "USD",
+        "enabled": true,
+        "expected_revision": null,
+        "fixed_sale_price": "0.01",
+        "gateway_check": {
+          "authentication": true,
+          "cache_ttl": 0,
+          "checked_at": "2026-10-08T00:00:00Z",
+          "collect_logs": false,
+          "gateway_id": "presence",
+          "gateway_retries": false,
+          "logpush": false,
+          "rate_limit_requests": 200,
+          "rate_limit_seconds": 60,
+          "workers_ai_billing_mode": "unified"
+        },
+        "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
+        "gateway_credential_revision": 1,
+        "gateway_id": "presence",
+        "platform_model_id": "bid-review-clef",
+        "price_revision": 1,
+        "revision": 2,
+        "updated_at": "2026-10-08T00:00:00Z",
+        "workers_credential_id": "00000000-0000-4000-8000-000000000001",
+        "workers_credential_revision": 1
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: set": {
+    "command": "platform clef set",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "blockers": [
+        "clef_gateway_unchecked"
+      ],
+      "config": {
+        "account_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "currency": "USD",
+        "enabled": true,
+        "expected_revision": null,
+        "fixed_sale_price": "0.01",
+        "gateway_check": null,
+        "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
+        "gateway_credential_revision": 1,
+        "gateway_id": "presence",
+        "platform_model_id": "bid-review-clef",
+        "price_revision": 1,
+        "revision": 1,
+        "updated_at": "2026-10-08T00:00:00Z",
+        "workers_credential_id": "00000000-0000-4000-8000-000000000001",
+        "workers_credential_revision": 1
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: show": {
+    "command": "platform clef show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "blockers": [
+        "clef_gateway_unchecked"
+      ],
+      "config": {
+        "account_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "currency": "USD",
+        "enabled": true,
+        "expected_revision": null,
+        "fixed_sale_price": "0.01",
+        "gateway_check": null,
+        "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
+        "gateway_credential_revision": 1,
+        "gateway_id": "presence",
+        "platform_model_id": "bid-review-clef",
+        "price_revision": 1,
+        "revision": 1,
+        "updated_at": "2026-10-08T00:00:00Z",
+        "workers_credential_id": "00000000-0000-4000-8000-000000000001",
+        "workers_credential_revision": 1
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: check": {
+    "command": "platform clef check",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "blockers": [],
+      "config": {
+        "account_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "currency": "USD",
+        "enabled": true,
+        "expected_revision": null,
+        "fixed_sale_price": "0.01",
+        "gateway_check": {
+          "authentication": true,
+          "cache_ttl": 0,
+          "checked_at": "2026-10-08T00:00:00Z",
+          "collect_logs": false,
+          "gateway_id": "presence",
+          "gateway_retries": false,
+          "logpush": false,
+          "rate_limit_requests": 200,
+          "rate_limit_seconds": 60,
+          "workers_ai_billing_mode": "unified"
+        },
+        "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
+        "gateway_credential_revision": 1,
+        "gateway_id": "presence",
+        "platform_model_id": "bid-review-clef",
+        "price_revision": 1,
+        "revision": 2,
+        "updated_at": "2026-10-08T00:00:00Z",
+        "workers_credential_id": "00000000-0000-4000-8000-000000000001",
+        "workers_credential_revision": 1
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: set": {
+    "command": "platform clef set",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "blockers": [
+        "clef_gateway_unchecked"
+      ],
+      "config": {
+        "account_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "currency": "USD",
+        "enabled": true,
+        "expected_revision": null,
+        "fixed_sale_price": "0.01",
+        "gateway_check": null,
+        "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
+        "gateway_credential_revision": 1,
+        "gateway_id": "presence",
+        "platform_model_id": "bid-review-clef",
+        "price_revision": 1,
+        "revision": 1,
+        "updated_at": "2026-10-08T00:00:00Z",
+        "workers_credential_id": "00000000-0000-4000-8000-000000000001",
+        "workers_credential_revision": 1
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: show": {
+    "command": "platform clef show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "blockers": [
+        "clef_gateway_unchecked"
+      ],
+      "config": {
+        "account_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "currency": "USD",
+        "enabled": true,
+        "expected_revision": null,
+        "fixed_sale_price": "0.01",
+        "gateway_check": null,
+        "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
+        "gateway_credential_revision": 1,
+        "gateway_id": "presence",
+        "platform_model_id": "bid-review-clef",
+        "price_revision": 1,
+        "revision": 1,
+        "updated_at": "2026-10-08T00:00:00Z",
+        "workers_credential_id": "00000000-0000-4000-8000-000000000001",
+        "workers_credential_revision": 1
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

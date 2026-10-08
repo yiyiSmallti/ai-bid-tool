@@ -81,6 +81,7 @@ class Snapshot:
     authorized_bid_pages: list
     documents: list
     validations: list
+    clef_config: object
     blockers: list[str]
     uncovered: list[str]
 
@@ -109,9 +110,11 @@ async def snapshot(session, actor, task_id, body, settings):
         "schema_version": VERSION,
         "provider_binding": binding,
         "reasoning": body.reasoning,
-        "clef_enabled": False,
+        "clef_enabled": body.clef_enabled,
         "limits": {
             "llm_calls": min(100, settings.job_max_vendor_calls),
+            "visual_calls": 40,
+            "external_calls": 140,
             "obligations": 2000,
             "required_locations": 10000,
             "findings": 10000,
@@ -295,11 +298,55 @@ async def snapshot(session, actor, task_id, body, settings):
         if manifest["prepared_warnings"]:
             uncovered.append("preparation_coverage_partial")
     manifest["required_calls"] = len(requests)
+    clef_config = None
+    clef = {
+        "enabled": body.clef_enabled,
+        "available": False,
+        "blockers": [],
+        "planned_calls": 0,
+        "fixed_sale_price": None,
+        "currency": settings.billing_currency,
+        "binding": None,
+        "authorization_id": None,
+    }
+    if body.clef_enabled:
+        from app.services import bid_review_presence, platform_clef
+
+        resolved = await platform_clef.resolve(session, settings)
+        clef_config = resolved.config
+        clef["blockers"] = list(resolved.blockers)
+        if clef_config is not None:
+            clef["binding"] = clef_config.model_dump(mode="json")
+            clef["fixed_sale_price"] = str(clef_config.fixed_sale_price)
+            clef["price_revision"] = str(clef_config.price_revision)
+            clef["currency"] = clef_config.currency
+            if clef_config.currency != settings.billing_currency:
+                clef["blockers"].append("clef_currency_mismatch")
+        if clef_config is not None and not clef["blockers"]:
+            presence = await bid_review_presence.planned(
+                session,
+                root.id,
+                settings,
+                clef["binding"],
+                authorization_id=body.presence_authorization_id,
+            )
+            clef.update(presence)
+            clef["planned_calls"] = min(presence["planned_calls"], 40)
+            clef["available"] = not presence["blockers"] and bool(presence["images"])
+            if presence["planned_calls"] > 40:
+                uncovered.append("clef_call_ceiling_will_limit_coverage")
+        if not clef["available"]:
+            uncovered += ["clef_unavailable", *clef["blockers"]]
+    else:
+        uncovered.append("clef_disabled")
+    manifest["clef"] = clef
     # Compliance calls depend on extracted obligations; their exact bytes and
     # price are unknowable during preflight. Quote only the known first stage.
     dependent_max = 2000 * len(authorized_bid_pages)
     manifest["dependent_compliance_calls_maximum"] = dependent_max
-    manifest["planned_calls"] = min(len(requests) + dependent_max, manifest["limits"]["llm_calls"])
+    manifest["planned_calls"] = (
+        min(len(requests) + dependent_max, manifest["limits"]["llm_calls"]) + clef["planned_calls"]
+    )
     manifest["first_pass_calls"] = min(len(requests), manifest["limits"]["llm_calls"])
     manifest["compliance_call_estimate"] = "dependent_on_extracted_obligations"
     manifest["dependent_calls_may_reach_ceiling"] = (
@@ -320,6 +367,7 @@ async def snapshot(session, actor, task_id, body, settings):
         authorized_bid_pages,
         document_inventory,
         validations,
+        clef_config,
         sorted(set(blockers)),
         sorted(set(uncovered)),
     )
@@ -352,6 +400,14 @@ async def submit(session, actor, task_id, body, queue, settings):
             ]
         except ProviderFailure as error:
             blockers.append(error.code)
+    clef = fixed.manifest["clef"]
+    if clef["available"]:
+        from app.services.bid_review_clef import preview_quote
+
+        # Preflight prices the pinned shape/hash without reading pixels. The quote
+        # amount is fixed; actual byte-bound quotes are built again on dispatch.
+        for image in clef["images"][: clef["planned_calls"]]:
+            quotes.append(preview_quote(image, fixed.clef_config))
     attached = await budget_preflight.attach(
         session,
         {},
@@ -366,7 +422,7 @@ async def submit(session, actor, task_id, body, queue, settings):
         dynamic=bool(fixed.manifest["dependent_compliance_calls_maximum"]),
     )
     budget = BudgetPreflightData.model_validate(attached["budget_preflight"])
-    budget.maximum_calls = fixed.manifest["limits"]["llm_calls"]
+    budget.maximum_calls = fixed.manifest["limits"]["external_calls"]
     budget.as_of = budget.as_of.replace(microsecond=0)
     if budget.admission_blocker:
         blockers.append(budget.admission_blocker)
@@ -374,8 +430,14 @@ async def submit(session, actor, task_id, body, queue, settings):
     signer = TokenSigner.for_tokens(settings)
     binding = receipt_binding(actor, task_id, body, fixed.input_hash)
     if body.dry_run:
+        public_clef = {
+            key: value
+            for key, value in fixed.manifest["clef"].items()
+            if key not in {"binding", "images"}
+        }
+        public_clef["binding_sha256"] = bids.digest(fixed.manifest["clef"]["binding"])
         return c.BidReviewPreview(
-            input={**fixed.manifest, "input_hash": fixed.input_hash},
+            input={**fixed.manifest, "clef": public_clef, "input_hash": fixed.input_hash},
             budget=budget,
             expires_at=expiry,
             preflight_token=signer.issue(binding, 900, expires_at=int(expiry.timestamp())),

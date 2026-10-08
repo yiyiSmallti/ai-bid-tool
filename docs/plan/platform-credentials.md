@@ -53,11 +53,20 @@ Add only global `platform_credentials`, not binding/history/platform Job/global 
 | Column | Constraint / meaning |
 | --- | --- |
 | `id uuid`, `name varchar(40)` | Primary key; UNIQUE name `^[a-z0-9_]{1,40}$`, immutable/nonreusable even after tombstone |
-| `purpose`, `provider`, `endpoint` | Immutable: purpose catalog_llm / standalone_llm / vendor_search; provider anthropic / openai / perplexity. Normalize HTTPS base URL, no userinfo/query/fragment, default port only |
+| `purpose`, `provider`, `endpoint` | Immutable: purpose catalog_llm / standalone_llm / vendor_search / clef_workers_ai / clef_gateway; provider anthropic / openai / perplexity / cloudflare. Normalize HTTPS base URL, no userinfo/query/fragment, default port only |
 | `encrypted_key text`, `envelope_version` | Ciphertext required except removed, where NULL required. ADR identity-bound envelope; no plaintext `api_key` column |
 | `fingerprint`, `last_four` | First 16 hex characters of key SHA-256 prefixed `sha256:`, last four ASCII characters. Visual identification only, not authorization/uniqueness/deduplication. Key: 16–4096 nonwhitespace printable ASCII characters; no password/short PIN |
 | `state`, `revision bigint`, `secret_version bigint` | active / disabled / removed. revision starts 1, +1 per business change; secret_version +1 only for key replacement. Root rewrapping changes neither |
 | `created_at`, `updated_at`, `updated_by` | Timezone-aware time and verified platform actor email; no client-supplied values |
+
+Clef uses two independent platform-only purposes: `clef_workers_ai` has provider
+`cloudflare` and fixed endpoint `https://gateway.ai.cloudflare.com`;
+`clef_gateway` has provider `cloudflare` and fixed endpoint
+`https://api.cloudflare.com/client/v4`. Neither is org-visible or BYOK. Their pinned
+IDs and generations belong only in server/platform configuration. The separate
+[Clef configuration and hardening contract](bid-review.md#providers-clef-and-charging)
+requires both at dispatch. Presence previews expose the binding hash and fixed sale
+price, without credential identifiers or platform routing configuration.
 
 For noncatalog purposes, a partial unique index on purpose where `state != removed` ensures one nonremoved credential per service; disabled occupies the slot. After removal, new name/ID may replace it, but old jobs never rebind automatically. Catalog credentials can serve multiple models; add `platform_models.credential` foreign key to name and reject physical deletion. Catalog writes/resolutions check matching purpose/provider/normalized endpoint. Normalize empty Anthropic base_url to the existing adapter's official default. Endpoint changes need a new credential and explicit catalog update; never send old-key headers to a new service by editing an address.
 

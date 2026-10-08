@@ -19,6 +19,8 @@ class BidReviewRequest(Contract):
     scope: Literal["uploaded_bid"] = "uploaded_bid"
     review_slice: Literal["compliance"] = "compliance"
     reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
+    clef_enabled: bool = True
+    presence_authorization_id: UUID | None = None
     dry_run: bool = False
     retry: bool = False
     expected_input_hash: Sha256 | None = None
@@ -74,7 +76,16 @@ class BidRequiredLocation(Contract):
     page_id: UUID | None = None
     document_id: UUID | None = None
     page: int | None = None
-    status: Literal["unresolved"] = "unresolved"
+    status: Literal["unresolved", "triage_present", "triage_absent", "triage_uncertain"] = (
+        "unresolved"
+    )
+    probability_yes: float | None = Field(default=None, ge=0, le=1)
+    presence_probabilities: dict[str, float] = Field(default_factory=dict)
+    needs_human_confirmation: Literal[True] = True
+    human_escalation: bool = False
+    owner_status: Literal["unresolved"] = "unresolved"
+    date_status: Literal["unresolved"] = "unresolved"
+    position_status: Literal["unresolved"] = "unresolved"
     group_id: str | None = None
     reason_code: str = "presence_not_checked"
 

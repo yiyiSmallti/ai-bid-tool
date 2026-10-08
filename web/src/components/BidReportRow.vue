@@ -1,4 +1,5 @@
 <script setup>
+import BidPresenceLocation from "./BidPresenceLocation.vue";
 import { computed } from "vue";
 import { money } from "../api.js";
 import { formatTime } from "../org.js";
@@ -35,7 +36,7 @@ const position = citation => `${citation.page_label === "rendered_docx" ? "固�
       <h4>签章要求 · {{ status(requirement.applicability) }}</h4>
       <p>{{ requirement.mark_types?.map(mark => marks[mark] ?? '待核对签章类型').join('、') }}<span v-if="requirement.date_required"> · 需填写日期</span></p>
       <template v-if="requirement.citation"><p>招标{{ position(requirement.citation) }}</p><blockquote>{{ requirement.citation.quote }}</blockquote></template>
-      <p v-for="(location,index) in requirement.required_locations" :key="index" data-testid="signing-location">{{ location.page ? `投标第 ${location.page} 页` : '投标页码未确定' }} · 位置未解决<span v-if="location.group_id"> · 骑缝组 {{ location.group_id }}</span> · {{ reviewError({ code: location.reason_code }) }}</p>
+      <BidPresenceLocation v-for="(location,index) in requirement.required_locations" :key="index" :location="location" />
       <p v-if="!requirement.required_locations?.length">{{ requirement.applicability === 'not_applicable' ? '无适用签章位置' : '目标位置未确定，不能判为存在' }}</p>
     </template>
     <template v-else-if="validation">

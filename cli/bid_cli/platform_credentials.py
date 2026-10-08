@@ -194,7 +194,9 @@ def perform(action: str, method: str, path: str, json_output: bool, **kwargs):
 def list_credentials(
     state: Annotated[Literal["active", "disabled", "removed"] | None, typer.Option()] = None,
     purpose: Annotated[
-        Literal["catalog_llm", "standalone_llm", "vendor_search"] | None, typer.Option()
+        Literal["catalog_llm", "standalone_llm", "vendor_search", "clef_workers_ai", "clef_gateway"]
+        | None,
+        typer.Option(),
     ] = None,
     after_name: Annotated[str | None, typer.Option()] = None,
     limit: Annotated[int, typer.Option(min=1, max=100)] = 100,

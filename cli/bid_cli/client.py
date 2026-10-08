@@ -198,6 +198,18 @@ class Client:
             raise ServiceError(
                 "invalid_server_response", "Server returned an invalid response", 502, 3
             ) from exc
+        if platform and (path == "/platform/clef" or path.startswith("/platform/clef/")):
+            from bid_cli.platform_clef import safe_result
+
+            action = (
+                "show" if method.upper() == "GET" else "set" if method.upper() == "PUT" else "check"
+            )
+            result = safe_result(body, "platform clef " + action)
+            if response.is_success != result["ok"]:
+                raise ServiceError(
+                    "invalid_server_response", "Server returned invalid Clef status", 502, 4
+                )
+            return result
         if platform and (
             path == "/platform/trust-anchors" or path.startswith("/platform/trust-anchors/")
         ):

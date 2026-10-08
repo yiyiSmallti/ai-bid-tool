@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import AwareDatetime, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
+from app.api.platform_clef import create_router as create_clef_router
 from app.api.platform_credentials import create_router as create_credentials_router
 from app.api.platform_trust_anchors import create_router as create_trust_anchors_router
 from app.core.config import Settings
@@ -281,6 +282,7 @@ def create_router(
         async with db.transaction() as session:
             return result("platform audit", items=await platform.audit_entries(session, limit))
 
+    router.include_router(create_clef_router(settings, operator))
     router.include_router(create_credentials_router(settings, operator))
     router.include_router(create_trust_anchors_router(db, operator))
     return router
