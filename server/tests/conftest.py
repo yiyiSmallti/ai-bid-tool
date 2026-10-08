@@ -82,6 +82,51 @@ def prepare_database(url: str, *, configure_logins: bool = True) -> None:
             engine.dispose()
 
 
+# Scale tests that each take minutes on a CI runner, pinned to their own shards so the
+# wall-clock time of a sharded run is not the sum of several of them. When the first is
+# selected, shard 1 runs only it; the others share their shard with hashed tests.
+PINNED_SHARD_TESTS = (
+    "server/tests/test_draft_batch_reads.py::test_large_draft_reads_match_reference",
+    "server/tests/test_runtime_integration.py::test_real_background_worker_and_both_cli_modes",
+    "server/tests/test_score_request_scope_db.py::test_large_draft_score_preview_run_scopes",
+    "server/tests/test_fast_citation.py::test_large_check_publish_includes_deferred_commit",
+)
+
+
+def shard_of(nodeid: str, count: int, reserve_first: bool) -> int:
+    """1-based shard for a test ID; pinned scale tests keep their shard when it exists."""
+    for position, prefix in enumerate(PINNED_SHARD_TESTS, start=1):
+        if nodeid.startswith(prefix) and position <= count:
+            return position
+    first = 2 if reserve_first and count > 1 else 1
+    digest = hashlib.sha256(nodeid.encode()).digest()
+    return first + int.from_bytes(digest[:8], "big") % (count - first + 1)
+
+
+# After -m and -k deselection, so shards split only the tests this run selects.
+@pytest.hookimpl(trylast=True)
+def pytest_collection_modifyitems(config, items):
+    """Keep only this CI shard's tests when BID_TEST_SHARD is set as "index/count".
+
+    Each test ID maps to exactly one shard, identically in every xdist worker and every
+    runner, so the shards together run the whole selection.
+    """
+    shard = os.environ.get("BID_TEST_SHARD")
+    if not shard:
+        return
+    index, count = (int(part) for part in shard.split("/"))
+    if not 1 <= index <= count:
+        raise pytest.UsageError(f"BID_TEST_SHARD must be index/count, got {shard!r}")
+    # The selection is identical on every shard, so this decision is too.
+    reserve_first = any(item.nodeid.startswith(PINNED_SHARD_TESTS[0]) for item in items)
+    selected, deselected = [], []
+    for item in items:
+        shard_index = shard_of(item.nodeid, count, reserve_first)
+        (selected if shard_index == index else deselected).append(item)
+    config.hook.pytest_deselected(items=deselected)
+    items[:] = selected
+
+
 def pytest_configure(config):
     """Give each pytest-xdist worker a copy of the migrated test database.
 

@@ -1,9 +1,11 @@
 name: check
 # Pull requests only: main accepts changes only through pull requests that passed these
 # checks, so rerunning them on the merge commit would double Actions minutes. Run it by
-# hand from the Actions tab when main needs a fresh check.
+# hand from the Actions tab when main needs a fresh check. Draft pull requests run
+# nothing; marking one ready for review starts the checks.
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 permissions:
   contents: read
@@ -11,9 +13,64 @@ permissions:
 concurrency:
   group: check-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+env:
+  BID_TEST_ADMIN_URL: postgresql+psycopg://postgres:synthetic-ci-test-only@127.0.0.1:5432/bid_test
+  BID_DATABASE_URL: postgresql+psycopg://bid_app:synthetic-ci-test-only@127.0.0.1:5432/bid_test
+  BID_DATABASE_PASSWORD: synthetic-ci-test-only
 jobs:
-  python:
+  changes:
+    if: github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft
     runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.changes.outputs.code }}
+      web: ${{ steps.changes.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      # Required checks must still report, so a change only to Markdown or the console
+      # succeeds without the Python suite. A manual run has no base and checks everything.
+      - name: Detect changes outside Markdown and the console
+        id: changes
+        run: |
+          base="${{ github.event.pull_request.base.sha }}"
+          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- . ':(exclude)*.md' ':(exclude)web/**'; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- web; then
+            echo "web=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "web=true" >> "$GITHUB_OUTPUT"
+          fi
+  lint:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.7"
+          enable-cache: true
+      - run: uv sync --frozen --extra dev --python 3.12
+      - run: uv run ruff check server cli scripts evals
+      - run: uv run ruff format --check server cli scripts evals
+      - run: uv run pyright
+      - run: uv build
+  # BID_TEST_SHARD splits the selection in server/tests/conftest.py; shard 1 holds only
+  # the longest scale test. Each xdist worker gets its own database copy, so every
+  # shard runs one worker per runner core.
+  tests:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    name: tests (${{ matrix.shard }}/5)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
     services:
       postgres:
         image: pgvector/pgvector:pg16
@@ -24,119 +81,67 @@ jobs:
         ports: ["5432:5432"]
         options: --health-cmd "pg_isready -U postgres -d bid_test" --health-interval 5s --health-timeout 5s --health-retries 12
     env:
-      BID_TEST_ADMIN_URL: postgresql+psycopg://postgres:synthetic-ci-test-only@127.0.0.1:5432/bid_test
-      BID_DATABASE_URL: postgresql+psycopg://bid_app:synthetic-ci-test-only@127.0.0.1:5432/bid_test
-      BID_DATABASE_PASSWORD: synthetic-ci-test-only
+      BID_TEST_SHARD: ${{ matrix.shard }}/5
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # Required checks must still report, so a change only to Markdown or the console
-      # succeeds without the suite. A manual run has no base and checks everything.
-      - name: Detect changes outside Markdown and the console
-        id: changes
-        run: |
-          base="${{ github.event.pull_request.base.sha }}"
-          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- . ':(exclude)*.md' ':(exclude)web/**'; then
-            echo "code=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "code=true" >> "$GITHUB_OUTPUT"
-          fi
-      # The service database is discarded after the job; skipping durability removes the
-      # per-commit flushes that dominate the suite's many truncates on runner disks.
-      - name: Turn off durability in the throwaway test database
-        if: steps.changes.outputs.code == 'true'
+      - uses: ./.github/actions/python-test-env
+      - run: uv run pytest -q -n auto -m "not latency" --durations=10
+  # Contractual wall-clock bounds (for example the 2-second board snapshot) are
+  # measured without other workers competing for the runner's cores.
+  latency:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    name: latency (${{ matrix.shard }}/3)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
         env:
-          PGPASSWORD: synthetic-ci-test-only
-        run: >-
-          psql -h 127.0.0.1 -U postgres -d bid_test -v ON_ERROR_STOP=1
-          -c "ALTER SYSTEM SET fsync = off"
-          -c "ALTER SYSTEM SET synchronous_commit = off"
-          -c "ALTER SYSTEM SET full_page_writes = off"
-          -c "SELECT pg_reload_conf()"
-      - uses: astral-sh/setup-uv@v6
-        if: steps.changes.outputs.code == 'true'
-        with:
-          version: "0.11.7"
-          enable-cache: true
-      - run: uv sync --frozen --extra dev --python 3.12
-        if: steps.changes.outputs.code == 'true'
-      - name: Create ephemeral test encryption configuration
-        if: steps.changes.outputs.code == 'true'
+          POSTGRES_DB: bid_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-ci-test-only
+        ports: ["5432:5432"]
+        options: --health-cmd "pg_isready -U postgres -d bid_test" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      BID_TEST_SHARD: ${{ matrix.shard }}/3
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/python-test-env
+      - run: uv run pytest -q -m latency --durations=10
+  # The required "python" check: every Python job passed, or none was needed.
+  python:
+    needs: [changes, lint, tests, latency]
+    if: always() && (github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every Python job
         run: |
-          uv run python - <<'PY'
-          import os
-          from cryptography.fernet import Fernet
-          with open(os.environ["GITHUB_ENV"], "a") as handle:
-              handle.write("BID_ENCRYPTION_KEY=" + Fernet.generate_key().decode() + "\n")
-              handle.write("BID_TOKEN_KEY=" + Fernet.generate_key().decode() + "\n")
-              handle.write("BID_CLI_KEY=" + Fernet.generate_key().decode() + "\n")
-          PY
-      - uses: dtolnay/rust-toolchain@stable
-        if: steps.changes.outputs.code == 'true'
-        with:
-          components: rustfmt, clippy
-      - uses: actions/cache@v4
-        if: steps.changes.outputs.code == 'true'
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            data/work/build/screenshot-renderer
-          key: renderer-${{ runner.os }}-${{ hashFiles('stamp/Cargo.lock', 'stamp/Cargo.toml') }}
-      - name: Build the screenshot renderer so image tests run instead of skipping
-        if: steps.changes.outputs.code == 'true'
-        run: CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" sh scripts/build_screenshot_renderer.sh
-      - name: Install the protected renderer for Linux process-boundary acceptance
-        if: steps.changes.outputs.code == 'true'
-        run: |
-          sudo install -d -o root -g root -m 0755 /usr/local /usr/local/libexec /usr/local/libexec/bid
-          sudo install -o root -g root -m 0555 data/work/bin/bid-screenshot-renderer /usr/local/libexec/bid/bid-screenshot-renderer
-          echo "BID_SCREENSHOT_RENDERER=/usr/local/libexec/bid/bid-screenshot-renderer" >> "$GITHUB_ENV"
-      - run: uv run ruff check server cli scripts evals
-        if: steps.changes.outputs.code == 'true'
-      - run: uv run ruff format --check server cli scripts evals
-        if: steps.changes.outputs.code == 'true'
-      - run: uv run pyright
-        if: steps.changes.outputs.code == 'true'
-      # Each worker gets its own database (server/tests/conftest.py), so the suite runs one
-      # worker per runner core; the slowest tests are listed to keep the run short.
-      - run: uv run pytest -q -n auto -m "not latency" --durations=20
-        if: steps.changes.outputs.code == 'true'
-      # Contractual wall-clock bounds (for example the 2-second board snapshot) are
-      # measured without the other workers competing for the runner's cores.
-      - run: uv run pytest -q -m latency
-        if: steps.changes.outputs.code == 'true'
-      - run: uv build
-        if: steps.changes.outputs.code == 'true'
+          [ "${{ needs.changes.result }}" = success ] || { echo "change detection: ${{ needs.changes.result }}"; exit 1; }
+          if [ "${{ needs.changes.outputs.code }}" = true ]; then want=success; else want=skipped; fi
+          for result in "lint=${{ needs.lint.result }}" "tests=${{ needs.tests.result }}" "latency=${{ needs.latency.result }}"; do
+            [ "${result#*=}" = "$want" ] || { echo "$result (expected $want)"; exit 1; }
+          done
   web:
+    needs: changes
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web
     steps:
+      # Same rule as Python: report success without building when web/ is unchanged.
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      # Same rule as the Python job: report success without building when web/ is unchanged.
-      - name: Detect console changes
-        id: changes
-        working-directory: .
-        run: |
-          base="${{ github.event.pull_request.base.sha }}"
-          if [ -n "$base" ] && git diff --quiet "$base" HEAD -- web; then
-            echo "web=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "web=true" >> "$GITHUB_OUTPUT"
-          fi
+        if: needs.changes.outputs.web == 'true'
       - uses: actions/setup-node@v4
-        if: steps.changes.outputs.web == 'true'
+        if: needs.changes.outputs.web == 'true'
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: web/package-lock.json
       - run: npm ci
-        if: steps.changes.outputs.web == 'true'
+        if: needs.changes.outputs.web == 'true'
       - run: npm run build
-        if: steps.changes.outputs.web == 'true'
-
+        if: needs.changes.outputs.web == 'true'
