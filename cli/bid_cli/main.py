@@ -63,6 +63,7 @@ from bid_cli.annotation import register as register_annotation_commands
 from bid_cli.assessments import app as assessment_app
 from bid_cli.attachments import COMMAND_INPUTS as ATTACHMENT_COMMANDS
 from bid_cli.attachments import register as register_attachment_commands
+from bid_cli.bid_review import app as review_app
 from bid_cli.budget import register as register_budget_commands
 from bid_cli.check import app as check_app
 from bid_cli.check import check_job_exit
@@ -95,6 +96,7 @@ app.add_typer(export_app, name="export")
 app.add_typer(sandbox_app, name="sandbox")
 app.add_typer(check_app, name="check")
 app.add_typer(assessment_app, name="assessment")
+app.add_typer(review_app, name="review")
 app.add_typer(memory_app, name="memory")
 app.add_typer(agent_app, name="agent")
 app.add_typer(score_app, name="score")
@@ -1774,6 +1776,7 @@ def main(args: list[str] | None = None):
                 or name in MANAGEMENT_PROVIDER_COMMANDS
                 or name in MANAGEMENT_CONFIDENTIAL_COMMANDS
                 or name.startswith("assessment ")
+                or name.startswith("review ")
                 or "--view" in arguments
                 or any(argument.startswith("--view=") for argument in arguments)
                 or any(

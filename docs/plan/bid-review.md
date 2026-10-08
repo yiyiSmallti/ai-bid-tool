@@ -4,14 +4,20 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved, not implemented. Recommended defaults are adopted, except that Clef
-triage is on by default.**
+Status: **Approved; slice 1 (upload and preparation) implemented. Recommended defaults
+are adopted, except that Clef triage is on by default.**
+
+The first phase is delivered as five implementation slices: upload/preparation;
+signature checklist and approved local validation; rule/LLM compliance and human
+dismissal; console/Word report; Clef triage with fixed per-call billing. Only the
+upload/preparation slice is implemented; PostgreSQL and browser acceptance remain
+pending. Its behavior and code anchors are in [the mechanism note](../notes/bid-review.md).
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
 [roadmap](roadmap.md), with B04/B05 evidence, P03 vision and E01/E02 evaluation
 dependencies. The importable [Pydantic v2 contract](bid-review/bid_review_contracts.py)
-defines payloads and service/Provider Protocols. It registers no routes, CLI commands,
-jobs, permissions or tables. Implementation follows the approved
+defines payloads and service/Provider Protocols. The document contract itself
+registers no runtime components. Implementation follows the approved
 [decisions](#open-decisions) under [agent.md](../../agent.md#workflow).
 
 ## Objective and input boundary

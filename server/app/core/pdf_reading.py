@@ -3,11 +3,11 @@
 import base64
 from collections.abc import Iterator
 from itertools import pairwise
-from typing import cast
+from typing import Any, cast
 
 import pymupdf
 
-from app.core.errors import invalid_document
+from app.core.errors import ServiceError, invalid_document
 from app.core.pdf_raster import MIN_OCR_DPI, OCR_DPI, ocr_dpi, raster_dimensions
 
 MIN_IMAGE_AREA_RATIO = 0.20
@@ -103,4 +103,64 @@ def read_document(content: bytes, max_pages: int, parse: bool) -> Iterator[dict]
                 "text": text,
                 "image": base64.b64encode(image).decode("ascii") if image is not None else None,
                 "warnings": warnings,
+            }
+
+
+def read_bid_document(content: bytes, max_pages: int, prepare: bool) -> Iterator[dict]:
+    """Uploaded-bid pages preserve native text and render without OCR or signature checks."""
+    with open_pdf(content, max_pages) as document:
+        # Repair can silently change the signed source or lose objects. Ordinary
+        # tender parsing retains its historical behavior; this branch is strict.
+        if (
+            not document.is_pdf
+            or document.needs_pass
+            or document.is_repaired
+            or document.xref_get_key(-1, "Encrypt")[0] != "null"
+        ):
+            raise ServiceError(
+                "bid_pdf_invalid", "Uploaded PDF must be unrepaired and unencrypted", 400, 2
+            )
+        if not prepare:
+            yield {"page_count": document.page_count}
+            return
+        for index in range(document.page_count):
+            page = document[index]
+            text = cast(str, page.get_text(sort=True))
+            coverage = uncovered_images(page)
+            # A scan with just a page number or header is still an image page.
+            # Native text is retained independently, without claiming a full parse.
+            kind = "text" if text.strip() and coverage < MIN_IMAGE_AREA_RATIO else "image"
+            warnings = []
+            if kind == "image":
+                warnings.append("image_page_not_transcribed")
+            elif coverage >= MIN_WARN_IMAGE_AREA_RATIO:
+                warnings.append("unparsed_image_regions")
+            dpi = ocr_dpi(page.rect.width, page.rect.height)
+            if dpi < OCR_DPI:
+                warnings.append("render_resolution_reduced")
+            pixmap = page.get_pixmap(dpi=dpi, colorspace=pymupdf.csRGB, alpha=False)
+            # Field names, subjects and values are restricted. Count field
+            # presence only; this does not establish that any field is signed.
+            signature_fields = sum(
+                1
+                for widget in (page.widgets() or ())
+                if cast(Any, widget).field_type == cast(Any, pymupdf).PDF_WIDGET_TYPE_SIGNATURE
+            )
+            yield {
+                "page": index + 1,
+                "text": text,
+                "page_kind": kind,
+                "image": base64.b64encode(pixmap.tobytes("png")).decode("ascii"),
+                "width": pixmap.width,
+                "height": pixmap.height,
+                "dpi": dpi,
+                "warnings": warnings,
+                "signature_field_count": signature_fields,
+                "structure": {
+                    "page": index + 1,
+                    "width_points": page.rect.width,
+                    "height_points": page.rect.height,
+                    "rotation": page.rotation,
+                },
+                "renderer_identity": "pymupdf:" + pymupdf.VersionBind,
             }

@@ -11,6 +11,8 @@ from app.core.password_attempts import PasswordAttempts, invalid_login
 from app.core.security import TokenSigner, token_digest
 from app.models.entities import ApiToken, Membership, Org, User
 from app.schemas.attachment_contracts import HUMAN_ONLY_SCOPES as ATTACHMENT_HUMAN_SCOPES
+from app.schemas.bid_review import HUMAN_ONLY_SCOPES as BID_REVIEW_HUMAN_SCOPES
+from app.schemas.bid_review import TOKEN_SCOPES as BID_REVIEW_TOKEN_SCOPES
 
 AGENT_SCOPES = {
     "task:read",
@@ -252,6 +254,32 @@ for _role, _scopes in ROLE_SCOPES.items():
     _scopes.update({"attachment:read", "attachment:page:read"})
     if _role in {"admin", "bidder"}:
         _scopes.update(ATTACHMENT_HUMAN_SCOPES)
+
+
+# Uploaded-bid scopes never expand the built-in agent tool surface.
+HUMAN_ONLY_SCOPES.update(BID_REVIEW_HUMAN_SCOPES)
+SCOPES.update(BID_REVIEW_TOKEN_SCOPES)
+for _role, _scopes in ROLE_SCOPES.items():
+    _scopes.add("bid-review:read")
+    _scopes.update({"bid-review:source:read", "bid-review:report:read"})
+    if _role != "viewer":
+        _scopes.add("bid-review:run")
+    if _role in {"admin", "bidder"}:
+        _scopes.update(
+            {
+                "bid-review:upload",
+                "bid-review:prepare",
+                "bid-review:original:read",
+                "bid-review:report:render",
+                "bid-review:report:download",
+                "bid-review:outbound:authorize",
+                "bid-review:price:release",
+            }
+        )
+    if _role in {"bidder", "technical"}:
+        _scopes.update({"bid-review:decide", "bid-review:evidence:review"})
+    if _role == "admin":
+        _scopes.add("bid-review:classify")
 
 
 @dataclass

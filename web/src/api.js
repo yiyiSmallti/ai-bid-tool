@@ -26,6 +26,7 @@ export class ApiError extends Error {
   }
 }
 const PUBLIC = new Set(["/health", "/platform/auth/login", "/platform/enrollment/start", "/platform/enrollment/complete", "/auth/login", "/auth/orgs", "/auth/setup-password", "/auth/org-applications"]);
+const BID_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/bid-submissions(?:\/[^/?]+\/prepare)?|bid-submissions\/[^/?]+)$/;
 const ASSESSMENT_PATH = /^\/(?:tasks\/[^/?]+\/(?:assessment-inputs|assessment-citation|checks|scores(?:\/[^/?]+)?|score-rubrics(?:\/[^/?]+(?:\/(?:history|revisions|decisions|(?:sections|items|coverage)\/[^/?]+\/(?:classification|decisions)))?)?)|checks\/[^/?]+(?:\/findings\/[^/?]+\/decisions)?)$/;
 const REQUIREMENT_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/(?:extractions\/[^/?]+\/(?:requirement-reviews|rejected-items|requirement-confirmations)|requirements\/(?:manual-preview|manual|repair))|requirements\/[^/?]+\/(?:review|review-history|review-decisions))$/;
 const COSIGN_PATH = /^\/(?:tasks\/[^/?]+\/(?:review-rule|requirements\/[^/?]+\/review-policy)|cards\/[^/?]+\/(?:review-rounds|signoffs))$/;
@@ -49,7 +50,7 @@ const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:workflow|progress|mem
 function checkedPath(path, org) {
   if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   const url = new URL(path, window.location.origin);
-  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ORG_PATH.test(url.pathname) || ATTACHMENT_PATH.test(url.pathname) || MEMORY_PATH.test(url.pathname) || CONFIDENTIAL_MANAGEMENT_PATH.test(url.pathname) || ANNOTATION_PATH.test(url.pathname) || QUALIFICATION_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || FEATURE_MANAGEMENT_PATH.test(url.pathname) || FEATURE_WRITE_PATH.test(url.pathname) || TEMPLATE_MANAGEMENT_PATH.test(url.pathname) || PROVIDER_MANAGEMENT_PATH.test(url.pathname) || PROVIDER_WRITE_PATH.test(url.pathname) || TEMPLATE_WRITE_PATH.test(url.pathname) || TEMPLATE_TASK_PATH.test(url.pathname) || TEMPLATE_BINDING_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
+  if (url.origin !== window.location.origin || url.hash || (!PUBLIC.has(url.pathname) && !(org ? ORG_PATH.test(url.pathname) || BID_REVIEW_PATH.test(url.pathname) || ATTACHMENT_PATH.test(url.pathname) || MEMORY_PATH.test(url.pathname) || CONFIDENTIAL_MANAGEMENT_PATH.test(url.pathname) || ANNOTATION_PATH.test(url.pathname) || QUALIFICATION_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_MANAGEMENT_PATH.test(url.pathname) || PRODUCT_WRITE_PATH.test(url.pathname) || FEATURE_MANAGEMENT_PATH.test(url.pathname) || FEATURE_WRITE_PATH.test(url.pathname) || TEMPLATE_MANAGEMENT_PATH.test(url.pathname) || PROVIDER_MANAGEMENT_PATH.test(url.pathname) || PROVIDER_WRITE_PATH.test(url.pathname) || TEMPLATE_WRITE_PATH.test(url.pathname) || TEMPLATE_TASK_PATH.test(url.pathname) || TEMPLATE_BINDING_PATH.test(url.pathname) || ASSESSMENT_PATH.test(url.pathname) || COLLABORATION_PATH.test(url.pathname) || COSIGN_PATH.test(url.pathname) || REQUIREMENT_REVIEW_PATH.test(url.pathname) : url.pathname.startsWith("/platform/")))) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   return url.pathname;
 }
 function retryDelay(value) {
@@ -72,7 +73,7 @@ async function parseResult(response, pathname, org, version4 = false) {
       ["unavailable", "range_only"].includes(payload.data.total_status) ||
       (typeof payload.data.snapshot === "string" && typeof payload.data.parent_id === "string" && Number.isInteger(payload.data.returned)));
   const assessmentHistory = ["check list", "score list", "score rubric list"].includes(payload.command) && typeof payload.data.task_id === "string" && Number.isInteger(payload.data.total) && payload.items.length > 0 && payload.items.every(item => typeof (item.report?.id ?? item.id) === "string") && payload.items.some(item => item.report?.completion === "partial" || ["unavailable", "range_only"].includes(item.total_status));
-  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release", "memory_candidate"].includes(payload.data.kind) &&
+  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release", "memory_candidate", "bid_review_prepare"].includes(payload.data.kind) &&
     ((payload.data.status === "succeeded" && payload.data.result?.completion === "partial") ||
       (payload.data.status === "cancelled" && (payload.data.error === null || payload.data.error?.code)) ||
       (payload.data.status === "failed" && payload.data.error?.code && [2, 3, 4, 5].includes(payload.data.error.exit_code)));
@@ -92,7 +93,7 @@ export async function request(method, path, body, { org = false, signal, binary 
   // The unversioned API deliberately projects legacy v3 costs. Assessment pages
   // and job receipts require enforced budget preflight and actual Result 4 costs.
   const assessmentJobs = /^\/tasks\/[^/]+\/jobs$/.test(pathname) && ["check", "score_rubric", "score"].includes(new URL(path, window.location.origin).searchParams.get("kind"));
-  const apiPath = org && (CONFIDENTIAL_MANAGEMENT_PATH.test(pathname) || ATTACHMENT_PATH.test(pathname) || MEMORY_PATH.test(pathname) || ANNOTATION_PATH.test(pathname) || QUALIFICATION_MANAGEMENT_PATH.test(pathname) || PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || TEMPLATE_MANAGEMENT_PATH.test(pathname) || PROVIDER_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
+  const apiPath = org && (BID_REVIEW_PATH.test(pathname) || CONFIDENTIAL_MANAGEMENT_PATH.test(pathname) || ATTACHMENT_PATH.test(pathname) || MEMORY_PATH.test(pathname) || ANNOTATION_PATH.test(pathname) || QUALIFICATION_MANAGEMENT_PATH.test(pathname) || PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || TEMPLATE_MANAGEMENT_PATH.test(pathname) || PROVIDER_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
   const headers = {};
   const epoch = orgEpoch;
   const controller = new AbortController();

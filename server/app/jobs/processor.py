@@ -123,7 +123,7 @@ class Processor:
             document = (
                 await session.get(Document, current.document_id) if current.document_id else None
             )
-            if document is None and current.kind != "provider_test":
+            if document is None and current.kind not in {"provider_test", "bid_review_prepare"}:
                 raise ServiceError("missing_document", "Resource not found", 404, 4)
             task_id, kind, document_id = current.task_id, current.kind, current.document_id
             reasoning = current.reasoning
@@ -156,6 +156,7 @@ class Processor:
                     "screenshot_analyze",
                     "prototype_generate",
                     "screenshot_search",
+                    "bid_review_prepare",
                 }
                 else [
                     dict(
@@ -181,6 +182,16 @@ class Processor:
             rejected: list[dict[str, str]] = []
 
             try:
+                if kind == "bid_review_prepare":
+                    from app.jobs.bid_review_prepare import process as prepare_bid
+                    from app.providers.converter import create_converter
+
+                    await prepare_bid(
+                        execution,
+                        self.storage,
+                        create_converter(self.settings, self.converter_transport),
+                    )
+                    return
                 if kind in {"parse", "extract"}:
                     async with self.db.transaction(org_id) as session:
                         authorized = await execution.owned_job(session)
@@ -572,6 +583,15 @@ class Processor:
                         from app.jobs.export_render import failure_audit
 
                         await failure_audit(session, current, error["code"])
+                    if kind == "bid_review_prepare":
+                        from app.jobs.bid_review_prepare import failure_audit
+
+                        # Losing human/task authority is itself a hard fence; no
+                        # failure event may reinstall a formerly valid scope.
+                        try:
+                            await failure_audit(session, current, error["code"])
+                        except (ServiceError, ProviderFailure):
+                            pass
                     if kind == "card_generate":
                         from app.services.auth import set_actor_context
                         from app.services.card_generation import worker

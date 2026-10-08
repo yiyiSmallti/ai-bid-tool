@@ -6,6 +6,16 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Uploaded-bid submission and local preparation
+
+- Add immutable tender/bid PDF and DOCX submission upload, explicit write-free
+  preparation preflight, fenced local preparation jobs and safe paged metadata APIs.
+- Preserve encrypted originals, native text, fixed page renders and structural maps;
+  publish complete page inventories atomically under tenant RLS and human/task gates.
+  Detect signature fields without validating signatures or invoking OCR/models.
+- Add `bid review upload/prepare/submission list/show` and the task's 标书检验
+  upload/preparation console. See [Uploaded-bid preparation](notes/bid-review.md).
+
 ## 2026-10-08: Deploy rollback health
 
 - A failed pilot deploy now keeps the last server and worker logs in `deploy-state/`

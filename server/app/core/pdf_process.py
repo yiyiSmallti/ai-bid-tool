@@ -53,11 +53,14 @@ class PDFOperation:
         operation: str,
         arguments: dict,
         settings: PDFSettings | None = None,
+        *,
+        temporary_root: Path | None = None,
     ):
         self.content = content
         self.operation = operation
         self.arguments = arguments
         self.settings = settings or PDFSettings()
+        self.temporary_root = temporary_root
         self.child: subprocess.Popen | None = None
         self.directory: tempfile.TemporaryDirectory | None = None
         self.count: int | None = None
@@ -65,7 +68,7 @@ class PDFOperation:
     def __enter__(self):
         self.started = time.monotonic()
         try:
-            self.directory = tempfile.TemporaryDirectory(prefix="bid-pdf-")
+            self.directory = tempfile.TemporaryDirectory(prefix="bid-pdf-", dir=self.temporary_root)
             self.root = Path(self.directory.name)
             private_write(self.root / "input.pdf", self.content)
             private_write(
@@ -157,7 +160,9 @@ class PDFOperation:
             self.count = result["count"]
             if type(self.count) is not int or self.count < 1:
                 raise ValueError("invalid result count")
-            maximum = self.arguments["max_pages"] if self.operation == "parse" else 1
+            maximum = (
+                self.arguments["max_pages"] if self.operation in {"parse", "bid_prepare"} else 1
+            )
             if self.count > maximum:
                 raise ValueError("unexpected result count")
             if (self.root / "pages.jsonl").stat().st_size > self.settings.pdf_output_bytes:

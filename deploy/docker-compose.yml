@@ -83,6 +83,7 @@ services:
       BID_SEARCH_URL: ${BID_SEARCH_URL:-http://searxng:8080}
       BID_SEARCH_PROVIDER: ${BID_SEARCH_PROVIDER:-disabled}
       BID_CONVERTER_URL: ${BID_CONVERTER_URL:-http://converter:3000}
+      BID_REVIEW_OFFICE_PROFILE: ${BID_REVIEW_OFFICE_PROFILE:-gotenberg-8.37.0-f29984bd1e226bf1-bundled-fonts-v1}
     volumes:
       - files:/app/data
     depends_on:

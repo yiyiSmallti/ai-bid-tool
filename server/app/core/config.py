@@ -110,6 +110,9 @@ class Settings(PDFSettings):
     perplexity_api_key: SecretStr | None = None
     # Private Gotenberg (LibreOffice) base URL for export page previews; unset disables them.
     converter_url: str | None = None
+    review_office_profile: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$"
+    )
     converter_timeout_seconds: float = Field(default=180, gt=0, le=600, allow_inf_nan=False)
     preview_max_pages: int = Field(default=1000, ge=1, le=2000)
     # Built console from web/dist; served under /app when set.

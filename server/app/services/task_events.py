@@ -134,6 +134,7 @@ async def append(
 def hidden_job_kinds(actor):
     """Cheap necessary-scope filter; survivors still pass full job access gates."""
     scopes = {
+        "bid_review_prepare": "bid-review:read",
         "check": "check:read",
         "score": "score:read",
         "score_rubric": "score:read",

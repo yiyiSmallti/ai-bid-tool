@@ -44,6 +44,16 @@ def main(root: Path) -> int:
         try:
             if operation in ("parse", "validate"):
                 records = read_document(content, arguments["max_pages"], operation == "parse")
+            elif operation in {"bid_validate", "bid_prepare"}:
+                from app.core.pdf_reading import read_bid_document
+
+                records = read_bid_document(
+                    content, arguments["max_pages"], operation == "bid_prepare"
+                )
+            elif operation in {"bid_docx_validate", "bid_docx_structure"}:
+                from app.core.bid_docx import inspect_docx
+
+                records = iter([inspect_docx(content, operation == "bid_docx_structure")])
             else:
                 from app.core.pdf_rendering import run
 

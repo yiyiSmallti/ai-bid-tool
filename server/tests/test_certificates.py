@@ -348,6 +348,20 @@ async def test_certificate_roles_preserve_old_grants(
             "sandbox:capture",
             "req:confirm",
             "req:manual",
+            "bid-review:classify",
+            "bid-review:decide",
+            "bid-review:evidence:review",
+            "bid-review:original:read",
+            "bid-review:outbound:authorize",
+            "bid-review:prepare",
+            "bid-review:price:release",
+            "bid-review:read",
+            "bid-review:report:download",
+            "bid-review:report:read",
+            "bid-review:report:render",
+            "bid-review:run",
+            "bid-review:source:read",
+            "bid-review:upload",
         }
     } == old_expected[role]
     row, task_id = await certificate(api, headers[0]), await task(api, headers[0])
