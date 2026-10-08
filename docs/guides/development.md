@@ -41,13 +41,18 @@ a local shell without tracing. Tests refuse any database whose name lacks the
 Without `BID_TEST_ADMIN_URL`, every database-backed test fails; tests that
 need no database still run.
 [.github/workflows/check.yml](../../.github/workflows/check.yml) runs the same
-checks in CI on pull requests only; it skips the suite whose files a pull request
-leaves unchanged and can be started by hand from the Actions tab. With `-n`, each
-pytest-xdist worker creates and migrates its own `bid_test_gwN` database in the same
-cluster, because tests truncate shared tables.
-Tests marked `latency` assert contractual wall-clock bounds; CI runs them in a
-separate serial step (`uv run pytest -q -m latency`) so other workers do not compete
-for the runner's cores.
+checks in CI on pull requests that are not drafts; it skips the suite whose files a
+pull request leaves unchanged and can be started by hand from the Actions tab. Open a
+pull request as a draft while still pushing fixes, and mark it ready for review to run
+the checks once. With `-n`, each pytest-xdist worker creates and migrates its own
+`bid_test_gwN` database in the same cluster, because tests truncate shared tables.
+CI splits the suite across runners with `BID_TEST_SHARD=index/count`; `shard_of` and
+`PINNED_SHARD_TESTS` in [conftest.py](../../server/tests/conftest.py) keep the longest
+scale tests on their own shards, and the required `python` check passes only when every
+shard does. The same variable reproduces one shard locally.
+Tests marked `latency` assert contractual wall-clock bounds; CI runs them in separate
+serial jobs (`uv run pytest -q -m latency`) so other workers do not compete for the
+runner's cores.
 
 ## Provision a development database
 

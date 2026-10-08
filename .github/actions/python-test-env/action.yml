@@ -1,0 +1,53 @@
+name: Python test environment
+description: Throwaway test database settings, Python dependencies, test keys and the screenshot renderer.
+runs:
+  using: composite
+  steps:
+    # The service database is discarded after the job; skipping durability removes the
+    # per-commit flushes that dominate the suite's many truncates on runner disks.
+    - name: Turn off durability in the throwaway test database
+      shell: bash
+      env:
+        PGPASSWORD: synthetic-ci-test-only
+      run: >-
+        psql -h 127.0.0.1 -U postgres -d bid_test -v ON_ERROR_STOP=1
+        -c "ALTER SYSTEM SET fsync = off"
+        -c "ALTER SYSTEM SET synchronous_commit = off"
+        -c "ALTER SYSTEM SET full_page_writes = off"
+        -c "SELECT pg_reload_conf()"
+    - uses: astral-sh/setup-uv@v6
+      with:
+        version: "0.11.7"
+        enable-cache: true
+    - shell: bash
+      run: uv sync --frozen --extra dev --python 3.12
+    - name: Create ephemeral test encryption configuration
+      shell: bash
+      run: |
+        uv run python - <<'PY'
+        import os
+        from cryptography.fernet import Fernet
+        with open(os.environ["GITHUB_ENV"], "a") as handle:
+            handle.write("BID_ENCRYPTION_KEY=" + Fernet.generate_key().decode() + "\n")
+            handle.write("BID_TOKEN_KEY=" + Fernet.generate_key().decode() + "\n")
+            handle.write("BID_CLI_KEY=" + Fernet.generate_key().decode() + "\n")
+        PY
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          data/work/build/screenshot-renderer
+        key: renderer-${{ runner.os }}-${{ hashFiles('stamp/Cargo.lock', 'stamp/Cargo.toml') }}
+    - name: Build the screenshot renderer so image tests run instead of skipping
+      shell: bash
+      run: CARGO_HOME="$HOME/.cargo" RUSTUP_HOME="$HOME/.rustup" sh scripts/build_screenshot_renderer.sh
+    - name: Install the protected renderer for Linux process-boundary acceptance
+      shell: bash
+      run: |
+        sudo install -d -o root -g root -m 0755 /usr/local /usr/local/libexec /usr/local/libexec/bid
+        sudo install -o root -g root -m 0555 data/work/bin/bid-screenshot-renderer /usr/local/libexec/bid/bid-screenshot-renderer
+        echo "BID_SCREENSHOT_RENDERER=/usr/local/libexec/bid/bid-screenshot-renderer" >> "$GITHUB_ENV"

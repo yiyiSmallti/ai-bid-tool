@@ -6,6 +6,12 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Sharded CI
+
+- CI runs the database suite on five parallel runners and the latency tests on three,
+  with the longest scale test alone on its own runner; the required `python` check
+  aggregates them. Draft pull requests run no checks until marked ready for review.
+
 ## 2026-10-08: Organization self-service applications
 
 - Add the opt-in public application form, uniform receipt, bounded password hashing,
