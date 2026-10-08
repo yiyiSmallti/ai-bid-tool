@@ -29,6 +29,8 @@ server/app/core/pdf_raster.py"
 cd "$ROOT"
 STATE=$ROOT/deploy-state
 mkdir -p "$STATE" releases backups
+# Database dumps hold every org's data; only the deploy user may read them.
+chmod 700 backups
 exec 9>"$STATE/lock"
 flock -n 9 || exit 0
 
@@ -130,7 +132,8 @@ compose "$rel" build migrate server worker >"$STATE/build.log" 2>&1 \
 if [ -n "$new_migrations" ]; then
   backup=backups/$(date +%Y%m%dT%H%M%S)-${deployed:0:12}.dump
   log "backing up database to $backup before migrations: $new_migrations"
-  compose "$rel" exec -T postgres pg_dump -U bid_owner -d bid -Fc > "$backup" || fail "database backup"
+  (umask 077; compose "$rel" exec -T postgres pg_dump -U bid_owner -d bid -Fc > "$backup") \
+    || fail "database backup"
   [ -s "$backup" ] || fail "empty database backup"
 fi
 
