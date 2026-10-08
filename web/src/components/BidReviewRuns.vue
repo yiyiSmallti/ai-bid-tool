@@ -102,7 +102,7 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
       <el-table-column label="运行"><template #default="{ row }"><code>{{ row.id }}</code></template></el-table-column>
       <el-table-column label="状态"><template #default="{ row }">{{ ({ queued: '排队中', running: '运行中', succeeded: '已完成', failed: '失败', cancelled: '已取消' })[row.status] ?? '状态未知' }}</template></el-table-column>
       <el-table-column label="覆盖"><template #default="{ row }">{{ row.completion === 'partial' ? '部分完成' : row.completion === 'complete' ? '已完成' : '待完成' }}</template></el-table-column>
-      <el-table-column label="操作"><template #default="{ row }"><el-button size="small" @click="show(row.id)">查看检验结果</el-button></template></el-table-column>
+      <el-table-column label="操作"><template #default="{ row }"><el-button size="small" @click="show(row.id)">查看检验结果</el-button><RouterLink v-if="row.status === 'succeeded' && row.completion" :to="`/org/tasks/${taskId}/bid-reviews/${row.id}/report`">检验报告与 Word</RouterLink></template></el-table-column>
     </el-table>
     <el-button v-if="nextCursor" @click="moreRuns">更多检验运行</el-button>
     <template v-if="selected">

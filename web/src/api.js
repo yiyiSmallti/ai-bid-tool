@@ -26,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 const PUBLIC = new Set(["/health", "/platform/auth/login", "/platform/enrollment/start", "/platform/enrollment/complete", "/auth/login", "/auth/orgs", "/auth/setup-password", "/auth/org-applications"]);
-const BID_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/(?:bid-submissions(?:\/[^/?]+\/prepare)?|bid-reviews)|bid-submissions\/[^/?]+(?:\/(?:signing-candidates|redaction(?:\/names)?|outbound-authorizations(?:\/revoke)?))?|bid-reviews\/[^/?]+(?:\/findings(?:\/[^/?]+\/(?:decisions|classification))?)?)$/;
+const BID_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/(?:bid-submissions(?:\/[^/?]+\/prepare)?|bid-reviews)|bid-submissions\/[^/?]+(?:\/(?:signing-candidates|redaction(?:\/names)?|outbound-authorizations(?:\/revoke)?))?|bid-reviews\/[^/?]+(?:\/(?:findings(?:\/[^/?]+\/(?:decisions|classification))?|report|reports|artifacts))?|bid-review-artifacts\/[^/?]+\/(?:download-link|download))$/;
 const ASSESSMENT_PATH = /^\/(?:tasks\/[^/?]+\/(?:assessment-inputs|assessment-citation|checks|scores(?:\/[^/?]+)?|score-rubrics(?:\/[^/?]+(?:\/(?:history|revisions|decisions|(?:sections|items|coverage)\/[^/?]+\/(?:classification|decisions)))?)?)|checks\/[^/?]+(?:\/findings\/[^/?]+\/decisions)?)$/;
 const REQUIREMENT_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/(?:extractions\/[^/?]+\/(?:requirement-reviews|rejected-items|requirement-confirmations)|requirements\/(?:manual-preview|manual|repair))|requirements\/[^/?]+\/(?:review|review-history|review-decisions))$/;
 const COSIGN_PATH = /^\/(?:tasks\/[^/?]+\/(?:review-rule|requirements\/[^/?]+\/review-policy)|cards\/[^/?]+\/(?:review-rounds|signoffs))$/;
@@ -73,12 +73,13 @@ async function parseResult(response, pathname, org, version4 = false) {
       ["unavailable", "range_only"].includes(payload.data.total_status) ||
       (typeof payload.data.snapshot === "string" && typeof payload.data.parent_id === "string" && Number.isInteger(payload.data.returned)));
   const assessmentHistory = ["check list", "score list", "score rubric list"].includes(payload.command) && typeof payload.data.task_id === "string" && Number.isInteger(payload.data.total) && payload.items.length > 0 && payload.items.every(item => typeof (item.report?.id ?? item.id) === "string") && payload.items.some(item => item.report?.completion === "partial" || ["unavailable", "range_only"].includes(item.total_status));
-  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release", "memory_candidate", "bid_review_prepare", "bid_review"].includes(payload.data.kind) &&
+  const assessmentJob = payload.command === "job status" && ["check", "score_rubric", "score", "annotation_render", "annotation_release", "memory_candidate", "bid_review_prepare", "bid_review", "bid_review_report"].includes(payload.data.kind) &&
     ((payload.data.status === "succeeded" && payload.data.result?.completion === "partial") ||
       (payload.data.status === "cancelled" && (payload.data.error === null || payload.data.error?.code)) ||
       (payload.data.status === "failed" && payload.data.error?.code && [2, 3, 4, 5].includes(payload.data.error.exit_code)));
   const reviewRead = payload.command === "review show" && payload.data.run?.completion === "partial" && typeof payload.data.run.id === "string" && Array.isArray(payload.data.obligations) && Array.isArray(payload.data.signing_requirements);
-  const partial = (!payload.data.error && (assessmentRead || assessmentHistory || reviewRead)) || assessmentJob || (payload.command === "draft show" && payload.data.completion === "partial") || (payload.command === "job status" && payload.data.result?.completion === "partial" && ["draft", "card_generate", "memory_candidate"].includes(payload.data.kind));
+  const reportRead = ["review report show", "review report list"].includes(payload.command) && payload.data.completion === "partial" && typeof payload.data.review_id === "string";
+  const partial = (!payload.data.error && (assessmentRead || assessmentHistory || reviewRead || reportRead)) || assessmentJob || (payload.command === "draft show" && payload.data.completion === "partial") || (payload.command === "job status" && payload.data.result?.completion === "partial" && ["draft", "card_generate", "memory_candidate"].includes(payload.data.kind));
   if (!response.ok || (!payload.ok && !partial)) {
     const error = payload.data?.error ?? payload.data ?? {};
     if ((response.status === 401 || (org && error.code === "org_inactive")) && !PUBLIC.has(pathname)) {

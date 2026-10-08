@@ -277,6 +277,56 @@ or reasons, classify or decide. Findings and history have bounded encoded respon
 and authenticated cursors tied to the current event snapshot. Console text uses
 normal Vue escaping and reasons are never saved in browser persistence.
 
+### Immutable console and Word reports
+
+The [report service](../../server/app/services/bid_review_report.py) admits only a
+published review. It captures the published run, ordered files, cited obligations,
+findings, local PDF signature evidence, unresolved required locations and current
+human events into encrypted immutable content. The canonical decision hash binds
+classification and disposition; later events never rewrite that content. Current
+console views and retained snapshots expose the same section structure specified
+by the [report contract](../plan/bid-review.md#report-scoring-and-human-decisions).
+Each section is bounded and cursor-paginated. Selecting a retained snapshot pins
+its pages; a different current decision hash signals that a new render is needed.
+
+The render preview makes no provider/converter call and writes no object, job,
+audit or usage. Its actor/org/task-bound signed receipt fixes the exact run,
+decisions and renderer input for explicit submission. Admission records the
+snapshot and enqueues `bid_review_report`. Repeated identical input reuses that
+initiator's job; retrying failed work needs a fresh request ID, current preview and
+explicit retry. The worker rechecks its attempt and
+live human task authority. A credential-free child uses local `python-docx`
+rendering and the existing Word serializer profile. The parent enforces the
+configured export deadline, memory and output bounds, terminates lost or cancelled
+attempts and removes private plaintext spools on every exit. The output retains
+all required headings, two-sided
+verbatim citations where evidence exists, basis types, human decisions and the
+advisory statement. Missing bid support remains a documented searched absence,
+never an invented quotation. Price-page assessments, visible marks, scoring and
+claim-to-image evidence verification remain explicitly unassessed.
+
+[Migration 0066](../../server/migrations/versions/0066_bid_review_reports.py) stores
+snapshots and artifact descriptors under forced tenant RLS and composite parent
+references. Snapshots and artifact pairs are immutable. A failed render publishes
+no downloadable artifact. The worker verifies both outputs before atomic descriptor
+publication. Storage and PostgreSQL cannot share a transaction: an unsuccessful
+commit may leave encrypted unreferenced objects, retained for reconciliation.
+
+The report page links from the existing review run and exposes a separate preview
+and submit action. Human admin/bidder task readers with original/report authority
+can render and download. Other humans get a purpose-built cleared projection;
+tokens get only safe metadata, with no quotations, human reasons or links. Link
+issuance and byte serving independently repeat current human/task authority and
+verify the artifact hash and size. Signed application links expire quickly and
+return `no-store` bytes with neutral filenames. The report scopes grant no Evidence
+confirmation or ordinary bid-export capability.
+
+`bid review report --id UUID --input REPORT.json --dry-run --json` returns the
+preview. Submission uses the same input with `--expected-input-hash` and
+`--preflight-token`. `bid review report download --artifact UUID --output PATH
+--json` saves only a verified DOCX through the shared private temporary-file,
+no-redirect and atomic no-overwrite download path. JSON contracts remain Result 4.0.
+
 ## Pitfalls
 
 - Synthetic fixtures alone missed the real 点聚 layout (embedded content digest,
@@ -337,3 +387,10 @@ normal Vue escaping and reasons are never saved in browser persistence.
   [finding console](../../web/src/components/BidReviewFindings.vue),
   [HTTP/worker acceptance](../../server/tests/test_bid_review_findings_db.py) and
   [mocked browser acceptance](../../web/e2e/bid-review-findings.spec.js).
+
+- [Report schemas](../../server/app/schemas/bid_review_report.py),
+  [report persistence](../../server/app/models/bid_review_report.py),
+  [report worker](../../server/app/jobs/bid_review_report.py),
+  [HTTP/worker report acceptance](../../server/tests/test_bid_review_report_db.py),
+  [CLI report snapshots](../../server/tests/test_bid_review_report_cli.py) and
+  [mocked report browser acceptance](../../web/e2e/bid-review-report.spec.js).

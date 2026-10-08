@@ -12,6 +12,7 @@ from app.core.errors import ServiceError
 from app.schemas import bid_review as models
 from app.schemas import bid_review_findings as findings_models
 from app.schemas import bid_review_privacy as privacy
+from app.schemas import bid_review_report as reports
 from app.schemas import bid_review_run as runs
 from app.schemas.check_contracts import AssessmentJobAccepted, AssessmentListData
 from app.schemas.contracts import Result
@@ -20,8 +21,10 @@ from pydantic import TypeAdapter
 app = typer.Typer()
 submissions = typer.Typer()
 outbound = typer.Typer()
+report = typer.Typer(invoke_without_command=True)
 app.add_typer(submissions, name="submission")
 app.add_typer(outbound, name="outbound")
+app.add_typer(report, name="report")
 JsonOption = Annotated[bool, typer.Option("--json")]
 COMMAND_INPUTS = {
     "review upload": models.BidSubmissionCreate,
@@ -38,6 +41,8 @@ COMMAND_INPUTS = {
     "review decide": findings_models.BidReviewDecisionRequest,
     "review history": models.BidReviewListQuery,
     "review classify": findings_models.BidReviewClassificationRequest,
+    "review report": reports.BidReportRenderRequest,
+    "review report download": None,
 }
 COMMAND_DATA = {
     "review upload": models.BidSubmissionUploaded | models.BidUploadPreview,
@@ -54,6 +59,8 @@ COMMAND_DATA = {
     "review decide": findings_models.BidReviewEventView,
     "review history": findings_models.BidReviewFindingsData,
     "review classify": findings_models.BidReviewEventView,
+    "review report": reports.BidReportRenderPreview | AssessmentJobAccepted,
+    "review report download": reports.BidReportDownloadReceipt,
 }
 COMMAND_ITEMS = {
     "review submission list": models.BidSubmissionUploaded | models.BidSubmissionView,
@@ -484,3 +491,70 @@ def finding_history(
         params=params,
     )
     cli.emit(_finding_result(result, "review history", id, finding), "review history", json_output)
+
+
+@report.callback()
+def render_report(
+    ctx: typer.Context,
+    id: Annotated[UUID | None, typer.Option("--id")] = None,
+    input: Annotated[Path | None, typer.Option()] = None,
+    dry_run: Annotated[bool, typer.Option()] = False,
+    expected_input_hash: Annotated[str | None, typer.Option()] = None,
+    preflight_token: Annotated[str | None, typer.Option()] = None,
+    retry: Annotated[bool, typer.Option()] = False,
+    json_output: JsonOption = False,
+):
+    """Preview or explicitly enqueue an immutable console and Word report."""
+    if ctx.invoked_subcommand is not None:
+        return
+    if id is None or input is None:
+        raise ServiceError("invalid_input", "Report requires --id and --input", 400, 2)
+    cli = _helpers()
+    raw = _input(input)
+    raw["dry_run"] = dry_run or raw.get("dry_run", False)
+    raw["retry"] = retry or raw.get("retry", False)
+    if expected_input_hash is not None:
+        raw["expected_input_hash"] = expected_input_hash
+    if preflight_token is not None:
+        raw["preflight_token"] = preflight_token
+    try:
+        body = reports.BidReportRenderRequest.model_validate(raw)
+        if body.report_id != id:
+            raise ValueError("report parent differs from --id")
+    except ValueError as exc:
+        raise ServiceError("invalid_input", "Invalid report metadata or receipt", 400, 2) from exc
+    result = validated(
+        cli.call("POST", f"/bid-reviews/{id}/artifacts", json=body.model_dump(mode="json")),
+        "review report",
+    )
+    try:
+        if body.dry_run:
+            preview = reports.BidReportRenderPreview.model_validate(result["data"])
+            if (
+                preview.report_id != id
+                or preview.decisions_snapshot_sha256 != body.expected_decisions_snapshot_sha256
+            ):
+                raise ValueError("report snapshot mismatch")
+        else:
+            AssessmentJobAccepted.model_validate(result["data"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ServiceError(
+            "invalid_server_response",
+            "Server returned a different report snapshot or result",
+            502,
+            4,
+        ) from exc
+    cli.emit(result, "review report", json_output)
+
+
+@report.command("download")
+def download_report(
+    artifact: Annotated[UUID, typer.Option()],
+    output: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    from bid_cli.bid_review_report_client import download_report_artifact
+
+    cli = _helpers()
+    result = asyncio.run(download_report_artifact(cli.client(), artifact, output))
+    cli.emit(validated(result, "review report download"), "review report download", json_output)

@@ -70,6 +70,7 @@ JOB_SCOPES = {
     "sandbox": "sandbox:render",
     "bid_review_prepare": "bid-review:prepare",
     "bid_review": "bid-review:run",
+    "bid_review_report": "bid-review:report:render",
 }
 
 
@@ -99,6 +100,10 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
         )
     if job.kind in {"annotation_render", "annotation_release"}:
         from app.services.annotations import worker_access
+
+        return await worker_access(session, job, bind_context=bind_context)
+    if job.kind == "bid_review_report":
+        from app.jobs.bid_review_report import worker_access
 
         return await worker_access(session, job, bind_context=bind_context)
     if job.kind == "bid_review_prepare":

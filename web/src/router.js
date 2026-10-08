@@ -53,6 +53,7 @@ export const router = createRouter({
     { path: "/org/tasks/:taskId/drafts", component: OrgDrafts, meta: { area: "org", title: "响应表初稿", nav: "tasks" } },
     { path: "/org/tasks/:taskId/bid-submissions", component: () => import("./views/OrgBidSubmissions.vue"), meta: { area: "org", title: "标书检验", nav: "tasks" } },
     { path: "/org/tasks/:taskId/bid-submissions/:submissionId", component: () => import("./views/OrgBidSubmission.vue"), meta: { area: "org", title: "标书提交与本地准备", nav: "tasks" } },
+    { path: "/org/tasks/:taskId/bid-reviews/:reviewId/report", component: () => import("./views/OrgBidReviewReport.vue"), meta: { area: "org", title: "标书检验报告", nav: "tasks" } },
     { path: "/org/tasks/:taskId/checks", component: () => import("./views/OrgChecks.vue"), meta: { area: "org", title: "检查风险", nav: "tasks" } },
     { path: "/org/tasks/:taskId/checks/:reportId", component: () => import("./views/OrgCheckReport.vue"), meta: { area: "org", title: "检查报告", nav: "tasks" } },
     { path: "/org/tasks/:taskId/score-rubrics", component: () => import("./views/OrgRubrics.vue"), meta: { area: "org", title: "评分规则", nav: "tasks" } },
