@@ -79,8 +79,9 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
             "platform_clef_manage",
             "platform_clef_row_gate",
         }
-        assert all(f[1] == "bid_clef_config_fn" for f in clef)
-        assert all(not f[2] for f in clef if f[0] != "platform_clef_row_gate")
+        # The row gate is an ordinary trigger function owned by the migration owner.
+        callable_fns = [f for f in clef if f[0] != "platform_clef_row_gate"]
+        assert all(f[1] == "bid_clef_config_fn" and not f[2] for f in callable_fns)
 
 
 def seed_usage(admin_engine, tenants):

@@ -137,7 +137,7 @@ test("human reviews exact derivative, default-on preview includes fixed quote, t
 test("opt-out invalidates preflight and stays disabled through submission", async ({ page }) => {
   const state = await fixture(page, { authorized: true, prepared: true, revision: 1 }); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("review-preview")).toBeVisible();
-  await page.getByRole("checkbox", { name: "使用 Clef 初筛（默认开启）", exact: true }).uncheck(); await expect(page.getByTestId("review-preview")).toHaveCount(0);
+  await page.locator(".el-checkbox").filter({ hasText: "使用 Clef 初筛（默认开启）" }).click(); await expect(page.getByRole("checkbox", { name: "使用 Clef 初筛（默认开启）", exact: true })).not.toBeChecked(); await expect(page.getByTestId("review-preview")).toHaveCount(0);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("clef-preview")).toContainText("本次已关闭"); await expect(page.getByTestId("clef-preview")).toContainText("计划 0 次图片调用");
   await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
   await expect(page.getByTestId("clef-coverage")).toContainText("本次已关闭"); expect(state.runEnabled).toBe(false); await artifact(page, state, "03-opt-out");
