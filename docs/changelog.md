@@ -6,6 +6,18 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Uploaded-bid local signature evidence
+
+- Validate unchanged PDF originals locally with the approved GM/T 0010 SM2/SM3
+  profile and supported RSA/ECDSA detached signatures. Preserve independent
+  coverage, cryptography, signing revision, certificate, local trust and time results.
+- Add operator-managed public CA trust anchors and immutable preparation snapshots
+  under [ADR 0010](adr/0010-offline-signature-trust.md); revocation remains unknown offline.
+- Retain encrypted, cited deterministic signing-clause candidates with unknown
+  applicability. Add signature/candidate sections, 信任根证书 management and
+  `bid platform trust-anchor list/add/disable`; extend submission CLI output.
+  See [Uploaded-bid local evidence](notes/bid-review.md).
+
 ## 2026-10-08: Uploaded-bid submission and local preparation
 
 - Add immutable tender/bid PDF and DOCX submission upload, explicit write-free

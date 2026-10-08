@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import TaskNavigation from "../components/TaskNavigation.vue";
 import JobPanel from "../components/JobPanel.vue";
+import BidSignatureResults from "../components/BidSignatureResults.vue";
 import { formatTime, orgRequest } from "../org.js";
 import { fileKinds, mib, preparationStatuses, reviewAuthority, reviewError, safeWarning, submissionPath, submissionStates } from "../bid-review.js";
 const route = useRoute();
@@ -11,6 +12,7 @@ const detail = ref(null), preview = ref(null), consent = ref(false), writable = 
 const submission = computed(() => detail.value?.submission), documents = computed(() => submission.value?.documents ?? submission.value?.files ?? []);
 const canPrepare = computed(() => writable.value && submission.value?.state === "uploaded" && !["queued", "running"].includes(detail.value?.preparation?.status));
 const expired = computed(() => preview.value && Date.parse(preview.value.expires_at) <= Date.now());
+const candidatesBusy = ref(false);
 let serial = 0, controller, requestId = crypto.randomUUID(), expiryTimer;
 function invalidate() { clearTimeout(expiryTimer); preview.value = null; consent.value = false; requestId = crypto.randomUUID(); }
 async function reread() {
@@ -19,7 +21,7 @@ async function reread() {
   detail.value = result.data; activeJob.value = result.data.preparation?.job_id ?? "";
 }
 async function load() {
-  const run = ++serial; controller?.abort(); controller = new AbortController(); detail.value = null; writable.value = false; busy.value = false; activeJob.value = ""; retry.value = false; error.value = ""; invalidate();
+  const run = ++serial; controller?.abort(); controller = new AbortController(); detail.value = null; writable.value = false; busy.value = false; candidatesBusy.value = false; activeJob.value = ""; retry.value = false; error.value = ""; invalidate();
   try { const allowed = await reviewAuthority(taskId.value); if (run !== serial) return; writable.value = allowed; await reread(); }
   catch (exc) { if (exc.name !== "AbortError") error.value = reviewError(exc); }
 }
@@ -44,6 +46,23 @@ async function submit() {
   finally { if (run === serial) busy.value = false; }
 }
 async function finished() { invalidate(); try { await reread(); } catch (exc) { error.value = reviewError(exc); } }
+async function moreCandidates() {
+  const current = detail.value, cursor = current?.signing_candidates_next_cursor, run = serial;
+  if (cursor === null || cursor === undefined || candidatesBusy.value) return;
+  candidatesBusy.value = true;
+  try {
+    const result = await orgRequest("GET", `/bid-submissions/${encodeURIComponent(submissionId.value)}/signing-candidates?cursor=${cursor}&limit=20`, undefined, { signal: controller?.signal });
+    if (run !== serial || detail.value !== current) return;
+    const known = new Set(current.signing_candidates.map(item => item.id));
+    if (!Array.isArray(result.data.items) || result.data.items.length > 20 || result.data.total !== current.signing_candidate_count || (result.data.next_cursor !== null && (!Number.isInteger(result.data.next_cursor) || result.data.next_cursor <= cursor))) throw new Error("invalid candidate page");
+    for (const item of result.data.items) {
+      if (!documents.value.some(doc => doc.id === item.document_id) || known.has(item.id)) throw new Error("invalid candidate parent");
+      known.add(item.id);
+    }
+    detail.value.signing_candidates.push(...result.data.items); detail.value.signing_candidates_next_cursor = result.data.next_cursor;
+  } catch (exc) { if (run === serial && exc.name !== "AbortError") error.value = reviewError(exc); }
+  finally { if (run === serial) candidatesBusy.value = false; }
+}
 watch([taskId, submissionId], load, { immediate: true });
 window.addEventListener("bid:org-reset", load);
 onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.value = null; window.removeEventListener("bid:org-reset", load); });
@@ -63,7 +82,7 @@ onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.valu
       </el-table>
     </el-card>
     <el-card v-if="canPrepare" class="section" shadow="never"><template #header><h3>本地准备</h3></template>
-      <p>解析与分页渲染生成固定页面清单，合计最多 1,000 页；不运行 OCR、模型或签名验证。准备费用为 0。</p>
+      <p>解析与分页渲染生成固定页面清单，合计最多 1,000 页，并对原件运行本地数字签名验证与签章条款扫描；不运行 OCR 或模型。准备费用为 0。</p>
       <el-button type="primary" plain :loading="busy" @click="inspect">预检本地准备</el-button>
       <div v-if="preview" class="preview section" role="status">
         <p>本地处理 · 费用 0 · 预检有效至 {{ formatTime(preview.expires_at) }}</p>
@@ -76,6 +95,7 @@ onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.valu
     </el-card>
     <p v-if="detail.preparation" role="status">准备状态：{{ preparationStatuses[detail.preparation.status] }}</p>
     <JobPanel :job-id="activeJob" :writable="writable" assessment-mode bid-preparation @finished="finished" />
+    <BidSignatureResults :validations="detail.signature_validations" :candidates="detail.signing_candidates" :candidate-count="detail.signing_candidate_count" :next-cursor="detail.signing_candidates_next_cursor ?? null" :busy="candidatesBusy" @more="moreCandidates" />
     <el-card class="section" shadow="never"><template #header><h3>页面清单</h3></template>
       <p class="hint">PDF 使用原件页码；DOCX 使用固定转换后的页码，原文引用仍使用结构块。图片页未做 OCR；签名字段数量仅代表发现字段。</p>
       <el-table role="table" :data="detail.inventory" aria-label="页面清单" empty-text="准备完成后显示固定页面清单">

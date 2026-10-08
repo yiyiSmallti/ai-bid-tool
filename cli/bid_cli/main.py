@@ -81,6 +81,7 @@ from bid_cli.management_templates import register as register_management_templat
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
 from bid_cli.platform_credentials import app as platform_credential_app
+from bid_cli.platform_trust_anchors import app as platform_trust_anchor_app
 from bid_cli.providers import app as provider_app
 from bid_cli.requirement_confirmation import register as register_requirement_confirmation_commands
 from bid_cli.sandbox import sandbox_app, sandbox_job_exit
@@ -1361,6 +1362,7 @@ platform_operator_app = typer.Typer()
 platform_app.add_typer(platform_operator_app, name="operator")
 platform_app.add_typer(platform_model_app, name="model")
 platform_app.add_typer(platform_credential_app, name="credential")
+platform_app.add_typer(platform_trust_anchor_app, name="trust-anchor")
 
 
 def env_secret(name: str, purpose: str) -> str:

@@ -83,7 +83,30 @@ def create_router(context, settings, storage, queue):
     )
     async def show(submission_id: UUID, ctx=Depends(context, scope="function")):
         return result(
-            "review submission show", await bid_review.show(ctx[0], ctx[1], submission_id)
+            "review submission show", await bid_review.show(ctx[0], ctx[1], submission_id, settings)
+        )
+
+    @router.get("/bid-submissions/{submission_id}/signing-candidates", response_model=Result)
+    async def signing_candidates(
+        submission_id: UUID,
+        cursor: int = Query(0, ge=0, le=2000),
+        limit: int = Query(20, ge=1, le=50),
+        ctx=Depends(context, scope="function"),
+    ):
+        from app.services import bid_signature_views
+
+        root = await bid_review.required(ctx[0], submission_id)
+        await bid_review.access(ctx[0], ctx[1], root.task_id)
+        return result(
+            "review signing-candidates",
+            await bid_signature_views.candidates(
+                ctx[0],
+                ctx[1],
+                submission_id,
+                settings,
+                cursor=cursor,
+                limit=limit,
+            ),
         )
 
     return router

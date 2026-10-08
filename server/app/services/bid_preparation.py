@@ -19,7 +19,7 @@ from app.providers.converter import MAX_PDF_BYTES
 from app.services import task_workflow
 from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, Identity, set_actor_context
 
-PREPARATION_VERSION = "bid-prepare-v1"
+PREPARATION_VERSION = "bid-prepare-v2"
 RENDER_PROFILE = "bid-pages-v1"
 PAGE_LIMIT = 1000
 STRUCTURAL_MAPPING_WORK_LIMIT = 32 * 1024 * 1024
@@ -32,6 +32,8 @@ def preparation_identity(settings: Settings) -> dict:
     return {
         "preparation_version": PREPARATION_VERSION,
         "render_profile": RENDER_PROFILE,
+        "signature_validator": "local-pdf-cms-v1",
+        "signing_clause_scan": "signing-clauses-v1",
         "structural_mapping_work_limit": STRUCTURAL_MAPPING_WORK_LIMIT,
         "pdf_parser": "pymupdf:" + version("PyMuPDF"),
         "docx_parser": "python-docx:" + version("python-docx"),
@@ -205,3 +207,16 @@ async def job_access(session, actor, job, *, cancel=False) -> None:
         or member.role not in {"owner", "contributor"}
     ):
         raise ServiceError("forbidden", "Human preparation authority required", 403, 4)
+
+
+async def pdf_signatures(content: bytes, anchors: list[dict], settings: Settings) -> dict:
+    """Validate the unchanged original in the same constrained disposable process."""
+    with PDFOperation(
+        content,
+        "bid_signatures",
+        {"anchors": anchors},
+        settings,
+        temporary_root=temporary_root(settings),
+    ) as child:
+        await child.wait_async()
+        return next(child.records())

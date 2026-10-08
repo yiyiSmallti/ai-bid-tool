@@ -9,6 +9,7 @@ from pydantic import AwareDatetime, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.platform_credentials import create_router as create_credentials_router
+from app.api.platform_trust_anchors import create_router as create_trust_anchors_router
 from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError
@@ -281,4 +282,5 @@ def create_router(
             return result("platform audit", items=await platform.audit_entries(session, limit))
 
     router.include_router(create_credentials_router(settings, operator))
+    router.include_router(create_trust_anchors_router(db, operator))
     return router

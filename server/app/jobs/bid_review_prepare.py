@@ -20,8 +20,10 @@ from app.models.bid_review import (
     BidSubmission,
     BidSubmissionDocument,
 )
+from app.models.bid_signature import BidPDFValidation, BidPreparationTrust, BidSigningCandidate
 from app.schemas.screenshot_contracts import PNGDescriptor
 from app.services import bid_preparation as local
+from app.services import bid_signing_clauses
 from app.services.auth import set_actor_context
 from app.services.versioned import audit
 
@@ -95,6 +97,14 @@ async def snapshot(session, job, settings):
             BidPreparation.created_by == job.actor_user_id,
         )
     )
+    trust = await session.scalar(
+        select(BidPreparationTrust).where(
+            BidPreparationTrust.org_id == job.org_id,
+            BidPreparationTrust.task_id == job.task_id,
+            BidPreparationTrust.submission_id == submission_id,
+            BidPreparationTrust.preparation_id == preparation_id,
+        )
+    )
     documents = list(
         (
             await session.scalars(
@@ -110,12 +120,13 @@ async def snapshot(session, job, settings):
     )
     if (
         root is None
+        or trust is None
         or preparation is None
         or len(documents) < 2
         or len(documents) > 20
         or {document.role for document in documents} != {"tender", "bid"}
         or [document.ordinal for document in documents] != list(range(1, len(documents) + 1))
-        or manifest != build_manifest(root, documents, settings)
+        or manifest != build_manifest(root, documents, settings, trust.trust_store_sha256)
         or local.digest(manifest) != input_hash
     ):
         raise changed()
@@ -128,7 +139,7 @@ async def snapshot(session, job, settings):
         raise ServiceError(
             "bid_already_prepared", "Submission already has an immutable inventory", 409, 4
         )
-    return root, preparation, documents
+    return root, preparation, documents, trust
 
 
 def word_map(structure: dict, pages: list[dict]) -> tuple[dict, dict[int, list[dict]], bool]:
@@ -203,9 +214,10 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
     async with execution.db.transaction(execution.org_id) as session:
         job = await execution.owned_job(session)
         actor = await local.worker_access(session, job)
-        root, preparation, documents = await snapshot(session, job, execution.settings)
+        root, preparation, documents, trust = await snapshot(session, job, execution.settings)
         task_id, submission_id, preparation_id = root.task_id, root.id, preparation.id
         input_hash = preparation.input_hash
+        trust_hash, trust_anchors = trust.trust_store_sha256, trust.anchors
         # Detached immutable parent data avoids long-running DB transactions.
         originals = [
             {
@@ -226,6 +238,8 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
         ]
     prepared_documents = []
     prepared_pages = []
+    validations = []
+    candidates = []
     page_total = 0
     for original in originals:
         await execution.heartbeat()
@@ -241,6 +255,39 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
             )
         await local.validate_upload(content, original["media_type"], execution.settings)
         word = original["media_type"] == local.DOCX_MEDIA_TYPE
+        validation = (
+            {
+                "validator_version": "local-pdf-cms-v1",
+                "document_sha256": original["sha256"],
+                "status": "not_applicable",
+                "signatures": [],
+                "final_revision": {
+                    "status": "not_applicable",
+                    "covered_by_signature_indices": [],
+                    "modified_after_last_signature": None,
+                },
+            }
+            if word
+            else await local.pdf_signatures(content, trust_anchors, execution.settings)
+        )
+        validation["validation_time"] = datetime.now(UTC).isoformat()
+        validation_id = uuid4()
+        validations.append(
+            BidPDFValidation(
+                id=validation_id,
+                org_id=execution.org_id,
+                task_id=task_id,
+                submission_id=submission_id,
+                preparation_id=preparation_id,
+                document_id=original["id"],
+                original_sha256=original["sha256"],
+                validator_identity=validation["validator_version"],
+                trust_store_sha256=trust_hash,
+                details_encrypted=local.seal(
+                    execution.settings, execution.org_id, validation_id, validation
+                ),
+            )
+        )
         structure = None
         office_identity = ""
         if word:
@@ -348,6 +395,31 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                     redaction_status="human_only",
                 )
             )
+            if original["role"] == "tender" and native:
+                for candidate in bid_signing_clauses.scan(native):
+                    if len(candidates) >= bid_signing_clauses.CANDIDATE_LIMIT:
+                        raise ServiceError(
+                            "bid_signing_clause_limit", "Signing clause scan exceeds bounds", 400, 2
+                        )
+                    candidate_id = uuid4()
+                    candidates.append(
+                        BidSigningCandidate(
+                            id=candidate_id,
+                            org_id=execution.org_id,
+                            task_id=task_id,
+                            submission_id=submission_id,
+                            preparation_id=preparation_id,
+                            document_id=original["id"],
+                            page_id=identifier,
+                            page=number,
+                            ordinal=len(candidates) + 1,
+                            candidate_kind="signing_clause",
+                            applicability="unknown",
+                            details_encrypted=local.seal(
+                                execution.settings, execution.org_id, candidate_id, candidate
+                            ),
+                        )
+                    )
             pages.append(page)
         if word:
             assert structure is not None
@@ -356,8 +428,6 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
                 warnings.add("docx_page_map_unknown")
         else:
             mapped = {}
-        if signatures:
-            warnings.add("pdf_signature_fields_not_validated")
         document_pages = prepared_pages[-len(pages) :]
         for row, page in zip(document_pages, pages, strict=True):
             row.structure_encrypted = local.seal(
@@ -419,6 +489,9 @@ async def prepare(execution: JobExecution, storage, converter) -> None:
         session.add_all(prepared_documents)
         await session.flush()
         session.add_all(prepared_pages)
+        await session.flush()
+        session.add_all(validations)
+        session.add_all(candidates)
         await session.flush()
         publication = BidPreparationPublication(
             id=uuid4(),

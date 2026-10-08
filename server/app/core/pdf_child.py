@@ -50,6 +50,16 @@ def main(root: Path) -> int:
                 records = read_bid_document(
                     content, arguments["max_pages"], operation == "bid_prepare"
                 )
+            elif operation == "bid_signatures":
+                import base64
+
+                from app.services.bid_pdf_signatures import validate_pdf
+
+                anchors = [
+                    base64.b64decode(anchor["certificate_der_base64"], validate=True)
+                    for anchor in arguments["anchors"]
+                ]
+                records = iter([validate_pdf(content, anchors)])
             elif operation in {"bid_docx_validate", "bid_docx_structure"}:
                 from app.core.bid_docx import inspect_docx
 

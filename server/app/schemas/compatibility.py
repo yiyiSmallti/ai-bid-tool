@@ -5,6 +5,9 @@ from typing import Any
 LEGACY_COST_FIELDS = frozenset({"llm_tokens", "ocr_pages", "usd"})
 NEW_COMMANDS = frozenset(
     {
+        "platform trust-anchor list",
+        "platform trust-anchor add",
+        "platform trust-anchor disable",
         "evidence stamp",
         "evidence annotation list",
         "evidence annotation show",
