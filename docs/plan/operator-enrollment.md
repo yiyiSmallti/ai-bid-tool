@@ -4,7 +4,7 @@ kind: plan
 
 # Platform operator enrollment in the browser
 
-Status: **Pending approval, not implemented**.
+Status: **Approved with all recommended defaults, not implemented**.
 
 This contract lets an allowlisted platform operator set a password and bind a TOTP
 authenticator in the browser from a one-time link, instead of running
@@ -14,9 +14,8 @@ environment. It amends one decision of
 encrypted in the database. The operator allowlist stays deployment configuration, so
 the application still cannot create a platform operator. The importable
 [Pydantic v2 contract](operator-enrollment/operator_enrollment_contracts.py) defines
-payloads and the service Protocol; it registers nothing. The
-[Open decisions](#open-decisions) are recommended defaults for approval, not decisions
-already adopted.
+payloads and the service Protocol; it registers nothing. Implementation follows the
+approved [decisions](#open-decisions) under [agent.md](../../agent.md#workflow).
 
 ## Goal and scope
 
