@@ -14,7 +14,8 @@ Each run downloads the commit's source archive, builds the console and the `migr
 migrations, starts the services and checks `/health`. A failed deploy without new
 migrations rolls back to the previous images and console. A failed deploy with new
 migrations stops with the backup kept, because the schema is not rolled back
-automatically. A failed commit is not retried; the next merge gets a new attempt.
+automatically. After a rollback the health check runs again; when the previous release
+cannot start either, the run reports the service as down. A failed commit is not retried; the next merge gets a new attempt.
 
 ## Prepare the host
 
@@ -43,7 +44,7 @@ empty strings on hosts that reach PyPI directly.
 | Need | Action |
 | --- | --- |
 | See what is live | `cat /opt/bid-tool/deploy-state/deployed` |
-| Read the last run | `journalctl -u bid-autodeploy.service -n 50`; build and start output is in `deploy-state/build.log` and `deploy-state/up.log` |
+| Read the last run | `journalctl -u bid-autodeploy.service -n 50`; build and start output is in `deploy-state/build.log` and `deploy-state/up.log`, and a failed run keeps the last service output in `deploy-state/server.log` and `worker.log` |
 | Retry a failed commit | Delete `deploy-state/failed`; the next timer run retries it |
 | Pause deploys | `sudo systemctl stop bid-autodeploy.timer` |
 | Restore after a failed migrating deploy | Restore the newest file in `backups/` with `pg_restore`, then point `src` and `deploy-state/deployed` at the previous release and start it |
