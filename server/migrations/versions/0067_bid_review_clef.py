@@ -11,6 +11,44 @@ depends_on = None
 def upgrade():
     platform_upgrade()
     presence_upgrade()
+    usage_gate_upgrade()
+
+
+def usage_gate_upgrade():
+    # A bid review job pins the org's text model, while its Clef calls are billed to the
+    # reserved platform Clef row. Only that pairing may differ from the job's model;
+    # task binding and every payer check stay as in 0020.
+    op.execute(
+        """
+        CREATE OR REPLACE FUNCTION provider_usage_gate() RETURNS trigger
+        LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+        DECLARE cfg public.provider_configs; parent public.jobs;
+        BEGIN
+            IF NEW.job_id IS NOT NULL THEN
+                SELECT * INTO parent FROM public.jobs WHERE org_id=NEW.org_id AND id=NEW.job_id;
+                IF NEW.task_id IS DISTINCT FROM parent.task_id
+                    OR (NEW.provider_config_id IS DISTINCT FROM parent.provider_config_id
+                        AND NOT (parent.kind = 'bid_review' AND NEW.provider_config_id IS NULL
+                                 AND NEW.platform_model_id = 'bid-review-clef')) THEN
+                    RAISE EXCEPTION 'Usage model or task differs from job' USING ERRCODE='23514';
+                END IF;
+            END IF;
+            IF NEW.task_id IS NULL AND (parent.id IS NULL OR parent.kind <> 'provider_test') THEN
+                RAISE EXCEPTION 'Taskless usage requires a provider test' USING ERRCODE='23514';
+            END IF;
+            IF NEW.provider_config_id IS NOT NULL THEN
+                SELECT * INTO cfg FROM public.provider_configs
+                    WHERE org_id=NEW.org_id AND id=NEW.provider_config_id;
+                IF cfg.id IS NULL OR (cfg.source='org' AND (NEW.platform_model_id IS NOT NULL
+                    OR NEW.charge IS DISTINCT FROM 0::numeric))
+                    OR (cfg.source='platform' AND NEW.platform_model_id IS DISTINCT FROM cfg.platform_model_id) THEN
+                    RAISE EXCEPTION 'Usage payer differs from configuration' USING ERRCODE='23514';
+                END IF;
+            END IF;
+            RETURN NEW;
+        END $$
+        """
+    )
 
 
 def platform_upgrade():
@@ -86,7 +124,7 @@ CREDENTIAL_FUNCTIONS = r"""
             AND p->>'purpose' IN ('catalog_llm','standalone_llm','vendor_search','clef_workers_ai','clef_gateway')
             AND p->>'provider' IN ('anthropic','openai','perplexity','cloudflare')
             AND length(p->>'endpoint') BETWEEN 8 AND 300
-            AND p->>'endpoint' ~ '^https://(\[[0-9a-f:]+\]|[a-z0-9][a-z0-9.-]*)(/[^[\:space:]?#%\\]*)?$'
+            AND p->>'endpoint' ~ '^https://(\[[0-9a-f:]+\]|[a-z0-9][a-z0-9.-]*)(/[^[:space:]?#%\\]*)?$'
             AND p->>'endpoint' !~ '/$' AND p->>'endpoint' !~ '[[\:cntrl:]]'
             AND length(p->>'encrypted_key') BETWEEN 100 AND 16384
             AND p->>'fingerprint' ~ '^sha256:[a-f0-9]{16}$'
@@ -181,7 +219,7 @@ DECLARE
   v_skipped integer := 0; v_dry boolean := false; v_audit record;
   v_details jsonb; v_outcome text; v_duration bigint; v_next text;
 BEGIN
-  IF p_actor IS NULL OR length(p_actor)>254 OR p_actor !~ '^[^@[\:space:]]+@[^@[\:space:]]+$'
+  IF p_actor IS NULL OR length(p_actor)>254 OR p_actor !~ '^[^@[:space:]]+@[^@[:space:]]+$'
     OR jsonb_typeof(p_body) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'invalid_input' USING ERRCODE='P0001'; END IF;
   IF p_action='list' THEN
@@ -406,7 +444,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog AS $$
 DECLARE v_prior jsonb; v_new jsonb; v_revision bigint; v_name text;
   v_workers record; v_gateway record; v_credential record;
 BEGIN
-  IF p_actor IS NULL OR p_actor !~ '^[^@[\:space:]]+@[^@[\:space:]]+$'
+  IF p_actor IS NULL OR p_actor !~ '^[^@[:space:]]+@[^@[:space:]]+$'
     OR length(p_actor)>254 OR jsonb_typeof(p_body) IS DISTINCT FROM 'object'
     OR p_action IS NULL OR p_action NOT IN ('set','check') THEN
     RAISE EXCEPTION 'invalid_input' USING ERRCODE='P0001';

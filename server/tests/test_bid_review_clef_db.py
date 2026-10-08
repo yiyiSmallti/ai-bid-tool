@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from app.core.config import Settings
 from app.models.bid_review_presence import BidPresenceAuthorizedImage
 from app.models.entities import UsageRecord, VendorCall
 from app.providers.clef import HTTPClefProvider
@@ -151,7 +152,7 @@ class ClefVendor:
 
 
 async def configure(application, monkeypatch, *, unsafe=False):
-    settings = application.state.settings
+    settings = Settings()
     workers = await seed_platform_credential(
         settings,
         name="clef_workers",
@@ -465,7 +466,7 @@ async def test_clef_unavailable_or_opt_out_preserves_run_and_explicit_coverage(
         )
         if blocked in {"workers_missing", "gateway_missing"}:
             target = workers if blocked == "workers_missing" else gateway
-            await PlatformCredentialService(application.state.settings).set_active(
+            await PlatformCredentialService(Settings()).set_active(
                 actor,
                 target.id,
                 CredentialSetActive(expected_revision=1, active=False, reason="incident"),

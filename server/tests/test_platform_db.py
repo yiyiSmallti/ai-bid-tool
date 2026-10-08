@@ -60,12 +60,27 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
                 "SELECT p.proname, pg_get_userbyid(p.proowner), p.prosecdef, "
                 "has_function_privilege('bid_app', p.oid, 'EXECUTE'), "
                 "has_function_privilege('public', p.oid, 'EXECUTE') "
-                "FROM pg_proc p WHERE p.proname LIKE 'platform_%' AND p.proname <> 'platform_cards_final_status' AND p.proname NOT LIKE 'platform_credential_%' AND p.proname NOT LIKE 'platform_operator_%' AND p.proname NOT LIKE 'platform_trust_anchor_%' "
+                "FROM pg_proc p WHERE p.proname LIKE 'platform_%' AND p.proname <> 'platform_cards_final_status' AND p.proname NOT LIKE 'platform_credential_%' AND p.proname NOT LIKE 'platform_operator_%' AND p.proname NOT LIKE 'platform_trust_anchor_%' AND p.proname NOT LIKE 'platform_clef_%' "
                 "OR p.proname IN ('redeem_card', 'user_org_memberships')"
             )
         ).all()
         assert {f[0] for f in functions} == FUNCTIONS
         assert all(f[1:] == ("bid_platform_fn", True, True, False) for f in functions)
+        # Clef configuration functions have their own owner role and no PUBLIC execute.
+        clef = connection.execute(
+            text(
+                "SELECT p.proname, pg_get_userbyid(p.proowner), "
+                "has_function_privilege('public', p.oid, 'EXECUTE') "
+                "FROM pg_proc p WHERE p.proname LIKE 'platform_clef_%'"
+            )
+        ).all()
+        assert {f[0] for f in clef} == {
+            "platform_clef_read",
+            "platform_clef_manage",
+            "platform_clef_row_gate",
+        }
+        assert all(f[1] == "bid_clef_config_fn" for f in clef)
+        assert all(not f[2] for f in clef if f[0] != "platform_clef_row_gate")
 
 
 def seed_usage(admin_engine, tenants):

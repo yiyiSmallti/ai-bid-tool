@@ -44030,6 +44030,812 @@
           ],
           "input": null
         },
+        "platform clef check": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "expected_revision"
+            ],
+            "title": "ClefCheckRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ClefGatewayCheck": {
+                "additionalProperties": false,
+                "description": "AI Gateway state read through its API at configuration/test time; dispatch requires it.",
+                "properties": {
+                  "authentication": {
+                    "const": true,
+                    "title": "Authentication",
+                    "type": "boolean"
+                  },
+                  "cache_ttl": {
+                    "const": 0,
+                    "title": "Cache Ttl",
+                    "type": "integer"
+                  },
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "collect_logs": {
+                    "const": false,
+                    "title": "Collect Logs",
+                    "type": "boolean"
+                  },
+                  "gateway_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Gateway Id",
+                    "type": "string"
+                  },
+                  "gateway_retries": {
+                    "const": false,
+                    "title": "Gateway Retries",
+                    "type": "boolean"
+                  },
+                  "logpush": {
+                    "const": false,
+                    "title": "Logpush",
+                    "type": "boolean"
+                  },
+                  "rate_limit_requests": {
+                    "exclusiveMinimum": 0,
+                    "title": "Rate Limit Requests",
+                    "type": "integer"
+                  },
+                  "rate_limit_seconds": {
+                    "exclusiveMinimum": 0,
+                    "title": "Rate Limit Seconds",
+                    "type": "integer"
+                  },
+                  "workers_ai_billing_mode": {
+                    "const": "unified",
+                    "title": "Workers Ai Billing Mode",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "gateway_id",
+                  "authentication",
+                  "collect_logs",
+                  "logpush",
+                  "cache_ttl",
+                  "gateway_retries",
+                  "rate_limit_requests",
+                  "rate_limit_seconds",
+                  "workers_ai_billing_mode",
+                  "checked_at"
+                ],
+                "title": "ClefGatewayCheck",
+                "type": "object"
+              },
+              "ClefPlatformConfig": {
+                "additionalProperties": false,
+                "properties": {
+                  "account_id": {
+                    "pattern": "^[a-f0-9]{32}$",
+                    "title": "Account Id",
+                    "type": "string"
+                  },
+                  "currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "default": true,
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "expected_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Revision"
+                  },
+                  "fixed_sale_price": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Fixed Sale Price"
+                  },
+                  "gateway_check": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ClefGatewayCheck"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "gateway_credential_id": {
+                    "format": "uuid",
+                    "title": "Gateway Credential Id",
+                    "type": "string"
+                  },
+                  "gateway_credential_revision": {
+                    "minimum": 1,
+                    "title": "Gateway Credential Revision",
+                    "type": "integer"
+                  },
+                  "gateway_id": {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "title": "Gateway Id",
+                    "type": "string"
+                  },
+                  "platform_model_id": {
+                    "const": "bid-review-clef",
+                    "default": "bid-review-clef",
+                    "title": "Platform Model Id",
+                    "type": "string"
+                  },
+                  "price_revision": {
+                    "minimum": 1,
+                    "title": "Price Revision",
+                    "type": "integer"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "workers_credential_id": {
+                    "format": "uuid",
+                    "title": "Workers Credential Id",
+                    "type": "string"
+                  },
+                  "workers_credential_revision": {
+                    "minimum": 1,
+                    "title": "Workers Credential Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "gateway_id",
+                  "price_revision",
+                  "fixed_sale_price",
+                  "workers_credential_id",
+                  "gateway_credential_id",
+                  "revision",
+                  "workers_credential_revision",
+                  "gateway_credential_revision",
+                  "updated_at"
+                ],
+                "title": "ClefPlatformConfig",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Blockers",
+                "type": "array"
+              },
+              "config": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ClefPlatformConfig"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ClefSettingsData",
+            "type": "object"
+          }
+        },
+        "platform clef set": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "account_id": {
+                "pattern": "^[a-f0-9]{32}$",
+                "title": "Account Id",
+                "type": "string"
+              },
+              "currency": {
+                "default": "USD",
+                "pattern": "^[A-Z]{3}$",
+                "title": "Currency",
+                "type": "string"
+              },
+              "enabled": {
+                "default": true,
+                "title": "Enabled",
+                "type": "boolean"
+              },
+              "expected_revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Revision"
+              },
+              "fixed_sale_price": {
+                "anyOf": [
+                  {
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  }
+                ],
+                "title": "Fixed Sale Price"
+              },
+              "gateway_credential_id": {
+                "format": "uuid",
+                "title": "Gateway Credential Id",
+                "type": "string"
+              },
+              "gateway_id": {
+                "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                "title": "Gateway Id",
+                "type": "string"
+              },
+              "price_revision": {
+                "minimum": 1,
+                "title": "Price Revision",
+                "type": "integer"
+              },
+              "workers_credential_id": {
+                "format": "uuid",
+                "title": "Workers Credential Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "account_id",
+              "gateway_id",
+              "price_revision",
+              "fixed_sale_price",
+              "workers_credential_id",
+              "gateway_credential_id"
+            ],
+            "title": "ClefSettingsSet",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "ClefGatewayCheck": {
+                "additionalProperties": false,
+                "description": "AI Gateway state read through its API at configuration/test time; dispatch requires it.",
+                "properties": {
+                  "authentication": {
+                    "const": true,
+                    "title": "Authentication",
+                    "type": "boolean"
+                  },
+                  "cache_ttl": {
+                    "const": 0,
+                    "title": "Cache Ttl",
+                    "type": "integer"
+                  },
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "collect_logs": {
+                    "const": false,
+                    "title": "Collect Logs",
+                    "type": "boolean"
+                  },
+                  "gateway_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Gateway Id",
+                    "type": "string"
+                  },
+                  "gateway_retries": {
+                    "const": false,
+                    "title": "Gateway Retries",
+                    "type": "boolean"
+                  },
+                  "logpush": {
+                    "const": false,
+                    "title": "Logpush",
+                    "type": "boolean"
+                  },
+                  "rate_limit_requests": {
+                    "exclusiveMinimum": 0,
+                    "title": "Rate Limit Requests",
+                    "type": "integer"
+                  },
+                  "rate_limit_seconds": {
+                    "exclusiveMinimum": 0,
+                    "title": "Rate Limit Seconds",
+                    "type": "integer"
+                  },
+                  "workers_ai_billing_mode": {
+                    "const": "unified",
+                    "title": "Workers Ai Billing Mode",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "gateway_id",
+                  "authentication",
+                  "collect_logs",
+                  "logpush",
+                  "cache_ttl",
+                  "gateway_retries",
+                  "rate_limit_requests",
+                  "rate_limit_seconds",
+                  "workers_ai_billing_mode",
+                  "checked_at"
+                ],
+                "title": "ClefGatewayCheck",
+                "type": "object"
+              },
+              "ClefPlatformConfig": {
+                "additionalProperties": false,
+                "properties": {
+                  "account_id": {
+                    "pattern": "^[a-f0-9]{32}$",
+                    "title": "Account Id",
+                    "type": "string"
+                  },
+                  "currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "default": true,
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "expected_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Revision"
+                  },
+                  "fixed_sale_price": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Fixed Sale Price"
+                  },
+                  "gateway_check": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ClefGatewayCheck"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "gateway_credential_id": {
+                    "format": "uuid",
+                    "title": "Gateway Credential Id",
+                    "type": "string"
+                  },
+                  "gateway_credential_revision": {
+                    "minimum": 1,
+                    "title": "Gateway Credential Revision",
+                    "type": "integer"
+                  },
+                  "gateway_id": {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "title": "Gateway Id",
+                    "type": "string"
+                  },
+                  "platform_model_id": {
+                    "const": "bid-review-clef",
+                    "default": "bid-review-clef",
+                    "title": "Platform Model Id",
+                    "type": "string"
+                  },
+                  "price_revision": {
+                    "minimum": 1,
+                    "title": "Price Revision",
+                    "type": "integer"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "workers_credential_id": {
+                    "format": "uuid",
+                    "title": "Workers Credential Id",
+                    "type": "string"
+                  },
+                  "workers_credential_revision": {
+                    "minimum": 1,
+                    "title": "Workers Credential Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "gateway_id",
+                  "price_revision",
+                  "fixed_sale_price",
+                  "workers_credential_id",
+                  "gateway_credential_id",
+                  "revision",
+                  "workers_credential_revision",
+                  "gateway_credential_revision",
+                  "updated_at"
+                ],
+                "title": "ClefPlatformConfig",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Blockers",
+                "type": "array"
+              },
+              "config": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ClefPlatformConfig"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ClefSettingsData",
+            "type": "object"
+          }
+        },
+        "platform clef show": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "ClefGatewayCheck": {
+                "additionalProperties": false,
+                "description": "AI Gateway state read through its API at configuration/test time; dispatch requires it.",
+                "properties": {
+                  "authentication": {
+                    "const": true,
+                    "title": "Authentication",
+                    "type": "boolean"
+                  },
+                  "cache_ttl": {
+                    "const": 0,
+                    "title": "Cache Ttl",
+                    "type": "integer"
+                  },
+                  "checked_at": {
+                    "format": "date-time",
+                    "title": "Checked At",
+                    "type": "string"
+                  },
+                  "collect_logs": {
+                    "const": false,
+                    "title": "Collect Logs",
+                    "type": "boolean"
+                  },
+                  "gateway_id": {
+                    "maxLength": 64,
+                    "minLength": 1,
+                    "title": "Gateway Id",
+                    "type": "string"
+                  },
+                  "gateway_retries": {
+                    "const": false,
+                    "title": "Gateway Retries",
+                    "type": "boolean"
+                  },
+                  "logpush": {
+                    "const": false,
+                    "title": "Logpush",
+                    "type": "boolean"
+                  },
+                  "rate_limit_requests": {
+                    "exclusiveMinimum": 0,
+                    "title": "Rate Limit Requests",
+                    "type": "integer"
+                  },
+                  "rate_limit_seconds": {
+                    "exclusiveMinimum": 0,
+                    "title": "Rate Limit Seconds",
+                    "type": "integer"
+                  },
+                  "workers_ai_billing_mode": {
+                    "const": "unified",
+                    "title": "Workers Ai Billing Mode",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "gateway_id",
+                  "authentication",
+                  "collect_logs",
+                  "logpush",
+                  "cache_ttl",
+                  "gateway_retries",
+                  "rate_limit_requests",
+                  "rate_limit_seconds",
+                  "workers_ai_billing_mode",
+                  "checked_at"
+                ],
+                "title": "ClefGatewayCheck",
+                "type": "object"
+              },
+              "ClefPlatformConfig": {
+                "additionalProperties": false,
+                "properties": {
+                  "account_id": {
+                    "pattern": "^[a-f0-9]{32}$",
+                    "title": "Account Id",
+                    "type": "string"
+                  },
+                  "currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "enabled": {
+                    "default": true,
+                    "title": "Enabled",
+                    "type": "boolean"
+                  },
+                  "expected_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Expected Revision"
+                  },
+                  "fixed_sale_price": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Fixed Sale Price"
+                  },
+                  "gateway_check": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ClefGatewayCheck"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "gateway_credential_id": {
+                    "format": "uuid",
+                    "title": "Gateway Credential Id",
+                    "type": "string"
+                  },
+                  "gateway_credential_revision": {
+                    "minimum": 1,
+                    "title": "Gateway Credential Revision",
+                    "type": "integer"
+                  },
+                  "gateway_id": {
+                    "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+                    "title": "Gateway Id",
+                    "type": "string"
+                  },
+                  "platform_model_id": {
+                    "const": "bid-review-clef",
+                    "default": "bid-review-clef",
+                    "title": "Platform Model Id",
+                    "type": "string"
+                  },
+                  "price_revision": {
+                    "minimum": 1,
+                    "title": "Price Revision",
+                    "type": "integer"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "updated_at": {
+                    "format": "date-time",
+                    "title": "Updated At",
+                    "type": "string"
+                  },
+                  "workers_credential_id": {
+                    "format": "uuid",
+                    "title": "Workers Credential Id",
+                    "type": "string"
+                  },
+                  "workers_credential_revision": {
+                    "minimum": 1,
+                    "title": "Workers Credential Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "account_id",
+                  "gateway_id",
+                  "price_revision",
+                  "fixed_sale_price",
+                  "workers_credential_id",
+                  "gateway_credential_id",
+                  "revision",
+                  "workers_credential_revision",
+                  "gateway_credential_revision",
+                  "updated_at"
+                ],
+                "title": "ClefPlatformConfig",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20,
+                "title": "Blockers",
+                "type": "array"
+              },
+              "config": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ClefPlatformConfig"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "ClefSettingsData",
+            "type": "object"
+          }
+        },
         "platform credential create": {
           "cli_parameters": [
             {
@@ -44087,7 +44893,8 @@
                 "enum": [
                   "anthropic",
                   "openai",
-                  "perplexity"
+                  "perplexity",
+                  "cloudflare"
                 ],
                 "title": "Provider",
                 "type": "string"
@@ -44096,7 +44903,9 @@
                 "enum": [
                   "catalog_llm",
                   "standalone_llm",
-                  "vendor_search"
+                  "vendor_search",
+                  "clef_workers_ai",
+                  "clef_gateway"
                 ],
                 "title": "Purpose",
                 "type": "string"
@@ -44390,7 +45199,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "perplexity"
+                      "perplexity",
+                      "cloudflare"
                     ],
                     "title": "Provider",
                     "type": "string"
@@ -44399,7 +45209,9 @@
                     "enum": [
                       "catalog_llm",
                       "standalone_llm",
-                      "vendor_search"
+                      "vendor_search",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Purpose",
                     "type": "string"
@@ -44467,7 +45279,9 @@
                   "service": {
                     "enum": [
                       "vendor_search",
-                      "standalone_llm"
+                      "standalone_llm",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Service",
                     "type": "string"
@@ -44560,7 +45374,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "perplexity"
+                      "perplexity",
+                      "cloudflare"
                     ],
                     "title": "Provider",
                     "type": "string"
@@ -44569,7 +45384,9 @@
                     "enum": [
                       "catalog_llm",
                       "standalone_llm",
-                      "vendor_search"
+                      "vendor_search",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Purpose",
                     "type": "string"
@@ -44931,7 +45748,9 @@
                     "enum": [
                       "catalog_llm",
                       "standalone_llm",
-                      "vendor_search"
+                      "vendor_search",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "type": "string"
                   },
@@ -45017,7 +45836,9 @@
                   "service": {
                     "enum": [
                       "vendor_search",
-                      "standalone_llm"
+                      "standalone_llm",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Service",
                     "type": "string"
@@ -45089,7 +45910,8 @@
                 "enum": [
                   "anthropic",
                   "openai",
-                  "perplexity"
+                  "perplexity",
+                  "cloudflare"
                 ],
                 "title": "Provider",
                 "type": "string"
@@ -45098,7 +45920,9 @@
                 "enum": [
                   "catalog_llm",
                   "standalone_llm",
-                  "vendor_search"
+                  "vendor_search",
+                  "clef_workers_ai",
+                  "clef_gateway"
                 ],
                 "title": "Purpose",
                 "type": "string"
@@ -45673,7 +46497,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "perplexity"
+                      "perplexity",
+                      "cloudflare"
                     ],
                     "title": "Provider",
                     "type": "string"
@@ -45682,7 +46507,9 @@
                     "enum": [
                       "catalog_llm",
                       "standalone_llm",
-                      "vendor_search"
+                      "vendor_search",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Purpose",
                     "type": "string"
@@ -45750,7 +46577,9 @@
                   "service": {
                     "enum": [
                       "vendor_search",
-                      "standalone_llm"
+                      "standalone_llm",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Service",
                     "type": "string"
@@ -46128,7 +46957,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "perplexity"
+                      "perplexity",
+                      "cloudflare"
                     ],
                     "title": "Provider",
                     "type": "string"
@@ -46137,7 +46967,9 @@
                     "enum": [
                       "catalog_llm",
                       "standalone_llm",
-                      "vendor_search"
+                      "vendor_search",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Purpose",
                     "type": "string"
@@ -46205,7 +47037,9 @@
                   "service": {
                     "enum": [
                       "vendor_search",
-                      "standalone_llm"
+                      "standalone_llm",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Service",
                     "type": "string"
@@ -46581,7 +47415,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "perplexity"
+                      "perplexity",
+                      "cloudflare"
                     ],
                     "title": "Provider",
                     "type": "string"
@@ -46590,7 +47425,9 @@
                     "enum": [
                       "catalog_llm",
                       "standalone_llm",
-                      "vendor_search"
+                      "vendor_search",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Purpose",
                     "type": "string"
@@ -46658,7 +47495,9 @@
                   "service": {
                     "enum": [
                       "vendor_search",
-                      "standalone_llm"
+                      "standalone_llm",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Service",
                     "type": "string"
@@ -46972,7 +47811,8 @@
                     "enum": [
                       "anthropic",
                       "openai",
-                      "perplexity"
+                      "perplexity",
+                      "cloudflare"
                     ],
                     "title": "Provider",
                     "type": "string"
@@ -46981,7 +47821,9 @@
                     "enum": [
                       "catalog_llm",
                       "standalone_llm",
-                      "vendor_search"
+                      "vendor_search",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Purpose",
                     "type": "string"
@@ -47049,7 +47891,9 @@
                   "service": {
                     "enum": [
                       "vendor_search",
-                      "standalone_llm"
+                      "standalone_llm",
+                      "clef_workers_ai",
+                      "clef_gateway"
                     ],
                     "title": "Service",
                     "type": "string"
@@ -75216,6 +76060,683 @@
             "type": "object"
           }
         },
+        "review presence authorize": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "submission",
+              "options": [
+                "--submission"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_external": {
+                "default": true,
+                "title": "Allow External",
+                "type": "boolean"
+              },
+              "expected_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Authorization Id"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "image_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "maxItems": 40,
+                "minItems": 1,
+                "title": "Image Ids",
+                "type": "array"
+              },
+              "manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Manifest Sha256",
+                "type": "string"
+              },
+              "privacy_reviewed": {
+                "const": true,
+                "title": "Privacy Reviewed",
+                "type": "boolean"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "expected_revision",
+              "manifest_sha256",
+              "image_ids",
+              "privacy_reviewed",
+              "reason"
+            ],
+            "title": "PresenceAuthorizationRequest",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "allow_external": {
+                "title": "Allow External",
+                "type": "boolean"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "image_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": "Image Ids",
+                "type": "array"
+              },
+              "manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Manifest Sha256",
+                "type": "string"
+              },
+              "purpose": {
+                "const": "bid_review_presence",
+                "default": "bid_review_presence",
+                "title": "Purpose",
+                "type": "string"
+              },
+              "revision": {
+                "title": "Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "id",
+              "revision",
+              "manifest_sha256",
+              "image_ids",
+              "allow_external"
+            ],
+            "title": "PresenceAuthorizationView",
+            "type": "object"
+          }
+        },
+        "review presence prepare": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "submission",
+              "options": [
+                "--submission"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "review",
+              "options": [
+                "--review"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "review_id": {
+                "format": "uuid",
+                "title": "Review Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "review_id"
+            ],
+            "title": "PresencePrepareRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "PresenceAuthorizationView": {
+                "additionalProperties": false,
+                "properties": {
+                  "allow_external": {
+                    "title": "Allow External",
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "image_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Image Ids",
+                    "type": "array"
+                  },
+                  "manifest_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Manifest Sha256",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "const": "bid_review_presence",
+                    "default": "bid_review_presence",
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "manifest_sha256",
+                  "image_ids",
+                  "allow_external"
+                ],
+                "title": "PresenceAuthorizationView",
+                "type": "object"
+              },
+              "PresenceImage": {
+                "additionalProperties": false,
+                "properties": {
+                  "blur": {
+                    "additionalProperties": true,
+                    "title": "Blur",
+                    "type": "object"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "height_px": {
+                    "title": "Height Px",
+                    "type": "integer"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "page": {
+                    "title": "Page",
+                    "type": "integer"
+                  },
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "privacy_receipt_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Privacy Receipt Sha256",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "source_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Source Sha256",
+                    "type": "string"
+                  },
+                  "width_px": {
+                    "title": "Width Px",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "page_id",
+                  "document_id",
+                  "page",
+                  "sha256",
+                  "source_sha256",
+                  "width_px",
+                  "height_px",
+                  "size_bytes",
+                  "blur",
+                  "privacy_receipt_sha256"
+                ],
+                "title": "PresenceImage",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Authorization Id"
+              },
+              "blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Blockers",
+                "type": "array"
+              },
+              "current": {
+                "default": false,
+                "title": "Current",
+                "type": "boolean"
+              },
+              "expected_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Authorization Id"
+              },
+              "expected_revision": {
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "images": {
+                "items": {
+                  "$ref": "#/$defs/PresenceImage"
+                },
+                "title": "Images",
+                "type": "array"
+              },
+              "manifest_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Manifest Sha256"
+              },
+              "purpose": {
+                "const": "bid_review_presence",
+                "default": "bid_review_presence",
+                "title": "Purpose",
+                "type": "string"
+              },
+              "revocable_authorization": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PresenceAuthorizationView"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "source_review_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Review Id"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "submission_id",
+              "expected_revision"
+            ],
+            "title": "PresencePreview",
+            "type": "object"
+          }
+        },
+        "review presence preview": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "submission",
+              "options": [
+                "--submission"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "PresenceAuthorizationView": {
+                "additionalProperties": false,
+                "properties": {
+                  "allow_external": {
+                    "title": "Allow External",
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "image_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "title": "Image Ids",
+                    "type": "array"
+                  },
+                  "manifest_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Manifest Sha256",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "const": "bid_review_presence",
+                    "default": "bid_review_presence",
+                    "title": "Purpose",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "title": "Revision",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "revision",
+                  "manifest_sha256",
+                  "image_ids",
+                  "allow_external"
+                ],
+                "title": "PresenceAuthorizationView",
+                "type": "object"
+              },
+              "PresenceImage": {
+                "additionalProperties": false,
+                "properties": {
+                  "blur": {
+                    "additionalProperties": true,
+                    "title": "Blur",
+                    "type": "object"
+                  },
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "height_px": {
+                    "title": "Height Px",
+                    "type": "integer"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "page": {
+                    "title": "Page",
+                    "type": "integer"
+                  },
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "privacy_receipt_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Privacy Receipt Sha256",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "source_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Source Sha256",
+                    "type": "string"
+                  },
+                  "width_px": {
+                    "title": "Width Px",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "page_id",
+                  "document_id",
+                  "page",
+                  "sha256",
+                  "source_sha256",
+                  "width_px",
+                  "height_px",
+                  "size_bytes",
+                  "blur",
+                  "privacy_receipt_sha256"
+                ],
+                "title": "PresenceImage",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Authorization Id"
+              },
+              "blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Blockers",
+                "type": "array"
+              },
+              "current": {
+                "default": false,
+                "title": "Current",
+                "type": "boolean"
+              },
+              "expected_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Authorization Id"
+              },
+              "expected_revision": {
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "images": {
+                "items": {
+                  "$ref": "#/$defs/PresenceImage"
+                },
+                "title": "Images",
+                "type": "array"
+              },
+              "manifest_sha256": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Manifest Sha256"
+              },
+              "purpose": {
+                "const": "bid_review_presence",
+                "default": "bid_review_presence",
+                "title": "Purpose",
+                "type": "string"
+              },
+              "revocable_authorization": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/PresenceAuthorizationView"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "source_review_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Source Review Id"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "submission_id",
+              "expected_revision"
+            ],
+            "title": "PresencePreview",
+            "type": "object"
+          }
+        },
         "review report": {
           "cli_parameters": [
             {
@@ -76462,6 +77983,11 @@
                 "title": "Assessment Date",
                 "type": "string"
               },
+              "clef_enabled": {
+                "default": true,
+                "title": "Clef Enabled",
+                "type": "boolean"
+              },
               "dry_run": {
                 "default": false,
                 "title": "Dry Run",
@@ -76510,6 +78036,19 @@
                 ],
                 "default": null,
                 "title": "Preflight Token"
+              },
+              "presence_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Presence Authorization Id"
               },
               "reasoning": {
                 "anyOf": [
@@ -78392,6 +79931,12 @@
               "BidRequiredLocation": {
                 "additionalProperties": false,
                 "properties": {
+                  "date_status": {
+                    "const": "unresolved",
+                    "default": "unresolved",
+                    "title": "Date Status",
+                    "type": "string"
+                  },
                   "document_id": {
                     "anyOf": [
                       {
@@ -78416,6 +79961,23 @@
                     ],
                     "default": null,
                     "title": "Group Id"
+                  },
+                  "human_escalation": {
+                    "default": false,
+                    "title": "Human Escalation",
+                    "type": "boolean"
+                  },
+                  "needs_human_confirmation": {
+                    "const": true,
+                    "default": true,
+                    "title": "Needs Human Confirmation",
+                    "type": "boolean"
+                  },
+                  "owner_status": {
+                    "const": "unresolved",
+                    "default": "unresolved",
+                    "title": "Owner Status",
+                    "type": "string"
                   },
                   "page": {
                     "anyOf": [
@@ -78442,14 +80004,46 @@
                     "default": null,
                     "title": "Page Id"
                   },
+                  "position_status": {
+                    "const": "unresolved",
+                    "default": "unresolved",
+                    "title": "Position Status",
+                    "type": "string"
+                  },
+                  "presence_probabilities": {
+                    "additionalProperties": {
+                      "type": "number"
+                    },
+                    "title": "Presence Probabilities",
+                    "type": "object"
+                  },
+                  "probability_yes": {
+                    "anyOf": [
+                      {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Probability Yes"
+                  },
                   "reason_code": {
                     "default": "presence_not_checked",
                     "title": "Reason Code",
                     "type": "string"
                   },
                   "status": {
-                    "const": "unresolved",
                     "default": "unresolved",
+                    "enum": [
+                      "unresolved",
+                      "triage_present",
+                      "triage_absent",
+                      "triage_uncertain"
+                    ],
                     "title": "Status",
                     "type": "string"
                   }
