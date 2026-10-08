@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import ValidationError
 
 from app.api.bid_upload import receive
-from app.core.errors import ServiceError
+from app.core.errors import ServiceError, not_found
 from app.providers.base import ProviderFailure
 from app.schemas import bid_review_findings as findings_contracts
+from app.schemas import bid_review_presence as presence_contracts
 from app.schemas import bid_review_privacy as privacy_contracts
 from app.schemas import bid_review_report as report_contracts
 from app.schemas import bid_review_run as run_contracts
@@ -23,6 +24,7 @@ from app.schemas.contracts import Cost, Result
 from app.services import (
     bid_review,
     bid_review_findings,
+    bid_review_presence,
     bid_review_privacy,
     bid_review_report,
     bid_review_run,
@@ -198,6 +200,80 @@ def create_router(context, settings, storage, queue):
         return result(
             "review outbound revoke",
             await bid_review_privacy.revoke(ctx[0], ctx[1], submission_id, body, settings),
+        )
+
+    async def presence_binding(ctx):
+        from app.services import platform_clef
+
+        resolved = await platform_clef.resolve(ctx[0], settings)
+        if resolved.config is None or resolved.blockers:
+            raise ServiceError("clef_unavailable", "Inspect platform Clef configuration", 409, 4)
+        return resolved.config.model_dump(mode="json")
+
+    @router.post("/bid-submissions/{submission_id}/presence-preparations", response_model=Result)
+    async def presence_prepare(
+        submission_id: UUID,
+        body: presence_contracts.PresencePrepareRequest,
+        ctx=Depends(context, scope="function"),
+    ):
+        await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id, write=True)
+        return result(
+            "review presence prepare",
+            await bid_review_presence.prepare(
+                ctx[0], ctx[1], submission_id, body, settings, await presence_binding(ctx), storage
+            ),
+        )
+
+    @router.get("/bid-submissions/{submission_id}/presence-preview", response_model=Result)
+    async def presence_preview(submission_id: UUID, ctx=Depends(context, scope="function")):
+        await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id)
+        try:
+            provider_binding = await presence_binding(ctx)
+        except ServiceError:
+            provider_binding = None
+        return result(
+            "review presence preview",
+            await bid_review_presence.preview(
+                ctx[0], ctx[1], submission_id, settings, provider_binding
+            ),
+        )
+
+    @router.post("/bid-submissions/{submission_id}/presence-authorizations", response_model=Result)
+    async def presence_authorize(
+        submission_id: UUID,
+        body: presence_contracts.PresenceAuthorizationRequest,
+        ctx=Depends(context, scope="function"),
+    ):
+        await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id, write=True)
+        provider_binding = await presence_binding(ctx) if body.allow_external else None
+        return result(
+            "review presence authorize",
+            await bid_review_presence.authorize(
+                ctx[0], ctx[1], submission_id, body, settings, provider_binding
+            ),
+        )
+
+    @router.get("/bid-presence-images/{image_id}/content")
+    async def presence_content(image_id: UUID, ctx=Depends(context, scope="function")):
+        from fastapi.responses import Response
+
+        from app.models.bid_review_presence import BidPresenceImage
+
+        image = await ctx[0].get(BidPresenceImage, image_id)
+        if image is None:
+            raise not_found()
+        await bid_review_privacy.human_access(ctx[0], ctx[1], image.submission_id)
+        content = await bid_review_presence.image_content(
+            ctx[0], ctx[1], image_id, settings, await presence_binding(ctx), storage
+        )
+        return Response(
+            content,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": "inline; filename=presence.jpg",
+                "X-Content-Type-Options": "nosniff",
+            },
         )
 
     @router.post("/tasks/{task_id}/bid-reviews", response_model=Result)

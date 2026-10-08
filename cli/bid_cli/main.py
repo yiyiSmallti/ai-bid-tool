@@ -80,6 +80,7 @@ from bid_cli.management_providers import register as register_management_provide
 from bid_cli.management_templates import register as register_management_template_commands
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
+from bid_cli.platform_clef import app as platform_clef_app
 from bid_cli.platform_credentials import app as platform_credential_app
 from bid_cli.platform_trust_anchors import app as platform_trust_anchor_app
 from bid_cli.providers import app as provider_app
@@ -1361,6 +1362,7 @@ platform_org_app.add_typer(platform_org_application_app, name="application")
 platform_operator_app = typer.Typer()
 platform_app.add_typer(platform_operator_app, name="operator")
 platform_app.add_typer(platform_model_app, name="model")
+platform_app.add_typer(platform_clef_app, name="clef")
 platform_app.add_typer(platform_credential_app, name="credential")
 platform_app.add_typer(platform_trust_anchor_app, name="trust-anchor")
 

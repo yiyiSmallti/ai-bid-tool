@@ -11,6 +11,7 @@ import typer
 from app.core.errors import ServiceError
 from app.schemas import bid_review as models
 from app.schemas import bid_review_findings as findings_models
+from app.schemas import bid_review_presence as presence_models
 from app.schemas import bid_review_privacy as privacy
 from app.schemas import bid_review_report as reports
 from app.schemas import bid_review_run as runs
@@ -21,9 +22,11 @@ from pydantic import TypeAdapter
 app = typer.Typer()
 submissions = typer.Typer()
 outbound = typer.Typer()
+presence = typer.Typer()
 report = typer.Typer(invoke_without_command=True)
 app.add_typer(submissions, name="submission")
 app.add_typer(outbound, name="outbound")
+app.add_typer(presence, name="presence")
 app.add_typer(report, name="report")
 JsonOption = Annotated[bool, typer.Option("--json")]
 COMMAND_INPUTS = {
@@ -34,6 +37,9 @@ COMMAND_INPUTS = {
     "review outbound authorize": privacy.OutboundAuthorizationRequest,
     "review outbound revoke": privacy.OutboundRevokeRequest,
     "review outbound list": privacy.BidPrivacyListQuery,
+    "review presence prepare": presence_models.PresencePrepareRequest,
+    "review presence preview": None,
+    "review presence authorize": presence_models.PresenceAuthorizationRequest,
     "review run": runs.BidReviewRequest,
     "review list": models.BidReviewListQuery,
     "review show": None,
@@ -52,6 +58,9 @@ COMMAND_DATA = {
     "review outbound authorize": privacy.OutboundAuthorizationView,
     "review outbound revoke": privacy.OutboundAuthorizationView,
     "review outbound list": privacy.OutboundAuthorizationListData,
+    "review presence prepare": presence_models.PresencePreview,
+    "review presence preview": presence_models.PresencePreview,
+    "review presence authorize": presence_models.PresenceAuthorizationView,
     "review run": runs.BidReviewPreview | AssessmentJobAccepted,
     "review list": runs.BidReviewListData,
     "review show": runs.BidReviewDetail,
@@ -289,6 +298,66 @@ def list_authorizations(
         "GET", f"/bid-submissions/{submission}/outbound-authorizations", params=params
     )
     cli.emit(validated(result, "review outbound list"), "review outbound list", json_output)
+
+
+@presence.command("preview")
+def presence_preview(submission: Annotated[UUID, typer.Option()], json_output: JsonOption = False):
+    cli = _helpers()
+    command = "review presence preview"
+    cli.emit(
+        validated(cli.call("GET", f"/bid-submissions/{submission}/presence-preview"), command),
+        command,
+        json_output,
+    )
+
+
+@presence.command("prepare")
+def presence_prepare(
+    submission: Annotated[UUID, typer.Option()],
+    review: Annotated[UUID, typer.Option()],
+    json_output: JsonOption = False,
+):
+    cli = _helpers()
+    command = "review presence prepare"
+    body = presence_models.PresencePrepareRequest(review_id=review)
+    cli.emit(
+        validated(
+            cli.call(
+                "POST",
+                f"/bid-submissions/{submission}/presence-preparations",
+                json=body.model_dump(mode="json"),
+            ),
+            command,
+        ),
+        command,
+        json_output,
+    )
+
+
+@presence.command("authorize")
+def presence_authorize(
+    submission: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    cli = _helpers()
+    command = "review presence authorize"
+    try:
+        body = presence_models.PresenceAuthorizationRequest.model_validate(_input(input))
+    except ValueError as exc:
+        raise ServiceError("invalid_input", "Invalid exact presence authorization", 400, 2) from exc
+    cli.emit(
+        validated(
+            cli.call(
+                "POST",
+                f"/bid-submissions/{submission}/presence-authorizations",
+                json=body.model_dump(mode="json"),
+            ),
+            command,
+        ),
+        command,
+        json_output,
+    )
 
 
 @app.command("run")

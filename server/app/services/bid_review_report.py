@@ -246,11 +246,15 @@ async def build_snapshot(session, actor, run, publication, settings):
         )
     ).all():
         value = privacy.open_value(settings, row, "details_encrypted")
-        # Presence is a distinct future assessment. Mapping never establishes presence.
-        if any(location.get("status") != "unresolved" for location in value["required_locations"]):
+        # Presence triage remains separate from human or cryptographic confirmation.
+        if any(
+            location.get("status")
+            not in {"unresolved", "triage_present", "triage_absent", "triage_uncertain"}
+            for location in value["required_locations"]
+        ):
             bids.fail(
                 "bid_review_output_integrity",
-                "Unassessed signing location claimed presence",
+                "Signing location claimed unsupported confirmation",
                 409,
                 4,
             )
@@ -258,18 +262,50 @@ async def build_snapshot(session, actor, run, publication, settings):
     rows["signatures"].append(
         notice(
             "签章位置",
-            "所需位置均未核实（unresolved，presence_not_checked）；数字签名有效性与可见签章位置分别判断。",
+            "所需位置均需人工确认：未初筛的位置为 unresolved（presence_not_checked），Clef 仅提供页面初筛概率；主体、日期与具体位置仍未核实。数字签名有效性单独判断。",
         )
     )
+    clef_status = publication.coverage.get("clef", "unavailable")
+    clef_notice = notice(
+        "Clef 初筛",
+        f"状态：{clef_status}；完成调用：{publication.coverage.get('clef_completed_calls', 0)} / 尝试 {publication.coverage.get('clef_calls', 0)}；已结算固定调用费用：{publication.coverage.get('clef_cost', '0')} {publication.coverage.get('clef_currency', settings.billing_currency)}；需人工确认。",
+        publication.coverage.get("clef_unvalidated_cases", []),
+    )
+    rows["signatures"].append(clef_notice)
+    if publication.coverage.get("clef_unresolved_calls"):
+        rows["signatures"].append(
+            notice(
+                "Clef 未确定费用",
+                f"{publication.coverage['clef_unresolved_calls']} 次调用尚未确定完成状态，保留预算 {publication.coverage.get('clef_reserved_amount', '0')} {publication.coverage.get('clef_currency', settings.billing_currency)}；已结算金额不代表这些调用免费。",
+            )
+        )
     rows["risks"] = machine_risks or [
         notice("高风险缺陷", "已检查范围内没有待处理缺陷；未知和未覆盖范围见检验说明。")
     ]
+    if "signing_presence_escalated_to_human" in publication.uncovered_codes:
+        escalated = notice(
+            "签章缺失风险需人工复核",
+            "初筛疑似缺章、签名缺失或无法判断；可能影响废标判定，必须逐个所需位置人工确认，不构成已通过结论。",
+        )
+        rows["risks"].append(escalated)
+        rows["overall"].append(escalated)
     rows["scores"] = [notice("得分预估", "未评分；第一阶段不可用。")]
     rows["evidence"] = [notice("证据核对", "未执行；第一阶段不包含证据核对。")]
     rows["remediation"] = risks or [notice("补救清单", "当前没有待处理发现。")]
+    if "signing_presence_escalated_to_human" in publication.uncovered_codes:
+        rows["remediation"].append(escalated)
     rows["methodology"] = [
         notice("审查范围", "uploaded_bid；仅资格与符合性审查，报价页面保持本地。"),
         notice("检验声明", c.ADVISORY),
+        clef_notice,
+        notice(
+            "Clef 验证范围",
+            "淡印、灰度、残缺、错误公司、要求位置和骑缝章尚未验证；签名身份与日期保持人工检查。返回 token 仅为遥测，费用按已固定的每次调用售价结算。",
+        ),
+        notice(
+            "Clef 费用边界",
+            f"已结算费用之外，{publication.coverage.get('clef_unresolved_calls', 0)} 次未确定调用保留预算 {publication.coverage.get('clef_reserved_amount', '0')} {publication.coverage.get('clef_currency', settings.billing_currency)}；超时不会自动免费或重试。",
+        ),
         notice("运行发布时间", publication.created_at.isoformat()),
         notice(
             "未覆盖项目",
@@ -281,7 +317,9 @@ async def build_snapshot(session, actor, run, publication, settings):
                         "quotation_not_assessed",
                         "scoring_not_requested",
                         "evidence_not_performed",
-                        "signature_presence_not_checked",
+                        "signature_presence_human_confirmation_required"
+                        if publication.coverage.get("clef_calls")
+                        else "signature_presence_not_checked",
                     ]
                 )
             ),

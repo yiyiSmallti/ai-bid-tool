@@ -123,7 +123,9 @@ class BidReviewRequiredLocation(Tenant, Base):
             ["task_id", "submission_id", "id"],
         ),
         UniqueConstraint("org_id", "review_id", "ordinal"),
-        CheckConstraint("ordinal BETWEEN 1 AND 10000 AND status='unresolved'"),
+        CheckConstraint(
+            "ordinal BETWEEN 1 AND 10000 AND status IN ('unresolved','triage_present','triage_absent','triage_uncertain')"
+        ),
     )
 
 

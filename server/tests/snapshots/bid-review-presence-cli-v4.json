@@ -1,0 +1,250 @@
+{
+  "local: review presence authorize": {
+    "command": "review presence authorize",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "allow_external": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "image_ids": [
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purpose": "bid_review_presence",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review presence prepare": {
+    "command": "review presence prepare",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "authorization_id": null,
+      "blockers": [],
+      "current": false,
+      "expected_authorization_id": null,
+      "expected_revision": 1,
+      "images": [
+        {
+          "blur": {
+            "sigma_px": 4.0,
+            "version": "presence-gaussian-v1"
+          },
+          "document_id": "00000000-0000-4000-8000-000000000001",
+          "height_px": 256,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "page": 2,
+          "page_id": "00000000-0000-4000-8000-000000000001",
+          "privacy_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 2400,
+          "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "width_px": 192
+        }
+      ],
+      "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purpose": "bid_review_presence",
+      "revocable_authorization": null,
+      "source_review_id": "00000000-0000-4000-8000-000000000001",
+      "submission_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review presence preview": {
+    "command": "review presence preview",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "authorization_id": null,
+      "blockers": [],
+      "current": false,
+      "expected_authorization_id": null,
+      "expected_revision": 1,
+      "images": [
+        {
+          "blur": {
+            "sigma_px": 4.0,
+            "version": "presence-gaussian-v1"
+          },
+          "document_id": "00000000-0000-4000-8000-000000000001",
+          "height_px": 256,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "page": 2,
+          "page_id": "00000000-0000-4000-8000-000000000001",
+          "privacy_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 2400,
+          "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "width_px": 192
+        }
+      ],
+      "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purpose": "bid_review_presence",
+      "revocable_authorization": null,
+      "source_review_id": "00000000-0000-4000-8000-000000000001",
+      "submission_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review presence authorize": {
+    "command": "review presence authorize",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "allow_external": true,
+      "id": "00000000-0000-4000-8000-000000000001",
+      "image_ids": [
+        "00000000-0000-4000-8000-000000000001"
+      ],
+      "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purpose": "bid_review_presence",
+      "revision": 1
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review presence prepare": {
+    "command": "review presence prepare",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "authorization_id": null,
+      "blockers": [],
+      "current": false,
+      "expected_authorization_id": null,
+      "expected_revision": 1,
+      "images": [
+        {
+          "blur": {
+            "sigma_px": 4.0,
+            "version": "presence-gaussian-v1"
+          },
+          "document_id": "00000000-0000-4000-8000-000000000001",
+          "height_px": 256,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "page": 2,
+          "page_id": "00000000-0000-4000-8000-000000000001",
+          "privacy_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 2400,
+          "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "width_px": 192
+        }
+      ],
+      "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purpose": "bid_review_presence",
+      "revocable_authorization": null,
+      "source_review_id": "00000000-0000-4000-8000-000000000001",
+      "submission_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review presence preview": {
+    "command": "review presence preview",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "authorization_id": null,
+      "blockers": [],
+      "current": false,
+      "expected_authorization_id": null,
+      "expected_revision": 1,
+      "images": [
+        {
+          "blur": {
+            "sigma_px": 4.0,
+            "version": "presence-gaussian-v1"
+          },
+          "document_id": "00000000-0000-4000-8000-000000000001",
+          "height_px": 256,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "page": 2,
+          "page_id": "00000000-0000-4000-8000-000000000001",
+          "privacy_receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "size_bytes": 2400,
+          "source_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "width_px": 192
+        }
+      ],
+      "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "purpose": "bid_review_presence",
+      "revocable_authorization": null,
+      "source_review_id": "00000000-0000-4000-8000-000000000001",
+      "submission_id": "00000000-0000-4000-8000-000000000002"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

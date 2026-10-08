@@ -126,6 +126,8 @@ def bootstrap(org_name: str, email: str):
 
 # Every column written with Secrets.encrypt. A new encrypted column must be added here.
 ENCRYPTED_COLUMNS = (
+    ("bid_presence_preparations", "details_encrypted"),
+    ("bid_presence_authorizations", "reason_encrypted"),
     ("bid_review_name_lists", "names_encrypted"),
     ("bid_redaction_snapshots", "details_encrypted"),
     ("bid_redacted_pages", "sanitized_text_encrypted"),

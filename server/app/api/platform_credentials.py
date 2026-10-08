@@ -74,7 +74,10 @@ def create_router(
     @router.get("", name="platform_credential_list", response_model=Result)
     async def list_credentials(
         state: Literal["active", "disabled", "removed"] | None = None,
-        purpose: Literal["catalog_llm", "standalone_llm", "vendor_search"] | None = None,
+        purpose: Literal[
+            "catalog_llm", "standalone_llm", "vendor_search", "clef_workers_ai", "clef_gateway"
+        ]
+        | None = None,
         after_name: str | None = Query(default=None, pattern=r"^[a-z0-9_]{1,40}$"),
         limit: int = Query(default=100, ge=1, le=100),
         actor=Depends(operator),
