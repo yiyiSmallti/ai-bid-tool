@@ -245,9 +245,9 @@ BEGIN
  ELSIF TG_TABLE_NAME='bid_outbound_authorized_pages' THEN
   SELECT * INTO g FROM public.bid_outbound_authorizations WHERE org_id=NEW.org_id AND id=NEW.authorization_id;
   IF g.authorized_by IS DISTINCT FROM actor OR NOT EXISTS(SELECT 1 FROM public.bid_redacted_pages r
-   JOIN public.bid_document_pages b ON (b.org_id,b.id)=(r.org_id,r.page_id)
+   JOIN public.bid_document_pages dp ON (dp.org_id,dp.id)=(r.org_id,r.page_id)
    WHERE r.org_id=NEW.org_id AND r.snapshot_id=NEW.snapshot_id AND r.page_id=NEW.page_id
-   AND r.sanitized_text_sha256=NEW.sanitized_text_sha256 AND NOT r.price_page AND b.text_status='native' AND b.page_kind='text') THEN
+   AND r.sanitized_text_sha256=NEW.sanitized_text_sha256 AND NOT r.price_page AND dp.text_status='native' AND dp.page_kind='text') THEN
    RAISE EXCEPTION 'Only exact non-price native-text scope can be authorized' USING ERRCODE='23514'; END IF;
  END IF;
  RETURN NEW;
