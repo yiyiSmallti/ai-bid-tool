@@ -6,7 +6,7 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
-## 2026-10-08: Default-on Clef presence triage
+## 2026-10-09: Default-on Clef presence triage
 
 - Add platform-only Clef settings, separate Workers AI/gateway credentials, a
   versioned fixed call price and fail-closed gateway hardening checks. The runtime
