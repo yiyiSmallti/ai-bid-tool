@@ -6,6 +6,11 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-09: Isolated board latency shard
+
+- The board latency bounds run alone on the first of four latency shards, so they no
+  longer follow the scale tests that slowed them past their limit on busy runners.
+
 ## 2026-10-08: Uploaded-bid console reports and Word artifacts
 
 - Add immutable report snapshots bound to a published review and the human decision
