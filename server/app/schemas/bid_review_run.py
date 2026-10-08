@@ -53,6 +53,8 @@ class BidReviewCitation(Contract):
     page_id: UUID
     page: int = Field(ge=1, le=1000)
     quote: str = Field(min_length=1, max_length=20000)
+    start_offset: int | None = Field(default=None, ge=0)
+    end_offset: int | None = Field(default=None, ge=1)
     location: dict | None = None
     page_label: Literal["original_pdf", "rendered_docx"] = "original_pdf"
 
@@ -62,6 +64,8 @@ class BidReviewObligation(Contract):
     text: str
     category: Literal["qualification", "commercial", "technical", "substantive", "scoring"]
     starred: bool
+    triangle: bool = False
+    star_marker: bool = False
     rejection_trigger: bool
     citation: BidReviewCitation
 

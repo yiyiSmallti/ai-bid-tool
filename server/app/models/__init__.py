@@ -7,6 +7,7 @@ from app.models import agent as agent
 from app.models import annotations as annotations
 from app.models import attachments as attachments
 from app.models import bid_review as bid_review
+from app.models import bid_review_findings as bid_review_findings
 from app.models import bid_review_privacy as bid_review_privacy
 from app.models import bid_review_run as bid_review_run
 from app.models import bid_signature as bid_signature

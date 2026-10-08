@@ -16,6 +16,7 @@ const canPrepare = computed(() => writable.value && submission.value?.state === 
 const expired = computed(() => preview.value && Date.parse(preview.value.expires_at) <= Date.now());
 const candidatesBusy = ref(false);
 const owner = ref(false), runWritable = ref(false), authorizationEpoch = ref(0);
+const findingAuthority = ref(null);
 let serial = 0, controller, requestId = crypto.randomUUID(), expiryTimer;
 function invalidate() { clearTimeout(expiryTimer); preview.value = null; consent.value = false; requestId = crypto.randomUUID(); }
 async function reread() {
@@ -27,7 +28,8 @@ async function load() {
   const run = ++serial; controller?.abort(); controller = new AbortController(); detail.value = null; writable.value = false; busy.value = false; candidatesBusy.value = false; activeJob.value = ""; retry.value = false; error.value = ""; invalidate();
   owner.value = false;
   runWritable.value = false;
-  try { const allowed = await reviewAuthorityInfo(taskId.value); if (run !== serial) return; writable.value = allowed.writable; runWritable.value = allowed.runWritable; owner.value = allowed.owner; await reread(); }
+  findingAuthority.value = null;
+  try { const allowed = await reviewAuthorityInfo(taskId.value); if (run !== serial) return; writable.value = allowed.writable; runWritable.value = allowed.runWritable; owner.value = allowed.owner; findingAuthority.value = allowed; await reread(); }
   catch (exc) { if (exc.name !== "AbortError") error.value = reviewError(exc); }
 }
 async function inspect() {
@@ -113,7 +115,7 @@ onBeforeUnmount(() => { serial++; controller?.abort(); invalidate(); detail.valu
       </el-table>
     </el-card>
     <BidOutboundAuthorization :task-id="taskId" :submission-id="submissionId" :owner="owner" :prepared="submission.state === 'prepared'" @changed="authorizationEpoch++" />
-    <BidReviewRuns :task-id="taskId" :submission-id="submissionId" :writable="runWritable" :prepared="submission.state === 'prepared'" :authorization-epoch="authorizationEpoch" />
+    <BidReviewRuns :task-id="taskId" :submission-id="submissionId" :writable="runWritable" :prepared="submission.state === 'prepared'" :authorization-epoch="authorizationEpoch" :authority="findingAuthority" />
   </template>
 </template>
 <style scoped>

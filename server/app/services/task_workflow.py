@@ -35,8 +35,16 @@ HUMAN_SCOPES = {
     "card:comment",
     "task:review-policy",
     "card:cosign",
+    "bid-review:decide",
+    "bid-review:classify",
 }
-DECISIONS = {"evidence:confirm", "card:cosign", "check:decide", "score:rubric:review"}
+DECISIONS = {
+    "evidence:confirm",
+    "card:cosign",
+    "check:decide",
+    "score:rubric:review",
+    "bid-review:decide",
+}
 
 
 def fail(code, message, status=409, exit_code=2) -> NoReturn:

@@ -2,7 +2,7 @@
 kind: reference
 ---
 
-# Uploaded-bid preparation and authorized text review
+# Uploaded-bid preparation, compliance and human review
 
 ## Problem
 
@@ -35,10 +35,12 @@ Result 4.0, and these commands have no legacy Result 3.0 route.
 The prepared submission also offers a cleared-text review and a separate review-run
 preflight. A human admin or bidder who owns the task reviews the actual sanitized
 native text, selects exact pages and confirms its external use before submission.
-The review extracts cited tender obligations and classifies signing-clause
-applicability. It does not determine whether the uploaded bid satisfies an
-obligation or contains a required mark. Runs remain advisory and record those
-unassessed areas explicitly.
+The review extracts cited tender obligations, classifies signing-clause
+applicability and compares obligations with authorized sanitized bid text.
+The findings section separates 废标风险, 高风险缺陷 and 其他, with risk/disposition
+filters and paged human history. An administrator classifies each finding's
+professional domain before its responsible reviewer records a reasoned decision.
+Runs remain advisory; required visible marks and other unassessed areas stay explicit.
 
 ## How it works
 
@@ -204,6 +206,77 @@ requirements to authorized humans, while token projections disclose only IDs,
 counts and fixed coverage codes. The
 [budget mechanism](task-budgets.md#how-it-works) owns settlement and exposure rules.
 
+### Bid compliance and human decisions
+
+The [compliance stage](../../server/app/services/bid_review_compliance.py) follows
+obligation extraction inside the same review job. The same human grant can cover
+exact tender and bid pages. A dependent request contains the verified tender
+obligation quotation, whole sanitized authorized bid pages and local refs; it
+contains no original filenames, internal source IDs or signature certificate data.
+Unselected, price, uncertain and image pages stay outside the provider boundary.
+The same admission fence and accounting ledger apply before every call.
+
+Preflight quotes the known extraction requests and declares that compliance call
+counts and costs depend on extracted obligations. It bounds the dependent envelope
+with the run's LLM ceiling; a possible later stop is not evidence of incomplete
+execution. Actual budget/provider/call stops preserve completed results and list
+unfinished obligations as unknown. Cancelled, lost or changed attempts publish
+nothing. Findings are grouped per obligation before checking the approved bounds;
+an overflowing group and the following groups remain explicitly uncovered.
+
+Each obligation has a response outcome: responded, deviation, missing or unknown.
+An accepted model conclusion requires the exact obligation citation; responded or
+deviation also requires a bid citation. Quotes must be unique continuous spans in
+both the dispatched sanitized text and fixed encrypted original text. Source
+document/page, original Unicode offsets and DOCX structural mapping are retained.
+Rejected citations lose the model narrative and yield fixed limitation codes.
+A missing response uses a separate searched-page inventory, never an invented
+quotation. Excluded pages, partial search or masked text that could hide a response
+prevent a definitive missing result.
+
+Local rules compare explicitly named required document kinds with the immutable
+submission inventory, inspect prepared signed-file validation for invalidity,
+modification or non-signing certificate purpose, and flag mandatory obligations
+without a located response. They retain a cited tender basis, exact inventory or
+normalized local validation links, and rule identity. A local signature defect
+without a verified related tender obligation remains in the preparation evidence
+and produces an explicit coverage gap, not a fabricated tender citation. An apparent ★ or explicit
+废标/无效 failure is fatal; ▲ or substantive failures are high; other concerns are
+medium. Responded observations carry no claimed rejection consequence. Model
+confidence is attribution, not calibrated accuracy or evidence confirmation.
+
+[Migration 0065](../../server/migrations/versions/0065_bid_review_findings.py) adds
+immutable findings, normalized citation/search/validation links and append-only
+human events. Composite org/task/submission/run/obligation parents and source
+roles prevent unrelated source attachment. Forced RLS, worker publication guards,
+deferred source/count checks and immutable-row triggers preserve the same tenant
+and attempt boundaries as the run. Finding bodies and human reasons are encrypted;
+owner-only key rotation may rewrap their ciphertext without changing business data.
+
+Classification and dismiss/reopen/confirm share one ordered event stream. Every
+mutation requires a request ID, current input hash, revision, predecessor event ID
+and nonblank reason. Row locks serialize compare-and-swap; request replay returns
+the existing event. A human admin with task management authority classifies only an
+open finding. Commercial decisions require a bidder with task commercial review
+rights; technical decisions require a technical reviewer with technical rights.
+Admin classification confers no decision right. Confirm and dismiss close an open
+disposition; reopen restores it. Confirmation adds a separate human-reviewed basis
+referencing the event, without changing machine evidence, outcome, severity or scores.
+
+`bid review findings --id REVIEW` lists paged findings; `--severity`, `--state`
+and `--outcome` filter them. `bid review decide` and `bid review classify` use
+`--id REVIEW --finding FINDING --input REQUEST.json`. `bid review history` uses the
+same IDs, optional `--classification`, and the shared `--cursor`/`--limit` pagination.
+All support Result 4.0 `--json`; input shapes are in the
+[finding schemas](../../server/app/schemas/bid_review_findings.py).
+
+Protected admin/bidder readers can read original saved excerpts. Other human
+readers use a live privacy-cleared projection; changed privacy blocks that
+projection. Tokens see only fixed metadata and cannot read human history, quotations
+or reasons, classify or decide. Findings and history have bounded encoded responses
+and authenticated cursors tied to the current event snapshot. Console text uses
+normal Vue escaping and reasons are never saved in browser persistence.
+
 ## Pitfalls
 
 - Synthetic fixtures alone missed the real 点聚 layout (embedded content digest,
@@ -212,9 +285,10 @@ counts and fixed coverage codes. The
   to external tools. An unreadable CMS is `unsupported`, never `invalid`.
 - Pure-Python SM3 takes seconds per megabyte; hashing goes through OpenSSL in
   `cryptography`, and only SM2 point arithmetic uses gmssl.
-- Extracted obligations and classified signing clauses do not establish bid compliance,
-  visible-signature presence, image support, scoring or a complete console/Word report.
-  Missing native text and unreviewed locations remain explicit coverage gaps.
+- Native-text compliance does not establish visible-signature presence, image support,
+  scoring or a complete console/Word report. Missing native text, excluded price pages
+  and unreviewed locations remain explicit coverage gaps. A present file kind proves
+  only its declared inventory role, not the sufficiency or authenticity of its content.
 - A prepared inventory is not a compliance result, OCR transcript, visible-signature
   completeness assessment, privacy clearance or permission to transmit a page externally.
   Local digital validity does not establish visible mark completeness or revocation.
@@ -258,3 +332,8 @@ counts and fixed coverage codes. The
   [review worker](../../server/app/jobs/bid_review_run.py).
 - [HTTP-to-worker review acceptance](../../server/tests/test_bid_review_run_db.py)
   captures synthetic provider requests and sanitized result receipts.
+- [Finding persistence and decision service](../../server/app/services/bid_review_findings.py),
+  [finding models](../../server/app/models/bid_review_findings.py),
+  [finding console](../../web/src/components/BidReviewFindings.vue),
+  [HTTP/worker acceptance](../../server/tests/test_bid_review_findings_db.py) and
+  [mocked browser acceptance](../../web/e2e/bid-review-findings.spec.js).
