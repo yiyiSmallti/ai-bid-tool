@@ -137,7 +137,30 @@ if [ -n "$new_migrations" ]; then
   [ -s "$backup" ] || fail "empty database backup"
 fi
 
+# Healthy means /health answers 200 and both long-running services stay up.
+healthy() {
+  local code state up=
+  for _ in $(seq 1 30); do
+    code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 --resolve "$HEALTH_RESOLVE" "$HEALTH_URL" || true)
+    if [ "$code" = 200 ]; then up=1; break; fi
+    sleep 3
+  done
+  [ -n "$up" ] || { echo "health check"; return 1; }
+  sleep 10
+  for service in server worker; do
+    state=$(sudo -n docker inspect -f '{{.State.Status}}' "bidtool-$service-1" 2>/dev/null || echo missing)
+    [ "$state" = running ] || { echo "$service is $state"; return 1; }
+  done
+}
+
+keep_logs() {
+  for service in server worker; do
+    sudo -n docker logs --tail 80 "bidtool-$service-1" >"$STATE/$service.log" 2>&1 || true
+  done
+}
+
 rollback() {
+  keep_logs
   if [ -n "$new_migrations" ] || [ -z "$previous" ]; then
     fail "$1; not rolled back because the schema may have changed (backup kept)"
   fi
@@ -147,6 +170,11 @@ rollback() {
   done
   compose "$previous" up -d --no-build migrate server worker >/dev/null 2>&1 || true
   rsync -a --delete "$previous/web/dist/" web/dist/ 2>/dev/null || true
+  # The previous release can fail too, for example after a host configuration change
+  # it does not support; say so instead of reporting a successful rollback.
+  if ! reason=$(healthy); then
+    fail "$1; rollback to ${deployed:0:12} is also unhealthy ($reason): service down"
+  fi
   fail "$1; rolled back"
 }
 
@@ -154,18 +182,7 @@ compose "$rel" up -d --no-build migrate server worker >"$STATE/up.log" 2>&1 \
   || rollback "compose up (see deploy-state/up.log)"
 rsync -a --delete "$rel/web/dist/" web/dist/
 
-healthy=
-for _ in $(seq 1 30); do
-  code=$(curl -s -o /dev/null -w '%{http_code}' -m 5 --resolve "$HEALTH_RESOLVE" "$HEALTH_URL" || true)
-  if [ "$code" = 200 ]; then healthy=1; break; fi
-  sleep 3
-done
-[ -n "$healthy" ] || rollback "health check"
-sleep 10
-for service in server worker; do
-  state=$(sudo -n docker inspect -f '{{.State.Status}}' "bidtool-$service-1" 2>/dev/null || echo missing)
-  [ "$state" = running ] || rollback "$service is $state"
-done
+reason=$(healthy) || rollback "$reason (see deploy-state/server.log and worker.log)"
 
 ln -sfn "$rel" src.next && mv -T src.next src
 echo "$sha" > "$STATE/deployed"
