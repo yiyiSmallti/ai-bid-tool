@@ -256,7 +256,10 @@ async def build_snapshot(session, actor, run, publication, settings):
             )
         rows["signatures"].append({"kind": "signing_requirement", "requirement": value})
     rows["signatures"].append(
-        notice("签章位置", "所需位置均未核实（unresolved）；数字签名有效性与可见签章位置分别判断。")
+        notice(
+            "签章位置",
+            "所需位置均未核实（unresolved，presence_not_checked）；数字签名有效性与可见签章位置分别判断。",
+        )
     )
     rows["risks"] = machine_risks or [
         notice("高风险缺陷", "已检查范围内没有待处理缺陷；未知和未覆盖范围见检验说明。")
