@@ -4,15 +4,15 @@ kind: plan
 
 # Organization self-service application
 
-Status: **Pending approval, not implemented**.
+Status: **Approved with all recommended defaults, not implemented**.
 
 This contract covers the self-service part of F04 in the [roadmap](roadmap.md): a
 prospective org (organization/tenant, 单位) applies on the public sign-in page and a
 platform operator approves or rejects the application in the platform console. The
 importable [Pydantic v2 contract](org-signup/org_signup_contracts.py) defines payloads,
 Result data and the service Protocol. It registers no routes, CLI commands, jobs or
-tables. The [Open decisions](#open-decisions) are recommended defaults for approval,
-not decisions already adopted. Org member management is a separate contract.
+tables. Implementation follows the approved [decisions](#open-decisions) under
+[agent.md](../../agent.md#workflow). Org member management is a separate contract.
 
 ## Goal and scope
 
