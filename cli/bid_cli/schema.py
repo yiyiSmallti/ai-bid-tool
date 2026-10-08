@@ -410,6 +410,7 @@ COMMANDS = {
     "token create": TokenCreate,
     "platform login": PlatformLogin,
     "platform org list": None,
+    "platform operator list": None,
     "platform org application list": OrgApplicationListQuery,
     "platform org application approve": OrgApplicationApprove,
     "platform org application reject": OrgApplicationReject,

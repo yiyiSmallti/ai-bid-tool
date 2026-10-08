@@ -700,6 +700,17 @@ async def fake_request(self, method, path, **kwargs):
             "email": "ops@example.test",
             "expires_in": 1800,
         }
+    elif path == "/platform/operators":
+        assert method == "GET" and kwargs["platform"] is True
+        items = [
+            {
+                "email": "ops@example.test",
+                "has_account": True,
+                "factor_source": "database",
+                "enrolled_at": "2026-10-08T00:00:00Z",
+                "enrolled_by": "link",
+            }
+        ]
     elif path == "/platform/org-applications":
         assert kwargs["platform"] is True
         assert kwargs["params"] == {"status": "pending", "limit": 50}
@@ -1648,6 +1659,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         ],
         "platform login": ["platform", "login", "--email", "ops@example.test", "--totp", "123456"],
         "platform org list": ["platform", "org", "list"],
+        "platform operator list": ["platform", "operator", "list"],
         "platform org application list": ["platform", "org", "application", "list"],
         "platform org application approve": ["platform", "org", "application", "approve", IDENTIFIER, "--org-name", "Corrected org", "--attach-existing-user"],
         "platform org application reject": ["platform", "org", "application", "reject", IDENTIFIER, "--reason", "Unable to verify applicant"],

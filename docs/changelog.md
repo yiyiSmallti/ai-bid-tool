@@ -6,6 +6,17 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Platform operator browser enrollment
+
+- Add host and console enrollment links for deployment-allowlisted operators,
+  a public password/authenticator enrollment page and the 平台管理员 metadata page.
+- Store TOTP factors encrypted behind a dedicated restricted function owner. Atomic
+  completion preserves existing passwords, invalidates other links and consumes the
+  enrollment TOTP step for login replay checks; attempts share sign-in failure limits.
+- Prefer deployment factors when present, retain the environment break-glass path
+  and include database factors in provider-secrets root rotation. See
+  [Platform operator browser enrollment](notes/operator-enrollment.md).
+
 ## 2026-10-08: Sharded CI
 
 - CI runs the database suite on five parallel runners and the latency tests on three,

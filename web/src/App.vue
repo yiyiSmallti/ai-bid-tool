@@ -1,5 +1,5 @@
 <script setup>
-import { Coin, DataAnalysis, Document, Files, Lock, Memo, Monitor, OfficeBuilding, Tickets, Wallet } from "@element-plus/icons-vue";
+import { Coin, DataAnalysis, Document, Files, Lock, Memo, Monitor, OfficeBuilding, Tickets, User, Wallet } from "@element-plus/icons-vue";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -11,6 +11,7 @@ const org = computed(() => (area.value === "org" ? orgSession.get() : null));
 const menus = computed(() => area.value === "platform"
   ? [
       { key: "orgs", to: "/platform/orgs", title: "单位", icon: OfficeBuilding },
+      { key: "operators", to: "/platform/operators", title: "平台管理员", icon: User },
       { key: "models", to: "/platform/models", title: "模型", icon: Monitor },
       { key: "credentials", to: "/platform/credentials", title: "服务凭据", icon: Lock },
       { key: "cards", to: "/platform/cards", title: "卡密", icon: Tickets },

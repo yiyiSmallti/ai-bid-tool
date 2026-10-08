@@ -73,8 +73,9 @@ class TokenSigner:
     def for_tokens(cls, settings) -> "TokenSigner":
         return cls(settings.token_key.get_secret_value())
 
-    def issue(self, payload: dict, seconds: int) -> str:
-        value = json.dumps({**payload, "exp": int(time.time()) + seconds})
+    def issue(self, payload: dict, seconds: int, *, expires_at: int | None = None) -> str:
+        expiry = int(time.time()) + seconds if expires_at is None else expires_at
+        value = json.dumps({**payload, "exp": expiry})
         return self.cipher.encrypt(value.encode()).decode()
 
     def open(self, token: str) -> dict:

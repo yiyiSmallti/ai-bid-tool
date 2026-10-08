@@ -440,6 +440,20 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path.startswith(("/platform/enrollment/", "/platform/operators")):
+            from app.services.operator_enrollment import invalid_link
+
+            # Unknown property names can themselves contain a secret. Never reflect loc/input.
+            bad_link = any(
+                tuple(item.get("loc", ())) in {("body", "token"), ("body", "pending")}
+                for item in error.errors()
+            )
+            return error_response(
+                request,
+                invalid_link()
+                if bad_link
+                else ServiceError("invalid_input", "Invalid enrollment input", 422, 2),
+            )
         if request.url.path == "/auth/org-applications" or request.url.path.startswith(
             "/platform/org-applications"
         ):

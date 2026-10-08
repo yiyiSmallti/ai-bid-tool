@@ -111,7 +111,7 @@ are accessible to them. Do not invent unsupported `*_FILE` application settings;
 arrange injection through the selected service manager or approved entrypoint.
 
 Generate independent roots for stored data (`BID_ENCRYPTION_KEY`), sessions/signed
-links (`BID_TOKEN_KEY`) and outbound provider secrets (`BID_SECRETS_KEY`). Use a
+links (`BID_TOKEN_KEY`) and provider/operator-factor secrets (`BID_SECRETS_KEY`). Use a
 separate `BID_CLI_KEY` on operator CLI machines for their encrypted local sessions;
 do not distribute it as an application root. Keep database passwords, S3 credentials,
 TOTP seeds and sandbox TLS private keys separate from all of these. Neither root keys
@@ -120,9 +120,15 @@ nor operator identities/TOTP seeds belong in `platform_credentials`.
 Never put secret values in repository files, command arguments, release evidence,
 terminal transcripts, logs, screenshots or support bundles. Exclude request bodies,
 Authorization/Cookie headers, signed-link query strings, database URLs and expanded
-environment dumps. Provision the operator's TOTP material through a private channel;
-`app.admin platform-totp` prints sensitive enrollment material and must not run in a
-recorded CI job or ordinary deployment log.
+environment dumps. Provision an allowlisted operator privately through the
+`app.admin platform-enroll EMAIL` link and browser flow in
+[Run the platform console](../guides/development.md#run-the-platform-console).
+The host command's link is sensitive and must not run in a recorded CI job or
+ordinary deployment log. Keep `BID_PLATFORM_TOTP_SECRETS` as the deployment-managed
+break-glass alternative: privately run `app.admin platform-totp`, inject the factor
+and restart. Such an override wins over the stored factor and blocks its browser
+enrollment until removed. Neither authentication path stores factors in
+`platform_credentials`.
 
 For a fresh environment, follow
 [Manage platform credentials](../guides/development.md#manage-platform-credentials):

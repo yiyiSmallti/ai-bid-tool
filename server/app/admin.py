@@ -229,6 +229,8 @@ def rotate_provider_secrets() -> dict:
     counts = {
         "platform_checked": 0,
         "platform_rewritten": 0,
+        "operator_factors_checked": 0,
+        "operator_factors_rewritten": 0,
         "org_revisions_checked": 0,
         "org_revisions_rewritten": 0,
         "failed": 0,
@@ -387,6 +389,61 @@ def rotate_provider_secrets() -> dict:
                     successes += 1
                 except (ServiceError, ValueError, SQLAlchemyError) as exc:
                     record_failure("org_revision", config_id, exc)
+        from app.core.operator_secrets import OperatorSecrets
+
+        operator_cipher = OperatorSecrets(settings)
+        try:
+            with engine.connect() as connection:
+                emails = connection.scalars(
+                    text("SELECT email FROM public.platform_operator_factors ORDER BY email")
+                ).all()
+        except SQLAlchemyError as exc:
+            record_failure("operator_scan", "operator_scan", exc)
+            emails = []
+        for email in emails:
+            counts["operator_factors_checked"] += 1
+            did_rewrite = False
+            try:
+                with engine.begin() as connection:
+                    row = (
+                        connection.execute(
+                            text(
+                                "SELECT secret_ciphertext, key_version, generation "
+                                "FROM public.platform_operator_factors WHERE email=:email FOR UPDATE"
+                            ),
+                            {"email": email},
+                        )
+                        .mappings()
+                        .first()
+                    )
+                    if row is None:
+                        counts["operator_factors_checked"] -= 1
+                        continue
+                    value = operator_cipher.rewrap(
+                        row["secret_ciphertext"], email, row["generation"], row["key_version"]
+                    )
+                    if value is not None:
+                        connection.execute(
+                            text(
+                                "UPDATE public.platform_operator_factors SET secret_ciphertext=:value "
+                                "WHERE email=:email"
+                            ),
+                            {"value": value, "email": email},
+                        )
+                        connection.execute(
+                            text(
+                                "INSERT INTO public.platform_audit_logs "
+                                "(id, actor_email, action, outcome, details) VALUES "
+                                "(gen_random_uuid(), 'maintenance@localhost', "
+                                "'platform.operator.rewrap', 'success', jsonb_build_object('email', CAST(:email AS text)))"
+                            ),
+                            {"email": email},
+                        )
+                        did_rewrite = True
+                counts["operator_factors_rewritten"] += int(did_rewrite)
+                successes += 1
+            except (ServiceError, ValueError, SQLAlchemyError) as exc:
+                record_failure("operator_factor", email, exc)
         code = 0 if not counts["failed"] else 5 if successes else 4 if permanent_failed else 3
         return RotationReport.model_validate({**counts, "exit_code": code}).model_dump()
     finally:
@@ -397,6 +454,9 @@ def main():
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("init-db")
+    enrollment_parser = commands.add_parser("platform-enroll")
+    enrollment_parser.add_argument("email")
+    commands.add_parser("rotate-provider-secrets")
     create = commands.add_parser("bootstrap")
     create.add_argument("--org-name", required=True)
     create.add_argument("--email", required=True)
@@ -413,8 +473,10 @@ def main():
     if args.command == "init-db":
         initialize_database()
         print("Selected development database initialized; runtime role is restricted")
-    elif args.command == "rotate-encryption":
-        if args.scope == "provider-secrets":
+    elif args.command == "platform-enroll":
+        platform_enroll(args.email)
+    elif args.command in {"rotate-encryption", "rotate-provider-secrets"}:
+        if args.command == "rotate-provider-secrets" or args.scope == "provider-secrets":
             from sqlalchemy.exc import SQLAlchemyError
 
             from app.core.errors import ServiceError
@@ -460,6 +522,50 @@ def main():
         platform_totp(args.email)
     else:
         bootstrap(args.org_name, args.email)
+
+
+def platform_enroll(email: str):
+    """Issue an unstored browser link using the same runtime service as the console."""
+    from pydantic import ValidationError
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.core.config import Settings
+    from app.core.db import Database
+    from app.core.errors import ServiceError
+    from app.core.password_attempts import PasswordAttempts
+    from app.core.security import TokenSigner
+    from app.schemas.contracts import Result
+    from app.schemas.operator_enrollment import EnrollmentLinkRequest
+    from app.services.operator_enrollment import OperatorEnrollmentService
+
+    async def issue():
+        settings = Settings.load()
+        db = Database(settings)
+        attempts = PasswordAttempts(db)
+        try:
+            return await OperatorEnrollmentService(
+                db, settings, TokenSigner.for_tokens(settings), attempts
+            ).issue_link("host", EnrollmentLinkRequest(email=email))
+        finally:
+            await attempts.close()
+            await db.engine.dispose()
+
+    try:
+        link = asyncio.run(issue())
+    except ServiceError as exc:
+        print(json.dumps({"error": exc.code}), file=sys.stderr)
+        raise SystemExit(exc.exit_code) from None
+    except ValidationError:
+        print(json.dumps({"error": "invalid_input"}), file=sys.stderr)
+        raise SystemExit(2) from None
+    except SQLAlchemyError:
+        print(json.dumps({"error": "enrollment_unavailable"}), file=sys.stderr)
+        raise SystemExit(3) from None
+    print(
+        Result(
+            ok=True, command="platform operator enrollment-link", data=link.model_dump(mode="json")
+        ).model_dump_json()
+    )
 
 
 def platform_totp(email: str):

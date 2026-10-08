@@ -46,6 +46,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [docx-citations.md](notes/docx-citations.md): Word citations by section, paragraph and table cell.
 - [reasoning-levels.md](notes/reasoning-levels.md): official reasoning levels and extraction history.
 - [platform-console.md](notes/platform-console.md): platform operator console (平台运营后台), TOTP, org activation/deactivation and model-catalog billing.
+- [operator-enrollment.md](notes/operator-enrollment.md): private enrollment links, password confirmation, encrypted authenticator factors and device recovery.
 - [prepaid-billing.md](notes/prepaid-billing.md): prepaid balance (预付余额), recharge cards (充值卡密), charges and admission blocks.
 - [versioned-resources.md](notes/versioned-resources.md): product revisions and task (任务) snapshots.
 - [model-settings.md](notes/model-settings.md): metadata-only org model settings, immutable identity and explicit connection tests.
@@ -80,6 +81,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [0007 Task liability and prepaid reservations](adr/0007-task-budget-reservations.md) (adr)
 
 - [0008 Organization self-service applications](adr/0008-org-signup.md) (adr)
+- [0009 Browser enrollment of platform operators](adr/0009-operator-enrollment.md) (adr)
 
 ## Plans and records
 

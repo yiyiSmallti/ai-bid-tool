@@ -4,7 +4,7 @@ kind: plan
 
 # Platform operator enrollment in the browser
 
-Status: **Approved with all recommended defaults, not implemented**.
+Status: **Approved; implemented**.
 
 This contract lets an allowlisted platform operator set a password and bind a TOTP
 authenticator in the browser from a one-time link, instead of running
