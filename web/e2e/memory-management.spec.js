@@ -45,6 +45,7 @@ async function fixture(page,options={}){
  if(path===`/tasks/${T}/memory-feedback`){expect(url.searchParams.get("management")).toBe("true");return send("memory feedback list",meta([event()]),[event()]);}
  if(path===`/jobs/${J}`){const value={id:J,kind:"memory_candidate",status:state.jobStatus,error:state.jobStatus==="failed"?{code:"job_failed",exit_code:4}:null,attempts:0,reasoning:null,result:state.jobStatus==="succeeded"?{completion:state.partial?"partial":"complete",items:[{event_id:F,outcome:"created",memory_id:M}]}:{}};const response=result("job status",value,[],!["failed","cancelled"].includes(state.jobStatus)&&!state.partial);return route.fulfill({json:response});}
  if(path===`/tasks/${T}/memory-candidates`){const body=req.postDataJSON();writes.push({path,body});expect(body).toEqual({event_ids:[F],action:{retry:true}});if(state.dispatchFail)return fail("queue_unavailable",503,{job_id:J});state.jobStatus="succeeded";return send("memory candidates run",{job_id:J,task_id:T,reused:true,dry_run:false,event_count:1});}
+ if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
  throw new Error(`Unexpected memory request ${req.method()} ${path}`);
  });return {state,writes,reads,queries,release:()=>release?.()};
 }

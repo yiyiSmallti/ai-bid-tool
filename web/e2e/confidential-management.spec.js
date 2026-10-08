@@ -90,6 +90,7 @@ async function fixture(page,options={}){
       if(path===`/confidential-fields/${F}/revisions`){writes.push({path,...body});if(state.fieldConflict&&!conflicted){conflicted=true;state.revision++;return fail(route,"revision_conflict",409);}expect(body.expected_revision).toBe(state.revision);if(body.label)state.label=body.label;if(body.archived!==undefined)state.archived=body.archived;state.revision++;return route.fulfill({json:result("confidential field update",field())});}
       if(path==="/confidential-fields"){writes.push({path,...body});state.scope=body.scope;state.label=body.label;state.key=body.key;state.kind=body.kind;return route.fulfill({json:result("confidential field add",{...field(),key:body.key,placeholder:`{{secret.${body.key}}}`,kind:body.kind})});}
     }
+    if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
     throw new Error(`Unexpected confidential request: ${req.method()} ${path}`);
   });
   return {state,writes,queries,requests,release:()=>release?.(),maxActive:()=>maxActive,setCanary:value=>{canary=value;}};

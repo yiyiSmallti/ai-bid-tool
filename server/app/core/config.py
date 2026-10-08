@@ -43,7 +43,7 @@ class Settings(PDFSettings):
     encryption_key: SecretStr
     # Retired data keys, comma separated: still decrypt, never encrypt.
     encryption_key_previous: Annotated[list[SecretStr], NoDecode] = []
-    # Sessions and signed links only; never used for stored data.
+    # Sessions, signed links and domain-separated signup source digests; not data encryption.
     token_key: SecretStr
     secrets_key: SecretStr | None = None
     secrets_key_previous: Annotated[list[SecretStr], NoDecode] = []
@@ -85,6 +85,7 @@ class Settings(PDFSettings):
     platform_admin_emails: str | None = None
     platform_totp_secrets: SecretStr | None = None
     platform_session_seconds: int = 1800
+    org_signup_enabled: bool = False
     # Sale prices, charges, balances and card values are all in this ISO 4217 currency.
     billing_currency: str = "USD"
     # Shared model-job guards; retries of the same job consume the same budget.

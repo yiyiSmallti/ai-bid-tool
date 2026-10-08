@@ -68,6 +68,7 @@ async function fixture(page,options={}){
    if(path==='/tasks')return route.fulfill({json:result('task list',{org_id:B},[])});
    const match=path.match(/^\/management\/resources\/(profiles|certificates)\/query$/);
    if(match){const kind=match[1],items=[{org_id:B,ref:{kind,resource_id:rid(kind,8000)},name:kind==='profiles'?'乙单位专属资料':'乙单位专属证照',revision_id:rid(kind,8001),revision:1,lifecycle:{state:'active',revision:0},provenance:'declared',created_at:date,revised_at:date,revised_by:U,actions:actions()}];return route.fulfill({json:result('resource query',{org_id:B,as_of:date,returned:items.length,next_cursor:null,has_more:false},items)});}
+   if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
    throw new Error(`Unexpected org B request: ${req.method()} ${path}`);
   }
   const failure=(code,status=409)=>route.fulfill({status,json:result('resource write',{error:{code,message:code,exit_code:status===403||status===404?4:2}},[],false)});
@@ -101,6 +102,7 @@ async function fixture(page,options={}){
   if(path.includes('/file/download-link'))return route.fulfill({json:result('resource certificate download link',{url:`/resources/certificates/revisions/${rid('certificates',1)}/file/download?signature=synthetic`,expires_in:300})});
   if(path.includes('/file/download')){expect(req.headers()['x-org-id']).toBe(O);expect(req.headers().authorization).toBeTruthy();return route.fulfill({contentType:'application/pdf',body:'%PDF-synthetic'});}
   if(path.includes('/file/pages/')){expect(req.headers().authorization).toBe('Bearer synthetic-qualification-session');expect(requestOrg).toBe(O);return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgaPj/HwAEggJ/59habAAAAABJRU5ErkJggg==','base64')});}
+  if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
   throw new Error(`Unexpected qualification request: ${req.method()} ${path}`);
   }finally{if(read)reads.active--;}
  });return {state,writes,queries,requests,pins,reads,totals,release:()=>release?.(),releaseRead:path=>gates.get(path)?.()};

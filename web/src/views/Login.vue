@@ -3,6 +3,7 @@ import { Coin } from "@element-plus/icons-vue";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { request, session } from "../api.js";
+import SignupLink from "../components/SignupLink.vue";
 
 const router = useRouter();
 const email = ref("");
@@ -47,5 +48,6 @@ async function submit() {
       <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
       <el-button type="primary" native-type="submit" size="large" :loading="busy">登录</el-button>
     </el-form>
+    <SignupLink />
   </el-card>
 </template>

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import AwareDatetime
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.platform_credentials import create_router as create_credentials_router
@@ -15,6 +16,13 @@ from app.core.password_attempts import PasswordAttempts
 from app.core.security import TokenSigner
 from app.schemas.budget_contracts import BudgetPlatformModelTest
 from app.schemas.contracts import Result
+from app.schemas.org_signup import (
+    ApplicationStatus,
+    OrgApplicationApprove,
+    OrgApplicationListQuery,
+    OrgApplicationReject,
+    OrgApplicationSubmit,
+)
 from app.schemas.platform_contracts import (
     OrgLookup,
     PasswordSetup,
@@ -27,6 +35,7 @@ from app.schemas.platform_contracts import (
 )
 from app.schemas.platform_credentials import CatalogResolveTarget
 from app.services import platform
+from app.services.org_signup import OrgSignupService
 from app.services.platform_credentials import PlatformCredentialResolver, database_error
 
 
@@ -46,11 +55,56 @@ def create_router(
 ) -> APIRouter:
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False)
+    signup = OrgSignupService(settings, db, attempts)
 
     async def operator(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
         if credentials is None:
             raise ServiceError("invalid_session", "Bearer credentials required", 401, 4)
         return platform.identify(settings, crypto, credentials.credentials)
+
+    @router.post(
+        "/auth/org-applications", name="auth_org-application_submit", response_model=Result
+    )
+    async def application_submit(body: OrgApplicationSubmit, request: Request):
+        receipt = await signup.submit(body, request.client.host if request.client else None)
+        return result("auth org-application submit", receipt.model_dump(mode="json"))
+
+    @router.get(
+        "/platform/org-applications", name="platform_org_application_list", response_model=Result
+    )
+    async def application_list(
+        status: ApplicationStatus | None = "pending",
+        limit: int = Query(default=50, ge=1, le=200),
+        before: AwareDatetime | None = None,
+        actor=Depends(operator),
+    ):
+        query = OrgApplicationListQuery(status=status, limit=limit, before=before)
+        rows = await signup.list_applications(actor.email, query)
+        return result(
+            "platform org application list", items=[row.model_dump(mode="json") for row in rows]
+        )
+
+    @router.post(
+        "/platform/org-applications/{application_id}/approve",
+        name="platform_org_application_approve",
+        response_model=Result,
+    )
+    async def application_approve(
+        application_id: UUID, body: OrgApplicationApprove, actor=Depends(operator)
+    ):
+        decision = await signup.approve(actor.email, application_id, body)
+        return result("platform org application approve", decision.model_dump(mode="json"))
+
+    @router.post(
+        "/platform/org-applications/{application_id}/reject",
+        name="platform_org_application_reject",
+        response_model=Result,
+    )
+    async def application_reject(
+        application_id: UUID, body: OrgApplicationReject, actor=Depends(operator)
+    ):
+        decision = await signup.reject(actor.email, application_id, body)
+        return result("platform org application reject", decision.model_dump(mode="json"))
 
     @router.post("/platform/auth/login", name="platform_login", response_model=Result)
     async def platform_login(body: PlatformLogin, request: Request):
@@ -81,8 +135,13 @@ def create_router(
 
     @router.get("/platform/orgs", name="platform_org_list", response_model=Result)
     async def org_list(actor=Depends(operator)):
+        pending = await signup.list_applications(actor.email, OrgApplicationListQuery(limit=200))
         async with db.transaction() as session:
-            return result("platform org list", items=await platform.list_orgs(session))
+            return result(
+                "platform org list",
+                {"pending_applications": len(pending)},
+                items=await platform.list_orgs(session),
+            )
 
     @router.post("/platform/orgs", name="platform_org_create", response_model=Result)
     async def org_create(body: PlatformOrgCreate, actor=Depends(operator)):

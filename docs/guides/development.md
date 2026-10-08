@@ -93,6 +93,20 @@ The API documentation at `http://127.0.0.1:8000/docs` uses the HTTP Bearer
 scheme: choose **Authorize**, paste the session or token value without the
 `Bearer` prefix, and supply `X-Org-Id` on each operation.
 
+## Enable organization applications
+
+1. Apply migrations using the provisioning owner before running the API or worker.
+2. Set `BID_ORG_SIGNUP_ENABLED=true` in the runtime environment (Compose passes it
+   through). The default is `false`; operator reviews remain available when disabled.
+3. Trust only the deployment's own reverse proxy for forwarded client addresses.
+   Application source limits use the effective request peer, never a header read by
+   the signup handler.
+4. Open `/app/apply` to submit a synthetic application, then approve it in the 申请
+   tab on `/app/platform/orgs` using a platform operator session. Sign in with the
+   applicant email and password to verify the new organization admin membership.
+5. Run the worker for daily expiry. The signup protocol and CLI commands are in
+   [Organization self-service application](../notes/org-signup.md).
+
 ## Configure the extraction model
 
 1. Configure a platform operator and the dedicated credential connections using

@@ -36,7 +36,12 @@ def create_router(
         configured = not active.test_only and active.name != "unconfigured"
         return result(
             "health",
-            {"status": "ok", "version": CONTRACT_VERSION, "real_llm_configured": configured},
+            {
+                "status": "ok",
+                "version": CONTRACT_VERSION,
+                "real_llm_configured": configured,
+                "org_signup_enabled": settings.org_signup_enabled,
+            },
         )
 
     @router.post("/auth/login", name="login", response_model=Result)

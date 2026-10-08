@@ -72,6 +72,21 @@ class Queue:
             await self.recover_agent_wakes()
             await self.recover_sandbox_jobs()
 
+        @self.app.periodic(cron="0 3 * * *")
+        @self.app.task(name="bid.org_application_expire", queue="bid", retry=True)
+        async def expire_overdue(timestamp: int):
+            from app.core.db import Database
+            from app.services.org_signup import OrgSignupService
+
+            # Global pre-tenant maintenance has no tenant context and uses only
+            # the fixed expiry function; it cannot query business content.
+            database = Database(settings)
+            try:
+                await OrgSignupService(settings, database).expire_overdue()
+            finally:
+                await database.engine.dispose()
+
+        self.org_application_expire_task = expire_overdue
         self.agent_wake_task = agent_wake
         self.agent_recover_task = agent_recover
         self.lock = asyncio.Lock()

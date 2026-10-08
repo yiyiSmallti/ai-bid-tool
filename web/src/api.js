@@ -25,7 +25,7 @@ export class ApiError extends Error {
     super(message); Object.assign(this, { status, code, payload, retryAfter });
   }
 }
-const PUBLIC = new Set(["/platform/auth/login", "/auth/login", "/auth/orgs", "/auth/setup-password"]);
+const PUBLIC = new Set(["/health", "/platform/auth/login", "/auth/login", "/auth/orgs", "/auth/setup-password", "/auth/org-applications"]);
 const ASSESSMENT_PATH = /^\/(?:tasks\/[^/?]+\/(?:assessment-inputs|assessment-citation|checks|scores(?:\/[^/?]+)?|score-rubrics(?:\/[^/?]+(?:\/(?:history|revisions|decisions|(?:sections|items|coverage)\/[^/?]+\/(?:classification|decisions)))?)?)|checks\/[^/?]+(?:\/findings\/[^/?]+\/decisions)?)$/;
 const REQUIREMENT_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/(?:extractions\/[^/?]+\/(?:requirement-reviews|rejected-items|requirement-confirmations)|requirements\/(?:manual-preview|manual|repair))|requirements\/[^/?]+\/(?:review|review-history|review-decisions))$/;
 const COSIGN_PATH = /^\/(?:tasks\/[^/?]+\/(?:review-rule|requirements\/[^/?]+\/review-policy)|cards\/[^/?]+\/(?:review-rounds|signoffs))$/;
@@ -121,6 +121,12 @@ export const money = (value, currency = "") => {
   return currency ? `${amount} ${currency}` : amount;
 };
 export const count = (value) => Number(value ?? 0).toLocaleString("zh-CN");
+
+export async function orgSignupEnabled() {
+  const response = await request("GET", "/health");
+  if (typeof response.data.org_signup_enabled !== "boolean") throw new ApiError(502, "invalid_response", "申请入口配置无法识别");
+  return response.data.org_signup_enabled;
+}
 
 // A fetch stream carries the same tenant credentials and cancellation epoch as Result reads.
 export async function orgEventStream(path, cursor, signal, onMessage) {

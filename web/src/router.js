@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { orgSession, session } from "./api.js";
 import { errorText, orgAccess, orgRequest } from "./org.js";
 import Audit from "./views/Audit.vue";
+import Apply from "./views/Apply.vue";
 import Cards from "./views/Cards.vue";
 import Credentials from "./views/Credentials.vue";
 import Login from "./views/Login.vue";
@@ -25,6 +26,7 @@ export const router = createRouter({
   history: createWebHistory("/app/"),
   routes: [
     { path: "/", redirect: "/org/tasks" },
+    { path: "/apply", component: Apply, meta: { public: true, title: "组织申请开通" } },
     { path: "/setup-password", component: SetupPassword, meta: { public: true, title: "设置密码" } },
     { path: "/platform/login", component: Login, meta: { public: true, title: "平台后台登录" } },
     { path: "/platform", redirect: "/platform/orgs" },
