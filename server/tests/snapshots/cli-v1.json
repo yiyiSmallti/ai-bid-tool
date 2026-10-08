@@ -70556,6 +70556,1064 @@
             "type": "object"
           }
         },
+        "review list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cursor"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "BidReviewListQuery",
+            "type": "object"
+          },
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "advisory_only": {
+                "const": true,
+                "default": true,
+                "title": "Advisory Only",
+                "type": "boolean"
+              },
+              "completion": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "complete",
+                      "partial"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Completion"
+              },
+              "coverage": {
+                "additionalProperties": true,
+                "title": "Coverage",
+                "type": "object"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "job_id": {
+                "format": "uuid",
+                "title": "Job Id",
+                "type": "string"
+              },
+              "review_slice": {
+                "const": "compliance",
+                "default": "compliance",
+                "title": "Review Slice",
+                "type": "string"
+              },
+              "status": {
+                "title": "Status",
+                "type": "string"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "uncovered_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Uncovered Codes",
+                "type": "array"
+              },
+              "validity": {
+                "default": "current",
+                "enum": [
+                  "current",
+                  "stale"
+                ],
+                "title": "Validity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "task_id",
+              "submission_id",
+              "job_id",
+              "status",
+              "input_hash",
+              "created_at"
+            ],
+            "title": "BidReviewRunView",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "task_id"
+            ],
+            "title": "BidReviewListData",
+            "type": "object"
+          }
+        },
+        "review outbound authorize": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "submission",
+              "options": [
+                "--submission"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "SanitizedPageRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "sanitized_text_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sanitized Text Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page_id",
+                  "sanitized_text_sha256"
+                ],
+                "title": "SanitizedPageRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "allow_external": {
+                "default": true,
+                "title": "Allow External",
+                "type": "boolean"
+              },
+              "allowed_capabilities": {
+                "items": {
+                  "const": "llm",
+                  "type": "string"
+                },
+                "maxItems": 1,
+                "minItems": 1,
+                "title": "Allowed Capabilities",
+                "type": "array"
+              },
+              "authorized_sanitized_context_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Authorized Sanitized Context Sha256",
+                "type": "string"
+              },
+              "expected_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expected Authorization Id"
+              },
+              "expected_preparation_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Preparation Input Hash",
+                "type": "string"
+              },
+              "expected_redaction_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Redaction Manifest Sha256",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "expected_submission_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Submission Manifest Sha256",
+                "type": "string"
+              },
+              "pages": {
+                "items": {
+                  "$ref": "#/$defs/SanitizedPageRef"
+                },
+                "maxItems": 1000,
+                "minItems": 1,
+                "title": "Pages",
+                "type": "array"
+              },
+              "privacy_reviewed": {
+                "const": true,
+                "title": "Privacy Reviewed",
+                "type": "boolean"
+              },
+              "provider_bindings_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Provider Bindings Sha256",
+                "type": "string"
+              },
+              "purposes": {
+                "items": {
+                  "const": "bid_review_text",
+                  "type": "string"
+                },
+                "maxItems": 1,
+                "minItems": 1,
+                "title": "Purposes",
+                "type": "array"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "expected_revision",
+              "expected_authorization_id",
+              "expected_submission_manifest_sha256",
+              "expected_preparation_input_hash",
+              "expected_redaction_manifest_sha256",
+              "authorized_sanitized_context_sha256",
+              "provider_bindings_sha256",
+              "pages",
+              "privacy_reviewed",
+              "reason"
+            ],
+            "title": "OutboundAuthorizationRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "SanitizedPageRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "sanitized_text_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sanitized Text Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page_id",
+                  "sanitized_text_sha256"
+                ],
+                "title": "SanitizedPageRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "allow_external": {
+                "title": "Allow External",
+                "type": "boolean"
+              },
+              "allowed_capabilities": {
+                "items": {
+                  "const": "llm",
+                  "type": "string"
+                },
+                "title": "Allowed Capabilities",
+                "type": "array"
+              },
+              "authorized_at": {
+                "format": "date-time",
+                "title": "Authorized At",
+                "type": "string"
+              },
+              "authorized_by": {
+                "format": "uuid",
+                "title": "Authorized By",
+                "type": "string"
+              },
+              "authorized_sanitized_context_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Authorized Sanitized Context Sha256",
+                "type": "string"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "immutable": {
+                "const": true,
+                "default": true,
+                "title": "Immutable",
+                "type": "boolean"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "pages": {
+                "items": {
+                  "$ref": "#/$defs/SanitizedPageRef"
+                },
+                "title": "Pages",
+                "type": "array"
+              },
+              "preparation_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Preparation Input Hash",
+                "type": "string"
+              },
+              "price_pages_included": {
+                "const": false,
+                "default": false,
+                "title": "Price Pages Included",
+                "type": "boolean"
+              },
+              "prior_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Prior Authorization Id"
+              },
+              "provider_bindings_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Provider Bindings Sha256",
+                "type": "string"
+              },
+              "purposes": {
+                "items": {
+                  "const": "bid_review_text",
+                  "type": "string"
+                },
+                "title": "Purposes",
+                "type": "array"
+              },
+              "reason_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Reason Sha256",
+                "type": "string"
+              },
+              "redaction_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Redaction Manifest Sha256",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              },
+              "submission_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Submission Manifest Sha256",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "submission_id",
+              "submission_manifest_sha256",
+              "preparation_input_hash",
+              "redaction_manifest_sha256",
+              "authorized_sanitized_context_sha256",
+              "provider_bindings_sha256",
+              "revision",
+              "prior_authorization_id",
+              "allow_external",
+              "purposes",
+              "allowed_capabilities",
+              "pages",
+              "authorized_by",
+              "authorized_at",
+              "reason_sha256",
+              "current"
+            ],
+            "title": "OutboundAuthorizationView",
+            "type": "object"
+          }
+        },
+        "review outbound list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "submission",
+              "options": [
+                "--submission"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "0",
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "default": 0,
+                "minimum": 0,
+                "title": "Cursor",
+                "type": "integer"
+              },
+              "limit": {
+                "default": 25,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "BidPrivacyListQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "SanitizedPageRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "sanitized_text_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sanitized Text Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page_id",
+                  "sanitized_text_sha256"
+                ],
+                "title": "SanitizedPageRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "allow_external": {
+                "title": "Allow External",
+                "type": "boolean"
+              },
+              "allowed_capabilities": {
+                "items": {
+                  "const": "llm",
+                  "type": "string"
+                },
+                "title": "Allowed Capabilities",
+                "type": "array"
+              },
+              "authorized_at": {
+                "format": "date-time",
+                "title": "Authorized At",
+                "type": "string"
+              },
+              "authorized_by": {
+                "format": "uuid",
+                "title": "Authorized By",
+                "type": "string"
+              },
+              "authorized_sanitized_context_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Authorized Sanitized Context Sha256",
+                "type": "string"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "immutable": {
+                "const": true,
+                "default": true,
+                "title": "Immutable",
+                "type": "boolean"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "pages": {
+                "items": {
+                  "$ref": "#/$defs/SanitizedPageRef"
+                },
+                "title": "Pages",
+                "type": "array"
+              },
+              "preparation_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Preparation Input Hash",
+                "type": "string"
+              },
+              "price_pages_included": {
+                "const": false,
+                "default": false,
+                "title": "Price Pages Included",
+                "type": "boolean"
+              },
+              "prior_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Prior Authorization Id"
+              },
+              "provider_bindings_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Provider Bindings Sha256",
+                "type": "string"
+              },
+              "purposes": {
+                "items": {
+                  "const": "bid_review_text",
+                  "type": "string"
+                },
+                "title": "Purposes",
+                "type": "array"
+              },
+              "reason_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Reason Sha256",
+                "type": "string"
+              },
+              "redaction_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Redaction Manifest Sha256",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              },
+              "submission_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Submission Manifest Sha256",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "submission_id",
+              "submission_manifest_sha256",
+              "preparation_input_hash",
+              "redaction_manifest_sha256",
+              "authorized_sanitized_context_sha256",
+              "provider_bindings_sha256",
+              "revision",
+              "prior_authorization_id",
+              "allow_external",
+              "purposes",
+              "allowed_capabilities",
+              "pages",
+              "authorized_by",
+              "authorized_at",
+              "reason_sha256",
+              "current"
+            ],
+            "title": "OutboundAuthorizationView",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "total": {
+                "minimum": 0,
+                "title": "Total",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "total"
+            ],
+            "title": "OutboundAuthorizationListData",
+            "type": "object"
+          }
+        },
+        "review outbound revoke": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "submission",
+              "options": [
+                "--submission"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_authorization_id": {
+                "format": "uuid",
+                "title": "Expected Authorization Id",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "expected_revision",
+              "expected_authorization_id",
+              "reason"
+            ],
+            "title": "OutboundRevokeRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "SanitizedPageRef": {
+                "additionalProperties": false,
+                "properties": {
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "sanitized_text_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sanitized Text Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page_id",
+                  "sanitized_text_sha256"
+                ],
+                "title": "SanitizedPageRef",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "allow_external": {
+                "title": "Allow External",
+                "type": "boolean"
+              },
+              "allowed_capabilities": {
+                "items": {
+                  "const": "llm",
+                  "type": "string"
+                },
+                "title": "Allowed Capabilities",
+                "type": "array"
+              },
+              "authorized_at": {
+                "format": "date-time",
+                "title": "Authorized At",
+                "type": "string"
+              },
+              "authorized_by": {
+                "format": "uuid",
+                "title": "Authorized By",
+                "type": "string"
+              },
+              "authorized_sanitized_context_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Authorized Sanitized Context Sha256",
+                "type": "string"
+              },
+              "current": {
+                "title": "Current",
+                "type": "boolean"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "immutable": {
+                "const": true,
+                "default": true,
+                "title": "Immutable",
+                "type": "boolean"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "pages": {
+                "items": {
+                  "$ref": "#/$defs/SanitizedPageRef"
+                },
+                "title": "Pages",
+                "type": "array"
+              },
+              "preparation_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Preparation Input Hash",
+                "type": "string"
+              },
+              "price_pages_included": {
+                "const": false,
+                "default": false,
+                "title": "Price Pages Included",
+                "type": "boolean"
+              },
+              "prior_authorization_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Prior Authorization Id"
+              },
+              "provider_bindings_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Provider Bindings Sha256",
+                "type": "string"
+              },
+              "purposes": {
+                "items": {
+                  "const": "bid_review_text",
+                  "type": "string"
+                },
+                "title": "Purposes",
+                "type": "array"
+              },
+              "reason_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Reason Sha256",
+                "type": "string"
+              },
+              "redaction_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Redaction Manifest Sha256",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              },
+              "submission_manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Submission Manifest Sha256",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "submission_id",
+              "submission_manifest_sha256",
+              "preparation_input_hash",
+              "redaction_manifest_sha256",
+              "authorized_sanitized_context_sha256",
+              "provider_bindings_sha256",
+              "revision",
+              "prior_authorization_id",
+              "allow_external",
+              "purposes",
+              "allowed_capabilities",
+              "pages",
+              "authorized_by",
+              "authorized_at",
+              "reason_sha256",
+              "current"
+            ],
+            "title": "OutboundAuthorizationView",
+            "type": "object"
+          }
+        },
         "review prepare": {
           "cli_parameters": [
             {
@@ -72520,6 +73578,2344 @@
               "preparation_input_hash"
             ],
             "title": "BidSubmissionView",
+            "type": "object"
+          }
+        },
+        "review run": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_input_hash",
+              "options": [
+                "--expected-input-hash"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "preflight_token",
+              "options": [
+                "--preflight-token"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "assessment_date": {
+                "format": "date",
+                "title": "Assessment Date",
+                "type": "string"
+              },
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Input Hash"
+              },
+              "max_charge": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Max Charge"
+              },
+              "preflight_token": {
+                "anyOf": [
+                  {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Preflight Token"
+              },
+              "reasoning": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z0-9_-]{1,20}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Reasoning"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              },
+              "review_slice": {
+                "const": "compliance",
+                "default": "compliance",
+                "title": "Review Slice",
+                "type": "string"
+              },
+              "scope": {
+                "const": "uploaded_bid",
+                "default": "uploaded_bid",
+                "title": "Scope",
+                "type": "string"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "submission_id",
+              "assessment_date"
+            ],
+            "title": "BidReviewRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AssessmentJobAccepted": {
+                "additionalProperties": false,
+                "properties": {
+                  "cached": {
+                    "title": "Cached",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "status",
+                  "cached"
+                ],
+                "title": "AssessmentJobAccepted",
+                "type": "object"
+              },
+              "BidReviewPreview": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blockers": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Admission Blockers",
+                    "type": "array"
+                  },
+                  "budget": {
+                    "$ref": "#/$defs/BudgetPreflightData"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "title": "Expires At",
+                    "type": "string"
+                  },
+                  "external_price_pages": {
+                    "const": false,
+                    "default": false,
+                    "title": "External Price Pages",
+                    "type": "boolean"
+                  },
+                  "input": {
+                    "additionalProperties": true,
+                    "title": "Input",
+                    "type": "object"
+                  },
+                  "preflight_token": {
+                    "title": "Preflight Token",
+                    "type": "string"
+                  },
+                  "preflight_ttl_seconds": {
+                    "const": 900,
+                    "default": 900,
+                    "title": "Preflight Ttl Seconds",
+                    "type": "integer"
+                  },
+                  "uncovered_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Uncovered Codes",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "input",
+                  "budget",
+                  "expires_at",
+                  "preflight_token"
+                ],
+                "title": "BidReviewPreview",
+                "type": "object"
+              },
+              "BudgetCallQuote": {
+                "additionalProperties": false,
+                "properties": {
+                  "capability": {
+                    "enum": [
+                      "llm",
+                      "vision",
+                      "ocr",
+                      "search",
+                      "embedding",
+                      "browser"
+                    ],
+                    "title": "Capability",
+                    "type": "string"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "image_count": {
+                    "default": 0,
+                    "maximum": 20,
+                    "minimum": 0,
+                    "title": "Image Count",
+                    "type": "integer"
+                  },
+                  "image_price_revision": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Image Price Revision"
+                  },
+                  "input_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Input Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "model": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "ocr_pages_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Ocr Pages Upper Bound",
+                    "type": "integer"
+                  },
+                  "output_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Output Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "payer": {
+                    "enum": [
+                      "org_platform",
+                      "org_direct",
+                      "platform_absorbed",
+                      "local_free"
+                    ],
+                    "title": "Payer",
+                    "type": "string"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "price_revision": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Price Revision",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "provider_config_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Config Id"
+                  },
+                  "request_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Request Sha256",
+                    "type": "string"
+                  },
+                  "reserved_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Charge"
+                  },
+                  "reserved_task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Task Amount"
+                  },
+                  "search_requests": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Search Requests",
+                    "type": "integer"
+                  },
+                  "unknown_reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "missing_price",
+                          "currency_conversion_required",
+                          "unbounded"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Unknown Reason"
+                  },
+                  "vendor_usd_upper_bound": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Vendor Usd Upper Bound"
+                  },
+                  "version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "capability",
+                  "payer",
+                  "provider",
+                  "model",
+                  "version",
+                  "price_revision",
+                  "request_sha256",
+                  "currency",
+                  "reserved_charge",
+                  "reserved_task_amount",
+                  "vendor_usd_upper_bound"
+                ],
+                "title": "BudgetCallQuote",
+                "type": "object"
+              },
+              "BudgetCost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "required": [
+                  "basis",
+                  "charge",
+                  "billing_currency",
+                  "task_amount"
+                ],
+                "title": "BudgetCost",
+                "type": "object"
+              },
+              "BudgetPreflightData": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blocker": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "task_budget_exceeded",
+                          "task_budget_unpriced",
+                          "task_budget_currency_review_required",
+                          "insufficient_balance",
+                          "job_charge_limit_exceeded",
+                          "job_call_limit_exceeded",
+                          "spend_cap_reached",
+                          "billing_price_unavailable",
+                          "billing_currency_mismatch",
+                          "provider_unavailable"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Admission Blocker"
+                  },
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "cached_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Cached Job Id"
+                  },
+                  "cached_result_cost": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Cost"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "command": {
+                    "title": "Command",
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "duration_basis": {
+                    "default": "unknown",
+                    "enum": [
+                      "unknown",
+                      "measured_profile"
+                    ],
+                    "title": "Duration Basis",
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "$ref": "#/$defs/BudgetCost"
+                  },
+                  "estimated_duration_ms": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Duration Ms"
+                  },
+                  "first_pass_fits": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "First Pass Fits"
+                  },
+                  "full_run_guaranteed": {
+                    "const": false,
+                    "default": false,
+                    "title": "Full Run Guaranteed",
+                    "type": "boolean"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "maximum_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Maximum Calls"
+                  },
+                  "next_call": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetCallQuote"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "planned_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Planned Calls"
+                  },
+                  "task_budget": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TaskBudgetView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Id"
+                  },
+                  "uncertainty": {
+                    "items": {
+                      "enum": [
+                        "retry_or_split",
+                        "dynamic_search",
+                        "unknown_price",
+                        "currency_conversion",
+                        "history_incomplete",
+                        "concurrent_spending",
+                        "unresolved_usage"
+                      ],
+                      "type": "string"
+                    },
+                    "title": "Uncertainty",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "command",
+                  "task_id",
+                  "input_hash",
+                  "as_of",
+                  "task_budget",
+                  "planned_calls",
+                  "estimate",
+                  "next_call",
+                  "admission_blocker",
+                  "first_pass_fits"
+                ],
+                "title": "BudgetPreflightData",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "TaskBudgetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "available": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Available"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "history_complete": {
+                    "title": "History Complete",
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reserved": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "spent": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Spent"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "currency_review_required"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "limit",
+                  "currency",
+                  "state",
+                  "spent",
+                  "reserved",
+                  "available",
+                  "unpriced_calls",
+                  "unresolved_calls",
+                  "history_complete",
+                  "as_of"
+                ],
+                "title": "TaskBudgetView",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BidReviewPreview"
+              },
+              {
+                "$ref": "#/$defs/AssessmentJobAccepted"
+              }
+            ]
+          },
+          "preflight": {
+            "$defs": {
+              "BudgetCallQuote": {
+                "additionalProperties": false,
+                "properties": {
+                  "capability": {
+                    "enum": [
+                      "llm",
+                      "vision",
+                      "ocr",
+                      "search",
+                      "embedding",
+                      "browser"
+                    ],
+                    "title": "Capability",
+                    "type": "string"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "image_count": {
+                    "default": 0,
+                    "maximum": 20,
+                    "minimum": 0,
+                    "title": "Image Count",
+                    "type": "integer"
+                  },
+                  "image_price_revision": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Image Price Revision"
+                  },
+                  "input_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Input Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "model": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "ocr_pages_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Ocr Pages Upper Bound",
+                    "type": "integer"
+                  },
+                  "output_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Output Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "payer": {
+                    "enum": [
+                      "org_platform",
+                      "org_direct",
+                      "platform_absorbed",
+                      "local_free"
+                    ],
+                    "title": "Payer",
+                    "type": "string"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "price_revision": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Price Revision",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "provider_config_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Config Id"
+                  },
+                  "request_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Request Sha256",
+                    "type": "string"
+                  },
+                  "reserved_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Charge"
+                  },
+                  "reserved_task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Task Amount"
+                  },
+                  "search_requests": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Search Requests",
+                    "type": "integer"
+                  },
+                  "unknown_reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "missing_price",
+                          "currency_conversion_required",
+                          "unbounded"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Unknown Reason"
+                  },
+                  "vendor_usd_upper_bound": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Vendor Usd Upper Bound"
+                  },
+                  "version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "capability",
+                  "payer",
+                  "provider",
+                  "model",
+                  "version",
+                  "price_revision",
+                  "request_sha256",
+                  "currency",
+                  "reserved_charge",
+                  "reserved_task_amount",
+                  "vendor_usd_upper_bound"
+                ],
+                "title": "BudgetCallQuote",
+                "type": "object"
+              },
+              "BudgetCost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "required": [
+                  "basis",
+                  "charge",
+                  "billing_currency",
+                  "task_amount"
+                ],
+                "title": "BudgetCost",
+                "type": "object"
+              },
+              "BudgetPreflightData": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blocker": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "task_budget_exceeded",
+                          "task_budget_unpriced",
+                          "task_budget_currency_review_required",
+                          "insufficient_balance",
+                          "job_charge_limit_exceeded",
+                          "job_call_limit_exceeded",
+                          "spend_cap_reached",
+                          "billing_price_unavailable",
+                          "billing_currency_mismatch",
+                          "provider_unavailable"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Admission Blocker"
+                  },
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "cached_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Cached Job Id"
+                  },
+                  "cached_result_cost": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Cost"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "command": {
+                    "title": "Command",
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "duration_basis": {
+                    "default": "unknown",
+                    "enum": [
+                      "unknown",
+                      "measured_profile"
+                    ],
+                    "title": "Duration Basis",
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "$ref": "#/$defs/BudgetCost"
+                  },
+                  "estimated_duration_ms": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Duration Ms"
+                  },
+                  "first_pass_fits": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "First Pass Fits"
+                  },
+                  "full_run_guaranteed": {
+                    "const": false,
+                    "default": false,
+                    "title": "Full Run Guaranteed",
+                    "type": "boolean"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "maximum_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Maximum Calls"
+                  },
+                  "next_call": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetCallQuote"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "planned_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Planned Calls"
+                  },
+                  "task_budget": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TaskBudgetView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Id"
+                  },
+                  "uncertainty": {
+                    "items": {
+                      "enum": [
+                        "retry_or_split",
+                        "dynamic_search",
+                        "unknown_price",
+                        "currency_conversion",
+                        "history_incomplete",
+                        "concurrent_spending",
+                        "unresolved_usage"
+                      ],
+                      "type": "string"
+                    },
+                    "title": "Uncertainty",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "command",
+                  "task_id",
+                  "input_hash",
+                  "as_of",
+                  "task_budget",
+                  "planned_calls",
+                  "estimate",
+                  "next_call",
+                  "admission_blocker",
+                  "first_pass_fits"
+                ],
+                "title": "BudgetPreflightData",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "TaskBudgetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "available": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Available"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "history_complete": {
+                    "title": "History Complete",
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reserved": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "spent": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Spent"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "currency_review_required"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "limit",
+                  "currency",
+                  "state",
+                  "spent",
+                  "reserved",
+                  "available",
+                  "unpriced_calls",
+                  "unresolved_calls",
+                  "history_complete",
+                  "as_of"
+                ],
+                "title": "TaskBudgetView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "admission_blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Admission Blockers",
+                "type": "array"
+              },
+              "budget": {
+                "$ref": "#/$defs/BudgetPreflightData"
+              },
+              "dry_run": {
+                "const": true,
+                "default": true,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "title": "Expires At",
+                "type": "string"
+              },
+              "external_price_pages": {
+                "const": false,
+                "default": false,
+                "title": "External Price Pages",
+                "type": "boolean"
+              },
+              "input": {
+                "additionalProperties": true,
+                "title": "Input",
+                "type": "object"
+              },
+              "preflight_token": {
+                "title": "Preflight Token",
+                "type": "string"
+              },
+              "preflight_ttl_seconds": {
+                "const": 900,
+                "default": 900,
+                "title": "Preflight Ttl Seconds",
+                "type": "integer"
+              },
+              "uncovered_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Uncovered Codes",
+                "type": "array"
+              }
+            },
+            "required": [
+              "input",
+              "budget",
+              "expires_at",
+              "preflight_token"
+            ],
+            "title": "BidReviewPreview",
+            "type": "object"
+          },
+          "wait_output": {
+            "additionalProperties": false,
+            "properties": {
+              "completion": {
+                "enum": [
+                  "complete",
+                  "partial"
+                ],
+                "title": "Completion",
+                "type": "string"
+              },
+              "coverage": {
+                "additionalProperties": true,
+                "title": "Coverage",
+                "type": "object"
+              },
+              "review_id": {
+                "format": "uuid",
+                "title": "Review Id",
+                "type": "string"
+              },
+              "stop_reason": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Stop Reason"
+              },
+              "uncovered_codes": {
+                "items": {
+                  "type": "string"
+                },
+                "title": "Uncovered Codes",
+                "type": "array"
+              },
+              "usage_record_ids": {
+                "items": {
+                  "format": "uuid",
+                  "type": "string"
+                },
+                "title": "Usage Record Ids",
+                "type": "array"
+              }
+            },
+            "required": [
+              "review_id",
+              "completion",
+              "coverage",
+              "uncovered_codes"
+            ],
+            "title": "BidReviewJobResult",
+            "type": "object"
+          }
+        },
+        "review show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "obligations",
+              "multiple": false,
+              "name": "section",
+              "options": [
+                "--section"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "BidConfirmedSigningRequirement": {
+                "additionalProperties": false,
+                "properties": {
+                  "applicability": {
+                    "enum": [
+                      "applies",
+                      "not_applicable",
+                      "alternative",
+                      "unknown"
+                    ],
+                    "title": "Applicability",
+                    "type": "string"
+                  },
+                  "candidate_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Candidate Id"
+                  },
+                  "citation": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BidReviewCitation"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "date_required": {
+                    "title": "Date Required",
+                    "type": "boolean"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "location_rule": {
+                    "enum": [
+                      "every_page",
+                      "seam_group",
+                      "specified",
+                      "unknown"
+                    ],
+                    "title": "Location Rule",
+                    "type": "string"
+                  },
+                  "mark_types": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Mark Types",
+                    "type": "array"
+                  },
+                  "owner_roles": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Owner Roles",
+                    "type": "array"
+                  },
+                  "reason_code": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Reason Code"
+                  },
+                  "required_locations": {
+                    "items": {
+                      "$ref": "#/$defs/BidRequiredLocation"
+                    },
+                    "title": "Required Locations",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "id",
+                  "applicability",
+                  "mark_types",
+                  "owner_roles",
+                  "date_required",
+                  "location_rule",
+                  "required_locations"
+                ],
+                "title": "BidConfirmedSigningRequirement",
+                "type": "object"
+              },
+              "BidRequiredLocation": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Document Id"
+                  },
+                  "group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Group Id"
+                  },
+                  "page": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page"
+                  },
+                  "page_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Page Id"
+                  },
+                  "reason_code": {
+                    "default": "presence_not_checked",
+                    "title": "Reason Code",
+                    "type": "string"
+                  },
+                  "status": {
+                    "const": "unresolved",
+                    "default": "unresolved",
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "title": "BidRequiredLocation",
+                "type": "object"
+              },
+              "BidReviewCitation": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "location": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Location"
+                  },
+                  "page": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "title": "Page",
+                    "type": "integer"
+                  },
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "page_label": {
+                    "default": "original_pdf",
+                    "enum": [
+                      "original_pdf",
+                      "rendered_docx"
+                    ],
+                    "title": "Page Label",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "page_id",
+                  "page",
+                  "quote"
+                ],
+                "title": "BidReviewCitation",
+                "type": "object"
+              },
+              "BidReviewObligation": {
+                "additionalProperties": false,
+                "properties": {
+                  "category": {
+                    "enum": [
+                      "qualification",
+                      "commercial",
+                      "technical",
+                      "substantive",
+                      "scoring"
+                    ],
+                    "title": "Category",
+                    "type": "string"
+                  },
+                  "citation": {
+                    "$ref": "#/$defs/BidReviewCitation"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "rejection_trigger": {
+                    "title": "Rejection Trigger",
+                    "type": "boolean"
+                  },
+                  "starred": {
+                    "title": "Starred",
+                    "type": "boolean"
+                  },
+                  "text": {
+                    "title": "Text",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "text",
+                  "category",
+                  "starred",
+                  "rejection_trigger",
+                  "citation"
+                ],
+                "title": "BidReviewObligation",
+                "type": "object"
+              },
+              "BidReviewRunView": {
+                "additionalProperties": false,
+                "properties": {
+                  "advisory_only": {
+                    "const": true,
+                    "default": true,
+                    "title": "Advisory Only",
+                    "type": "boolean"
+                  },
+                  "completion": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "complete",
+                          "partial"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Completion"
+                  },
+                  "coverage": {
+                    "additionalProperties": true,
+                    "title": "Coverage",
+                    "type": "object"
+                  },
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "review_slice": {
+                    "const": "compliance",
+                    "default": "compliance",
+                    "title": "Review Slice",
+                    "type": "string"
+                  },
+                  "status": {
+                    "title": "Status",
+                    "type": "string"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "uncovered_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "title": "Uncovered Codes",
+                    "type": "array"
+                  },
+                  "validity": {
+                    "default": "current",
+                    "enum": [
+                      "current",
+                      "stale"
+                    ],
+                    "title": "Validity",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "task_id",
+                  "submission_id",
+                  "job_id",
+                  "status",
+                  "input_hash",
+                  "created_at"
+                ],
+                "title": "BidReviewRunView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "obligations": {
+                "items": {
+                  "$ref": "#/$defs/BidReviewObligation"
+                },
+                "title": "Obligations",
+                "type": "array"
+              },
+              "run": {
+                "$ref": "#/$defs/BidReviewRunView"
+              },
+              "signing_requirements": {
+                "items": {
+                  "$ref": "#/$defs/BidConfirmedSigningRequirement"
+                },
+                "title": "Signing Requirements",
+                "type": "array"
+              }
+            },
+            "required": [
+              "run"
+            ],
+            "title": "BidReviewDetail",
             "type": "object"
           }
         },
