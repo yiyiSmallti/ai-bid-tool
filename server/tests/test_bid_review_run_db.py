@@ -230,8 +230,13 @@ async def prepared(
     task_id = await task(api, headers[0])
     field = await add_field(api, headers[0], "review_identity", "Review identity", "other", "task")
     await set_value(api, headers[0], field, REGISTERED, task=task_id)
+    # The signer certificate subject reaches the tender text only through the
+    # certificate case, which proves it is masked from locally derived names.
+    clauses = [SAFE_CLAUSE, *([SIGNING] if signing else [])]
+    if certificate:
+        clauses.append("Signed by SYNTHETIC Standard Signer.")
     tender = document(
-        [f"{SAFE_CLAUSE}\n{SIGNING}\nRepeated ambiguous phrase. Repeated ambiguous phrase."] * pages
+        ["\n".join(clauses) + "\nRepeated ambiguous phrase. Repeated ambiguous phrase."] * pages
     )
     bid = document(
         [
