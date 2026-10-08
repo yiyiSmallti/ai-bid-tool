@@ -230,7 +230,16 @@ def create_app(
                 )
         if (
             credential_route
-            or (request.method == "POST" and "bid-submissions" in parts and parts[-1] == "prepare")
+            or (
+                request.method == "POST"
+                and (
+                    (
+                        "bid-submissions" in parts
+                        and parts[-1] in {"prepare", "names", "outbound-authorizations", "revoke"}
+                    )
+                    or "bid-reviews" in parts
+                )
+            )
             or resource_management_route
             or manual_requirement_route
             or (
@@ -328,7 +337,7 @@ def create_app(
                 )
             )
         )
-        bid_review_route = "bid-submissions" in parts
+        bid_review_route = "bid-submissions" in parts or "bid-reviews" in parts
         annotation_route = (
             len(parts) == 3 and parts[0] == "tasks" and parts[2] == "annotations"
         ) or (parts[0] in {"annotations", "annotation-releases"} and parts[-1] != "content")

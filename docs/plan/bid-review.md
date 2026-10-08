@@ -4,13 +4,18 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved; slices 1–2 implemented. Recommended defaults
+Status: **Approved; slices 1–2 and slice 3a implemented. Recommended defaults
 are adopted, except that Clef triage is on by default.**
 
-The first phase is delivered as five implementation slices: upload/preparation;
+The first phase is divided into five implementation slices: upload/preparation;
 signature checklist and approved local validation; rule/LLM compliance and human
-dismissal; console/Word report; Clef triage with fixed per-call billing. Upload/preparation and local signature evidence are implemented; PostgreSQL and browser acceptance remain
-pending. Its behavior and code anchors are in [the mechanism note](../notes/bid-review.md).
+dismissal; console/Word report; Clef triage with fixed per-call billing. Slice 3a
+implements exact human-authorized sanitized native-text review, cited tender
+obligations and signing-clause applicability with unresolved location inventories.
+Upload/preparation and local signature evidence are implemented. PostgreSQL and
+browser acceptance remain pending; static checks do not establish those gates.
+The delivered boundary is in [slice 3a](#slice-3a-authorized-native-text-review), and
+its mechanisms are in [the mechanism note](../notes/bid-review.md).
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
 [roadmap](roadmap.md), with B04/B05 evidence, P03 vision and E01/E02 evaluation
@@ -685,6 +690,38 @@ database, cryptographic-validator, visual-model or runtime acceptance.
 3. Broader scan/seam-seal coverage, larger measured limits and optional B04/B05
    adoption adapter. Retention/purge or online certificate revocation requires its
    own approved policy and acceptance; no implicit enablement.
+
+### Slice 3a: Authorized native-text review
+
+This slice provides the first accounted LLM path over prepared uploads. It includes
+human task-owner cleared-text inspection and exact page/hash authorization,
+registered-value and bid-derived identity masking, append-only grants/revocations,
+live provider/privacy/input fences, write-free preflight and explicit durable
+submission. Token execution requires a prior current human grant; tokens receive
+safe review/job metadata without quotes or cleared text.
+
+The worker extracts tender obligations with verified original citations and
+classifies signing candidates, including unknown applicability and additional
+cited clauses. Required every-page or seam locations are expanded against the
+fixed bid inventory and remain unresolved. Price, mixed, image and uncertain
+pages cannot enter the external text snapshot. Missing preparation, authorization
+or provider configuration blocks admission. Shared task/prepaid accounting retains
+usage and unresolved holds; provider/budget stops retain explicit partial coverage,
+while cancellation, input/privacy changes and accounting failures fence publication.
+
+[Runtime schemas](../../server/app/schemas/bid_review_run.py) and
+[privacy schemas](../../server/app/schemas/bid_review_privacy.py) define this bounded
+subset of the proposed full contract. It does not include clause-to-bid compliance
+judgments, visible mark presence, finding decisions, evidence-image validation,
+score estimates, Word rendering or Clef triage. Those stages remain required for
+the complete first phase. The implemented interfaces and code pointers are in
+[authorized native-text review](../notes/bid-review.md#authorized-native-text-review).
+
+The [synthetic HTTP-to-worker scenarios](../../server/tests/test_bid_review_run_db.py)
+cover disclosure, citations, authority, stale grants, cancellation, deduplication
+and accounting. PostgreSQL execution and real-browser acceptance have not been
+performed for this slice. Captured request/result receipts belong under ignored
+`data/work/bid-review-run`, outside documentation.
 
 ## Open decisions
 

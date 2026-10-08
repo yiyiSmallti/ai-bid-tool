@@ -6,6 +6,23 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Authorized uploaded-bid text review
+
+- Add exact human task-owner cleared-text inspection and outbound grants for
+  prepared native text; mask registered confidential values and bid-derived
+  identities, exclude price/image/uncertain pages and invalidate changed grants.
+- Add write-free review preflight, explicit durable submission and bounded protected
+  report sections. Reuse provider resolution, live task authority, shared budgets,
+  cancellation and publication fences; tokens receive safe metadata projections.
+- Extract cited tender obligations and signing-clause applicability; expand required
+  page/seam locations as unresolved. Compliance judgments, visible mark checks,
+  evidence/scoring, Word reports and Clef remain later stages.
+- Add synthetic HTTP-to-worker PostgreSQL acceptance scenarios for disclosure,
+  citation rejection, stale grants, authority, deduplication and accounting.
+  PostgreSQL and browser execution remain pending. See the
+  [slice boundary](plan/bid-review.md#slice-3a-authorized-native-text-review) and
+  [mechanism](notes/bid-review.md#authorized-native-text-review).
+
 ## 2026-10-08: Uploaded-bid local signature evidence
 
 - Validate unchanged PDF originals locally with the approved GM/T 0010 SM2/SM3

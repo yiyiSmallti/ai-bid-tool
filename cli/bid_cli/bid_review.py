@@ -10,28 +10,46 @@ from uuid import UUID
 import typer
 from app.core.errors import ServiceError
 from app.schemas import bid_review as models
+from app.schemas import bid_review_privacy as privacy
+from app.schemas import bid_review_run as runs
 from app.schemas.check_contracts import AssessmentJobAccepted, AssessmentListData
 from app.schemas.contracts import Result
 from pydantic import TypeAdapter
 
 app = typer.Typer()
 submissions = typer.Typer()
+outbound = typer.Typer()
 app.add_typer(submissions, name="submission")
+app.add_typer(outbound, name="outbound")
 JsonOption = Annotated[bool, typer.Option("--json")]
 COMMAND_INPUTS = {
     "review upload": models.BidSubmissionCreate,
     "review prepare": models.BidPrepareRequest,
     "review submission list": models.BidReviewListQuery,
     "review submission show": None,
+    "review outbound authorize": privacy.OutboundAuthorizationRequest,
+    "review outbound revoke": privacy.OutboundRevokeRequest,
+    "review outbound list": privacy.BidPrivacyListQuery,
+    "review run": runs.BidReviewRequest,
+    "review list": models.BidReviewListQuery,
+    "review show": None,
 }
 COMMAND_DATA = {
     "review upload": models.BidSubmissionUploaded | models.BidUploadPreview,
     "review prepare": models.BidPreparePreview | AssessmentJobAccepted,
     "review submission list": AssessmentListData,
     "review submission show": models.BidSubmissionDetail,
+    "review outbound authorize": privacy.OutboundAuthorizationView,
+    "review outbound revoke": privacy.OutboundAuthorizationView,
+    "review outbound list": privacy.OutboundAuthorizationListData,
+    "review run": runs.BidReviewPreview | AssessmentJobAccepted,
+    "review list": runs.BidReviewListData,
+    "review show": runs.BidReviewDetail,
 }
 COMMAND_ITEMS = {
     "review submission list": models.BidSubmissionUploaded | models.BidSubmissionView,
+    "review outbound list": privacy.OutboundAuthorizationView,
+    "review list": runs.BidReviewRunView,
 }
 
 
@@ -58,9 +76,11 @@ def _input(path: Path) -> dict:
 def validated(body: dict, command: str) -> dict:
     try:
         value = Result.model_validate(body)
-        if value.command != command or not value.ok:
+        if value.command != command:
             raise ValueError("unexpected result")
-        TypeAdapter(COMMAND_DATA[command]).validate_python(value.data)
+        data = TypeAdapter(COMMAND_DATA[command]).validate_python(value.data)
+        if not value.ok and not (command == "review show" and data.run.completion == "partial"):
+            raise ValueError("unexpected failure")
         if command in COMMAND_ITEMS:
             if len(value.items) > 100:
                 raise ValueError("oversize page")
@@ -203,3 +223,148 @@ def show(
     cli = _helpers()
     body = cli.call("GET", f"/bid-submissions/{id}")
     cli.emit(validated(body, "review submission show"), "review submission show", json_output)
+
+
+def _outbound_mutation(submission: UUID, input: Path, revoke: bool, json_output: bool):
+    cli = _helpers()
+    model = privacy.OutboundRevokeRequest if revoke else privacy.OutboundAuthorizationRequest
+    try:
+        body = model.model_validate(_input(input))
+    except ValueError as exc:
+        raise ServiceError("invalid_input", "Invalid exact outbound authorization", 400, 2) from exc
+    command = "review outbound revoke" if revoke else "review outbound authorize"
+    path = f"/bid-submissions/{submission}/outbound-authorizations"
+    if revoke:
+        path += "/revoke"
+    result = cli.call("POST", path, json=body.model_dump(mode="json"))
+    cli.emit(validated(result, command), command, json_output)
+
+
+@outbound.command("authorize")
+def authorize(
+    submission: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    _outbound_mutation(submission, input, False, json_output)
+
+
+@outbound.command("revoke")
+def revoke(
+    submission: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    _outbound_mutation(submission, input, True, json_output)
+
+
+@outbound.command("list")
+def list_authorizations(
+    submission: Annotated[UUID, typer.Option()],
+    cursor: Annotated[int, typer.Option(min=0)] = 0,
+    limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+    json_output: JsonOption = False,
+):
+    cli = _helpers()
+    params = privacy.BidPrivacyListQuery(cursor=cursor, limit=limit).model_dump(exclude_none=True)
+    result = cli.call(
+        "GET", f"/bid-submissions/{submission}/outbound-authorizations", params=params
+    )
+    cli.emit(validated(result, "review outbound list"), "review outbound list", json_output)
+
+
+@app.command("run")
+def run_review(
+    task: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    dry_run: Annotated[bool, typer.Option()] = False,
+    expected_input_hash: Annotated[str | None, typer.Option()] = None,
+    preflight_token: Annotated[str | None, typer.Option()] = None,
+    retry: Annotated[bool, typer.Option()] = False,
+    wait: Annotated[bool, typer.Option()] = False,
+    timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
+    json_output: JsonOption = False,
+):
+    cli = _helpers()
+    raw = _input(input)
+    raw["dry_run"] = dry_run or raw.get("dry_run", False)
+    raw["retry"] = retry or raw.get("retry", False)
+    if expected_input_hash is not None:
+        raw["expected_input_hash"] = expected_input_hash
+    if preflight_token is not None:
+        raw["preflight_token"] = preflight_token
+    try:
+        body = runs.BidReviewRequest.model_validate(raw)
+    except ValueError as exc:
+        raise ServiceError("invalid_input", "Invalid review metadata or receipt", 400, 2) from exc
+    if body.dry_run and wait:
+        raise ServiceError("invalid_input", "A preview creates no job to wait for", 400, 2)
+    result = validated(
+        cli.call("POST", f"/tasks/{task}/bid-reviews", json=body.model_dump(mode="json")),
+        "review run",
+    )
+    if wait:
+        job_id = AssessmentJobAccepted.model_validate(result["data"]).job_id
+        try:
+            terminal = asyncio.run(cli.wait_for_job(job_id, timeout))
+            if terminal["data"].get("status") in {"failed", "cancelled"}:
+                cli.emit(
+                    cli.merge_job_result(result, terminal),
+                    "review run",
+                    json_output,
+                    cli.partial_completion_exit(terminal),
+                )
+            output = terminal["data"].get("result")
+            if not isinstance(output, dict):
+                raise ValueError("missing review job result")
+            result["data"] = runs.BidReviewJobResult.model_validate(
+                {key: value for key, value in output.items() if key not in {"submission", "budget"}}
+            ).model_dump(mode="json")
+            result["warnings"] = terminal.get("warnings", [])
+            result["cost"] = terminal.get("cost", result["cost"])
+        except ServiceError as exc:
+            exc.job_id = str(job_id)
+            raise
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ServiceError(
+                "invalid_server_response",
+                "Invalid completed review result",
+                502,
+                4,
+                job_id=str(job_id),
+            ) from exc
+    cli.emit(result, "review run", json_output, cli.partial_completion_exit(result))
+
+
+@app.command("list")
+def list_reviews(
+    task: Annotated[UUID, typer.Option()],
+    cursor: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+    json_output: JsonOption = False,
+):
+    cli = _helpers()
+    params = models.BidReviewListQuery(cursor=cursor, limit=limit).model_dump(exclude_none=True)
+    result = cli.call("GET", f"/tasks/{task}/bid-reviews", params=params)
+    cli.emit(validated(result, "review list"), "review list", json_output)
+
+
+@app.command("show")
+def show_review(
+    id: Annotated[UUID, typer.Option("--id")],
+    section: Annotated[str, typer.Option()] = "obligations",
+    cursor: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+    json_output: JsonOption = False,
+):
+    if section not in {"obligations", "signing_requirements"}:
+        raise ServiceError("invalid_input", "Unknown review section", 400, 2)
+    cli = _helpers()
+    params = models.BidReviewListQuery(cursor=cursor, limit=limit).model_dump(exclude_none=True)
+    params["section"] = section
+    result = cli.call("GET", f"/bid-reviews/{id}", params=params)
+    result = validated(result, "review show")
+    partial = result["data"]["run"]["completion"] == "partial"
+    if partial:
+        result["ok"] = False
+    cli.emit(result, "review show", json_output, 5 if partial else 0)

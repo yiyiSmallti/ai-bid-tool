@@ -249,7 +249,9 @@ class Client:
             job_id = None
             parts = path.split("?", 1)[0].split("/")
             queued_submission = (len(parts) == 4 and parts[1::2] == ["tasks", "checks"]) or (
-                len(parts) == 4 and parts[1] == "tasks" and parts[3] == "score-rubrics"
+                len(parts) == 4
+                and parts[1] == "tasks"
+                and parts[3] in {"score-rubrics", "bid-reviews"}
             )
             if method.upper() == "POST" and queued_submission and "job_id" in data:
                 try:

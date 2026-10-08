@@ -46,7 +46,8 @@ async function fixture(page, options = {}) {
       expect(body.files[1].kind).toBe("qualification");
       if (body.dry_run) { state.uploadPreviews++; state.uploadRequest = body.request_id; response = result("review upload", { dry_run: true, files: body.files, payload_sha256: hash, limits: { files: 20, file_bytes: 40 * 1024 * 1024, submission_bytes: 40 * 1024 * 1024 }, cost: zero }); }
       else { expect(body.request_id).toBe(state.uploadRequest); state.uploads++; state.files = body.files.map((file, index) => ({ ...file, id: uuid(10 + index), file_id: uuid(20 + index), org_id: ids.org, task_id: ids.task, submission_id: ids.submission })); response = result("review upload", submission()); }
-    } else if (method === "GET" && path === `/bid-submissions/${ids.submission}`) response = result("review submission show", detail());
+    } else if (method === "GET" && path === `/tasks/${ids.task}/bid-reviews`) { expect(url.pathname.startsWith("/v4/")).toBe(true); response = result("review list", { task_id: ids.task, next_cursor: null }, []); }
+    else if (method === "GET" && path === `/bid-submissions/${ids.submission}`) response = result("review submission show", detail());
     else if (method === "POST" && path === `/tasks/${ids.task}/bid-submissions/${ids.submission}/prepare`) {
       const body = request.postDataJSON(); expect(body.submission_id).toBe(ids.submission); expect(url.pathname.startsWith("/v4/")).toBe(true);
       if (body.dry_run) {

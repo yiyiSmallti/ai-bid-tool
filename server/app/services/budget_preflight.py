@@ -70,6 +70,7 @@ async def attach(
     if cached_job is None and task_id is not None:
         kinds = {
             "check run": "check",
+            "review run": "bid_review",
             "score run": "score",
             "score rubric generate": "score_rubric",
             "draft": "draft",
@@ -97,7 +98,8 @@ async def attach(
                     if actor is not None and kind != "draft"
                     else true(),
                     Job.actor_kind == actor.actor_kind
-                    if actor is not None and kind in {"check", "score", "score_rubric"}
+                    if actor is not None
+                    and kind in {"check", "score", "score_rubric", "bid_review"}
                     else true(),
                 )
                 .order_by(Job.created_at.desc())
