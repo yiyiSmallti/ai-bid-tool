@@ -194,6 +194,9 @@ class BidDocumentPage(Tenant, Base):
         *common(),
         UniqueConstraint("org_id", "task_id", "submission_id", "id"),
         UniqueConstraint("org_id", "preparation_id", "document_id", "page"),
+        UniqueConstraint(
+            "org_id", "task_id", "submission_id", "preparation_id", "document_id", "page", "id"
+        ),
         fk(
             ["task_id", "submission_id", "preparation_id", "document_id"],
             "bid_prepared_documents",

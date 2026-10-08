@@ -9,6 +9,7 @@ from typing import Literal, NoReturn
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, select, text, tuple_
+from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets, TokenSigner
@@ -20,6 +21,7 @@ from app.models.bid_review import (
     BidSubmission,
     BidSubmissionDocument,
 )
+from app.models.bid_signature import BidPreparationTrust
 from app.models.entities import AuditLog, Job
 from app.schemas import bid_review as c
 from app.schemas.budget_contracts import BudgetPreflightData
@@ -308,7 +310,7 @@ async def upload(session, actor, task_id, body, files, storage, settings):
     return await submission_view(session, root)
 
 
-def build_manifest(root, documents, settings):
+def build_manifest(root, documents, settings, trust_store_sha256):
     from app.services.bid_preparation import preparation_identity
 
     return {
@@ -317,7 +319,8 @@ def build_manifest(root, documents, settings):
         "task_id": str(root.task_id),
         "submission_id": str(root.id),
         "manifest_sha256": root.manifest_sha256,
-        "preparation_version": "bid-prepare-v1",
+        "preparation_version": "bid-prepare-v2",
+        "trust_store_sha256": trust_store_sha256,
         "render_profile": "bid-pages-v1",
         "documents": [
             {
@@ -363,7 +366,17 @@ async def prepare(session, actor, task_id, body, queue, settings):
     root = await required(session, body.submission_id, task_id)
     await access(session, actor, task_id, "bid-review:prepare", write=True, lock=not body.dry_run)
     documents = await rows(session, root.id)
-    manifest = build_manifest(root, documents, settings)
+    from app.services.platform_trust_anchors import get_snapshot
+
+    pinned = await session.scalar(
+        select(BidPreparationTrust).where(BidPreparationTrust.submission_id == root.id)
+    )
+    trust = (
+        {"sha256": pinned.trust_store_sha256, "anchors": pinned.anchors}
+        if pinned is not None
+        else await get_snapshot(session)
+    )
+    manifest = build_manifest(root, documents, settings, trust["sha256"])
     input_hash = digest(manifest)
     blockers = []
     if root.state != "uploaded":
@@ -520,6 +533,27 @@ async def prepare(session, actor, task_id, body, queue, settings):
         )
     )
     await session.flush()
+    session.add(
+        BidPreparationTrust(
+            id=uuid4(),
+            org_id=actor.org_id,
+            task_id=task_id,
+            submission_id=root.id,
+            preparation_id=prep_id,
+            created_by=actor.user_id,
+            trust_store_sha256=trust["sha256"],
+            anchors=trust["anchors"],
+        )
+    )
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if (
+            getattr(getattr(exc.orig, "diag", None), "constraint_name", None)
+            == "bid_signing_trust_snapshot"
+        ):
+            fail("bid_input_changed", "Trust anchors changed; preview again")
+        raise
     await enqueue(session, queue, job)
     audit(
         session,
@@ -550,7 +584,7 @@ async def enqueue(session, queue, job):
             ) from exc
 
 
-async def show(session, actor, submission_id):
+async def show(session, actor, submission_id, settings):
     root = await required(session, submission_id)
     await access(session, actor, root.task_id)
     submission = await submission_view(session, root)
@@ -589,9 +623,26 @@ async def show(session, actor, submission_id):
             }
             for row in prepared
         ]
-    return c.BidSubmissionDetail.model_validate(
-        {"submission": submission, "preparation": status, "inventory": inventory}
+    from app.services import bid_signature_views
+
+    signatures, candidate_page = [], c.BidSigningCandidatesPage(total=0)
+    if isinstance(submission, c.BidSubmissionView):
+        signatures = await bid_signature_views.validations(session, actor, root.id, settings)
+        candidate_page = await bid_signature_views.candidates(session, actor, root.id, settings)
+    detail = c.BidSubmissionDetail.model_validate(
+        {
+            "submission": submission,
+            "preparation": status,
+            "inventory": inventory,
+            "signature_validations": signatures,
+            "signing_candidates": candidate_page.items,
+            "signing_candidate_count": candidate_page.total,
+            "signing_candidates_next_cursor": candidate_page.next_cursor,
+        }
     )
+    if len(detail.model_dump_json().encode()) > 1024 * 1024:
+        fail("bid_review_output_limit", "Submission detail exceeds output limit", 409, 4)
+    return detail
 
 
 async def list_submissions(session, actor, task_id, query, settings):

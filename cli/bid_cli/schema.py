@@ -303,6 +303,9 @@ from bid_cli.management_providers import COMMAND_ITEMS as PROVIDER_COMMAND_ITEMS
 from bid_cli.management_templates import COMMAND_DATA as TEMPLATE_COMMAND_DATA
 from bid_cli.management_templates import COMMAND_INPUTS as TEMPLATE_COMMAND_INPUTS
 from bid_cli.management_templates import COMMAND_ITEMS as TEMPLATE_COMMAND_ITEMS
+from bid_cli.platform_trust_anchors import COMMAND_DATA as TRUST_ANCHOR_DATA
+from bid_cli.platform_trust_anchors import COMMAND_INPUTS as TRUST_ANCHOR_INPUTS
+from bid_cli.platform_trust_anchors import COMMAND_ITEMS as TRUST_ANCHOR_ITEMS
 from bid_cli.requirement_confirmation import RequirementProgressInvocation
 
 # Only implemented commands are advertised; future commands are deliberately absent.
@@ -802,6 +805,8 @@ COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 
 COMMANDS.update(ATTACHMENT_INPUTS)
 COMMANDS.update(REVIEW_INPUTS)
+COMMANDS.update(TRUST_ANCHOR_INPUTS)
+OUTPUTS.update({name: TypeAdapter(model) for name, model in TRUST_ANCHOR_DATA.items()})
 OUTPUTS.update({name: TypeAdapter(model) for name, model in ATTACHMENT_DATA.items()})
 
 OUTPUTS.update({name: TypeAdapter(AttachmentPageData) for name in ATTACHMENT_ITEMS})
@@ -1063,6 +1068,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         for name, model in REVIEW_DATA.items():
             schema["commands"][name]["output"] = TypeAdapter(model).json_schema()
         for name, model in REVIEW_ITEMS.items():
+            schema["commands"][name]["items"] = TypeAdapter(model).json_schema()
+        for name, model in TRUST_ANCHOR_ITEMS.items():
             schema["commands"][name]["items"] = TypeAdapter(model).json_schema()
         schema["commands"]["review upload"]["preflight"] = BidUploadPreview.model_json_schema()
         schema["commands"]["review prepare"]["preflight"] = BidPreparePreview.model_json_schema()

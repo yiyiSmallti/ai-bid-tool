@@ -199,6 +199,24 @@ class Client:
                 "invalid_server_response", "Server returned an invalid response", 502, 3
             ) from exc
         if platform and (
+            path == "/platform/trust-anchors" or path.startswith("/platform/trust-anchors/")
+        ):
+            from bid_cli.platform_trust_anchors import safe_result
+
+            action = (
+                "list"
+                if method.upper() == "GET"
+                else "add"
+                if path == "/platform/trust-anchors"
+                else "disable"
+            )
+            result = safe_result(body, "platform trust-anchor " + action)
+            if response.is_success != result["ok"]:
+                raise ServiceError(
+                    "invalid_server_response", "Server returned invalid trust status", 502, 4
+                )
+            return result
+        if platform and (
             path == "/platform/credentials" or path.startswith("/platform/credentials/")
         ):
             from bid_cli.platform_credentials import safe_result

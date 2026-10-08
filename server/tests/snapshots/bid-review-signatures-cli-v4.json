@@ -1,0 +1,504 @@
+{
+  "local: protected": {
+    "command": "review submission show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "inventory": [],
+      "preparation": null,
+      "signature_validations": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "final_revision": {
+            "covered_by_signature_indices": [],
+            "modified_after_last_signature": true,
+            "status": "modified_after_signing"
+          },
+          "original_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "signatures": [
+            {
+              "certificate": {
+                "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "issuer": "CN=Synthetic issuer",
+                "not_after": "2027-10-08T00:00:00Z",
+                "not_before": "2026-10-08T00:00:00Z",
+                "subject": "CN=Synthetic protected signer"
+              },
+              "certificate_validity_status": "valid",
+              "coverage_status": "whole_revision",
+              "crypto_status": "valid",
+              "field_name_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "final_revision_covered": false,
+              "modified_after_signing": true,
+              "revocation_status": "unknown",
+              "signature_index": 1,
+              "timestamp_status": "absent",
+              "trust_status": "unknown"
+            }
+          ],
+          "status": "unknown",
+          "trust_store_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "validation_time": "2026-10-08T00:00:00Z",
+          "validator_identity": "synthetic-local-v1"
+        }
+      ],
+      "signing_candidate_count": 1,
+      "signing_candidates": [
+        {
+          "applicability": "unknown",
+          "candidate_kind": "signing_clause",
+          "date_required": false,
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "end_offset": 12,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "location_hint": "every_page",
+          "mark_types": [
+            "company_seal"
+          ],
+          "ordinal": 1,
+          "owner_roles": [
+            "bidder"
+          ],
+          "page": 1,
+          "page_id": "00000000-0000-4000-8000-000000000001",
+          "quote": "\u6295\u6807\u6587\u4ef6\u987b\u9010\u9875\u52a0\u76d6\u516c\u7ae0\u3002",
+          "start_offset": 0
+        }
+      ],
+      "signing_candidates_next_cursor": null,
+      "submission": {
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "documents": [
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000020",
+            "id": "00000000-0000-4000-8000-000000000010",
+            "kind": "tender",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "tender",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000021",
+            "id": "00000000-0000-4000-8000-000000000011",
+            "kind": "qualification",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "bid",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "id": "00000000-0000-4000-8000-000000000002",
+        "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preparation_job_id": "00000000-0000-4000-8000-000000000001",
+        "revision": 1,
+        "state": "prepared",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: restricted": {
+    "command": "review submission show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "inventory": [],
+      "preparation": null,
+      "signature_validations": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "final_revision": {
+            "covered_by_signature_indices": [],
+            "modified_after_last_signature": true,
+            "status": "modified_after_signing"
+          },
+          "original_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "signatures": [
+            {
+              "certificate": {
+                "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "not_after": "2027-10-08T00:00:00Z",
+                "not_before": "2026-10-08T00:00:00Z"
+              },
+              "certificate_validity_status": "valid",
+              "coverage_status": "whole_revision",
+              "crypto_status": "valid",
+              "field_name_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "final_revision_covered": false,
+              "modified_after_signing": true,
+              "revocation_status": "unknown",
+              "signature_index": 1,
+              "timestamp_status": "absent",
+              "trust_status": "unknown"
+            }
+          ],
+          "status": "unknown",
+          "trust_store_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "validation_time": "2026-10-08T00:00:00Z",
+          "validator_identity": "synthetic-local-v1"
+        }
+      ],
+      "signing_candidate_count": 1,
+      "signing_candidates": [
+        {
+          "applicability": "unknown",
+          "candidate_kind": "signing_clause",
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "id": "00000000-0000-4000-8000-000000000001",
+          "ordinal": 1,
+          "page": 1,
+          "page_id": "00000000-0000-4000-8000-000000000001"
+        }
+      ],
+      "signing_candidates_next_cursor": null,
+      "submission": {
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "documents": [
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000020",
+            "id": "00000000-0000-4000-8000-000000000010",
+            "kind": "tender",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "tender",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000021",
+            "id": "00000000-0000-4000-8000-000000000011",
+            "kind": "qualification",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "bid",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "id": "00000000-0000-4000-8000-000000000002",
+        "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preparation_job_id": "00000000-0000-4000-8000-000000000001",
+        "revision": 1,
+        "state": "prepared",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: protected": {
+    "command": "review submission show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "inventory": [],
+      "preparation": null,
+      "signature_validations": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "final_revision": {
+            "covered_by_signature_indices": [],
+            "modified_after_last_signature": true,
+            "status": "modified_after_signing"
+          },
+          "original_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "signatures": [
+            {
+              "certificate": {
+                "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "issuer": "CN=Synthetic issuer",
+                "not_after": "2027-10-08T00:00:00Z",
+                "not_before": "2026-10-08T00:00:00Z",
+                "subject": "CN=Synthetic protected signer"
+              },
+              "certificate_validity_status": "valid",
+              "coverage_status": "whole_revision",
+              "crypto_status": "valid",
+              "field_name_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "final_revision_covered": false,
+              "modified_after_signing": true,
+              "revocation_status": "unknown",
+              "signature_index": 1,
+              "timestamp_status": "absent",
+              "trust_status": "unknown"
+            }
+          ],
+          "status": "unknown",
+          "trust_store_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "validation_time": "2026-10-08T00:00:00Z",
+          "validator_identity": "synthetic-local-v1"
+        }
+      ],
+      "signing_candidate_count": 1,
+      "signing_candidates": [
+        {
+          "applicability": "unknown",
+          "candidate_kind": "signing_clause",
+          "date_required": false,
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "end_offset": 12,
+          "id": "00000000-0000-4000-8000-000000000001",
+          "location_hint": "every_page",
+          "mark_types": [
+            "company_seal"
+          ],
+          "ordinal": 1,
+          "owner_roles": [
+            "bidder"
+          ],
+          "page": 1,
+          "page_id": "00000000-0000-4000-8000-000000000001",
+          "quote": "\u6295\u6807\u6587\u4ef6\u987b\u9010\u9875\u52a0\u76d6\u516c\u7ae0\u3002",
+          "start_offset": 0
+        }
+      ],
+      "signing_candidates_next_cursor": null,
+      "submission": {
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "documents": [
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000020",
+            "id": "00000000-0000-4000-8000-000000000010",
+            "kind": "tender",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "tender",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000021",
+            "id": "00000000-0000-4000-8000-000000000011",
+            "kind": "qualification",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "bid",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "id": "00000000-0000-4000-8000-000000000002",
+        "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preparation_job_id": "00000000-0000-4000-8000-000000000001",
+        "revision": 1,
+        "state": "prepared",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: restricted": {
+    "command": "review submission show",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "inventory": [],
+      "preparation": null,
+      "signature_validations": [
+        {
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "final_revision": {
+            "covered_by_signature_indices": [],
+            "modified_after_last_signature": true,
+            "status": "modified_after_signing"
+          },
+          "original_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "signatures": [
+            {
+              "certificate": {
+                "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "not_after": "2027-10-08T00:00:00Z",
+                "not_before": "2026-10-08T00:00:00Z"
+              },
+              "certificate_validity_status": "valid",
+              "coverage_status": "whole_revision",
+              "crypto_status": "valid",
+              "field_name_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "final_revision_covered": false,
+              "modified_after_signing": true,
+              "revocation_status": "unknown",
+              "signature_index": 1,
+              "timestamp_status": "absent",
+              "trust_status": "unknown"
+            }
+          ],
+          "status": "unknown",
+          "trust_store_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "validation_time": "2026-10-08T00:00:00Z",
+          "validator_identity": "synthetic-local-v1"
+        }
+      ],
+      "signing_candidate_count": 1,
+      "signing_candidates": [
+        {
+          "applicability": "unknown",
+          "candidate_kind": "signing_clause",
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "id": "00000000-0000-4000-8000-000000000001",
+          "ordinal": 1,
+          "page": 1,
+          "page_id": "00000000-0000-4000-8000-000000000001"
+        }
+      ],
+      "signing_candidates_next_cursor": null,
+      "submission": {
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "documents": [
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000020",
+            "id": "00000000-0000-4000-8000-000000000010",
+            "kind": "tender",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "tender",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          },
+          {
+            "citation_mode": "page",
+            "file_id": "00000000-0000-4000-8000-000000000021",
+            "id": "00000000-0000-4000-8000-000000000011",
+            "kind": "qualification",
+            "media_type": "application/pdf",
+            "org_id": "00000000-0000-4000-8000-000000000001",
+            "page_count": 1,
+            "parsing_warnings": [],
+            "render_profile": "synthetic-local-v1",
+            "rendered_pdf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "renderer_identity": "synthetic-local-v1",
+            "role": "bid",
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "size_bytes": 100,
+            "submission_id": "00000000-0000-4000-8000-000000000002",
+            "task_id": "00000000-0000-4000-8000-000000000001"
+          }
+        ],
+        "id": "00000000-0000-4000-8000-000000000002",
+        "manifest_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "preparation_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "preparation_job_id": "00000000-0000-4000-8000-000000000001",
+        "revision": 1,
+        "state": "prepared",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

@@ -1,0 +1,212 @@
+{
+  "local: add": {
+    "command": "platform trust-anchor add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created": true,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "operator@example.test",
+      "disabled_at": null,
+      "disabled_by": null,
+      "enabled": true,
+      "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "is_ca": true,
+      "issuer": "CN=Synthetic CA",
+      "label": "Synthetic local root",
+      "not_after": "2027-01-01T00:00:00Z",
+      "not_before": "2026-01-01T00:00:00Z",
+      "revision": 1,
+      "subject": "CN=Synthetic CA"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: disable": {
+    "command": "platform trust-anchor disable",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "operator@example.test",
+      "disabled_at": "2026-10-08T00:00:00Z",
+      "disabled_by": "operator@example.test",
+      "enabled": false,
+      "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "is_ca": true,
+      "issuer": "CN=Synthetic CA",
+      "label": "Synthetic local root",
+      "not_after": "2027-01-01T00:00:00Z",
+      "not_before": "2026-01-01T00:00:00Z",
+      "revision": 2,
+      "subject": "CN=Synthetic CA"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: list": {
+    "command": "platform trust-anchor list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "operator@example.test",
+        "disabled_at": null,
+        "disabled_by": null,
+        "enabled": true,
+        "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "is_ca": true,
+        "issuer": "CN=Synthetic CA",
+        "label": "Synthetic local root",
+        "not_after": "2027-01-01T00:00:00Z",
+        "not_before": "2026-01-01T00:00:00Z",
+        "revision": 1,
+        "subject": "CN=Synthetic CA"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: add": {
+    "command": "platform trust-anchor add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created": true,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "operator@example.test",
+      "disabled_at": null,
+      "disabled_by": null,
+      "enabled": true,
+      "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "is_ca": true,
+      "issuer": "CN=Synthetic CA",
+      "label": "Synthetic local root",
+      "not_after": "2027-01-01T00:00:00Z",
+      "not_before": "2026-01-01T00:00:00Z",
+      "revision": 1,
+      "subject": "CN=Synthetic CA"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: disable": {
+    "command": "platform trust-anchor disable",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "operator@example.test",
+      "disabled_at": "2026-10-08T00:00:00Z",
+      "disabled_by": "operator@example.test",
+      "enabled": false,
+      "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "is_ca": true,
+      "issuer": "CN=Synthetic CA",
+      "label": "Synthetic local root",
+      "not_after": "2027-01-01T00:00:00Z",
+      "not_before": "2026-01-01T00:00:00Z",
+      "revision": 2,
+      "subject": "CN=Synthetic CA"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: list": {
+    "command": "platform trust-anchor list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "operator@example.test",
+        "disabled_at": null,
+        "disabled_by": null,
+        "enabled": true,
+        "fingerprint_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "id": "00000000-0000-4000-8000-000000000001",
+        "is_ca": true,
+        "issuer": "CN=Synthetic CA",
+        "label": "Synthetic local root",
+        "not_after": "2027-01-01T00:00:00Z",
+        "not_before": "2026-01-01T00:00:00Z",
+        "revision": 1,
+        "subject": "CN=Synthetic CA"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  }
+}

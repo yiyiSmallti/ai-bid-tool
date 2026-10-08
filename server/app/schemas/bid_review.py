@@ -279,7 +279,90 @@ class BidDocumentInventory(Contract):
     parsing_warnings: list[str] = Field(default_factory=list, max_length=100)
 
 
+class BidSignatureCertificate(Contract):
+    fingerprint_sha256: Sha256 | None = None
+    not_before: AwareDatetime | None = None
+    not_after: AwareDatetime | None = None
+    subject: str | None = Field(default=None, max_length=2000)
+    issuer: str | None = Field(default=None, max_length=2000)
+
+
+class BidSignatureObservation(Contract):
+    signature_index: int = Field(ge=1)
+    field_name_sha256: Sha256 | None = None
+    signed_revision_sha256: Sha256 | None = None
+    signed_revision: int | None = Field(default=None, ge=1)
+    revision_length: int | None = Field(default=None, ge=0)
+    byte_range: list[int] = Field(default_factory=list, max_length=4)
+    coverage_status: str = Field(max_length=100)
+    crypto_status: str = Field(max_length=100)
+    signature_value_status: str = Field(default="unknown", max_length=100)
+    content_digest_status: str = Field(default="unknown", max_length=100)
+    trust_status: str = Field(max_length=100)
+    certificate_validity_status: str = Field(max_length=100)
+    revocation_status: Literal["unknown"] = "unknown"
+    timestamp_status: str = Field(max_length=100)
+    claimed_signing_time: AwareDatetime | None = None
+    trusted_timestamp_time: AwareDatetime | None = None
+    modified_after_signing: bool | None = None
+    final_revision_covered: bool = False
+    reason_codes: list[str] = Field(default_factory=list, max_length=100)
+    certificate: BidSignatureCertificate | None = None
+    digest_algorithm: str | None = Field(default=None, max_length=100)
+    signature_algorithm: str | None = Field(default=None, max_length=100)
+    verification_variant: str | None = Field(default=None, max_length=100)
+    post_signing_changes: str = Field(default="unknown", max_length=100)
+
+
+class BidSignatureFinalRevision(Contract):
+    status: str = Field(max_length=100)
+    covered_by_signature_indices: list[int] = Field(default_factory=list, max_length=128)
+    modified_after_last_signature: bool | None = None
+
+
+class BidPDFValidationView(Contract):
+    document_id: UUID
+    original_sha256: Sha256
+    trust_store_sha256: Sha256
+    validator_identity: str = Field(max_length=200)
+    status: str = Field(max_length=100)
+    validation_network: Literal["disabled"] = "disabled"
+    validation_time: AwareDatetime
+    signatures: list[BidSignatureObservation] = Field(default_factory=list, max_length=128)
+    final_revision: BidSignatureFinalRevision
+
+
+class BidSigningCandidateView(Contract):
+    id: UUID
+    document_id: UUID
+    page_id: UUID
+    page: PageNumber
+    ordinal: int = Field(ge=1, le=2000)
+    candidate_kind: Literal["signing_clause"]
+    applicability: Literal["unknown"] = "unknown"
+    quote: str | None = Field(default=None, max_length=2000)
+    start_offset: int | None = Field(default=None, ge=0)
+    end_offset: int | None = Field(default=None, ge=0)
+    mark_types: list[str] | None = None
+    owner_roles: list[str] | None = None
+    date_required: bool | None = None
+    location_hint: str | None = Field(default=None, max_length=100)
+
+
+class BidSigningCandidatesPage(Contract):
+    items: list[BidSigningCandidateView] = Field(default_factory=list, max_length=50)
+    total: int = Field(ge=0, le=2000)
+    next_cursor: int | None = Field(default=None, ge=1, le=2000)
+
+
 class BidSubmissionDetail(Contract):
     submission: BidSubmissionUploaded | BidSubmissionView
     preparation: BidPreparationStatus | None = None
     inventory: list[BidDocumentInventory] = Field(default_factory=list, max_length=FILE_LIMIT)
+
+    signature_validations: list[BidPDFValidationView] = Field(
+        default_factory=list, max_length=FILE_LIMIT
+    )
+    signing_candidates: list[BidSigningCandidateView] = Field(default_factory=list, max_length=50)
+    signing_candidate_count: int = Field(default=0, ge=0, le=2000)
+    signing_candidates_next_cursor: int | None = Field(default=None, ge=1, le=2000)

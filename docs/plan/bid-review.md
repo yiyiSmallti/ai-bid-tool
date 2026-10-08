@@ -4,13 +4,12 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved; slice 1 (upload and preparation) implemented. Recommended defaults
+Status: **Approved; slices 1–2 implemented. Recommended defaults
 are adopted, except that Clef triage is on by default.**
 
 The first phase is delivered as five implementation slices: upload/preparation;
 signature checklist and approved local validation; rule/LLM compliance and human
-dismissal; console/Word report; Clef triage with fixed per-call billing. Only the
-upload/preparation slice is implemented; PostgreSQL and browser acceptance remain
+dismissal; console/Word report; Clef triage with fixed per-call billing. Upload/preparation and local signature evidence are implemented; PostgreSQL and browser acceptance remain
 pending. Its behavior and code anchors are in [the mechanism note](../notes/bid-review.md).
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
@@ -68,10 +67,10 @@ rule; competitor research and strategic recommendations remain excluded by
 | `Identity.require`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `ROLE_SCOPES` in [auth.py](../../server/app/services/auth.py); [task_workflow.py](../../server/app/services/task_workflow.py) | Preserve session-only actions, live Membership/task authority and token ceilings in API, workers and DB. Proposed scopes below are declarations only. |
 | [Screenshot evidence](../notes/screenshot-evidence.md), [annotation](annotation.md), [attachment archives](attachment-archive.md) | Reuse exact pixels, source/rendition hashes, mappings, privacy lineage and separate human confirmation. Archive approval, annotation and image similarity do not prove a response claim. Uploaded-bid pages require an explicit new source branch before any later reuse in B04/B05. |
 
-No PDF digital-signature validator is present in the reviewed provider/service code or
-[dependency manifest](../../pyproject.toml). A vetted offline validator and trust-store
-policy are implementation prerequisites subject to approval; merely reading signature
-widgets or detecting their image appearance cannot satisfy this contract.
+The [local PDF validator](../../server/app/services/bid_pdf_signatures.py) and
+[trust-store decision](#open-decisions) provide independent cryptographic evidence.
+Merely reading signature widgets or detecting their image appearance cannot satisfy
+this contract.
 
 ## Two independent validation logics
 
@@ -120,6 +119,23 @@ The primary quality metric is **recall of missing required marks**, measured per
 required location. Any unresolved occurrence remains in the report even if Clef
 assigns high presence probability. Triage cannot suppress required locations or turn
 a skipped page into a pass.
+
+The approved reference profile is 点聚 Filter `/DJ.GMPkiLite`, SubFilter
+`/GM.sm2cms.detached`: GM/T 0010 CMS SignedData uses OIDs
+`1.2.156.10197.6.1.4.2.1` / `.2`, SM3, SM2 signature OID `1.2.156.10197.1.501` or
+its GM/T 0006 form `1.2.156.10197.1.301.1`, and curve OID `1.2.156.10197.1.301`.
+Real 点聚 signatures are not detached despite the SubFilter: eContent holds
+SM3(ByteRange bytes), there are no signed attributes, and the standard ZA-bound SM2
+signature covers that embedded digest. Their signer certificates mark extended key
+usage critical with client authentication and email protection; email protection,
+any purpose and document-signing purposes qualify a certificate for signing. The owner-reported
+政采云 bid embeds only its provincial-CA signer certificate, so uploaded local
+intermediates and roots are required to establish a chain. pyHanko cannot verify
+this SM2 profile; the approved pure-Python BSD dependency is gmssl (with its
+pycryptodomex dependency). Signed attributes use DER SET OF and standard SM2 Z with
+user ID `1234567812345678`; a signature over the direct SM3 content digest is also
+accepted without signed attributes, with the matched variant recorded. The reference
+bid is descriptive input only; implementation acceptance uses synthetic fixtures.
 
 ### Images as response evidence
 
@@ -677,7 +693,7 @@ database, cryptographic-validator, visual-model or runtime acceptance.
 | Input/command scope | Independent `uploaded_bid`, `bid review …`, immutable multi-file submission; no DraftRun prerequisite | Keeps confirmed-draft services and agent permissions unchanged. |
 | First slice | Upload + local preparation + signature completeness including local PDF validation + default-on Clef presence/page-type triage + rule/LLM compliance + console/Word | Score and Clef image-supports-claim triage remain next-slice capabilities, visibly unavailable. |
 | Limits | 20 files, 100 MiB/file, 500 MiB/submission, 1,000 combined pages; lower deployment limits win; 200 external calls with 100/60/40 stage ceilings | Benchmark maximum accepted inputs before raising actual deployment settings. |
-| PDF validator/trust | Vetted offline library, pinned trust anchors, separate validity/modification/trust/revocation; unknown when proof unavailable | Approve dependency and supported signature profiles before implementation; no online checks or automatic trust. |
+| PDF validator/trust | **Approved:** `gmssl==3.2.2` for GM/T 0010 SM2/SM3; bounded strict DER; straightforward RSA/ECDSA through existing `cryptography`; pyHanko deferred | Platform operators upload public root/intermediate CA certificates on 信任根证书 under [ADR 0010](../adr/0010-offline-signature-trust.md). Pin each preparation to the enabled store hash; keep crypto, coverage, modification, certificate validity, trust, timestamp and revocation independent. No OCSP/CRL/network checks or automatic trust. |
 | Clef | **On by default** for every review once the platform adapter, gateway credentials and versioned fixed per-call sale price are configured; per-review opt-out in preflight; no initial BYOK | Missing configuration or a failed gateway check runs the review without Clef and reports triage unavailable; no dispatch until accounting and capability bounds pass; provider token telemetry never sets user charges. |
 | Clef transport | Only through an authenticated Cloudflare AI Gateway with log collection, log push, caching and gateway retries off and a rate limit set; unified billing; separate model and gateway credentials | A gateway in any other state blocks Clef; 429 is a retryable non-completion. |
 | Confidentiality | Mandatory external redaction including bid-derived names and exact reviewed image derivatives | Local/human handling when necessary identity/value is masked. |

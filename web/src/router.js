@@ -37,6 +37,7 @@ export const router = createRouter({
     { path: "/platform/operators", component: Operators, meta: { area: "platform", title: "平台管理员", nav: "operators" } },
     { path: "/platform/models", component: Models, meta: { area: "platform", title: "模型", nav: "models" } },
     { path: "/platform/credentials", component: Credentials, meta: { area: "platform", title: "服务凭据", nav: "credentials" } },
+    { path: "/platform/trust-anchors", component: () => import("./views/TrustAnchors.vue"), meta: { area: "platform", title: "信任根证书", nav: "trust-anchors" } },
     { path: "/platform/cards", component: Cards, meta: { area: "platform", title: "卡密", nav: "cards" } },
     { path: "/platform/usage", component: Usage, meta: { area: "platform", title: "用量与账单", nav: "usage" } },
     { path: "/platform/audit", component: Audit, meta: { area: "platform", title: "审计", nav: "audit" } },

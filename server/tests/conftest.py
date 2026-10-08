@@ -209,7 +209,7 @@ def tenants(admin_engine, monkeypatch):
     with admin_engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE platform_operator_factors, platform_credentials, platform_cards, balance_entries, org_balances, platform_audit_logs, platform_models, evidence_sources, certificate_files, task_templates, template_revisions, templates, task_org_profiles, org_profile_revisions, org_profiles, task_certificates, certificate_revisions, certificates, task_features, feature_revisions, features, audit_logs, task_resources, product_revisions, products, jobs, usage_records, requirements, chunks, documents, tasks, api_tokens, memberships, orgs, users CASCADE"
+                "TRUNCATE platform_trust_anchors, platform_operator_factors, platform_credentials, platform_cards, balance_entries, org_balances, platform_audit_logs, platform_models, evidence_sources, certificate_files, task_templates, template_revisions, templates, task_org_profiles, org_profile_revisions, org_profiles, task_certificates, certificate_revisions, certificates, task_features, feature_revisions, features, audit_logs, task_resources, product_revisions, products, jobs, usage_records, requirements, chunks, documents, tasks, api_tokens, memberships, orgs, users CASCADE"
             )
         )
     orgs, users = [], []
