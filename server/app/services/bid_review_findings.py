@@ -4,7 +4,7 @@ import re
 from collections import Counter
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 
 from app.core.errors import not_found
 from app.core.security import Secrets
@@ -333,7 +333,13 @@ async def required_finding(session, run, finding_id, *, lock=False):
         BidReviewFinding.id == finding_id, BidReviewFinding.review_id == run.id
     )
     if lock:
-        query = query.with_for_update()
+        # Findings are immutable and bid_app has no UPDATE privilege, so FOR UPDATE
+        # is unavailable. A transaction advisory lock per finding serializes human
+        # decisions; UNIQUE(org_id, finding_id, revision) still rejects a lost race.
+        await session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
+            {"key": f"bid-review-finding:{finding_id}"},
+        )
     finding = await session.scalar(query)
     if finding is None:
         raise not_found()

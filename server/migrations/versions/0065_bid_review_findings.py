@@ -225,7 +225,7 @@ BEGIN
    SELECT * INTO p FROM public.bid_document_pages WHERE org_id=NEW.org_id AND id=NEW.page_id;
    IF p.id IS NULL OR p.preparation_id IS DISTINCT FROM r.preparation_id
    OR p.document_id IS DISTINCT FROM NEW.document_id
-   OR p.role IS DISTINCT FROM CASE WHEN NEW.kind='tender_support' THEN 'tender' ELSE 'bid' END
+   OR p.role IS DISTINCT FROM (CASE WHEN NEW.kind='tender_support' THEN 'tender' ELSE 'bid' END)
    OR (NEW.kind IN ('tender_support','bid_support','absence_page') AND NOT EXISTS(
     SELECT 1 FROM public.bid_outbound_authorized_pages a WHERE a.org_id=NEW.org_id
     AND a.authorization_id=r.authorization_id AND a.page_id=p.id)) THEN
@@ -261,7 +261,10 @@ DECLARE f public.bid_review_findings%ROWTYPE; r public.bid_review_runs%ROWTYPE;
  prior public.bid_review_finding_events%ROWTYPE; classification public.bid_review_finding_events%ROWTYPE;
  member public.memberships%ROWTYPE; tm public.task_members%ROWTYPE;
 BEGIN
- SELECT * INTO f FROM public.bid_review_findings WHERE org_id=NEW.org_id AND id=NEW.finding_id FOR UPDATE;
+ -- bid_app has no UPDATE privilege on immutable findings; serialize with the
+ -- same per-finding advisory lock the decision service takes.
+ PERFORM pg_advisory_xact_lock(hashtextextended('bid-review-finding:' || NEW.finding_id::text, 0));
+ SELECT * INTO f FROM public.bid_review_findings WHERE org_id=NEW.org_id AND id=NEW.finding_id;
  SELECT * INTO r FROM public.bid_review_runs WHERE org_id=NEW.org_id AND id=NEW.review_id;
  SELECT * INTO member FROM public.memberships WHERE org_id=NEW.org_id AND user_id=NEW.decided_by;
  SELECT * INTO tm FROM public.task_members WHERE org_id=NEW.org_id AND task_id=NEW.task_id AND user_id=NEW.decided_by AND active;
@@ -288,7 +291,7 @@ BEGIN
   SELECT * INTO classification FROM public.bid_review_finding_events WHERE org_id=NEW.org_id AND finding_id=f.id AND action='classify' ORDER BY revision DESC LIMIT 1;
   IF classification.id IS NULL OR tm.id IS NULL OR tm.role NOT IN ('owner','contributor','reviewer')
   OR NOT (tm.review_domains ? NEW.review_domain)
-  OR member.role IS DISTINCT FROM CASE NEW.review_domain WHEN 'commercial' THEN 'bidder' ELSE 'technical' END
+  OR member.role IS DISTINCT FROM (CASE NEW.review_domain WHEN 'commercial' THEN 'bidder' ELSE 'technical' END)
   OR NEW.review_domain IS DISTINCT FROM classification.review_domain
   OR NOT (COALESCE(current_setting('app.actor_scopes',true),'[]')::jsonb ? 'bid-review\:decide') THEN
    RAISE EXCEPTION 'Finding domain requires its authorized human reviewer' USING ERRCODE='42501'; END IF;
