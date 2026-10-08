@@ -70556,6 +70556,1641 @@
             "type": "object"
           }
         },
+        "review classify": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "finding",
+              "options": [
+                "--finding"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "expected_decision_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expected Decision Id"
+              },
+              "expected_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Input Hash",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              },
+              "review_domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              }
+            },
+            "required": [
+              "request_id",
+              "review_domain",
+              "reason",
+              "expected_revision",
+              "expected_input_hash",
+              "expected_decision_id"
+            ],
+            "title": "BidReviewClassificationRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "FindingState": {
+                "enum": [
+                  "open",
+                  "dismissed",
+                  "confirmed"
+                ],
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "dismiss",
+                  "reopen",
+                  "confirm",
+                  "classify"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "decided_at": {
+                "format": "date-time",
+                "title": "Decided At",
+                "type": "string"
+              },
+              "decided_by": {
+                "format": "uuid",
+                "title": "Decided By",
+                "type": "string"
+              },
+              "finding_id": {
+                "format": "uuid",
+                "title": "Finding Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "immutable": {
+                "const": true,
+                "default": true,
+                "title": "Immutable",
+                "type": "boolean"
+              },
+              "prior_decision_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Prior Decision Id"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "reason_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Reason Sha256",
+                "type": "string"
+              },
+              "review_domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              },
+              "review_id": {
+                "format": "uuid",
+                "title": "Review Id",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "state": {
+                "$ref": "#/$defs/FindingState"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "review_id",
+              "task_id",
+              "finding_id",
+              "prior_decision_id",
+              "revision",
+              "action",
+              "review_domain",
+              "state",
+              "reason",
+              "reason_sha256",
+              "decided_by",
+              "decided_at"
+            ],
+            "title": "BidReviewEventView",
+            "type": "object"
+          }
+        },
+        "review decide": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "finding",
+              "options": [
+                "--finding"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "dismiss",
+                  "reopen",
+                  "confirm"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "expected_decision_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Expected Decision Id"
+              },
+              "expected_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Expected Input Hash",
+                "type": "string"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "action",
+              "reason",
+              "expected_revision",
+              "expected_input_hash",
+              "expected_decision_id"
+            ],
+            "title": "BidReviewDecisionRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "FindingState": {
+                "enum": [
+                  "open",
+                  "dismissed",
+                  "confirmed"
+                ],
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "dismiss",
+                  "reopen",
+                  "confirm",
+                  "classify"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "decided_at": {
+                "format": "date-time",
+                "title": "Decided At",
+                "type": "string"
+              },
+              "decided_by": {
+                "format": "uuid",
+                "title": "Decided By",
+                "type": "string"
+              },
+              "finding_id": {
+                "format": "uuid",
+                "title": "Finding Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "immutable": {
+                "const": true,
+                "default": true,
+                "title": "Immutable",
+                "type": "boolean"
+              },
+              "prior_decision_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Prior Decision Id"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "reason_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Reason Sha256",
+                "type": "string"
+              },
+              "review_domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              },
+              "review_id": {
+                "format": "uuid",
+                "title": "Review Id",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "state": {
+                "$ref": "#/$defs/FindingState"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "review_id",
+              "task_id",
+              "finding_id",
+              "prior_decision_id",
+              "revision",
+              "action",
+              "review_domain",
+              "state",
+              "reason",
+              "reason_sha256",
+              "decided_by",
+              "decided_at"
+            ],
+            "title": "BidReviewEventView",
+            "type": "object"
+          }
+        },
+        "review findings": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "severity",
+              "options": [
+                "--severity"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "state",
+              "options": [
+                "--state"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "outcome",
+              "options": [
+                "--outcome"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "FindingOutcome": {
+                "enum": [
+                  "responded",
+                  "deviation",
+                  "missing",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "FindingSeverity": {
+                "enum": [
+                  "fatal",
+                  "high",
+                  "medium"
+                ],
+                "type": "string"
+              },
+              "FindingState": {
+                "enum": [
+                  "open",
+                  "dismissed",
+                  "confirmed"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "maxLength": 4096,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cursor"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              },
+              "outcome": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/FindingOutcome"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "severity": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/FindingSeverity"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "state": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/FindingState"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              }
+            },
+            "title": "BidReviewFindingsQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "BidReviewFindingView": {
+                "additionalProperties": false,
+                "properties": {
+                  "absence_search": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/FindingAbsenceSearch"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "advisory_only": {
+                    "const": true,
+                    "default": true,
+                    "title": "Advisory Only",
+                    "type": "boolean"
+                  },
+                  "basis": {
+                    "$ref": "#/$defs/FindingBasis"
+                  },
+                  "bid_support": {
+                    "items": {
+                      "$ref": "#/$defs/FindingCitation"
+                    },
+                    "maxItems": 20,
+                    "title": "Bid Support",
+                    "type": "array"
+                  },
+                  "classification_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Classification Id"
+                  },
+                  "code": {
+                    "pattern": "^[a-z][a-z0-9_]{0,99}$",
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "explanation": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Explanation",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "impact": {
+                    "enum": [
+                      "rejection",
+                      "lost_points",
+                      "both",
+                      "uncertain"
+                    ],
+                    "title": "Impact",
+                    "type": "string"
+                  },
+                  "latest_decision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Latest Decision Id"
+                  },
+                  "limitation_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Limitation Codes",
+                    "type": "array"
+                  },
+                  "obligation_id": {
+                    "format": "uuid",
+                    "title": "Obligation Id",
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "$ref": "#/$defs/FindingOutcome"
+                  },
+                  "remediation": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Remediation",
+                    "type": "string"
+                  },
+                  "review_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "review_id": {
+                    "format": "uuid",
+                    "title": "Review Id",
+                    "type": "string"
+                  },
+                  "reviewed_basis": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/FindingReviewedBasis"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "revision": {
+                    "default": 1,
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "rule_evidence": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/FindingRuleEvidence"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "severity": {
+                    "$ref": "#/$defs/FindingSeverity"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/FindingState",
+                    "default": "open"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "tender_support": {
+                    "items": {
+                      "$ref": "#/$defs/FindingCitation"
+                    },
+                    "maxItems": 20,
+                    "minItems": 1,
+                    "title": "Tender Support",
+                    "type": "array"
+                  },
+                  "title": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Title",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "obligation_id",
+                  "code",
+                  "title",
+                  "outcome",
+                  "severity",
+                  "impact",
+                  "basis",
+                  "tender_support",
+                  "explanation",
+                  "remediation",
+                  "review_id",
+                  "task_id"
+                ],
+                "title": "BidReviewFindingView",
+                "type": "object"
+              },
+              "BidReviewSafeFinding": {
+                "additionalProperties": false,
+                "properties": {
+                  "advisory_only": {
+                    "const": true,
+                    "default": true,
+                    "title": "Advisory Only",
+                    "type": "boolean"
+                  },
+                  "classification_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Classification Id"
+                  },
+                  "code": {
+                    "title": "Code",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "impact": {
+                    "enum": [
+                      "rejection",
+                      "lost_points",
+                      "both",
+                      "uncertain"
+                    ],
+                    "title": "Impact",
+                    "type": "string"
+                  },
+                  "latest_decision_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Latest Decision Id"
+                  },
+                  "obligation_id": {
+                    "format": "uuid",
+                    "title": "Obligation Id",
+                    "type": "string"
+                  },
+                  "outcome": {
+                    "$ref": "#/$defs/FindingOutcome"
+                  },
+                  "review_domain": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/ReviewDomain"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "review_id": {
+                    "format": "uuid",
+                    "title": "Review Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "severity": {
+                    "$ref": "#/$defs/FindingSeverity"
+                  },
+                  "state": {
+                    "$ref": "#/$defs/FindingState"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "review_id",
+                  "task_id",
+                  "obligation_id",
+                  "code",
+                  "outcome",
+                  "severity",
+                  "impact",
+                  "state",
+                  "revision",
+                  "review_domain",
+                  "classification_id",
+                  "latest_decision_id"
+                ],
+                "title": "BidReviewSafeFinding",
+                "type": "object"
+              },
+              "FindingAbsenceSearch": {
+                "additionalProperties": false,
+                "properties": {
+                  "coverage": {
+                    "enum": [
+                      "required_locations",
+                      "all_bid_pages",
+                      "partial",
+                      "complete_inventory"
+                    ],
+                    "title": "Coverage",
+                    "type": "string"
+                  },
+                  "inspected_bid_document_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 19,
+                    "title": "Inspected Bid Document Ids",
+                    "type": "array"
+                  },
+                  "kind": {
+                    "enum": [
+                      "locations",
+                      "submission_inventory"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "limitation_codes": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Limitation Codes",
+                    "type": "array"
+                  },
+                  "method": {
+                    "enum": [
+                      "local_text",
+                      "local_pdf",
+                      "ocr",
+                      "llm",
+                      "human",
+                      "manifest_rule",
+                      "llm_mapping"
+                    ],
+                    "title": "Method",
+                    "type": "string"
+                  },
+                  "required_document_description": {
+                    "anyOf": [
+                      {
+                        "maxLength": 20000,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Required Document Description"
+                  },
+                  "searched_pages": {
+                    "items": {
+                      "$ref": "#/$defs/FindingPage"
+                    },
+                    "maxItems": 1000,
+                    "title": "Searched Pages",
+                    "type": "array"
+                  },
+                  "searched_regions": {
+                    "items": {
+                      "additionalProperties": true,
+                      "type": "object"
+                    },
+                    "maxItems": 0,
+                    "title": "Searched Regions",
+                    "type": "array"
+                  },
+                  "submission_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Submission Id"
+                  },
+                  "submission_manifest_sha256": {
+                    "anyOf": [
+                      {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Submission Manifest Sha256"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "method",
+                  "coverage"
+                ],
+                "title": "FindingAbsenceSearch",
+                "type": "object"
+              },
+              "FindingBasis": {
+                "additionalProperties": false,
+                "properties": {
+                  "confidence": {
+                    "anyOf": [
+                      {
+                        "maximum": 1,
+                        "minimum": 0,
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Confidence"
+                  },
+                  "kind": {
+                    "enum": [
+                      "rule",
+                      "model"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Model"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "maxLength": 100,
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "provider_config_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Config Id"
+                  },
+                  "provider_revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Revision"
+                  },
+                  "rule_or_prompt_version": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Rule Or Prompt Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "rule_or_prompt_version"
+                ],
+                "title": "FindingBasis",
+                "type": "object"
+              },
+              "FindingCitation": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "end_offset": {
+                    "minimum": 1,
+                    "title": "End Offset",
+                    "type": "integer"
+                  },
+                  "location": {
+                    "anyOf": [
+                      {
+                        "additionalProperties": true,
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Location"
+                  },
+                  "page": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "title": "Page",
+                    "type": "integer"
+                  },
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "page_label": {
+                    "default": "original_pdf",
+                    "enum": [
+                      "original_pdf",
+                      "rendered_docx"
+                    ],
+                    "title": "Page Label",
+                    "type": "string"
+                  },
+                  "quote": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Quote",
+                    "type": "string"
+                  },
+                  "start_offset": {
+                    "minimum": 0,
+                    "title": "Start Offset",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "page_id",
+                  "page",
+                  "quote",
+                  "start_offset",
+                  "end_offset"
+                ],
+                "title": "FindingCitation",
+                "type": "object"
+              },
+              "FindingOutcome": {
+                "enum": [
+                  "responded",
+                  "deviation",
+                  "missing",
+                  "unknown"
+                ],
+                "type": "string"
+              },
+              "FindingPage": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "page": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "title": "Page",
+                    "type": "integer"
+                  },
+                  "page_id": {
+                    "format": "uuid",
+                    "title": "Page Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "const": "bid",
+                    "default": "bid",
+                    "title": "Role",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "page_id",
+                  "document_id",
+                  "page"
+                ],
+                "title": "FindingPage",
+                "type": "object"
+              },
+              "FindingReviewedBasis": {
+                "additionalProperties": false,
+                "properties": {
+                  "human_decision_id": {
+                    "format": "uuid",
+                    "title": "Human Decision Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "human_reviewed",
+                    "default": "human_reviewed",
+                    "title": "Kind",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "human_decision_id"
+                ],
+                "title": "FindingReviewedBasis",
+                "type": "object"
+              },
+              "FindingRuleEvidence": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 19,
+                    "minItems": 1,
+                    "title": "Document Ids",
+                    "type": "array"
+                  },
+                  "kind": {
+                    "const": "pdf_signature_validation",
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "validation_ids": {
+                    "items": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "maxItems": 19,
+                    "minItems": 1,
+                    "title": "Validation Ids",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "document_ids",
+                  "validation_ids"
+                ],
+                "title": "FindingRuleEvidence",
+                "type": "object"
+              },
+              "FindingSeverity": {
+                "enum": [
+                  "fatal",
+                  "high",
+                  "medium"
+                ],
+                "type": "string"
+              },
+              "FindingState": {
+                "enum": [
+                  "open",
+                  "dismissed",
+                  "confirmed"
+                ],
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BidReviewFindingView"
+              },
+              {
+                "$ref": "#/$defs/BidReviewSafeFinding"
+              }
+            ]
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "review_id": {
+                "format": "uuid",
+                "title": "Review Id",
+                "type": "string"
+              },
+              "validity": {
+                "enum": [
+                  "current",
+                  "stale"
+                ],
+                "title": "Validity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "review_id",
+              "input_hash",
+              "validity"
+            ],
+            "title": "BidReviewFindingsData",
+            "type": "object"
+          }
+        },
+        "review history": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "finding",
+              "options": [
+                "--finding"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "classification",
+              "options": [
+                "--classification"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cursor"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "BidReviewListQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "FindingState": {
+                "enum": [
+                  "open",
+                  "dismissed",
+                  "confirmed"
+                ],
+                "type": "string"
+              },
+              "ReviewDomain": {
+                "enum": [
+                  "commercial",
+                  "technical"
+                ],
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "dismiss",
+                  "reopen",
+                  "confirm",
+                  "classify"
+                ],
+                "title": "Action",
+                "type": "string"
+              },
+              "actor_kind": {
+                "const": "session",
+                "default": "session",
+                "title": "Actor Kind",
+                "type": "string"
+              },
+              "decided_at": {
+                "format": "date-time",
+                "title": "Decided At",
+                "type": "string"
+              },
+              "decided_by": {
+                "format": "uuid",
+                "title": "Decided By",
+                "type": "string"
+              },
+              "finding_id": {
+                "format": "uuid",
+                "title": "Finding Id",
+                "type": "string"
+              },
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "immutable": {
+                "const": true,
+                "default": true,
+                "title": "Immutable",
+                "type": "boolean"
+              },
+              "prior_decision_id": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Prior Decision Id"
+              },
+              "reason": {
+                "maxLength": 20000,
+                "minLength": 1,
+                "title": "Reason",
+                "type": "string"
+              },
+              "reason_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Reason Sha256",
+                "type": "string"
+              },
+              "review_domain": {
+                "$ref": "#/$defs/ReviewDomain"
+              },
+              "review_id": {
+                "format": "uuid",
+                "title": "Review Id",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 2,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "state": {
+                "$ref": "#/$defs/FindingState"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "review_id",
+              "task_id",
+              "finding_id",
+              "prior_decision_id",
+              "revision",
+              "action",
+              "review_domain",
+              "state",
+              "reason",
+              "reason_sha256",
+              "decided_by",
+              "decided_at"
+            ],
+            "title": "BidReviewEventView",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "review_id": {
+                "format": "uuid",
+                "title": "Review Id",
+                "type": "string"
+              },
+              "validity": {
+                "enum": [
+                  "current",
+                  "stale"
+                ],
+                "title": "Validity",
+                "type": "string"
+              }
+            },
+            "required": [
+              "review_id",
+              "input_hash",
+              "validity"
+            ],
+            "title": "BidReviewFindingsData",
+            "type": "object"
+          }
+        },
         "review list": {
           "cli_parameters": [
             {
@@ -75685,6 +77320,19 @@
                     "title": "Document Id",
                     "type": "string"
                   },
+                  "end_offset": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "End Offset"
+                  },
                   "location": {
                     "anyOf": [
                       {
@@ -75723,6 +77371,19 @@
                     "minLength": 1,
                     "title": "Quote",
                     "type": "string"
+                  },
+                  "start_offset": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Start Offset"
                   }
                 },
                 "required": [
@@ -75760,6 +77421,11 @@
                     "title": "Rejection Trigger",
                     "type": "boolean"
                   },
+                  "star_marker": {
+                    "default": false,
+                    "title": "Star Marker",
+                    "type": "boolean"
+                  },
                   "starred": {
                     "title": "Starred",
                     "type": "boolean"
@@ -75767,6 +77433,11 @@
                   "text": {
                     "title": "Text",
                     "type": "string"
+                  },
+                  "triangle": {
+                    "default": false,
+                    "title": "Triangle",
+                    "type": "boolean"
                   }
                 },
                 "required": [
