@@ -10,6 +10,7 @@ from uuid import UUID
 import typer
 from app.core.errors import ServiceError
 from app.schemas import bid_review as models
+from app.schemas import bid_review_findings as findings_models
 from app.schemas import bid_review_privacy as privacy
 from app.schemas import bid_review_run as runs
 from app.schemas.check_contracts import AssessmentJobAccepted, AssessmentListData
@@ -33,6 +34,10 @@ COMMAND_INPUTS = {
     "review run": runs.BidReviewRequest,
     "review list": models.BidReviewListQuery,
     "review show": None,
+    "review findings": findings_models.BidReviewFindingsQuery,
+    "review decide": findings_models.BidReviewDecisionRequest,
+    "review history": models.BidReviewListQuery,
+    "review classify": findings_models.BidReviewClassificationRequest,
 }
 COMMAND_DATA = {
     "review upload": models.BidSubmissionUploaded | models.BidUploadPreview,
@@ -45,11 +50,17 @@ COMMAND_DATA = {
     "review run": runs.BidReviewPreview | AssessmentJobAccepted,
     "review list": runs.BidReviewListData,
     "review show": runs.BidReviewDetail,
+    "review findings": findings_models.BidReviewFindingsData,
+    "review decide": findings_models.BidReviewEventView,
+    "review history": findings_models.BidReviewFindingsData,
+    "review classify": findings_models.BidReviewEventView,
 }
 COMMAND_ITEMS = {
     "review submission list": models.BidSubmissionUploaded | models.BidSubmissionView,
     "review outbound list": privacy.OutboundAuthorizationView,
     "review list": runs.BidReviewRunView,
+    "review findings": findings_models.BidReviewFindingView | findings_models.BidReviewSafeFinding,
+    "review history": findings_models.BidReviewEventView,
 }
 
 
@@ -368,3 +379,108 @@ def show_review(
     if partial:
         result["ok"] = False
     cli.emit(result, "review show", json_output, 5 if partial else 0)
+
+
+@app.command("findings")
+def list_findings(
+    id: Annotated[UUID, typer.Option("--id")],
+    cursor: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+    severity: Annotated[str | None, typer.Option()] = None,
+    state: Annotated[str | None, typer.Option()] = None,
+    outcome: Annotated[str | None, typer.Option()] = None,
+    json_output: JsonOption = False,
+):
+    cli = _helpers()
+    try:
+        params = findings_models.BidReviewFindingsQuery.model_validate(
+            {
+                "cursor": cursor,
+                "limit": limit,
+                "severity": severity,
+                "state": state,
+                "outcome": outcome,
+            }
+        ).model_dump(exclude_none=True)
+    except ValueError as exc:
+        raise ServiceError("invalid_input", "Invalid finding filters", 400, 2) from exc
+    result = cli.call("GET", f"/bid-reviews/{id}/findings", params=params)
+    cli.emit(_finding_result(result, "review findings", id), "review findings", json_output)
+
+
+def _finding_result(result: dict, command: str, review: UUID, finding: UUID | None = None):
+    validated(result, command)
+    data = result["data"]
+    rows = result["items"] if command in {"review findings", "review history"} else [data]
+    if (
+        str(data["review_id"]) != str(review)
+        or any(
+            str(row["review_id"]) != str(review)
+            or (finding is not None and str(row["finding_id"]) != str(finding))
+            for row in rows
+        )
+        or len({row["id"] for row in rows}) != len(rows)
+    ):
+        raise ServiceError(
+            "invalid_server_response", "Server returned a different finding parent", 502, 4
+        )
+    return result
+
+
+def _finding_mutation(review: UUID, finding: UUID, input: Path, classify: bool, json_output: bool):
+    cli = _helpers()
+    model = (
+        findings_models.BidReviewClassificationRequest
+        if classify
+        else findings_models.BidReviewDecisionRequest
+    )
+    try:
+        body = model.model_validate(_input(input))
+    except ValueError as exc:
+        raise ServiceError("invalid_input", "Invalid finding action or revision", 400, 2) from exc
+    command = "review classify" if classify else "review decide"
+    result = cli.call(
+        "POST",
+        f"/bid-reviews/{review}/findings/{finding}/{'classification' if classify else 'decisions'}",
+        json=body.model_dump(mode="json"),
+    )
+    cli.emit(_finding_result(result, command, review, finding), command, json_output)
+
+
+@app.command("decide")
+def decide_finding(
+    id: Annotated[UUID, typer.Option("--id")],
+    finding: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    _finding_mutation(id, finding, input, False, json_output)
+
+
+@app.command("classify")
+def classify_finding(
+    id: Annotated[UUID, typer.Option("--id")],
+    finding: Annotated[UUID, typer.Option()],
+    input: Annotated[Path, typer.Option()],
+    json_output: JsonOption = False,
+):
+    _finding_mutation(id, finding, input, True, json_output)
+
+
+@app.command("history")
+def finding_history(
+    id: Annotated[UUID, typer.Option("--id")],
+    finding: Annotated[UUID, typer.Option()],
+    classification: Annotated[bool, typer.Option()] = False,
+    cursor: Annotated[str | None, typer.Option()] = None,
+    limit: Annotated[int, typer.Option(min=1, max=100)] = 50,
+    json_output: JsonOption = False,
+):
+    cli = _helpers()
+    params = models.BidReviewListQuery(cursor=cursor, limit=limit).model_dump(exclude_none=True)
+    result = cli.call(
+        "GET",
+        f"/bid-reviews/{id}/findings/{finding}/{'classification' if classification else 'decisions'}",
+        params=params,
+    )
+    cli.emit(_finding_result(result, "review history", id, finding), "review history", json_output)

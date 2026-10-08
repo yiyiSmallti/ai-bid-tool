@@ -4,7 +4,7 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved; slices 1–2 and slice 3a implemented. Recommended defaults
+Status: **Approved; slices 1–2 and slices 3a–3b implemented. Recommended defaults
 are adopted, except that Clef triage is on by default.**
 
 The first phase is divided into five implementation slices: upload/preparation;
@@ -12,9 +12,12 @@ signature checklist and approved local validation; rule/LLM compliance and human
 dismissal; console/Word report; Clef triage with fixed per-call billing. Slice 3a
 implements exact human-authorized sanitized native-text review, cited tender
 obligations and signing-clause applicability with unresolved location inventories.
+Slice 3b adds authorized bid-text compliance findings, deterministic rules and
+append-only classified human decisions within that same run.
 Upload/preparation and local signature evidence are implemented. PostgreSQL and
 browser acceptance remain pending; static checks do not establish those gates.
-The delivered boundary is in [slice 3a](#slice-3a-authorized-native-text-review), and
+The delivered boundaries are in [slice 3a](#slice-3a-authorized-native-text-review)
+and [slice 3b](#slice-3b-native-text-compliance-findings-and-human-decisions), and
 its mechanisms are in [the mechanism note](../notes/bid-review.md).
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
@@ -264,7 +267,7 @@ No new price algorithm is approved by this contract. Until separately enabled, p
 inputs are retained as supplied and price scores stay unsupported. Comparative results
 mean arithmetic under supplied data, not predictions about the actual committee.
 
-Human false-positive decisions append `dismiss` or `reopen`, retaining actor, time,
+Human decisions append `dismiss`, `reopen` or `confirm`, retaining actor, time,
 nonblank reason, expected finding revision, prior decision ID and run input hash.
 Only the stored domain's authorized human reviewer can act; admin role alone is not
 a technical/commercial review grant. Unclassified findings require classification
@@ -272,7 +275,11 @@ before a decision. Stale input or concurrent revision conflicts with no partial 
 Dismissal changes current disposition only, preserving the machine finding, original
 severity and score output. New runs do not inherit dismissals. A corrected file needs
 a new submission/review; no “fixed” button silently clears a risk. Evidence-confirmation
-history is separate and equally append-only.
+history is separate and equally append-only. Confirm records agreement with the
+advisory finding; it does not confirm Evidence or satisfy export gates. Confirm and
+dismiss apply to an open disposition; reopen restores either closed disposition.
+Classification and decisions share the finding revision and predecessor event ID;
+reclassification is permitted only while open.
 
 ## Providers, Clef and charging
 
@@ -463,6 +470,7 @@ a new preview, not automatic rebinding or downgrade to a cheaper mode.
 | `POST /tasks/{task_id}/bid-submissions/{id}/prepare` | `review prepare --task UUID --input PREPARE.json --dry-run`; same with `--expected-input-hash HASH --preflight-token RECEIPT [--retry] [--wait]` | `BidPrepareRequest` → `BidPreparePreview` or `AssessmentJobAccepted`; completed preparation → `BidSubmissionView`. |
 | `POST /tasks/{task_id}/bid-reviews` with `dry_run=true` or explicit submit | `review run --task UUID --input REVIEW.json --dry-run`; same with `--expected-input-hash HASH --preflight-token RECEIPT [--retry] [--wait]` | `BidReviewRequest` → `BidReviewPreview` or reused `AssessmentJobAccepted`; wait → `BidReviewJobResult`. |
 | `GET /tasks/{task_id}/bid-reviews`; `GET /bid-reviews/{id}` | `review list/show` | Paged run summaries; authorized report sections/findings, or safe token projection. |
+| `GET /bid-reviews/{id}/findings` | `review findings --id REVIEW` | Bounded findings with `severity`, `state`, `outcome` filters and event-snapshot-bound cursors; tokens receive metadata only. |
 | `POST /bid-reviews/{id}/findings/{finding_id}/decisions`; `GET` same | `review decide/history` | `BidReviewDecisionRequest` → immutable decision; separately paged history. |
 | `POST /bid-reviews/{id}/findings/{finding_id}/classification` | `review classify --input CLASSIFY.json` | Human classification with expected revision/hash and reason; no self-assigned domain in a dismissal request. |
 | `POST /bid-reviews/{id}/evidence/{check_id}/decisions`; `GET` same | `review evidence decide/history` | `EvidenceReviewDecisionRequest` → `EvidenceReviewDecision`; no Evidence confirmation side effect. |
@@ -722,6 +730,31 @@ cover disclosure, citations, authority, stale grants, cancellation, deduplicatio
 and accounting. PostgreSQL execution and real-browser acceptance have not been
 performed for this slice. Captured request/result receipts belong under ignored
 `data/work/bid-review-run`, outside documentation.
+
+### Slice 3b: Native-text compliance findings and human decisions
+
+The same authorized review run now compares extracted obligations with sanitized
+bid pages. It retains response/deviation/missing/unknown outcomes, verified original
+offsets on both sides, separate searched-absence inventories, document-kind rules,
+local invalid/modified/non-signing signature rules and mandatory-response gaps.
+Budget, cancellation, authorization and call ceilings remain those of slice 3a.
+Preflight identifies exact first-stage quotes and an explicitly dependent compliance
+envelope; unresolved price-dependent and unsearched work remains unknown.
+
+Immutable findings and normalized sources are published with the review. Human
+classification and dismiss/reopen/confirm use an append-only shared revision chain,
+with responsible-domain task authority and no admin decision override. The CLI and
+existing review page expose findings, filters, source quotes and human history.
+The bounded runtime subset is defined by
+[finding schemas](../../server/app/schemas/bid_review_findings.py) and the
+[mechanism note](../notes/bid-review.md#bid-compliance-and-human-decisions).
+
+The [HTTP/worker acceptance suite](../../server/tests/test_bid_review_findings_db.py)
+and [mocked browser suite](../../web/e2e/bid-review-findings.spec.js) are implemented.
+Their database/browser execution remains pending in the main session. Generated
+verification artifacts belong under ignored `data/work/bid-review-findings`.
+Visible mark presence, image evidence review, scoring, Word rendering and Clef
+remain outside this slice.
 
 ## Open decisions
 

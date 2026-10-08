@@ -467,7 +467,7 @@ class BidReviewFinding(Contract):
     explanation: NonBlank
     remediation: NonBlank
     deadline: AwareDatetime | None = None
-    status: Literal["open", "dismissed"] = "open"
+    status: Literal["open", "dismissed", "confirmed"] = "open"
     revision: Revision = 1
     latest_decision_id: UUID | None = None
     advisory_only: Literal[True] = True
@@ -490,14 +490,15 @@ class BidReviewFinding(Contract):
             raise ValueError("decision pointer must match the finding revision")
         if (self.review_domain is None) != (self.classification_id is None):
             raise ValueError("classified finding needs the exact classification event")
-        if self.status == "dismissed" and (
+        if self.status in {"dismissed", "confirmed"} and (
             self.latest_decision_id is None or self.classification_id is None
         ):
-            raise ValueError("dismissal requires a recorded human decision")
+            raise ValueError("closed disposition requires a recorded human decision")
         return self
 
 
 class BidReviewDecisionRequest(FindingDecisionRequest):
+    action: Literal["dismiss", "reopen", "confirm"]
     request_id: UUID
     expected_decision_id: UUID | None
 
@@ -510,7 +511,7 @@ class BidReviewDecisionView(Contract):
     finding_id: UUID
     prior_decision_id: UUID | None
     revision: int = Field(strict=True, ge=2)
-    action: Literal["dismiss", "reopen"]
+    action: Literal["dismiss", "reopen", "confirm", "classify"]
     reason: NonBlank
     reason_sha256: Sha256
     decided_by: UUID
@@ -527,6 +528,7 @@ class BidReviewDecisionView(Contract):
 
 class BidReviewClassificationRequest(Contract):
     request_id: UUID
+    expected_decision_id: UUID | None
     expected_revision: Revision
     expected_input_hash: Sha256
     review_domain: ReviewDomain

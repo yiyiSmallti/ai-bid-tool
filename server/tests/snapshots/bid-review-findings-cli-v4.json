@@ -1,0 +1,790 @@
+{
+  "local: review classification history": {
+    "command": "review history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": null,
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "action": "classify",
+        "actor_kind": "session",
+        "decided_at": "2026-10-08T00:00:00Z",
+        "decided_by": "00000000-0000-4000-8000-000000000001",
+        "finding_id": "00000000-0000-4000-8000-000000000003",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "immutable": true,
+        "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+        "reason": "Synthetic human review reason",
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 3,
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review classify": {
+    "command": "review classify",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "classify",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "open",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review confirm": {
+    "command": "review decide",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "confirm",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "confirmed",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review dismiss": {
+    "command": "review decide",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "dismiss",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "dismissed",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review findings": {
+    "command": "review findings",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": "synthetic-next",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "absence_search": {
+          "coverage": "all_bid_pages",
+          "inspected_bid_document_ids": [],
+          "kind": "locations",
+          "limitation_codes": [],
+          "method": "local_text",
+          "required_document_description": null,
+          "searched_pages": [
+            {
+              "document_id": "00000000-0000-4000-8000-000000000001",
+              "page": 2,
+              "page_id": "00000000-0000-4000-8000-000000000005",
+              "role": "bid"
+            }
+          ],
+          "searched_regions": [],
+          "submission_id": null,
+          "submission_manifest_sha256": null
+        },
+        "advisory_only": true,
+        "basis": {
+          "confidence": null,
+          "kind": "rule",
+          "model": null,
+          "platform_model_id": null,
+          "provider_config_id": null,
+          "provider_revision": null,
+          "rule_or_prompt_version": "synthetic-v1"
+        },
+        "bid_support": [],
+        "classification_id": "00000000-0000-4000-8000-000000000004",
+        "code": "bid_response_missing",
+        "explanation": "Synthetic searched inventory has no response",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "impact": "rejection",
+        "latest_decision_id": "00000000-0000-4000-8000-000000000004",
+        "limitation_codes": [],
+        "obligation_id": "00000000-0000-4000-8000-000000000001",
+        "outcome": "missing",
+        "remediation": "Synthetic human follow-up",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "reviewed_basis": null,
+        "revision": 2,
+        "rule_evidence": null,
+        "severity": "fatal",
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "tender_support": [
+          {
+            "document_id": "00000000-0000-4000-8000-000000000001",
+            "end_offset": 27,
+            "location": null,
+            "page": 1,
+            "page_id": "00000000-0000-4000-8000-000000000005",
+            "page_label": "original_pdf",
+            "quote": "Synthetic tender obligation",
+            "start_offset": 0
+          }
+        ],
+        "title": "Synthetic mandatory response missing"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review findings safe": {
+    "command": "review findings",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": "synthetic-next",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "advisory_only": true,
+        "classification_id": "00000000-0000-4000-8000-000000000004",
+        "code": "bid_response_missing",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "impact": "rejection",
+        "latest_decision_id": "00000000-0000-4000-8000-000000000004",
+        "obligation_id": "00000000-0000-4000-8000-000000000001",
+        "outcome": "missing",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 2,
+        "severity": "fatal",
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review findings stale": {
+    "command": "review findings",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": "synthetic-next",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "stale"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "advisory_only": true,
+        "classification_id": "00000000-0000-4000-8000-000000000004",
+        "code": "bid_response_missing",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "impact": "rejection",
+        "latest_decision_id": "00000000-0000-4000-8000-000000000004",
+        "obligation_id": "00000000-0000-4000-8000-000000000001",
+        "outcome": "missing",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 2,
+        "severity": "fatal",
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review history": {
+    "command": "review history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": null,
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "action": "dismiss",
+        "actor_kind": "session",
+        "decided_at": "2026-10-08T00:00:00Z",
+        "decided_by": "00000000-0000-4000-8000-000000000001",
+        "finding_id": "00000000-0000-4000-8000-000000000003",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "immutable": true,
+        "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+        "reason": "Synthetic human review reason",
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 3,
+        "state": "dismissed",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review reopen": {
+    "command": "review decide",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "reopen",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "open",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review classification history": {
+    "command": "review history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": null,
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "action": "classify",
+        "actor_kind": "session",
+        "decided_at": "2026-10-08T00:00:00Z",
+        "decided_by": "00000000-0000-4000-8000-000000000001",
+        "finding_id": "00000000-0000-4000-8000-000000000003",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "immutable": true,
+        "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+        "reason": "Synthetic human review reason",
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 3,
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review classify": {
+    "command": "review classify",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "classify",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "open",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review confirm": {
+    "command": "review decide",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "confirm",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "confirmed",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review dismiss": {
+    "command": "review decide",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "dismiss",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "dismissed",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review findings": {
+    "command": "review findings",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": "synthetic-next",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "absence_search": {
+          "coverage": "all_bid_pages",
+          "inspected_bid_document_ids": [],
+          "kind": "locations",
+          "limitation_codes": [],
+          "method": "local_text",
+          "required_document_description": null,
+          "searched_pages": [
+            {
+              "document_id": "00000000-0000-4000-8000-000000000001",
+              "page": 2,
+              "page_id": "00000000-0000-4000-8000-000000000005",
+              "role": "bid"
+            }
+          ],
+          "searched_regions": [],
+          "submission_id": null,
+          "submission_manifest_sha256": null
+        },
+        "advisory_only": true,
+        "basis": {
+          "confidence": null,
+          "kind": "rule",
+          "model": null,
+          "platform_model_id": null,
+          "provider_config_id": null,
+          "provider_revision": null,
+          "rule_or_prompt_version": "synthetic-v1"
+        },
+        "bid_support": [],
+        "classification_id": "00000000-0000-4000-8000-000000000004",
+        "code": "bid_response_missing",
+        "explanation": "Synthetic searched inventory has no response",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "impact": "rejection",
+        "latest_decision_id": "00000000-0000-4000-8000-000000000004",
+        "limitation_codes": [],
+        "obligation_id": "00000000-0000-4000-8000-000000000001",
+        "outcome": "missing",
+        "remediation": "Synthetic human follow-up",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "reviewed_basis": null,
+        "revision": 2,
+        "rule_evidence": null,
+        "severity": "fatal",
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "tender_support": [
+          {
+            "document_id": "00000000-0000-4000-8000-000000000001",
+            "end_offset": 27,
+            "location": null,
+            "page": 1,
+            "page_id": "00000000-0000-4000-8000-000000000005",
+            "page_label": "original_pdf",
+            "quote": "Synthetic tender obligation",
+            "start_offset": 0
+          }
+        ],
+        "title": "Synthetic mandatory response missing"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review findings safe": {
+    "command": "review findings",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": "synthetic-next",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "advisory_only": true,
+        "classification_id": "00000000-0000-4000-8000-000000000004",
+        "code": "bid_response_missing",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "impact": "rejection",
+        "latest_decision_id": "00000000-0000-4000-8000-000000000004",
+        "obligation_id": "00000000-0000-4000-8000-000000000001",
+        "outcome": "missing",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 2,
+        "severity": "fatal",
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review findings stale": {
+    "command": "review findings",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": "synthetic-next",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "stale"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "advisory_only": true,
+        "classification_id": "00000000-0000-4000-8000-000000000004",
+        "code": "bid_response_missing",
+        "id": "00000000-0000-4000-8000-000000000003",
+        "impact": "rejection",
+        "latest_decision_id": "00000000-0000-4000-8000-000000000004",
+        "obligation_id": "00000000-0000-4000-8000-000000000001",
+        "outcome": "missing",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 2,
+        "severity": "fatal",
+        "state": "open",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review history": {
+    "command": "review history",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "next_cursor": null,
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "validity": "current"
+    },
+    "duration_ms": 0,
+    "items": [
+      {
+        "action": "dismiss",
+        "actor_kind": "session",
+        "decided_at": "2026-10-08T00:00:00Z",
+        "decided_by": "00000000-0000-4000-8000-000000000001",
+        "finding_id": "00000000-0000-4000-8000-000000000003",
+        "id": "00000000-0000-4000-8000-000000000004",
+        "immutable": true,
+        "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+        "reason": "Synthetic human review reason",
+        "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "review_domain": "commercial",
+        "review_id": "00000000-0000-4000-8000-000000000002",
+        "revision": 3,
+        "state": "dismissed",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review reopen": {
+    "command": "review decide",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "action": "reopen",
+      "actor_kind": "session",
+      "decided_at": "2026-10-08T00:00:00Z",
+      "decided_by": "00000000-0000-4000-8000-000000000001",
+      "finding_id": "00000000-0000-4000-8000-000000000003",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "immutable": true,
+      "prior_decision_id": "00000000-0000-4000-8000-000000000004",
+      "reason": "Synthetic human review reason",
+      "reason_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "review_domain": "commercial",
+      "review_id": "00000000-0000-4000-8000-000000000002",
+      "revision": 3,
+      "state": "open",
+      "task_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

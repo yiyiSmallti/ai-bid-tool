@@ -6,6 +6,23 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-08: Uploaded-bid compliance findings and human decisions
+
+- Extend the authorized review run with bid-versus-obligation native-text judgments,
+  two-sided verified source spans and first-class searched absence. Keep excluded
+  price pages and unfinished budget/call coverage unknown.
+- Add deterministic required-document, local invalid/modified/non-signing signature
+  and mandatory-response rules. Migration 0065 stores encrypted immutable findings,
+  normalized source links and append-only human classification/decision events.
+- Add responsible-domain dismiss/reopen/confirm with reason and revision/hash CAS;
+  administrators classify without cross-domain decision rights. Tokens retain only
+  safe metadata projections. Machine findings and scores remain unchanged.
+- Add `bid review findings/decide/history/classify`, CLI snapshots and the existing
+  review page's grouped findings, source quotations, filters and decision dialogs.
+  HTTP/worker PostgreSQL and mocked browser scenarios are implemented; execution
+  remains pending. See [slice 3b](plan/bid-review.md#slice-3b-native-text-compliance-findings-and-human-decisions)
+  and [the mechanism](notes/bid-review.md#bid-compliance-and-human-decisions).
+
 ## 2026-10-08: Authorized uploaded-bid text review
 
 - Add exact human task-owner cleared-text inspection and outbound grants for

@@ -66,6 +66,7 @@ class BidReviewObligation(Tenant, Base):
             "bid_document_pages",
             ["task_id", "submission_id", "id"],
         ),
+        UniqueConstraint("org_id", "task_id", "submission_id", "review_id", "id"),
         UniqueConstraint("org_id", "review_id", "ordinal"),
         CheckConstraint("ordinal BETWEEN 1 AND 2000 AND length(details_encrypted)>0"),
     )

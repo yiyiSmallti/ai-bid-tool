@@ -18,8 +18,9 @@ from app.providers.base import ProviderFailure
 from app.providers.bid_reviewing import review_provider
 from app.schemas.bid_review_run import BidReviewRequest
 from app.services import bid_review as bids
+from app.services import bid_review_compliance as compliance
+from app.services import bid_review_findings, bid_review_text, check_semantic
 from app.services import bid_review_run as review
-from app.services import bid_review_text, check_semantic
 from app.services.auth import set_actor_context
 from app.services.versioned import audit
 
@@ -64,7 +65,7 @@ async def process(execution: JobExecution, storage) -> None:
         submitted = job.result["submission"]
         review_id = UUID(submitted["review_id"])
     execution.absolute_call_ceiling = fixed.manifest["limits"]["llm_calls"]
-    execution.plan(len(fixed.requests))
+    execution.plan(fixed.manifest["planned_calls"])
 
     async def before_admit(session):
         live = await execution.owned_job(session)
@@ -95,6 +96,75 @@ async def process(execution: JobExecution, storage) -> None:
             fixed.bid_pages,
         )
         completed.extend(fixed.refs[t.ref]["page_id"] for t in request.texts)
+    findings, compliance_assessed = [], []
+    for obligation in obligations:
+        requests, refs, excluded = compliance.batches(
+            obligation, fixed.authorized_bid_pages, fixed.llm.settings.llm_batch_chars
+        )
+        results, limits = [], []
+        if len(fixed.authorized_bid_pages) < len(fixed.bid_pages):
+            limits.append("bid_pages_excluded")
+        if excluded:
+            limits.append("bid_review_page_context_limit")
+        for request in requests:
+            if stop_reason is not None:
+                limits.append(stop_reason)
+                break
+            try:
+                output = await adapter.review(request)
+            except ProviderFailure as error:
+                if error.code not in PARTIAL_STOPS:
+                    raise
+                reported.extend(error.usage)
+                stop_reason = error.code
+                limits.append(error.code)
+                break
+            reported.extend(output.usages)
+            results.append(compliance.accept(request, output.wire, obligation, refs))
+        if stop_reason:
+            limits.append(stop_reason)
+        result = compliance.summarize(
+            obligation,
+            results,
+            fixed.manifest,
+            fixed.bid_pages,
+            fixed.manifest["provider_binding"],
+            limits,
+        )
+        findings.append(result)
+        if result["outcome"] != "unknown":
+            compliance_assessed.append(obligation["id"])
+    rule_findings = compliance.rules(
+        obligations,
+        findings,
+        fixed.manifest,
+        fixed.bid_pages,
+        fixed.documents,
+        fixed.validations,
+    )
+    if compliance.invalid_signatures(fixed.validations)[0] and not any(
+        finding["code"] == "signature_validation_invalid" for finding in rule_findings
+    ):
+        rejected.append("signature_defect_without_cited_obligation")
+    # Reject an overflowing obligation group as a whole and expose the uncovered
+    # suffix. Never prune individual anchors or low-confidence clauses to fit.
+    grouped, accepted = findings, []
+    limited_obligations = []
+    for obligation in obligations:
+        group = [f for f in grouped + rule_findings if f["obligation_id"] == obligation["id"]]
+        if (
+            limited_obligations
+            or len(group) > compliance.PER_OBLIGATION_LIMIT
+            or len(accepted) + len(group) > compliance.FINDING_LIMIT
+        ):
+            limited_obligations.append(obligation["id"])
+        else:
+            accepted.extend(group)
+    findings = accepted
+    if limited_obligations:
+        rejected.append("bid_review_finding_limit")
+        compliance_assessed = [i for i in compliance_assessed if i not in limited_obligations]
+    compliance.enforce_limits(findings)
     if execution.stopped is not None and execution.stopped.code not in ADMISSION_STOPS:
         raise execution.stopped
     unknown_signing = sum(value["applicability"] == "unknown" for value in signing.values())
@@ -116,6 +186,7 @@ async def process(execution: JobExecution, storage) -> None:
             + rejected
             + ([stop_reason] if stop_reason else [])
             + (["signing_applicability_unknown"] if unknown_signing else [])
+            + [code for finding in findings for code in finding["limitation_codes"]]
         )
     )
     coverage = {
@@ -133,7 +204,19 @@ async def process(execution: JobExecution, storage) -> None:
         "signing_requirements": len(signing),
         "signing_unknown": unknown_signing,
         "required_locations": sum(len(v["required_locations"]) for v in signing.values()),
-        "bid_compliance": "not_implemented",
+        "bid_compliance": "assessed" if len(compliance_assessed) == len(obligations) else "partial",
+        "bid_pages_authorized": len(fixed.authorized_bid_pages),
+        "compliance_obligations_total": len(obligations),
+        "compliance_obligations_assessed": len(compliance_assessed),
+        "compliance_assessed_obligation_ids": compliance_assessed,
+        "compliance_unassessed_obligation_ids": [
+            o["id"] for o in obligations if o["id"] not in compliance_assessed
+        ],
+        "findings": len(findings),
+        "finding_outcomes": {
+            outcome: sum(f["outcome"] == outcome for f in findings)
+            for outcome in ("responded", "deviation", "missing", "unknown")
+        },
         "signature_presence": "not_checked",
         "scoring": "not_requested",
         "clef": "not_implemented",
@@ -196,6 +279,9 @@ async def process(execution: JobExecution, storage) -> None:
                     )
                 )
         await session.flush()
+        await bid_review_findings.publish_bid_review_findings(
+            session, run, findings, settings=execution.settings
+        )
         session.add(
             BidReviewPublication(
                 id=uuid4(),
@@ -208,6 +294,7 @@ async def process(execution: JobExecution, storage) -> None:
                     {
                         "obligations": obligations,
                         "signing": list(signing.values()),
+                        "findings": findings,
                         "coverage": coverage,
                     }
                 ),

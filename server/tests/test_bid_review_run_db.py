@@ -57,6 +57,7 @@ from test_bid_review_upload_db import (
 )
 from test_check_combined import install_resolver
 from test_confidential_values import add_field, set_value
+from test_provider_config import save as save_provider
 from test_task_budget_execution import set_limit
 from test_team_workflow_membership import add_member, person, workflow
 
@@ -147,7 +148,38 @@ class ReviewVendor:
                 obligations.append(copy.deepcopy(target))
             else:
                 raise AssertionError(self.attack)
-        content = json.dumps({"obligations": obligations, "signing_requirements": signing})
+        if payload.get("operation") == "compliance":
+            target = payload["obligation"]
+            bid = next(
+                (
+                    row
+                    for row in payload["texts"]
+                    if row["ref"].startswith("b") and SAFE_CLAUSE in row["text"]
+                ),
+                None,
+            )
+            content = json.dumps(
+                {
+                    "obligations": [],
+                    "signing_requirements": [],
+                    "observations": [
+                        {
+                            "obligation_ref": target["ref"],
+                            "outcome": "responded" if bid else "missing",
+                            "confidence": 0.9,
+                            "explanation": "Synthetic comparison of authorized text.",
+                            "tender_references": [
+                                {"ref": target["tender_ref"], "quote": target["quote"]}
+                            ],
+                            "bid_references": [{"ref": bid["ref"], "quote": SAFE_CLAUSE}]
+                            if bid
+                            else [],
+                        }
+                    ],
+                }
+            )
+        else:
+            content = json.dumps({"obligations": obligations, "signing_requirements": signing})
         if self.failure == "malformed":
             content = REGISTERED
         return httpx.Response(
@@ -168,7 +200,7 @@ class ReviewVendor:
         )
 
 
-def review_llm(tmp_path, vendor):
+async def review_llm(api, header, tmp_path, vendor):
     values = {
         "data_dir": tmp_path,
         "llm_provider": "openai",
@@ -179,9 +211,29 @@ def review_llm(tmp_path, vendor):
         "llm_output_usd_per_mtok": 2,
         "llm_batch_chars": 100_000,
     }
-    return OpenAICompatibleExtractor(
-        Settings(**values), httpx.MockTransport(vendor), org_owned=True
+    existing = (await api.get("/providers", headers=header, params={"history": True})).json()[
+        "items"
+    ]
+    configured = (
+        existing[0]
+        if existing
+        else await save_provider(
+            api,
+            header,
+            model="synthetic-check-model",
+            base_url="https://semantic.example.test/v1",
+            reasoning=[],
+            default_reasoning=None,
+        )
     )
+    llm = OpenAICompatibleExtractor(
+        Settings(**values),
+        httpx.MockTransport(vendor),
+        org_owned=True,
+        provider_config_id=UUID(configured["id"]),
+    )
+    llm.model_revision = configured["revision"]
+    return llm
 
 
 def document(lines, *, image=False):
@@ -399,7 +451,7 @@ async def review_case(
     api, headers, application, tenants, tmp_path, monkeypatch, *, vendor=None, pages=1
 ):
     vendor = vendor or ReviewVendor()
-    llm = review_llm(tmp_path, vendor)
+    llm = await review_llm(api, headers[0], tmp_path, vendor)
     install_resolver(monkeypatch, llm)
     case = await prepared(api, headers, application, tenants, pages=pages)
     cleared, body, grant = await authorize(api, headers[0], case)
@@ -453,7 +505,7 @@ async def test_authorized_sanitized_run_preview_worker_citations_and_budget(
         row["sanitized_text"] for row in case["cleared"]["pages"] if row["outbound_eligible"]
     }
     sent_text = {row["text"] for payload in case["vendor"].requests for row in payload["texts"]}
-    assert sent_text and sent_text <= allowed_text
+    assert sent_text and all(any(text in allowed for allowed in allowed_text) for text in sent_text)
     assert_private_absent(case["vendor"].requests)
     assert_private_absent([receipt, accepted, finished, caplog.text])
     async with application.state.db.transaction(tenants["orgs"][0]) as session:
@@ -491,7 +543,7 @@ async def test_missing_prerequisites_are_write_free_preview_blockers(
     missing, api, headers, tenants, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, review_llm(tmp_path, vendor))
+    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
     case = await prepared(api, headers, application, tenants, prepare=missing != "preparation")
     if missing == "provider":
         await authorize(api, headers[0], case)
@@ -900,12 +952,10 @@ async def test_signing_coverage_never_turns_unchecked_locations_into_presence(
             params={"section": "signing_requirements"},
         )
     )
-    if applicability == "unknown" or location_rule == "specified" or omit_signing:
-        assert report["run"]["completion"] == "partial"
-    else:
-        assert report["run"]["completion"] == "complete"
+    # The fixture includes an excluded price page; compliance coverage is partial.
+    assert report["run"]["completion"] == "partial"
     assert report["run"]["coverage"]["signature_presence"] == "not_checked"
-    assert report["run"]["coverage"]["bid_compliance"] == "not_implemented"
+    assert report["run"]["coverage"]["bid_compliance"] == "partial"
     requirements = report["signing_requirements"]
     assert requirements
     bid_pages = {row["page_id"] for row in case["cleared"]["pages"] if row["role"] == "bid"}
@@ -988,7 +1038,7 @@ async def test_native_header_over_scanned_page_does_not_authorize_mixed_pixels(
     api, headers, tenants, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, review_llm(tmp_path, vendor))
+    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
     case = await prepared(api, headers, application, tenants, mixed=True)
     cleared = await redaction(api, headers[0], case)
     mixed = next(
@@ -1007,22 +1057,22 @@ async def test_native_header_over_scanned_page_does_not_authorize_mixed_pixels(
     assert_private_absent(rejected.json())
 
 
-async def test_complete_clause_extraction_declares_later_review_stages_unavailable(
+async def test_complete_clause_extraction_retains_excluded_bid_coverage_and_later_stages(
     api, headers, tenants, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, review_llm(tmp_path, vendor))
+    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
     case = await prepared(api, headers, application, tenants, signing=False)
     await authorize(api, headers[0], case)
     receipt = data(await preview(api, headers[0], case))
     accepted = data(await submit(api, headers[0], case, receipt))
     finished = await terminal(api, headers[0], application, tenants["orgs"][0], accepted)
     report = data(await api.get(f"/v4/bid-reviews/{accepted['review_id']}", headers=headers[0]))
-    assert report["run"]["completion"] == "complete"
+    assert report["run"]["completion"] == "partial"
     assert len(report["obligations"]) == 1
     coverage = report["run"]["coverage"]
     assert coverage["tender_pages_assessed"] == coverage["tender_pages_total"] == 1
-    assert coverage["bid_compliance"] == "not_implemented"
+    assert coverage["bid_compliance"] == "partial"
     assert coverage["signature_presence"] == "not_checked"
     assert coverage["scoring"] == "not_requested" and coverage["clef"] == "not_implemented"
     artifact(tmp_path, "complete-extraction", job=finished, report=report, requests=vendor.requests)
@@ -1032,7 +1082,7 @@ async def test_local_signature_subject_is_masked_in_authorized_tender_context(
     api, headers, tenants, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, review_llm(tmp_path, vendor))
+    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
     case = await prepared(api, headers, application, tenants, certificate=True)
     cleared, _, _ = await authorize(api, headers[0], case)
     assert_private_absent(cleared)
@@ -1053,7 +1103,7 @@ async def test_token_executes_only_current_human_authorized_snapshot_and_cannot_
     api, headers, tenants, application, tmp_path, monkeypatch
 ):
     vendor = ReviewVendor()
-    install_resolver(monkeypatch, review_llm(tmp_path, vendor))
+    install_resolver(monkeypatch, await review_llm(api, headers[0], tmp_path, vendor))
     case = await prepared(api, headers, application, tenants)
     issued = free_result(
         await api.post(

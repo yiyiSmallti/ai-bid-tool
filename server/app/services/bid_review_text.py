@@ -27,6 +27,8 @@ def verified_quote(page, quote):
         "page_id": page["page_id"],
         "page": page["page"],
         "quote": quote,
+        "start_offset": original.index(quote),
+        "end_offset": original.index(quote) + len(quote),
         "location": None,
         "page_label": "original_pdf",
     }
@@ -39,7 +41,7 @@ def verified_quote(page, quote):
 
 
 def build_requests(pages, candidates, batch_chars):
-    """One whole tender page per call. No bid content or filename is needed by 3a."""
+    """Extract one whole authorized tender page per call."""
     requests, refs, candidate_refs, excluded = [], {}, {}, []
     for index, page in enumerate(pages, 1):
         ref = f"t{index}"
@@ -106,6 +108,8 @@ def locations(answer, bid_pages):
 
 
 def accept(request, output, refs, candidate_refs, obligations, signing, bid_pages):
+    if output.observations:
+        return ["unexpected_compliance_output"]
     sent_refs = {text.ref for text in request.texts}
     expected_candidates = {c.candidate_ref for c in request.candidates}
     rejected = []
@@ -124,6 +128,8 @@ def accept(request, output, refs, candidate_refs, obligations, signing, bid_page
                 "text": citation["quote"],
                 "category": answer.category,
                 "starred": answer.starred or "★" in answer.quote or "▲" in answer.quote,
+                "triangle": "▲" in answer.quote,
+                "star_marker": "★" in answer.quote,
                 "rejection_trigger": answer.rejection_trigger
                 or "废标" in answer.quote
                 or "无效" in answer.quote,

@@ -4,7 +4,8 @@ import { money } from "../api.js";
 import { orgRequest, formatTime } from "../org.js";
 import { reviewError } from "../bid-review.js";
 import JobPanel from "./JobPanel.vue";
-const props = defineProps({ taskId: String, submissionId: String, writable: Boolean, prepared: Boolean, authorizationEpoch: Number });
+import BidReviewFindings from "./BidReviewFindings.vue";
+const props = defineProps({ taskId: String, submissionId: String, writable: Boolean, prepared: Boolean, authorizationEpoch: Number, authority: Object });
 const asOf = ref(new Date().toISOString().slice(0, 10)), preview = ref(null), consent = ref(false), retry = ref(false), busy = ref(false), error = ref(""), runs = ref([]), nextCursor = ref(null), selected = ref(null), jobId = ref("");
 const obligations = ref([]), signing = ref([]), obligationCursor = ref(null), signingCursor = ref(null);
 const path = computed(() => `/tasks/${encodeURIComponent(props.taskId)}/bid-reviews`);
@@ -80,7 +81,7 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
 <template>
   <el-card class="section" shadow="never"><template #header><h3>检验运行</h3></template>
     <el-alert v-if="error" :title="error" type="error" :closable="false" role="alert" />
-    <p>抽取招标义务并形成签章检查清单。检查结论仅供人工审查；本次不生成评分或签章存在性结论。</p>
+    <p>抽取招标义务、核对已授权文本并形成签章检查清单。检查结论仅供人工审查；本次不生成评分或签章存在性结论。</p>
     <template v-if="writable && prepared">
       <el-form label-position="top"><el-form-item label="检验基准日期"><el-input v-model="asOf" type="date" aria-label="检验基准日期" :disabled="busy" /></el-form-item></el-form>
       <el-checkbox v-model="retry" :disabled="busy">明确重试检验运行</el-checkbox>
@@ -105,6 +106,7 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
     </el-table>
     <el-button v-if="nextCursor" @click="moreRuns">更多检验运行</el-button>
     <template v-if="selected">
+      <BidReviewFindings :key="selected.id" :task-id="taskId" :run="selected" :authority="authority" :authorization-epoch="authorizationEpoch" />
       <p role="status">检验结果：{{ selected.completion === 'partial' ? '部分完成' : selected.completion === 'complete' ? '已完成' : '待完成' }} · 仅供辅助审查</p>
       <el-alert v-if="selected.validity === 'stale'" title="此检验结果的输入或授权已变化；请重新预检并运行，当前仅显示安全状态信息。" type="warning" :closable="false" />
       <p v-if="selected.coverage.tender_pages_total !== undefined">招标页面覆盖：已检验 {{ selected.coverage.tender_pages_assessed }} / 共 {{ selected.coverage.tender_pages_total }} 页；已授权 {{ selected.coverage.tender_pages_authorized }} 页</p>

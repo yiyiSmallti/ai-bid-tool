@@ -131,6 +131,8 @@ ENCRYPTED_COLUMNS = (
     ("bid_redacted_pages", "sanitized_text_encrypted"),
     ("bid_redacted_pages", "notes_encrypted"),
     ("bid_outbound_authorizations", "reason_encrypted"),
+    ("bid_review_findings", "details_encrypted"),
+    ("bid_review_finding_events", "reason_encrypted"),
     ("bid_review_obligations", "details_encrypted"),
     ("bid_review_signing_requirements", "details_encrypted"),
     ("bid_pdf_validations", "details_encrypted"),

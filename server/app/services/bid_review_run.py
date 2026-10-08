@@ -15,7 +15,7 @@ from app.models.bid_review_run import (
     BidReviewRun,
     BidReviewSigningRequirement,
 )
-from app.models.bid_signature import BidSigningCandidate
+from app.models.bid_signature import BidPDFValidation, BidSigningCandidate
 from app.models.entities import AuditLog, Job, VendorCall
 from app.providers import llm as llm_providers
 from app.providers.base import ProviderFailure
@@ -78,6 +78,9 @@ class Snapshot:
     candidate_refs: dict
     candidates: list
     bid_pages: list
+    authorized_bid_pages: list
+    documents: list
+    validations: list
     blockers: list[str]
     uncovered: list[str]
 
@@ -111,10 +114,15 @@ async def snapshot(session, actor, task_id, body, settings):
             "llm_calls": min(100, settings.job_max_vendor_calls),
             "obligations": 2000,
             "required_locations": 10000,
+            "findings": 10000,
+            "findings_per_obligation": 20,
+            "tender_anchors_per_finding": 20,
+            "bid_anchors_per_finding": 20,
         },
         "max_charge": str(body.max_charge) if body.max_charge is not None else None,
     }
     requests, refs, candidate_refs, candidates, bid_pages = [], {}, {}, [], []
+    authorized_bid_pages, document_inventory, validations = [], [], []
     fixed = None
     try:
         fixed = await privacy.current_snapshot(session, root.id, settings, binding)
@@ -163,6 +171,24 @@ async def snapshot(session, actor, task_id, body, settings):
             if p.role == "bid"
         ]
         documents = await bids.rows(session, root.id)
+        document_inventory = [{"id": str(d.id), "role": d.role, "kind": d.kind} for d in documents]
+        for row in (
+            await session.scalars(
+                select(BidPDFValidation).where(
+                    BidPDFValidation.submission_id == root.id,
+                    BidPDFValidation.preparation_id == fixed.publication.preparation_id,
+                )
+            )
+        ).all():
+            if any(d.id == row.document_id and d.role == "bid" for d in documents):
+                validations.append(
+                    {
+                        "validation_id": str(row.id),
+                        "document_id": str(row.document_id),
+                        "details": privacy.open_value(settings, row, "details_encrypted"),
+                    }
+                )
+        manifest["signature_validations_sha256"] = bids.digest(validations)
         doc_order = {str(d.id): d.ordinal for d in documents}
         bid_pages.sort(key=lambda p: (doc_order[p["document_id"]], p["page"]))
         manifest["tender_document_ids"] = [str(d.id) for d in documents if d.role == "tender"]
@@ -193,7 +219,7 @@ async def snapshot(session, actor, task_id, body, settings):
                 selected.authorization.authorized_sanitized_context_sha256
             )
             for page in selected.pages:
-                if page["role"] != "tender" or page["price_page"] or not page["outbound_eligible"]:
+                if page["price_page"] or not page["outbound_eligible"]:
                     continue
                 source = originals[str(page["page_id"])]
                 mapped = {
@@ -238,7 +264,10 @@ async def snapshot(session, actor, task_id, body, settings):
                         for b in section["blocks"]
                         if b["block_id"] in mapping
                     ]
-                pages.append(mapped)
+                if page["role"] == "tender":
+                    pages.append(mapped)
+                else:
+                    authorized_bid_pages.append(mapped)
         if not pages:
             blockers.append("outbound_authorization_required")
         if isinstance(llm, HTTPExtractor):
@@ -253,6 +282,10 @@ async def snapshot(session, actor, task_id, body, settings):
         if len(pages) < manifest["tender_page_count"]:
             uncovered.append("tender_pages_excluded")
         manifest["authorized_tender_page_ids"] = [p["page_id"] for p in pages]
+        authorized_bid_pages.sort(key=lambda p: (doc_order[p["document_id"]], p["page"]))
+        manifest["authorized_bid_page_ids"] = [p["page_id"] for p in authorized_bid_pages]
+        if len(authorized_bid_pages) < len(bid_pages):
+            uncovered.append("bid_pages_excluded")
         manifest["request_hashes"] = [
             bids.digest(request.model_dump(mode="json")) for request in requests
         ]
@@ -262,8 +295,17 @@ async def snapshot(session, actor, task_id, body, settings):
         if manifest["prepared_warnings"]:
             uncovered.append("preparation_coverage_partial")
     manifest["required_calls"] = len(requests)
-    manifest["planned_calls"] = min(len(requests), manifest["limits"]["llm_calls"])
-    if len(requests) > manifest["planned_calls"]:
+    # Compliance calls depend on extracted obligations; their exact bytes and
+    # price are unknowable during preflight. Quote only the known first stage.
+    dependent_max = 2000 * len(authorized_bid_pages)
+    manifest["dependent_compliance_calls_maximum"] = dependent_max
+    manifest["planned_calls"] = min(len(requests) + dependent_max, manifest["limits"]["llm_calls"])
+    manifest["first_pass_calls"] = min(len(requests), manifest["limits"]["llm_calls"])
+    manifest["compliance_call_estimate"] = "dependent_on_extracted_obligations"
+    manifest["dependent_calls_may_reach_ceiling"] = (
+        len(requests) + dependent_max > manifest["limits"]["llm_calls"]
+    )
+    if len(requests) > manifest["limits"]["llm_calls"]:
         uncovered.append("llm_call_ceiling_will_limit_coverage")
     return Snapshot(
         root,
@@ -275,6 +317,9 @@ async def snapshot(session, actor, task_id, body, settings):
         candidate_refs,
         candidates,
         bid_pages,
+        authorized_bid_pages,
+        document_inventory,
+        validations,
         sorted(set(blockers)),
         sorted(set(uncovered)),
     )
@@ -303,7 +348,7 @@ async def submit(session, actor, task_id, body, queue, settings):
         try:
             quotes = [
                 fixed.llm.quote(adapter.request_body(request))
-                for request in fixed.requests[: fixed.manifest["planned_calls"]]
+                for request in fixed.requests[: fixed.manifest["first_pass_calls"]]
             ]
         except ProviderFailure as error:
             blockers.append(error.code)
@@ -318,6 +363,7 @@ async def submit(session, actor, task_id, body, queue, settings):
         quotes=quotes,
         planned_calls=fixed.manifest["planned_calls"] if not blockers else None,
         max_charge=body.max_charge,
+        dynamic=bool(fixed.manifest["dependent_compliance_calls_maximum"]),
     )
     budget = BudgetPreflightData.model_validate(attached["budget_preflight"])
     budget.maximum_calls = fixed.manifest["limits"]["llm_calls"]

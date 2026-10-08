@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from app.api.bid_upload import receive
 from app.core.errors import ServiceError
 from app.providers.base import ProviderFailure
+from app.schemas import bid_review_findings as findings_contracts
 from app.schemas import bid_review_privacy as privacy_contracts
 from app.schemas import bid_review_run as run_contracts
 from app.schemas.bid_review import (
@@ -18,7 +19,7 @@ from app.schemas.bid_review import (
     BidSubmissionCreate,
 )
 from app.schemas.contracts import Cost, Result
-from app.services import bid_review, bid_review_privacy, bid_review_run
+from app.services import bid_review, bid_review_findings, bid_review_privacy, bid_review_run
 
 
 def create_router(context, settings, storage, queue):
@@ -229,5 +230,110 @@ def create_router(context, settings, storage, queue):
         response.ok = data.run.completion != "partial"
         response.warnings = data.run.uncovered_codes
         return response
+
+    @router.get("/bid-reviews/{review_id}/findings", response_model=Result)
+    async def findings(
+        review_id: UUID,
+        cursor: str | None = Query(None, max_length=4096),
+        limit: int = Query(50, ge=1, le=100),
+        severity: findings_contracts.FindingSeverity | None = None,
+        state: findings_contracts.FindingState | None = None,
+        outcome: findings_contracts.FindingOutcome | None = None,
+        ctx=Depends(context, scope="function"),
+    ):
+        data, items = await bid_review_findings.list_findings(
+            ctx[0],
+            ctx[1],
+            review_id,
+            settings,
+            cursor=cursor,
+            limit=limit,
+            severity=severity,
+            state=state,
+            outcome=outcome,
+        )
+        return result("review findings", data, items)
+
+    @router.post("/bid-reviews/{review_id}/findings/{finding_id}/decisions", response_model=Result)
+    async def decide_finding(
+        review_id: UUID,
+        finding_id: UUID,
+        body: findings_contracts.BidReviewDecisionRequest,
+        ctx=Depends(context, scope="function"),
+    ):
+        return result(
+            "review decide",
+            await bid_review_findings.decide(
+                ctx[0],
+                ctx[1],
+                review_id,
+                finding_id,
+                body,
+                settings,
+            ),
+        )
+
+    @router.post(
+        "/bid-reviews/{review_id}/findings/{finding_id}/classification", response_model=Result
+    )
+    async def classify_finding(
+        review_id: UUID,
+        finding_id: UUID,
+        body: findings_contracts.BidReviewClassificationRequest,
+        ctx=Depends(context, scope="function"),
+    ):
+        return result(
+            "review classify",
+            await bid_review_findings.decide(
+                ctx[0],
+                ctx[1],
+                review_id,
+                finding_id,
+                body,
+                settings,
+                classify=True,
+            ),
+        )
+
+    @router.get("/bid-reviews/{review_id}/findings/{finding_id}/decisions", response_model=Result)
+    async def finding_history(
+        review_id: UUID,
+        finding_id: UUID,
+        cursor: str | None = Query(None, max_length=4096),
+        limit: int = Query(50, ge=1, le=100),
+        ctx=Depends(context, scope="function"),
+    ):
+        data, items = await bid_review_findings.history(
+            ctx[0],
+            ctx[1],
+            review_id,
+            finding_id,
+            settings,
+            cursor=cursor,
+            limit=limit,
+        )
+        return result("review history", data, items)
+
+    @router.get(
+        "/bid-reviews/{review_id}/findings/{finding_id}/classification", response_model=Result
+    )
+    async def classification_history(
+        review_id: UUID,
+        finding_id: UUID,
+        cursor: str | None = Query(None, max_length=4096),
+        limit: int = Query(50, ge=1, le=100),
+        ctx=Depends(context, scope="function"),
+    ):
+        data, items = await bid_review_findings.history(
+            ctx[0],
+            ctx[1],
+            review_id,
+            finding_id,
+            settings,
+            cursor=cursor,
+            limit=limit,
+            classification=True,
+        )
+        return result("review history", data, items)
 
     return router
