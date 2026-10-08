@@ -95615,6 +95615,3663 @@
             "title": "OrgApplicationDecision",
             "type": "object"
           }
+        },
+        "review prepare": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_input_hash",
+              "options": [
+                "--expected-input-hash"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "preflight_token",
+              "options": [
+                "--preflight-token"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "retry",
+              "options": [
+                "--retry"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "wait",
+              "options": [
+                "--wait"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "120",
+              "multiple": false,
+              "name": "timeout",
+              "options": [
+                "--timeout"
+              ],
+              "required": false,
+              "type": "float range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expected_input_hash": {
+                "anyOf": [
+                  {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expected Input Hash"
+              },
+              "preflight_token": {
+                "anyOf": [
+                  {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Preflight Token"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              },
+              "retry": {
+                "default": false,
+                "title": "Retry",
+                "type": "boolean"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "submission_id"
+            ],
+            "title": "BidPrepareRequest",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "AssessmentJobAccepted": {
+                "additionalProperties": false,
+                "properties": {
+                  "cached": {
+                    "title": "Cached",
+                    "type": "boolean"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "status",
+                  "cached"
+                ],
+                "title": "AssessmentJobAccepted",
+                "type": "object"
+              },
+              "BidPreparePreview": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blockers": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Admission Blockers",
+                    "type": "array"
+                  },
+                  "budget": {
+                    "$ref": "#/$defs/BudgetPreflightData"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "expires_at": {
+                    "format": "date-time",
+                    "title": "Expires At",
+                    "type": "string"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "local_only": {
+                    "const": true,
+                    "default": true,
+                    "title": "Local Only",
+                    "type": "boolean"
+                  },
+                  "preflight_token": {
+                    "maxLength": 4096,
+                    "minLength": 1,
+                    "title": "Preflight Token",
+                    "type": "string"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "submission_id",
+                  "input_hash",
+                  "budget",
+                  "expires_at",
+                  "preflight_token"
+                ],
+                "title": "BidPreparePreview",
+                "type": "object"
+              },
+              "BudgetCallQuote": {
+                "additionalProperties": false,
+                "properties": {
+                  "capability": {
+                    "enum": [
+                      "llm",
+                      "vision",
+                      "ocr",
+                      "search",
+                      "embedding",
+                      "browser"
+                    ],
+                    "title": "Capability",
+                    "type": "string"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "image_count": {
+                    "default": 0,
+                    "maximum": 20,
+                    "minimum": 0,
+                    "title": "Image Count",
+                    "type": "integer"
+                  },
+                  "image_price_revision": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Image Price Revision"
+                  },
+                  "input_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Input Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "model": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "ocr_pages_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Ocr Pages Upper Bound",
+                    "type": "integer"
+                  },
+                  "output_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Output Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "payer": {
+                    "enum": [
+                      "org_platform",
+                      "org_direct",
+                      "platform_absorbed",
+                      "local_free"
+                    ],
+                    "title": "Payer",
+                    "type": "string"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "price_revision": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Price Revision",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "provider_config_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Config Id"
+                  },
+                  "request_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Request Sha256",
+                    "type": "string"
+                  },
+                  "reserved_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Charge"
+                  },
+                  "reserved_task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Task Amount"
+                  },
+                  "search_requests": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Search Requests",
+                    "type": "integer"
+                  },
+                  "unknown_reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "missing_price",
+                          "currency_conversion_required",
+                          "unbounded"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Unknown Reason"
+                  },
+                  "vendor_usd_upper_bound": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Vendor Usd Upper Bound"
+                  },
+                  "version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "capability",
+                  "payer",
+                  "provider",
+                  "model",
+                  "version",
+                  "price_revision",
+                  "request_sha256",
+                  "currency",
+                  "reserved_charge",
+                  "reserved_task_amount",
+                  "vendor_usd_upper_bound"
+                ],
+                "title": "BudgetCallQuote",
+                "type": "object"
+              },
+              "BudgetCost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "required": [
+                  "basis",
+                  "charge",
+                  "billing_currency",
+                  "task_amount"
+                ],
+                "title": "BudgetCost",
+                "type": "object"
+              },
+              "BudgetPreflightData": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blocker": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "task_budget_exceeded",
+                          "task_budget_unpriced",
+                          "task_budget_currency_review_required",
+                          "insufficient_balance",
+                          "job_charge_limit_exceeded",
+                          "job_call_limit_exceeded",
+                          "spend_cap_reached",
+                          "billing_price_unavailable",
+                          "billing_currency_mismatch",
+                          "provider_unavailable"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Admission Blocker"
+                  },
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "cached_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Cached Job Id"
+                  },
+                  "cached_result_cost": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Cost"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "command": {
+                    "title": "Command",
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "duration_basis": {
+                    "default": "unknown",
+                    "enum": [
+                      "unknown",
+                      "measured_profile"
+                    ],
+                    "title": "Duration Basis",
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "$ref": "#/$defs/BudgetCost"
+                  },
+                  "estimated_duration_ms": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Duration Ms"
+                  },
+                  "first_pass_fits": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "First Pass Fits"
+                  },
+                  "full_run_guaranteed": {
+                    "const": false,
+                    "default": false,
+                    "title": "Full Run Guaranteed",
+                    "type": "boolean"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "maximum_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Maximum Calls"
+                  },
+                  "next_call": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetCallQuote"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "planned_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Planned Calls"
+                  },
+                  "task_budget": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TaskBudgetView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Id"
+                  },
+                  "uncertainty": {
+                    "items": {
+                      "enum": [
+                        "retry_or_split",
+                        "dynamic_search",
+                        "unknown_price",
+                        "currency_conversion",
+                        "history_incomplete",
+                        "concurrent_spending",
+                        "unresolved_usage"
+                      ],
+                      "type": "string"
+                    },
+                    "title": "Uncertainty",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "command",
+                  "task_id",
+                  "input_hash",
+                  "as_of",
+                  "task_budget",
+                  "planned_calls",
+                  "estimate",
+                  "next_call",
+                  "admission_blocker",
+                  "first_pass_fits"
+                ],
+                "title": "BudgetPreflightData",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "TaskBudgetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "available": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Available"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "history_complete": {
+                    "title": "History Complete",
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reserved": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "spent": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Spent"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "currency_review_required"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "limit",
+                  "currency",
+                  "state",
+                  "spent",
+                  "reserved",
+                  "available",
+                  "unpriced_calls",
+                  "unresolved_calls",
+                  "history_complete",
+                  "as_of"
+                ],
+                "title": "TaskBudgetView",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BidPreparePreview"
+              },
+              {
+                "$ref": "#/$defs/AssessmentJobAccepted"
+              }
+            ]
+          },
+          "preflight": {
+            "$defs": {
+              "BudgetCallQuote": {
+                "additionalProperties": false,
+                "properties": {
+                  "capability": {
+                    "enum": [
+                      "llm",
+                      "vision",
+                      "ocr",
+                      "search",
+                      "embedding",
+                      "browser"
+                    ],
+                    "title": "Capability",
+                    "type": "string"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "image_count": {
+                    "default": 0,
+                    "maximum": 20,
+                    "minimum": 0,
+                    "title": "Image Count",
+                    "type": "integer"
+                  },
+                  "image_price_revision": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Image Price Revision"
+                  },
+                  "input_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Input Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "model": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Model",
+                    "type": "string"
+                  },
+                  "ocr_pages_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Ocr Pages Upper Bound",
+                    "type": "integer"
+                  },
+                  "output_tokens_upper_bound": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Output Tokens Upper Bound",
+                    "type": "integer"
+                  },
+                  "payer": {
+                    "enum": [
+                      "org_platform",
+                      "org_direct",
+                      "platform_absorbed",
+                      "local_free"
+                    ],
+                    "title": "Payer",
+                    "type": "string"
+                  },
+                  "platform_model_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Platform Model Id"
+                  },
+                  "price_revision": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Price Revision",
+                    "type": "string"
+                  },
+                  "provider": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Provider",
+                    "type": "string"
+                  },
+                  "provider_config_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Provider Config Id"
+                  },
+                  "request_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Request Sha256",
+                    "type": "string"
+                  },
+                  "reserved_charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved Charge"
+                  },
+                  "reserved_task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Reserved Task Amount"
+                  },
+                  "search_requests": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Search Requests",
+                    "type": "integer"
+                  },
+                  "unknown_reason": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "missing_price",
+                          "currency_conversion_required",
+                          "unbounded"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Unknown Reason"
+                  },
+                  "vendor_usd_upper_bound": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Vendor Usd Upper Bound"
+                  },
+                  "version": {
+                    "maxLength": 100,
+                    "minLength": 1,
+                    "title": "Version",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "capability",
+                  "payer",
+                  "provider",
+                  "model",
+                  "version",
+                  "price_revision",
+                  "request_sha256",
+                  "currency",
+                  "reserved_charge",
+                  "reserved_task_amount",
+                  "vendor_usd_upper_bound"
+                ],
+                "title": "BudgetCallQuote",
+                "type": "object"
+              },
+              "BudgetCost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "required": [
+                  "basis",
+                  "charge",
+                  "billing_currency",
+                  "task_amount"
+                ],
+                "title": "BudgetCost",
+                "type": "object"
+              },
+              "BudgetPreflightData": {
+                "additionalProperties": false,
+                "properties": {
+                  "admission_blocker": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "task_budget_exceeded",
+                          "task_budget_unpriced",
+                          "task_budget_currency_review_required",
+                          "insufficient_balance",
+                          "job_charge_limit_exceeded",
+                          "job_call_limit_exceeded",
+                          "spend_cap_reached",
+                          "billing_price_unavailable",
+                          "billing_currency_mismatch",
+                          "provider_unavailable"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Admission Blocker"
+                  },
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "cached_job_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Cached Job Id"
+                  },
+                  "cached_result_cost": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Cost"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null
+                  },
+                  "command": {
+                    "title": "Command",
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "duration_basis": {
+                    "default": "unknown",
+                    "enum": [
+                      "unknown",
+                      "measured_profile"
+                    ],
+                    "title": "Duration Basis",
+                    "type": "string"
+                  },
+                  "estimate": {
+                    "$ref": "#/$defs/BudgetCost"
+                  },
+                  "estimated_duration_ms": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Estimated Duration Ms"
+                  },
+                  "first_pass_fits": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "First Pass Fits"
+                  },
+                  "full_run_guaranteed": {
+                    "const": false,
+                    "default": false,
+                    "title": "Full Run Guaranteed",
+                    "type": "boolean"
+                  },
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "maximum_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Maximum Calls"
+                  },
+                  "next_call": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/BudgetCallQuote"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "planned_calls": {
+                    "anyOf": [
+                      {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Planned Calls"
+                  },
+                  "task_budget": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/TaskBudgetView"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "task_id": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Task Id"
+                  },
+                  "uncertainty": {
+                    "items": {
+                      "enum": [
+                        "retry_or_split",
+                        "dynamic_search",
+                        "unknown_price",
+                        "currency_conversion",
+                        "history_incomplete",
+                        "concurrent_spending",
+                        "unresolved_usage"
+                      ],
+                      "type": "string"
+                    },
+                    "title": "Uncertainty",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "command",
+                  "task_id",
+                  "input_hash",
+                  "as_of",
+                  "task_budget",
+                  "planned_calls",
+                  "estimate",
+                  "next_call",
+                  "admission_blocker",
+                  "first_pass_fits"
+                ],
+                "title": "BudgetPreflightData",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              },
+              "TaskBudgetView": {
+                "additionalProperties": false,
+                "properties": {
+                  "as_of": {
+                    "format": "date-time",
+                    "title": "As Of",
+                    "type": "string"
+                  },
+                  "available": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Available"
+                  },
+                  "currency": {
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Currency",
+                    "type": "string"
+                  },
+                  "history_complete": {
+                    "title": "History Complete",
+                    "type": "boolean"
+                  },
+                  "limit": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "title": "Limit"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "reserved": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Reserved"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "spent": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      }
+                    ],
+                    "title": "Spent"
+                  },
+                  "state": {
+                    "enum": [
+                      "active",
+                      "currency_review_required"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "unpriced_calls": {
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "limit",
+                  "currency",
+                  "state",
+                  "spent",
+                  "reserved",
+                  "available",
+                  "unpriced_calls",
+                  "unresolved_calls",
+                  "history_complete",
+                  "as_of"
+                ],
+                "title": "TaskBudgetView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "admission_blockers": {
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 100,
+                "title": "Admission Blockers",
+                "type": "array"
+              },
+              "budget": {
+                "$ref": "#/$defs/BudgetPreflightData"
+              },
+              "dry_run": {
+                "const": true,
+                "default": true,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "title": "Expires At",
+                "type": "string"
+              },
+              "input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Input Hash",
+                "type": "string"
+              },
+              "local_only": {
+                "const": true,
+                "default": true,
+                "title": "Local Only",
+                "type": "boolean"
+              },
+              "preflight_token": {
+                "maxLength": 4096,
+                "minLength": 1,
+                "title": "Preflight Token",
+                "type": "string"
+              },
+              "submission_id": {
+                "format": "uuid",
+                "title": "Submission Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "submission_id",
+              "input_hash",
+              "budget",
+              "expires_at",
+              "preflight_token"
+            ],
+            "title": "BidPreparePreview",
+            "type": "object"
+          },
+          "wait_output": {
+            "$defs": {
+              "BidDocumentView": {
+                "additionalProperties": false,
+                "properties": {
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  },
+                  "file_id": {
+                    "format": "uuid",
+                    "title": "File Id",
+                    "type": "string"
+                  },
+                  "page_count": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "title": "Page Count",
+                    "type": "integer"
+                  },
+                  "rendered_pdf_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Rendered Pdf Sha256",
+                    "type": "string"
+                  },
+                  "render_profile": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Render Profile",
+                    "type": "string"
+                  },
+                  "renderer_identity": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Renderer Identity",
+                    "type": "string"
+                  },
+                  "citation_mode": {
+                    "enum": [
+                      "page",
+                      "block"
+                    ],
+                    "title": "Citation Mode",
+                    "type": "string"
+                  },
+                  "parsing_warnings": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Parsing Warnings",
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "submission_id",
+                  "file_id",
+                  "page_count",
+                  "rendered_pdf_sha256",
+                  "render_profile",
+                  "renderer_identity",
+                  "citation_mode"
+                ],
+                "title": "BidDocumentView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "format": "uuid",
+                "title": "Id",
+                "type": "string"
+              },
+              "org_id": {
+                "format": "uuid",
+                "title": "Org Id",
+                "type": "string"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "revision": {
+                "minimum": 1,
+                "title": "Revision",
+                "type": "integer"
+              },
+              "manifest_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Manifest Sha256",
+                "type": "string"
+              },
+              "documents": {
+                "items": {
+                  "$ref": "#/$defs/BidDocumentView"
+                },
+                "maxItems": 20,
+                "minItems": 2,
+                "title": "Documents",
+                "type": "array"
+              },
+              "created_by": {
+                "format": "uuid",
+                "title": "Created By",
+                "type": "string"
+              },
+              "created_at": {
+                "format": "date-time",
+                "title": "Created At",
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "prepared",
+                  "withdrawn"
+                ],
+                "title": "State",
+                "type": "string"
+              },
+              "preparation_job_id": {
+                "format": "uuid",
+                "title": "Preparation Job Id",
+                "type": "string"
+              },
+              "preparation_input_hash": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Preparation Input Hash",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "org_id",
+              "task_id",
+              "revision",
+              "manifest_sha256",
+              "documents",
+              "created_by",
+              "created_at",
+              "state",
+              "preparation_job_id",
+              "preparation_input_hash"
+            ],
+            "title": "BidSubmissionView",
+            "type": "object"
+          }
+        },
+        "review submission list": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "cursor",
+              "options": [
+                "--cursor"
+              ],
+              "required": false,
+              "type": "text"
+            },
+            {
+              "default": "50",
+              "multiple": false,
+              "name": "limit",
+              "options": [
+                "--limit"
+              ],
+              "required": false,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "cursor": {
+                "anyOf": [
+                  {
+                    "maxLength": 2048,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Cursor"
+              },
+              "limit": {
+                "default": 50,
+                "maximum": 100,
+                "minimum": 1,
+                "title": "Limit",
+                "type": "integer"
+              }
+            },
+            "title": "BidReviewListQuery",
+            "type": "object"
+          },
+          "items": {
+            "$defs": {
+              "BidDocumentView": {
+                "additionalProperties": false,
+                "properties": {
+                  "citation_mode": {
+                    "enum": [
+                      "page",
+                      "block"
+                    ],
+                    "title": "Citation Mode",
+                    "type": "string"
+                  },
+                  "file_id": {
+                    "format": "uuid",
+                    "title": "File Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "page_count": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "title": "Page Count",
+                    "type": "integer"
+                  },
+                  "parsing_warnings": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Parsing Warnings",
+                    "type": "array"
+                  },
+                  "render_profile": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Render Profile",
+                    "type": "string"
+                  },
+                  "rendered_pdf_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Rendered Pdf Sha256",
+                    "type": "string"
+                  },
+                  "renderer_identity": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Renderer Identity",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "submission_id",
+                  "file_id",
+                  "page_count",
+                  "rendered_pdf_sha256",
+                  "render_profile",
+                  "renderer_identity",
+                  "citation_mode"
+                ],
+                "title": "BidDocumentView",
+                "type": "object"
+              },
+              "BidSubmissionUploaded": {
+                "additionalProperties": false,
+                "properties": {
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "created_by": {
+                    "format": "uuid",
+                    "title": "Created By",
+                    "type": "string"
+                  },
+                  "files": {
+                    "items": {
+                      "$ref": "#/$defs/BidUploadedDocument"
+                    },
+                    "maxItems": 20,
+                    "minItems": 2,
+                    "title": "Files",
+                    "type": "array"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "manifest_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Manifest Sha256",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "default": "uploaded",
+                    "enum": [
+                      "uploaded",
+                      "withdrawn"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "manifest_sha256",
+                  "files",
+                  "created_by",
+                  "created_at"
+                ],
+                "title": "BidSubmissionUploaded",
+                "type": "object"
+              },
+              "BidSubmissionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "created_by": {
+                    "format": "uuid",
+                    "title": "Created By",
+                    "type": "string"
+                  },
+                  "documents": {
+                    "items": {
+                      "$ref": "#/$defs/BidDocumentView"
+                    },
+                    "maxItems": 20,
+                    "minItems": 2,
+                    "title": "Documents",
+                    "type": "array"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "manifest_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Manifest Sha256",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "preparation_input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Preparation Input Hash",
+                    "type": "string"
+                  },
+                  "preparation_job_id": {
+                    "format": "uuid",
+                    "title": "Preparation Job Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "prepared",
+                      "withdrawn"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "manifest_sha256",
+                  "documents",
+                  "created_by",
+                  "created_at",
+                  "state",
+                  "preparation_job_id",
+                  "preparation_input_hash"
+                ],
+                "title": "BidSubmissionView",
+                "type": "object"
+              },
+              "BidUploadedDocument": {
+                "additionalProperties": false,
+                "properties": {
+                  "file_id": {
+                    "format": "uuid",
+                    "title": "File Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "submission_id",
+                  "file_id"
+                ],
+                "title": "BidUploadedDocument",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BidSubmissionUploaded"
+              },
+              {
+                "$ref": "#/$defs/BidSubmissionView"
+              }
+            ]
+          },
+          "output": {
+            "additionalProperties": false,
+            "properties": {
+              "next_cursor": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Next Cursor"
+              },
+              "task_id": {
+                "format": "uuid",
+                "title": "Task Id",
+                "type": "string"
+              },
+              "total": {
+                "minimum": 0,
+                "title": "Total",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "task_id",
+              "total"
+            ],
+            "title": "AssessmentListData",
+            "type": "object"
+          }
+        },
+        "review submission show": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "id",
+              "options": [
+                "--id"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "BidDocumentInventory": {
+                "additionalProperties": false,
+                "properties": {
+                  "document_id": {
+                    "format": "uuid",
+                    "title": "Document Id",
+                    "type": "string"
+                  },
+                  "image_pages": {
+                    "maximum": 1000,
+                    "minimum": 0,
+                    "title": "Image Pages",
+                    "type": "integer"
+                  },
+                  "page_count": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "title": "Page Count",
+                    "type": "integer"
+                  },
+                  "parsing_warnings": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Parsing Warnings",
+                    "type": "array"
+                  },
+                  "signature_fields": {
+                    "minimum": 0,
+                    "title": "Signature Fields",
+                    "type": "integer"
+                  },
+                  "text_pages": {
+                    "maximum": 1000,
+                    "minimum": 0,
+                    "title": "Text Pages",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "document_id",
+                  "page_count",
+                  "text_pages",
+                  "image_pages",
+                  "signature_fields"
+                ],
+                "title": "BidDocumentInventory",
+                "type": "object"
+              },
+              "BidDocumentView": {
+                "additionalProperties": false,
+                "properties": {
+                  "citation_mode": {
+                    "enum": [
+                      "page",
+                      "block"
+                    ],
+                    "title": "Citation Mode",
+                    "type": "string"
+                  },
+                  "file_id": {
+                    "format": "uuid",
+                    "title": "File Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "page_count": {
+                    "maximum": 1000,
+                    "minimum": 1,
+                    "title": "Page Count",
+                    "type": "integer"
+                  },
+                  "parsing_warnings": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "maxItems": 100,
+                    "title": "Parsing Warnings",
+                    "type": "array"
+                  },
+                  "render_profile": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Render Profile",
+                    "type": "string"
+                  },
+                  "rendered_pdf_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Rendered Pdf Sha256",
+                    "type": "string"
+                  },
+                  "renderer_identity": {
+                    "maxLength": 20000,
+                    "minLength": 1,
+                    "title": "Renderer Identity",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "submission_id",
+                  "file_id",
+                  "page_count",
+                  "rendered_pdf_sha256",
+                  "render_profile",
+                  "renderer_identity",
+                  "citation_mode"
+                ],
+                "title": "BidDocumentView",
+                "type": "object"
+              },
+              "BidPreparationStatus": {
+                "additionalProperties": false,
+                "properties": {
+                  "input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Input Hash",
+                    "type": "string"
+                  },
+                  "job_id": {
+                    "format": "uuid",
+                    "title": "Job Id",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "queued",
+                      "running",
+                      "succeeded",
+                      "failed",
+                      "cancelled"
+                    ],
+                    "title": "Status",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "job_id",
+                  "status",
+                  "input_hash"
+                ],
+                "title": "BidPreparationStatus",
+                "type": "object"
+              },
+              "BidSubmissionUploaded": {
+                "additionalProperties": false,
+                "properties": {
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "created_by": {
+                    "format": "uuid",
+                    "title": "Created By",
+                    "type": "string"
+                  },
+                  "files": {
+                    "items": {
+                      "$ref": "#/$defs/BidUploadedDocument"
+                    },
+                    "maxItems": 20,
+                    "minItems": 2,
+                    "title": "Files",
+                    "type": "array"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "manifest_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Manifest Sha256",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "default": "uploaded",
+                    "enum": [
+                      "uploaded",
+                      "withdrawn"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "manifest_sha256",
+                  "files",
+                  "created_by",
+                  "created_at"
+                ],
+                "title": "BidSubmissionUploaded",
+                "type": "object"
+              },
+              "BidSubmissionView": {
+                "additionalProperties": false,
+                "properties": {
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "created_by": {
+                    "format": "uuid",
+                    "title": "Created By",
+                    "type": "string"
+                  },
+                  "documents": {
+                    "items": {
+                      "$ref": "#/$defs/BidDocumentView"
+                    },
+                    "maxItems": 20,
+                    "minItems": 2,
+                    "title": "Documents",
+                    "type": "array"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "manifest_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Manifest Sha256",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "preparation_input_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Preparation Input Hash",
+                    "type": "string"
+                  },
+                  "preparation_job_id": {
+                    "format": "uuid",
+                    "title": "Preparation Job Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "enum": [
+                      "prepared",
+                      "withdrawn"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "manifest_sha256",
+                  "documents",
+                  "created_by",
+                  "created_at",
+                  "state",
+                  "preparation_job_id",
+                  "preparation_input_hash"
+                ],
+                "title": "BidSubmissionView",
+                "type": "object"
+              },
+              "BidUploadedDocument": {
+                "additionalProperties": false,
+                "properties": {
+                  "file_id": {
+                    "format": "uuid",
+                    "title": "File Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "submission_id",
+                  "file_id"
+                ],
+                "title": "BidUploadedDocument",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "inventory": {
+                "items": {
+                  "$ref": "#/$defs/BidDocumentInventory"
+                },
+                "maxItems": 20,
+                "title": "Inventory",
+                "type": "array"
+              },
+              "preparation": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/BidPreparationStatus"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null
+              },
+              "submission": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/BidSubmissionUploaded"
+                  },
+                  {
+                    "$ref": "#/$defs/BidSubmissionView"
+                  }
+                ],
+                "title": "Submission"
+              }
+            },
+            "required": [
+              "submission"
+            ],
+            "title": "BidSubmissionDetail",
+            "type": "object"
+          }
+        },
+        "review upload": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "task",
+              "options": [
+                "--task"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "input",
+              "options": [
+                "--input"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": null,
+              "multiple": true,
+              "name": "file",
+              "options": [
+                "--file"
+              ],
+              "required": true,
+              "type": "path"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "dry_run",
+              "options": [
+                "--dry-run"
+              ],
+              "required": false,
+              "type": "boolean"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "$defs": {
+              "BidFileInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "BidFileInput",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Multipart metadata; bytes are independently bounded and verified by service.",
+            "properties": {
+              "dry_run": {
+                "default": false,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/BidFileInput"
+                },
+                "maxItems": 20,
+                "minItems": 2,
+                "title": "Files",
+                "type": "array"
+              },
+              "request_id": {
+                "format": "uuid",
+                "title": "Request Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "request_id",
+              "files"
+            ],
+            "title": "BidSubmissionCreate",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "BidFileInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "BidFileInput",
+                "type": "object"
+              },
+              "BidSubmissionUploaded": {
+                "additionalProperties": false,
+                "properties": {
+                  "created_at": {
+                    "format": "date-time",
+                    "title": "Created At",
+                    "type": "string"
+                  },
+                  "created_by": {
+                    "format": "uuid",
+                    "title": "Created By",
+                    "type": "string"
+                  },
+                  "files": {
+                    "items": {
+                      "$ref": "#/$defs/BidUploadedDocument"
+                    },
+                    "maxItems": 20,
+                    "minItems": 2,
+                    "title": "Files",
+                    "type": "array"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "manifest_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Manifest Sha256",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "revision": {
+                    "minimum": 1,
+                    "title": "Revision",
+                    "type": "integer"
+                  },
+                  "state": {
+                    "default": "uploaded",
+                    "enum": [
+                      "uploaded",
+                      "withdrawn"
+                    ],
+                    "title": "State",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "revision",
+                  "manifest_sha256",
+                  "files",
+                  "created_by",
+                  "created_at"
+                ],
+                "title": "BidSubmissionUploaded",
+                "type": "object"
+              },
+              "BidUploadPreview": {
+                "additionalProperties": false,
+                "properties": {
+                  "cost": {
+                    "$ref": "#/$defs/Cost"
+                  },
+                  "dry_run": {
+                    "const": true,
+                    "default": true,
+                    "title": "Dry Run",
+                    "type": "boolean"
+                  },
+                  "files": {
+                    "items": {
+                      "$ref": "#/$defs/BidFileInput"
+                    },
+                    "maxItems": 20,
+                    "minItems": 2,
+                    "title": "Files",
+                    "type": "array"
+                  },
+                  "limits": {
+                    "additionalProperties": {
+                      "type": "integer"
+                    },
+                    "propertyNames": {
+                      "enum": [
+                        "files",
+                        "file_bytes",
+                        "submission_bytes"
+                      ]
+                    },
+                    "title": "Limits",
+                    "type": "object"
+                  },
+                  "payload_sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Payload Sha256",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "files",
+                  "payload_sha256",
+                  "limits",
+                  "cost"
+                ],
+                "title": "BidUploadPreview",
+                "type": "object"
+              },
+              "BidUploadedDocument": {
+                "additionalProperties": false,
+                "properties": {
+                  "file_id": {
+                    "format": "uuid",
+                    "title": "File Id",
+                    "type": "string"
+                  },
+                  "id": {
+                    "format": "uuid",
+                    "title": "Id",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "org_id": {
+                    "format": "uuid",
+                    "title": "Org Id",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  },
+                  "submission_id": {
+                    "format": "uuid",
+                    "title": "Submission Id",
+                    "type": "string"
+                  },
+                  "task_id": {
+                    "format": "uuid",
+                    "title": "Task Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes",
+                  "id",
+                  "org_id",
+                  "task_id",
+                  "submission_id",
+                  "file_id"
+                ],
+                "title": "BidUploadedDocument",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              }
+            },
+            "anyOf": [
+              {
+                "$ref": "#/$defs/BidSubmissionUploaded"
+              },
+              {
+                "$ref": "#/$defs/BidUploadPreview"
+              }
+            ]
+          },
+          "preflight": {
+            "$defs": {
+              "BidFileInput": {
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "enum": [
+                      "tender",
+                      "qualification",
+                      "commercial_technical",
+                      "price",
+                      "declaration",
+                      "other"
+                    ],
+                    "title": "Kind",
+                    "type": "string"
+                  },
+                  "media_type": {
+                    "enum": [
+                      "application/pdf",
+                      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ],
+                    "title": "Media Type",
+                    "type": "string"
+                  },
+                  "role": {
+                    "enum": [
+                      "tender",
+                      "bid"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "sha256": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "Sha256",
+                    "type": "string"
+                  },
+                  "size_bytes": {
+                    "exclusiveMinimum": 0,
+                    "maximum": 104857600,
+                    "title": "Size Bytes",
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "role",
+                  "kind",
+                  "media_type",
+                  "sha256",
+                  "size_bytes"
+                ],
+                "title": "BidFileInput",
+                "type": "object"
+              },
+              "Cost": {
+                "additionalProperties": false,
+                "properties": {
+                  "basis": {
+                    "default": "zero",
+                    "enum": [
+                      "actual",
+                      "first_pass_upper_bound",
+                      "unknown",
+                      "zero",
+                      "cache_hit"
+                    ],
+                    "title": "Basis",
+                    "type": "string"
+                  },
+                  "billing_currency": {
+                    "default": "USD",
+                    "pattern": "^[A-Z]{3}$",
+                    "title": "Billing Currency",
+                    "type": "string"
+                  },
+                  "charge": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Charge"
+                  },
+                  "llm_tokens": {
+                    "default": 0,
+                    "title": "Llm Tokens",
+                    "type": "integer"
+                  },
+                  "ocr_pages": {
+                    "default": 0,
+                    "title": "Ocr Pages",
+                    "type": "integer"
+                  },
+                  "task_amount": {
+                    "anyOf": [
+                      {
+                        "minimum": 0.0,
+                        "type": "number"
+                      },
+                      {
+                        "pattern": "^(?!^[-+.]*$)[+-]?0*(?:\\d{0,10}|(?=[\\d.]{1,19}0*$)\\d{0,10}\\.\\d{0,8}0*$)",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": "0",
+                    "title": "Task Amount"
+                  },
+                  "unpriced_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unpriced Calls",
+                    "type": "integer"
+                  },
+                  "unresolved_calls": {
+                    "default": 0,
+                    "minimum": 0,
+                    "title": "Unresolved Calls",
+                    "type": "integer"
+                  },
+                  "usd": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": 0.0,
+                    "title": "Usd"
+                  }
+                },
+                "title": "Cost",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "properties": {
+              "cost": {
+                "$ref": "#/$defs/Cost"
+              },
+              "dry_run": {
+                "const": true,
+                "default": true,
+                "title": "Dry Run",
+                "type": "boolean"
+              },
+              "files": {
+                "items": {
+                  "$ref": "#/$defs/BidFileInput"
+                },
+                "maxItems": 20,
+                "minItems": 2,
+                "title": "Files",
+                "type": "array"
+              },
+              "limits": {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "propertyNames": {
+                  "enum": [
+                    "files",
+                    "file_bytes",
+                    "submission_bytes"
+                  ]
+                },
+                "title": "Limits",
+                "type": "object"
+              },
+              "payload_sha256": {
+                "pattern": "^[0-9a-f]{64}$",
+                "title": "Payload Sha256",
+                "type": "string"
+              }
+            },
+            "required": [
+              "files",
+              "payload_sha256",
+              "limits",
+              "cost"
+            ],
+            "title": "BidUploadPreview",
+            "type": "object"
+          }
         }
       },
       "exit_codes": {

@@ -276,6 +276,9 @@ from pydantic import TypeAdapter
 from bid_cli.attachments import COMMAND_DATA as ATTACHMENT_DATA
 from bid_cli.attachments import COMMAND_INPUTS as ATTACHMENT_INPUTS
 from bid_cli.attachments import COMMAND_ITEMS as ATTACHMENT_ITEMS
+from bid_cli.bid_review import COMMAND_DATA as REVIEW_DATA
+from bid_cli.bid_review import COMMAND_INPUTS as REVIEW_INPUTS
+from bid_cli.bid_review import COMMAND_ITEMS as REVIEW_ITEMS
 from bid_cli.management_bindings import COMMAND_DATA as BINDING_COMMAND_DATA
 from bid_cli.management_bindings import COMMAND_INPUTS as BINDING_COMMAND_INPUTS
 from bid_cli.management_bindings import COMMAND_ITEMS as BINDING_COMMAND_ITEMS
@@ -798,6 +801,7 @@ COMMANDS.update(PROVIDER_COMMAND_INPUTS)
 COMMANDS.update(CONFIDENTIAL_COMMAND_INPUTS)
 
 COMMANDS.update(ATTACHMENT_INPUTS)
+COMMANDS.update(REVIEW_INPUTS)
 OUTPUTS.update({name: TypeAdapter(model) for name, model in ATTACHMENT_DATA.items()})
 
 OUTPUTS.update({name: TypeAdapter(AttachmentPageData) for name in ATTACHMENT_ITEMS})
@@ -1054,6 +1058,15 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
     if version == "4.0":
+        from app.schemas.bid_review import BidPreparePreview, BidSubmissionView, BidUploadPreview
+
+        for name, model in REVIEW_DATA.items():
+            schema["commands"][name]["output"] = TypeAdapter(model).json_schema()
+        for name, model in REVIEW_ITEMS.items():
+            schema["commands"][name]["items"] = TypeAdapter(model).json_schema()
+        schema["commands"]["review upload"]["preflight"] = BidUploadPreview.model_json_schema()
+        schema["commands"]["review prepare"]["preflight"] = BidPreparePreview.model_json_schema()
+        schema["commands"]["review prepare"]["wait_output"] = BidSubmissionView.model_json_schema()
         from app.schemas.annotation_contracts import (
             COMMAND_PAYLOADS,
             AnnotationCandidateView,

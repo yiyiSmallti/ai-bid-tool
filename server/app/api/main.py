@@ -17,6 +17,7 @@ from starlette.exceptions import HTTPException
 
 from app.api.account import create_router as create_account_router
 from app.api.agent import create_router as create_agent_router
+from app.api.bid_review import create_router as create_bid_review_router
 from app.api.check import create_router as create_check_router
 from app.api.confidential import create_router as create_confidential_router
 from app.api.exports import create_router as create_export_router
@@ -229,6 +230,7 @@ def create_app(
                 )
         if (
             credential_route
+            or (request.method == "POST" and "bid-submissions" in parts and parts[-1] == "prepare")
             or resource_management_route
             or manual_requirement_route
             or (
@@ -326,13 +328,20 @@ def create_app(
                 )
             )
         )
+        bid_review_route = "bid-submissions" in parts
         annotation_route = (
             len(parts) == 3 and parts[0] == "tasks" and parts[2] == "annotations"
         ) or (parts[0] in {"annotations", "annotation-releases"} and parts[-1] != "content")
         response = (
             error_response(request, ServiceError("not_found", "Resource not found", 404, 4))
             if version == "3.0"
-            and (budget_route or agent_route or assessment_route or annotation_route)
+            and (
+                budget_route
+                or agent_route
+                or assessment_route
+                or annotation_route
+                or bid_review_route
+            )
             else await call_next(request)
         )
         response.headers["X-Bid-Contract-Version"] = version
@@ -507,6 +516,10 @@ def create_app(
                     return error_response(request, exc)
             return error_response(
                 request, ServiceError("invalid_input", "Invalid credential input", 422, 2)
+            )
+        if "bid-submissions" in request.url.path.split("/"):
+            return error_response(
+                request, ServiceError("invalid_input", "Invalid bid submission input", 422, 2)
             )
         # Name the offending fields but never echo submitted values.
         fields = sorted(
@@ -728,6 +741,7 @@ def create_app(
 
     app.include_router(create_management_provider_router(context, settings))
     app.include_router(create_confidential_router(context, settings))
+    app.include_router(create_bid_review_router(context, settings, storage, queue))
     app.include_router(create_check_router(context, db, storage, queue, settings))
     app.include_router(create_score_router(context, db, storage, queue, settings))
     from app.api.memory import create_router as create_memory_router

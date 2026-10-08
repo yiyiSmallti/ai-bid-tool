@@ -68,6 +68,7 @@ JOB_SCOPES = {
     "product_simulation": "task:resource",
     "memory_candidate": "memory:candidate:run",
     "sandbox": "sandbox:render",
+    "bid_review_prepare": "bid-review:prepare",
 }
 
 
@@ -97,6 +98,10 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
         )
     if job.kind in {"annotation_render", "annotation_release"}:
         from app.services.annotations import worker_access
+
+        return await worker_access(session, job, bind_context=bind_context)
+    if job.kind == "bid_review_prepare":
+        from app.services.bid_preparation import worker_access
 
         return await worker_access(session, job, bind_context=bind_context)
     member = await membership(session, job.actor_user_id, job.org_id)

@@ -6,6 +6,7 @@ __all__ = ["Base"]
 from app.models import agent as agent
 from app.models import annotations as annotations
 from app.models import attachments as attachments
+from app.models import bid_review as bid_review
 from app.models import check as check
 from app.models import confidential as confidential
 from app.models import exports as exports

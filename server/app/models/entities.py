@@ -79,6 +79,10 @@ class ApiToken(Tenant, Base):
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (
         CheckConstraint(
+            "NOT (scopes ?| ARRAY['bid-review:upload','bid-review:prepare','bid-review:report:render','bid-review:original:read','bid-review:source:read','bid-review:report:read','bid-review:report:download','bid-review:decide','bid-review:evidence:review','bid-review:price:release','bid-review:outbound:authorize','bid-review:classify'])",
+            name="token_forbidden_bid_review_scopes",
+        ),
+        CheckConstraint(
             "NOT (scopes ?| ARRAY['attachment:write','attachment:review','attachment:manage','attachment:original:read','task:attachment','attachment:privacy','attachment:page:read'])",
             name="token_forbidden_attachment_scopes",
         ),
@@ -432,6 +436,10 @@ class Job(Tenant, Base):
     command: Mapped[str | None] = mapped_column(String(100))
     __table_args__ = (
         CheckConstraint(
+            "kind<>'bid_review_prepare' OR (actor_user_id IS NOT NULL AND actor_kind='session' AND actor_token_id IS NULL AND agent_principal_id IS NULL)",
+            name="bid_review_prepare_actor",
+        ),
+        CheckConstraint(
             "kind NOT IN ('annotation_render','annotation_release') OR (task_id IS NOT NULL AND document_id IS NOT NULL AND actor_user_id IS NOT NULL AND actor_kind='session' AND actor_token_id IS NULL)",
             name="annotation_job_kind",
         ),
@@ -461,12 +469,13 @@ class Job(Tenant, Base):
         ),
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "task_id", "document_id", "id", name="agent_job_document"),
+        UniqueConstraint("org_id", "task_id", "id", name="bid_review_job_task"),
         UniqueConstraint("org_id", "cache_key"),
         ForeignKeyConstraint(
             ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
         ),
         CheckConstraint(
-            "(kind = 'provider_test' AND task_id IS NULL AND document_id IS NULL) OR (kind <> 'provider_test' AND task_id IS NOT NULL AND document_id IS NOT NULL)",
+            "(kind = 'provider_test' AND task_id IS NULL AND document_id IS NULL) OR (kind='bid_review_prepare' AND task_id IS NOT NULL AND document_id IS NULL) OR (kind NOT IN ('provider_test','bid_review_prepare') AND task_id IS NOT NULL AND document_id IS NOT NULL)",
             name="job_document_binding",
         ),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),

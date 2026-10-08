@@ -65,6 +65,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [page-previews.md](notes/page-previews.md): online page previews of original tender documents (招标文件), original certificates and exports, and export conversion.
 - [sandbox-execution.md](notes/sandbox-execution.md): isolated execution, job authorization, artifact provenance, cleanup and downloads.
 - [sandbox-fetch.md](notes/sandbox-fetch.md): allowlist and open-development policies, DNS/IP pinning, fetch quotas, individual-resource denial and trusted request receipts.
+- [bid-review.md](notes/bid-review.md): independent immutable tender/bid upload, human preparation admission and protected local page inventories.
 - [attachment-archives.md](notes/attachment-archives.md): immutable PDF review, exact declaration/task pins, page privacy and retained-object reconciliation.
 - [annotation.md](notes/annotation.md): source-bound cloud certificate-page candidates, exact-approval confirmed releases, and explicit human attachment.
 - [screenshot-evidence.md](notes/screenshot-evidence.md): screenshot pixel redaction and privacy clearance, vendor web/PDF capture and archival, vendor-source search, response-card image evidence, prototype (原型) delivery decisions, analysis admission and billing, and invalidation/recomputation.
