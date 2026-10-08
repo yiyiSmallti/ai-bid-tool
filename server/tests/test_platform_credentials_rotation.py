@@ -133,6 +133,8 @@ def test_two_org_history_and_platform_rewrap_is_reentrant_and_preserves_values(
         "scope": "provider-secrets",
         "platform_checked": 1,
         "platform_rewritten": 1,
+        "operator_factors_checked": 0,
+        "operator_factors_rewritten": 0,
         "org_revisions_checked": 4,
         "org_revisions_rewritten": 4,
         "failed": 0,

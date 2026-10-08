@@ -150,7 +150,9 @@ Batching and model options are defined by
 2. Inject `BID_PLATFORM_DATABASE_URL` for management, `BID_CREDENTIAL_DATABASE_URL`
    for resolution, and a distinct `BID_SECRETS_KEY` into the appropriate API/worker
    processes. The standalone evaluator requires only the reader URL. Keep root keys,
-   database credentials and platform TOTP seeds outside the credential table.
+   database credentials and platform authentication factors outside the service
+   credential table. Operator enrollment uses its own
+   [authentication-factor authority](../notes/operator-enrollment.md).
 3. Sign in through the existing platform password-and-TOTP flow. In `/app/platform/credentials`,
    create the credential, inspect consumers, replace, enable, disable, remove or test it.
    CLI automation uses `bid platform login` followed by these commands:
@@ -205,7 +207,8 @@ uv run python -m app.admin rotate-encryption --scope provider-secrets
 uv run python -m app.admin rotate-encryption --scope provider-secrets
 ```
 
-The report separates checked/rewritten platform and BYOK-history counts. Require zero
+The report separates checked/rewritten platform, BYOK-history and operator-factor
+counts; `app.admin rotate-provider-secrets` invokes the same scope. Require zero
 failures and zero rewrites on the second run before removing retired keys from the online
 keyring. Preserve retired keys for the backup retention period. Default `--scope data`
 keeps the existing data rotation behavior. Never downgrade to an env-reading release
@@ -269,19 +272,10 @@ while serving requests; retain the table/audits and repair forward.
 The console at `/app` is for platform operators; it shows org accounts and
 usage totals, never org business data.
 
-1. Create the operator's account. An existing user works; otherwise create one
-   with `bootstrap` from [Provision a development database](#provision-a-development-database).
-2. Generate a TOTP secret and scan the printed URI in an authenticator app:
-
-   ```sh
-   uv run python -m app.admin platform-totp --email OPERATOR_EMAIL
-   ```
-
-3. Set `BID_PLATFORM_ADMIN_EMAILS` to the operator emails and
-   `BID_PLATFORM_TOTP_SECRETS` to the printed `email:SECRET` pairs, comma
-   separated. Manage catalog keys through
-   [Manage platform credentials](#manage-platform-credentials).
-4. Build the console and point the API at it:
+1. Apply migrations with the provisioning owner. Set `BID_PLATFORM_ADMIN_EMAILS`
+   to the operator emails and inject the independent `BID_SECRETS_KEY` on the API.
+   Leave `BID_PLATFORM_TOTP_SECRETS` empty for browser-managed factors.
+2. Build the console and point the API at it:
 
    ```sh
    cd web && npm ci && npm run build
@@ -290,6 +284,34 @@ usage totals, never org business data.
    Set `BID_WEB_DIR` to the absolute path of `web/dist`, restart the API, and
    open `http://127.0.0.1:8000/app/`. For live editing, run `npm run dev` in
    `web/` with `BID_API_URL` pointing at the API.
+3. Issue the first operator's enrollment link on the trusted host:
+
+   ```sh
+   uv run python -m app.admin platform-enroll OPERATOR_EMAIL
+   ```
+
+   Deliver the printed relative link privately and open it on the console origin.
+   Links expire after 30 minutes. Set a password for a new/setup-only account or
+   confirm its existing password, scan the QR code or enter the shown secret, and
+   submit a current authenticator code. Enrollment creates no org membership.
+4. Wait for the next authenticator code and sign in at `/app/platform/login`.
+   Signed-in operators can issue another allowlisted email's link from 平台管理员;
+   the host command also supports device recovery. Create any required org
+   separately in the console and attach the operator's existing email. Manage
+   catalog keys through [Manage platform credentials](#manage-platform-credentials).
+
+For the deployment-managed break-glass alternative, use an account with a usable
+password, generate a factor privately, and set its printed `email:SECRET` pair in
+`BID_PLATFORM_TOTP_SECRETS` before restarting:
+
+```sh
+uv run python -m app.admin platform-totp --email OPERATOR_EMAIL
+```
+
+An environment factor always wins over the stored factor and blocks browser
+enrollment for that email. Remove the override and restart before returning to
+browser enrollment. Enrollment-token binding, key rotation and failure semantics
+are defined by [Operator enrollment](../notes/operator-enrollment.md).
 
 Set `BID_BILLING_CURRENCY` (an ISO 4217 code, default `USD`) before any org has
 a balance; catalog sale prices, charges, balances and card values all use it,

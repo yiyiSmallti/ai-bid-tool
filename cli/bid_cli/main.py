@@ -1355,6 +1355,8 @@ app.add_typer(auth_app, name="auth")
 platform_app.add_typer(platform_org_app, name="org")
 platform_org_application_app = typer.Typer()
 platform_org_app.add_typer(platform_org_application_app, name="application")
+platform_operator_app = typer.Typer()
+platform_app.add_typer(platform_operator_app, name="operator")
 platform_app.add_typer(platform_model_app, name="model")
 platform_app.add_typer(platform_credential_app, name="credential")
 
@@ -1381,6 +1383,11 @@ def platform_login(
     client().state.save_platform(result["data"].pop("session"))
     result["data"]["authenticated"] = True
     emit(result, "platform login", json_output)
+
+
+@platform_operator_app.command("list")
+def platform_operator_list(json_output: JsonOption = False):
+    emit(call("GET", "/platform/operators", platform=True), "platform operator list", json_output)
 
 
 @platform_org_app.command("list")

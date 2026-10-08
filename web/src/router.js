@@ -20,6 +20,8 @@ import OrgRequirements from "./views/OrgRequirements.vue";
 import OrgReview from "./views/OrgReview.vue";
 import OrgDrafts from "./views/OrgDrafts.vue";
 import Orgs from "./views/Orgs.vue";
+import OperatorEnrollment from "./views/OperatorEnrollment.vue";
+import Operators from "./views/Operators.vue";
 import SetupPassword from "./views/SetupPassword.vue";
 import Usage from "./views/Usage.vue";
 export const router = createRouter({
@@ -28,9 +30,11 @@ export const router = createRouter({
     { path: "/", redirect: "/org/tasks" },
     { path: "/apply", component: Apply, meta: { public: true, title: "组织申请开通" } },
     { path: "/setup-password", component: SetupPassword, meta: { public: true, title: "设置密码" } },
+    { path: "/platform/enroll", component: OperatorEnrollment, meta: { public: true, title: "平台管理员开通" } },
     { path: "/platform/login", component: Login, meta: { public: true, title: "平台后台登录" } },
     { path: "/platform", redirect: "/platform/orgs" },
     { path: "/platform/orgs", component: Orgs, meta: { area: "platform", title: "单位", nav: "orgs" } },
+    { path: "/platform/operators", component: Operators, meta: { area: "platform", title: "平台管理员", nav: "operators" } },
     { path: "/platform/models", component: Models, meta: { area: "platform", title: "模型", nav: "models" } },
     { path: "/platform/credentials", component: Credentials, meta: { area: "platform", title: "服务凭据", nav: "credentials" } },
     { path: "/platform/cards", component: Cards, meta: { area: "platform", title: "卡密", nav: "cards" } },

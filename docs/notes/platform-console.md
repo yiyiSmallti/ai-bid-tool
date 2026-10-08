@@ -18,10 +18,11 @@ cross-org access is shaped this way is recorded in
 
 ## How it works
 
-Operators are the emails in `BID_PLATFORM_ADMIN_EMAILS`; each needs an entry in
-`BID_PLATFORM_TOTP_SECRETS`, or startup fails. `python -m app.admin platform-totp`
-prints a new secret and its provisioning URI. Sign-in checks the password and
-an RFC 6238 code with one step of drift. The shared password admission and
+Operators are the emails in `BID_PLATFORM_ADMIN_EMAILS`. Authentication factors
+come from deployment overrides or encrypted database enrollment, with authority and
+precedence defined by [Operator enrollment](operator-enrollment.md#how-it-works).
+Sign-in checks the password and an RFC 6238 code with one step of drift. The shared
+password admission and
 atomic TOTP consumption rules are described below. A platform session is a Fernet token under `BID_TOKEN_KEY` of
 kind `platform`, valid for 30 minutes and re-checked against the configured
 list on every request. Org routes accept only `session` tokens and `bid_`
@@ -29,13 +30,14 @@ API tokens, so the two kinds never cross.
 
 ### Password admission and TOTP consumption
 
-`/auth/orgs`, `/auth/login` and `/platform/auth/login` use `PasswordAttempts`
-in [password_attempts.py](../../server/app/core/password_attempts.py). The
+`/auth/orgs`, `/auth/login`, `/platform/auth/login` and operator enrollment use
+`PasswordAttempts` in [password_attempts.py](../../server/app/core/password_attempts.py). The
 account key is the email after trimming whitespace and lowercasing. Five
 failed attempts in a rolling 15-minute window block every entry point,
 regardless of source or org. The existing `platform.login` failures count
-alongside `auth.password` failures; a successful password check does not clear
-either. A platform attempt with invalid or replayed TOTP also counts.
+alongside `auth.password` and `platform.operator.enroll` failures; a successful
+password check does not clear them. A platform attempt with invalid or replayed
+TOTP also counts.
 
 When the ASGI request provides a client address, 30 failures from that source
 in the same window additionally block attempts across accounts. Source failure
@@ -55,7 +57,8 @@ Password verification, TOTP verification and audit
 inserts run under those locks. Failures commit before the API raises the
 credential error. For TOTP, `login.consume_totp` in
 [platform.py](../../server/app/services/platform.py) re-reads the last accepted
-counter inside that transaction and rejects a counter no greater than it.
+counter from login or successful enrollment inside that transaction and rejects
+a counter no greater than it.
 The success row commits before session issuance, so concurrent API workers
 cannot issue two sessions for the same counter. No schema change is needed.
 

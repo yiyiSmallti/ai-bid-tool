@@ -25,7 +25,7 @@ export class ApiError extends Error {
     super(message); Object.assign(this, { status, code, payload, retryAfter });
   }
 }
-const PUBLIC = new Set(["/health", "/platform/auth/login", "/auth/login", "/auth/orgs", "/auth/setup-password", "/auth/org-applications"]);
+const PUBLIC = new Set(["/health", "/platform/auth/login", "/platform/enrollment/start", "/platform/enrollment/complete", "/auth/login", "/auth/orgs", "/auth/setup-password", "/auth/org-applications"]);
 const ASSESSMENT_PATH = /^\/(?:tasks\/[^/?]+\/(?:assessment-inputs|assessment-citation|checks|scores(?:\/[^/?]+)?|score-rubrics(?:\/[^/?]+(?:\/(?:history|revisions|decisions|(?:sections|items|coverage)\/[^/?]+\/(?:classification|decisions)))?)?)|checks\/[^/?]+(?:\/findings\/[^/?]+\/decisions)?)$/;
 const REQUIREMENT_REVIEW_PATH = /^\/(?:tasks\/[^/?]+\/(?:extractions\/[^/?]+\/(?:requirement-reviews|rejected-items|requirement-confirmations)|requirements\/(?:manual-preview|manual|repair))|requirements\/[^/?]+\/(?:review|review-history|review-decisions))$/;
 const COSIGN_PATH = /^\/(?:tasks\/[^/?]+\/(?:review-rule|requirements\/[^/?]+\/review-policy)|cards\/[^/?]+\/(?:review-rounds|signoffs))$/;

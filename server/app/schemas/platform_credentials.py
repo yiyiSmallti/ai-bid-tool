@@ -467,6 +467,8 @@ class RotationReport(CredentialContract):
     scope: Literal["provider-secrets"] = "provider-secrets"
     platform_checked: int = Field(ge=0)
     platform_rewritten: int = Field(ge=0)
+    operator_factors_checked: int = Field(default=0, ge=0)
+    operator_factors_rewritten: int = Field(default=0, ge=0)
     org_revisions_checked: int = Field(ge=0)
     org_revisions_rewritten: int = Field(ge=0)
     failed: int = Field(ge=0)

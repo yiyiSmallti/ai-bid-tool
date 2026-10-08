@@ -212,10 +212,7 @@ class Settings(PDFSettings):
             self.request_options()
         except ValueError:
             raise ValueError("BID_LLM_REQUEST_OPTIONS must be a JSON object") from None
-        secrets = self.platform_totp()
-        missing = set(self.platform_admins()) - set(secrets)
-        if missing:
-            raise ValueError("Every platform admin needs a BID_PLATFORM_TOTP_SECRETS entry")
+        self.platform_totp()  # Validate configured factors; other operators enroll in the browser.
         return self
 
     def request_options(self) -> dict:

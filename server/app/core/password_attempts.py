@@ -23,9 +23,10 @@ FAILURE_WINDOW = timedelta(minutes=15)
 PASSWORD_WORKERS = 4
 PASSWORD_QUEUE = 8
 QUEUE_SECONDS = 1.0
-LOGIN_ACTIONS = ("auth.password", "platform.login")
+LOGIN_ACTIONS = ("auth.password", "platform.login", "platform.operator.enroll")
 DUMMY_HASH = "pbkdf2$600000$MDAwMDAwMDAwMDAwMDAwMA==$MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 SecondFactor = Callable[[AsyncSession, User], Awaitable[dict]]
+EnrollmentPrepare = Callable[[AsyncSession, User | None], Awaitable[User]]
 logger = logging.getLogger(__name__)
 
 
@@ -110,6 +111,8 @@ class PasswordAttempts:
         password: str,
         source: str | None,
         second_factor: SecondFactor | None = None,
+        *,
+        enrollment_prepare: EnrollmentPrepare | None = None,
     ) -> User:
         email = email.strip().lower()
         # Unicode lowercasing can expand an input that passed the wire length
@@ -121,7 +124,9 @@ class PasswordAttempts:
         if self.closed or self.pending >= PASSWORD_WORKERS + PASSWORD_QUEUE:
             raise busy()
         # No await between admission and registration, so the queue cannot overfill.
-        task = asyncio.create_task(self.run(email, password, source, second_factor))
+        task = asyncio.create_task(
+            self.run(email, password, source, second_factor, enrollment_prepare)
+        )
         self.tasks.add(task)
         task.add_done_callback(self.finished)
         # Cancellation cannot stop an already-running PBKDF2 thread. Keep its
@@ -129,14 +134,19 @@ class PasswordAttempts:
         return await asyncio.shield(task)
 
     async def run(
-        self, email: str, password: str, source: str | None, second_factor: SecondFactor | None
+        self,
+        email: str,
+        password: str,
+        source: str | None,
+        second_factor: SecondFactor | None,
+        enrollment_prepare: EnrollmentPrepare | None = None,
     ) -> User:
         try:
             await asyncio.wait_for(self.slots.acquire(), timeout=QUEUE_SECONDS)
         except TimeoutError:
             raise busy() from None
         try:
-            return await self.check(email, password, source, second_factor)
+            return await self.check(email, password, source, second_factor, enrollment_prepare)
         except DBAPIError as exc:
             if getattr(exc.orig, "sqlstate", None) == "55P03":
                 raise busy() from None
@@ -159,10 +169,17 @@ class PasswordAttempts:
         ).scalar_one()
 
     async def check(
-        self, email: str, password: str, source: str | None, second_factor: SecondFactor | None
+        self,
+        email: str,
+        password: str,
+        source: str | None,
+        second_factor: SecondFactor | None,
+        enrollment_prepare: EnrollmentPrepare | None = None,
     ) -> User:
         source_actor = "source:" + hashlib.sha256(source.encode()).hexdigest() if source else None
         action = "platform.login" if second_factor is not None else "auth.password"
+        if enrollment_prepare is not None:
+            action = "platform.operator.enroll"
         failure: ServiceError | None = None
         async with self.db.transaction() as session:
             # A waiter must see its predecessor's commit even if the database's
@@ -191,6 +208,8 @@ class PasswordAttempts:
             user = await session.scalar(
                 select(User).where(User.email == email, User.active.is_(True))
             )
+            if enrollment_prepare is not None:
+                user = await enrollment_prepare(session, user)
             # Setup-only identities must not skip the expensive work either.
             encoded = user.password_hash if user is not None else DUMMY_HASH
             if encoded == "!setup":
@@ -209,7 +228,8 @@ class PasswordAttempts:
                         raise
                     failure = exc
 
-            if failure is not None or second_factor is not None:
+            # Successful enrollment is audited atomically by its database function.
+            if failure is not None or (second_factor is not None and enrollment_prepare is None):
                 session.add(
                     PlatformAuditLog(
                         actor_email=email,

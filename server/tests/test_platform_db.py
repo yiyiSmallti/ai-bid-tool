@@ -60,7 +60,7 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
                 "SELECT p.proname, pg_get_userbyid(p.proowner), p.prosecdef, "
                 "has_function_privilege('bid_app', p.oid, 'EXECUTE'), "
                 "has_function_privilege('public', p.oid, 'EXECUTE') "
-                "FROM pg_proc p WHERE p.proname LIKE 'platform_%' AND p.proname <> 'platform_cards_final_status' AND p.proname NOT LIKE 'platform_credential_%' "
+                "FROM pg_proc p WHERE p.proname LIKE 'platform_%' AND p.proname <> 'platform_cards_final_status' AND p.proname NOT LIKE 'platform_credential_%' AND p.proname NOT LIKE 'platform_operator_%' "
                 "OR p.proname IN ('redeem_card', 'user_org_memberships')"
             )
         ).all()

@@ -5,7 +5,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import AwareDatetime
+from pydantic import AwareDatetime, ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.platform_credentials import create_router as create_credentials_router
@@ -16,6 +16,11 @@ from app.core.password_attempts import PasswordAttempts
 from app.core.security import TokenSigner
 from app.schemas.budget_contracts import BudgetPlatformModelTest
 from app.schemas.contracts import Result
+from app.schemas.operator_enrollment import (
+    EnrollmentComplete,
+    EnrollmentLinkRequest,
+    EnrollmentStartRequest,
+)
 from app.schemas.org_signup import (
     ApplicationStatus,
     OrgApplicationApprove,
@@ -35,6 +40,7 @@ from app.schemas.platform_contracts import (
 )
 from app.schemas.platform_credentials import CatalogResolveTarget
 from app.services import platform
+from app.services.operator_enrollment import OperatorEnrollmentService
 from app.services.org_signup import OrgSignupService
 from app.services.platform_credentials import PlatformCredentialResolver, database_error
 
@@ -56,11 +62,44 @@ def create_router(
     router = APIRouter()
     bearer = HTTPBearer(auto_error=False)
     signup = OrgSignupService(settings, db, attempts)
+    enrollment = OperatorEnrollmentService(db, settings, crypto, attempts)
 
     async def operator(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
         if credentials is None:
             raise ServiceError("invalid_session", "Bearer credentials required", 401, 4)
         return platform.identify(settings, crypto, credentials.credentials)
+
+    @router.get("/platform/operators", name="platform_operator_list", response_model=Result)
+    async def operator_list(actor=Depends(operator)):
+        rows = await enrollment.list_operators(actor.email)
+        return result("platform operator list", items=[row.model_dump(mode="json") for row in rows])
+
+    @router.post(
+        "/platform/operators/{email}/enrollment-links",
+        name="platform_operator_enrollment-link",
+        response_model=Result,
+    )
+    async def operator_enrollment_link(email: str, actor=Depends(operator)):
+        try:
+            target = EnrollmentLinkRequest(email=email)
+        except ValidationError:
+            raise ServiceError("invalid_input", "Invalid email address", 422, 2) from None
+        link = await enrollment.issue_link(actor.email, target)
+        return result("platform operator enrollment-link", link.model_dump(mode="json"))
+
+    @router.post(
+        "/platform/enrollment/start", name="platform_enrollment_start", response_model=Result
+    )
+    async def enrollment_start(body: EnrollmentStartRequest):
+        started = await enrollment.start(body)
+        return result("platform enrollment start", started.model_dump(mode="json"))
+
+    @router.post(
+        "/platform/enrollment/complete", name="platform_enrollment_complete", response_model=Result
+    )
+    async def enrollment_complete(body: EnrollmentComplete, request: Request):
+        completed = await enrollment.complete(body, request.client.host if request.client else None)
+        return result("platform enrollment complete", completed.model_dump(mode="json"))
 
     @router.post(
         "/auth/org-applications", name="auth_org-application_submit", response_model=Result

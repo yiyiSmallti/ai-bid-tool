@@ -66,16 +66,20 @@ async def login(
     email = email.strip().lower()
 
     async def consume_totp(session: AsyncSession, _user: User) -> dict:
-        secret = settings.platform_totp().get(email)
+        from app.services.operator_enrollment import factor_secret
+
+        if email not in settings.platform_admins():
+            raise invalid_login()
+        secret = await factor_secret(settings, session, email)
         counter = matching_counter(secret, code) if secret else None
-        if email not in settings.platform_admins() or counter is None:
+        if counter is None:
             raise invalid_login()
         # PasswordAttempts holds the account lock until the successful audit row
         # commits. Re-read and consume under that same lock, across API workers.
         last_counter = await session.scalar(
             select(func.max(PlatformAuditLog.details["totp_counter"].as_integer())).where(
                 PlatformAuditLog.actor_email == email,
-                PlatformAuditLog.action == LOGIN_ACTION,
+                PlatformAuditLog.action.in_((LOGIN_ACTION, "platform.operator.enroll")),
                 PlatformAuditLog.outcome == "success",
             )
         )

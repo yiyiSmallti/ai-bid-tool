@@ -2574,6 +2574,33 @@
     "ok": true,
     "warnings": []
   },
+  "platform operator list": {
+    "command": "platform operator list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "email": "ops@example.test",
+        "enrolled_at": "2026-10-08T00:00:00Z",
+        "enrolled_by": "link",
+        "factor_source": "database",
+        "has_account": true
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
   "platform org list": {
     "command": "platform org list",
     "cost": {
@@ -43446,6 +43473,21 @@
             "title": "PlatformOrgCreate",
             "type": "object"
           }
+        },
+        "platform operator list": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null
         },
         "platform org list": {
           "cli_parameters": [

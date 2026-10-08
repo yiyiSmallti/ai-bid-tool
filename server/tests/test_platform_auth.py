@@ -14,6 +14,7 @@ from app.models.entities import PlatformAuditLog, User
 from app.services import platform
 from conftest import OPERATOR, OPERATOR_PASSWORD, PASSWORD, FakeQueue
 from conftest import OPERATOR_SECRET as SECRET
+from cryptography.fernet import Fernet
 from pydantic import ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -121,11 +122,23 @@ async def test_platform_session_is_not_an_org_session_and_follows_config(client,
         platform.identify(platform_settings(tmp_path, admins="other@example.test"), crypto, session)
 
 
-def test_operator_without_totp_secret_refuses_to_start(tmp_path):
-    with pytest.raises(ValidationError):
-        Settings(data_dir=tmp_path, platform_admin_emails="ops@example.test")
+def test_operator_without_environment_factor_can_start_but_malformed_factor_cannot(tmp_path):
+    configuration = {
+        "database_url": "postgresql+psycopg://bid_app@localhost/bid_test_unused",
+        "encryption_key": Fernet.generate_key().decode(),
+        "token_key": Fernet.generate_key().decode(),
+    }
+    settings = Settings(
+        **configuration,
+        data_dir=tmp_path,
+        platform_admin_emails="ops@example.test",
+        platform_totp_secrets=None,
+    )
+    assert settings.platform_admins() == ["ops@example.test"]
+    assert settings.platform_totp() == {}
     with pytest.raises(ValidationError):
         Settings(
+            **configuration,
             data_dir=tmp_path,
             platform_admin_emails=OPERATOR,
             platform_totp_secrets=f"{OPERATOR}:not base32!",
