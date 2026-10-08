@@ -1,0 +1,10 @@
+[Unit]
+Description=Check main for a deployable commit every five minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=5min
+Persistent=false
+
+[Install]
+WantedBy=timers.target
