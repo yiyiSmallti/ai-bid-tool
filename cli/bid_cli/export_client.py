@@ -105,14 +105,18 @@ def _same_directory(path: Path, descriptor: int) -> bool:
 
 
 def _parse_signed_route(link: ExportDownloadLink) -> tuple[str, dict[str, str]]:
-    parsed = urlsplit(link.url)
+    return signed_download_route(link.url, f"/exports/{link.export_id}/download")
+
+
+def signed_download_route(url: str, expected: str) -> tuple[str, dict[str, str]]:
+    """Allow only the exact authenticated route on the configured service."""
+    parsed = urlsplit(url)
     try:
         query = parse_qs(parsed.query, strict_parsing=True)
     except ValueError as exc:
         raise _download_error(
-            "invalid_download_link", "Server returned an unsafe export download link"
+            "invalid_download_link", "Server returned an unsafe download link"
         ) from exc
-    expected = f"/exports/{link.export_id}/download"
     if (
         parsed.scheme
         or parsed.netloc
@@ -185,6 +189,44 @@ async def download_export(client: Client, export_id: UUID, output: Path) -> dict
         ) from None
 
     path, query = _parse_signed_route(link)
+    await save_verified_docx(
+        client,
+        output,
+        path,
+        query,
+        size_bytes=link.file.size_bytes,
+        sha256=link.file.sha256,
+    )
+
+    receipt = ExportDownloadResult(
+        export_id=export_id,
+        output_path=str(output),
+        file=link.file,
+        mode=view.mode,
+        completion=view.completion,
+        validity=view.validity,
+        issues=view.issues,
+    ).model_dump(mode="json")
+    return Result(
+        ok=view.completion == "complete",
+        command="export download",
+        data=receipt,
+        warnings=[issue.code for issue in view.issues],
+    ).model_dump(mode="json")
+
+
+async def save_verified_docx(
+    client: Client,
+    output: Path,
+    path: str,
+    query: dict[str, str],
+    *,
+    size_bytes: int,
+    sha256: str,
+    integrity_code: str = "export_file_integrity",
+) -> None:
+    """Persist verified DOCX bytes privately, atomically and without overwriting."""
+    saved = client.state.load()
     headers = {"Authorization": f"Bearer {saved['session']}", "X-Org-Id": saved["org_id"]}
     parent_fd: int | None = None
     temporary_name: str | None = None
@@ -210,7 +252,7 @@ async def download_export(client: Client, export_id: UUID, output: Path) -> dict
                         media_type = response.headers.get("content-type", "").split(";", 1)[0]
                         if media_type.strip().lower() != DOCX_MEDIA_TYPE:
                             raise _download_error(
-                                "export_file_integrity",
+                                integrity_code,
                                 "Downloaded export has the wrong media type",
                             )
                         declared_length = response.headers.get("content-length")
@@ -219,19 +261,19 @@ async def download_export(client: Client, export_id: UUID, output: Path) -> dict
                                 length = int(declared_length)
                             except ValueError:
                                 raise _download_error(
-                                    "export_file_integrity",
+                                    integrity_code,
                                     "Downloaded export has an invalid length header",
                                 ) from None
-                            if length != link.file.size_bytes:
+                            if length != size_bytes:
                                 raise _download_error(
-                                    "export_file_integrity",
+                                    integrity_code,
                                     "Downloaded export length does not match its descriptor",
                                 )
                         async for chunk in response.aiter_bytes():
                             received += len(chunk)
-                            if received > link.file.size_bytes or received > MAX_EXPORT_BYTES:
+                            if received > size_bytes or received > MAX_EXPORT_BYTES:
                                 raise _download_error(
-                                    "export_file_integrity",
+                                    integrity_code,
                                     "Downloaded export exceeded its declared limit",
                                 )
                             digest.update(chunk)
@@ -244,11 +286,14 @@ async def download_export(client: Client, export_id: UUID, output: Path) -> dict
                 ) from exc
             handle.flush()
             os.fsync(handle.fileno())
-            if received != link.file.size_bytes or digest.hexdigest() != link.file.sha256:
+            if received != size_bytes or digest.hexdigest() != sha256:
                 raise _download_error(
-                    "export_file_integrity", "Downloaded export failed length or SHA-256 checks"
+                    integrity_code, "Downloaded export failed length or SHA-256 checks"
                 )
-            await asyncio.to_thread(_validate_docx, handle)
+            try:
+                await asyncio.to_thread(_validate_docx, handle)
+            except ServiceError as exc:
+                raise _download_error(integrity_code, exc.message) from exc
         if not _same_directory(output.parent, parent_fd):
             raise OSError("download directory changed")
         os.link(
@@ -295,19 +340,3 @@ async def download_export(client: Client, export_id: UUID, output: Path) -> dict
                 except FileNotFoundError:
                     pass
             os.close(parent_fd)
-
-    receipt = ExportDownloadResult(
-        export_id=export_id,
-        output_path=str(output),
-        file=link.file,
-        mode=view.mode,
-        completion=view.completion,
-        validity=view.validity,
-        issues=view.issues,
-    ).model_dump(mode="json")
-    return Result(
-        ok=view.completion == "complete",
-        command="export download",
-        data=receipt,
-        warnings=[issue.code for issue in view.issues],
-    ).model_dump(mode="json")

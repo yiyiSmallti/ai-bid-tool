@@ -337,7 +337,11 @@ def create_app(
                 )
             )
         )
-        bid_review_route = "bid-submissions" in parts or "bid-reviews" in parts
+        bid_review_route = (
+            "bid-submissions" in parts
+            or "bid-reviews" in parts
+            or ("bid-review-artifacts" in parts and parts[-1] != "download")
+        )
         annotation_route = (
             len(parts) == 3 and parts[0] == "tasks" and parts[2] == "annotations"
         ) or (parts[0] in {"annotations", "annotation-releases"} and parts[-1] != "content")

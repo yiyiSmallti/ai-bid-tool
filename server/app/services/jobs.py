@@ -79,6 +79,10 @@ async def read_access(
     await agent_access(session, identity, job)
     if job.task_id is not None:
         identity.require("task:read")
+    if job.kind == "bid_review_report":
+        from app.services.bid_review_report import job_access
+
+        await job_access(session, identity, job)
     if job.kind == "bid_review":
         from app.services.bid_review_run import job_access
 
@@ -312,6 +316,10 @@ async def cancel(session: AsyncSession, identity: Identity, job_id: UUID, storag
         )
         return job
     identity.require("job:cancel")
+    if job.kind == "bid_review_report":
+        from app.services.bid_review_report import job_access
+
+        await job_access(session, identity, job, cancel=True)
     if job.kind == "bid_review":
         from app.services.bid_review_run import job_access
         from app.services.versioned import audit

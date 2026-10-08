@@ -4,7 +4,7 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved; slices 1–2 and slices 3a–3b implemented. Recommended defaults
+Status: **Approved; slices 1–2, slices 3a–3b and slice 4 implemented. Recommended defaults
 are adopted, except that Clef triage is on by default.**
 
 The first phase is divided into five implementation slices: upload/preparation;
@@ -13,12 +13,14 @@ dismissal; console/Word report; Clef triage with fixed per-call billing. Slice 3
 implements exact human-authorized sanitized native-text review, cited tender
 obligations and signing-clause applicability with unresolved location inventories.
 Slice 3b adds authorized bid-text compliance findings, deterministic rules and
-append-only classified human decisions within that same run.
+append-only classified human decisions within that same run. Slice 4 adds the
+immutable console/Word snapshot and human-only report artifacts.
 Upload/preparation and local signature evidence are implemented. PostgreSQL and
 browser acceptance remain pending; static checks do not establish those gates.
-The delivered boundaries are in [slice 3a](#slice-3a-authorized-native-text-review)
-and [slice 3b](#slice-3b-native-text-compliance-findings-and-human-decisions), and
-its mechanisms are in [the mechanism note](../notes/bid-review.md).
+The delivered boundaries are in [slice 3a](#slice-3a-authorized-native-text-review),
+[slice 3b](#slice-3b-native-text-compliance-findings-and-human-decisions) and
+[slice 4](#slice-4-console-report-and-word-artifacts); their mechanisms are in
+[the mechanism note](../notes/bid-review.md).
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
 [roadmap](roadmap.md), with B04/B05 evidence, P03 vision and E01/E02 evaluation
@@ -755,6 +757,32 @@ Their database/browser execution remains pending in the main session. Generated
 verification artifacts belong under ignored `data/work/bid-review-findings`.
 Visible mark presence, image evidence review, scoring, Word rendering and Clef
 remain outside this slice.
+
+### Slice 4: Console report and Word artifacts
+
+The report captures one published review and the append-only human events current
+at render admission. Its decision hash and encrypted content remain immutable;
+later decisions require a new render and are shown as a stale-snapshot indicator.
+Published partial reviews remain partial, with explicit unknowns and uncovered
+scope. Unpublished reviews cannot enter report rendering.
+
+The console reads bounded sections from the same snapshot used by the local Word
+renderer. Original-read authority controls protected details; other human readers
+receive a purpose-built cleared projection and tokens receive safe metadata.
+Human admin/bidder render admission uses a call-free, write-free preview and signed
+hash receipt. The report job publishes verified encrypted console/Word artifacts
+together; download links and authenticated byte reads repeat live authority.
+The [runtime schemas](../../server/app/schemas/bid_review_report.py) define this
+bounded subset; [the mechanism note](../notes/bid-review.md#immutable-console-and-word-reports)
+links its implementation.
+
+The [HTTP/worker suite](../../server/tests/test_bid_review_report_db.py) and
+[mocked browser suite](../../web/e2e/bid-review-report.spec.js) cover snapshot drift,
+projections, sections, failures and downloads. Database and browser execution remain
+pending in the main session; static checks and CLI tests do not establish those
+gates. Repeatable acceptance artifacts belong under ignored
+`data/work/bid-review-report`. Scoring, claim-to-image evidence verification,
+visible mark presence and Clef remain outside this slice.
 
 ## Open decisions
 

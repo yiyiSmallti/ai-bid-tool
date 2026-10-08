@@ -6,6 +6,28 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-09: Isolated board latency shard
+
+- The board latency bounds run alone on the first of four latency shards, so they no
+  longer follow the scale tests that slowed them past their limit on busy runners.
+
+## 2026-10-08: Uploaded-bid console reports and Word artifacts
+
+- Add immutable report snapshots bound to a published review and the human decision
+  hash at admission. Preserve partial coverage, exact citations, original machine
+  findings, current human decisions, unresolved signing locations and the advisory
+  statement; scoring and image-evidence checks remain explicitly unavailable.
+- Add bounded console report sections, protected/cleared/token projections and
+  explicit render preview/submission. Publish verified encrypted Word and console
+  artifacts together with renderer identity, hash and size through migration 0066.
+- Add short-lived human-only report downloads with live authorization and neutral
+  filenames, plus `bid review report` and `bid review report download` using the
+  existing verified Word transfer stack.
+- Add CLI snapshots, HTTP-to-worker acceptance and mocked browser scenarios.
+  PostgreSQL and browser execution remain pending; see
+  [slice 4](plan/bid-review.md#slice-4-console-report-and-word-artifacts) and
+  [the mechanism](notes/bid-review.md#immutable-console-and-word-reports).
+
 ## 2026-10-08: Uploaded-bid compliance findings and human decisions
 
 - Extend the authorized review run with bid-versus-obligation native-text judgments,

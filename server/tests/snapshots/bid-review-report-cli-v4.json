@@ -1,0 +1,248 @@
+{
+  "local: review report download": {
+    "command": "review report download",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "artifact": {
+        "advisory_only": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "decisions_snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "format": "docx",
+        "human_only": true,
+        "id": "00000000-0000-4000-8000-000000000006",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "renderer_identity": "synthetic-report-renderer-v1",
+        "report_id": "00000000-0000-4000-8000-000000000004",
+        "report_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sha256": "7f02717933cb347eafc34ae84608fde00bca0cc627b38211a6f44bd047323765",
+        "size_bytes": 36935,
+        "snapshot_id": "00000000-0000-4000-8000-000000000005",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "artifact_id": "00000000-0000-4000-8000-000000000006",
+      "output_path": "<OUTPUT>/local.docx"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review report dry-run": {
+    "command": "review report",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "budget": {
+        "admission_blocker": null,
+        "as_of": "2026-10-08T00:00:00Z",
+        "cached_job_id": null,
+        "cached_result_cost": null,
+        "command": "review report",
+        "dry_run": true,
+        "duration_basis": "unknown",
+        "estimate": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "estimated_duration_ms": null,
+        "first_pass_fits": true,
+        "full_run_guaranteed": false,
+        "input_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "maximum_calls": 0,
+        "next_call": null,
+        "planned_calls": 0,
+        "task_budget": null,
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncertainty": []
+      },
+      "decisions_snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "dry_run": true,
+      "expires_at": "2026-10-08T00:15:00Z",
+      "formats": [
+        "docx",
+        "console"
+      ],
+      "input_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "preflight_token": "synthetic-report-receipt",
+      "renderer_identity": "synthetic-report-renderer-v1",
+      "report_id": "00000000-0000-4000-8000-000000000004",
+      "report_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local: review report submit": {
+    "command": "review report",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "cached": false,
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "status": "queued"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review report download": {
+    "command": "review report download",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "artifact": {
+        "advisory_only": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "decisions_snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "format": "docx",
+        "human_only": true,
+        "id": "00000000-0000-4000-8000-000000000006",
+        "org_id": "00000000-0000-4000-8000-000000000001",
+        "renderer_identity": "synthetic-report-renderer-v1",
+        "report_id": "00000000-0000-4000-8000-000000000004",
+        "report_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "sha256": "7f02717933cb347eafc34ae84608fde00bca0cc627b38211a6f44bd047323765",
+        "size_bytes": 36935,
+        "snapshot_id": "00000000-0000-4000-8000-000000000005",
+        "task_id": "00000000-0000-4000-8000-000000000001"
+      },
+      "artifact_id": "00000000-0000-4000-8000-000000000006",
+      "output_path": "<OUTPUT>/remote.docx"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review report dry-run": {
+    "command": "review report",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "budget": {
+        "admission_blocker": null,
+        "as_of": "2026-10-08T00:00:00Z",
+        "cached_job_id": null,
+        "cached_result_cost": null,
+        "command": "review report",
+        "dry_run": true,
+        "duration_basis": "unknown",
+        "estimate": {
+          "basis": "zero",
+          "billing_currency": "USD",
+          "charge": "0",
+          "llm_tokens": 0,
+          "ocr_pages": 0,
+          "task_amount": "0",
+          "unpriced_calls": 0,
+          "unresolved_calls": 0,
+          "usd": 0.0
+        },
+        "estimated_duration_ms": null,
+        "first_pass_fits": true,
+        "full_run_guaranteed": false,
+        "input_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "maximum_calls": 0,
+        "next_call": null,
+        "planned_calls": 0,
+        "task_budget": null,
+        "task_id": "00000000-0000-4000-8000-000000000001",
+        "uncertainty": []
+      },
+      "decisions_snapshot_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "dry_run": true,
+      "expires_at": "2026-10-08T00:15:00Z",
+      "formats": [
+        "docx",
+        "console"
+      ],
+      "input_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "preflight_token": "synthetic-report-receipt",
+      "renderer_identity": "synthetic-report-renderer-v1",
+      "report_id": "00000000-0000-4000-8000-000000000004",
+      "report_input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote: review report submit": {
+    "command": "review report",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "cached": false,
+      "job_id": "00000000-0000-4000-8000-000000000001",
+      "status": "queued"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}
