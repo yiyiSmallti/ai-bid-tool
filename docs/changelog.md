@@ -6,7 +6,7 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
-## 2026-10-07: Organization self-service applications
+## 2026-10-08: Organization self-service applications
 
 - Add the opt-in public application form, uniform receipt, bounded password hashing,
   source admission and manual platform review through HTTP, CLI and the console.
@@ -16,6 +16,13 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   clear the submitted hash.
 - Add daily expiry, platform audit events and pending-review counts. See
   [Organization self-service application](notes/org-signup.md).
+
+## 2026-10-08: Pull-based automatic deployment
+
+- [autodeploy.sh](../deploy/pilot/autodeploy.sh) with a systemd timer deploys the newest
+  `main` merge commit whose pull request passed the `python` and `web` checks: source
+  archive, console and image builds, `pg_dump` before new migrations, health check, and
+  rollback when no migration ran. See [the guide](guides/pilot-autodeploy.md).
 
 ## 2026-10-08: Rate-limited open vendor egress
 

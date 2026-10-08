@@ -19,6 +19,7 @@ each page declares one `kind`, and each fact has one home. Kind mappings are in
 - [Local development and verification](guides/development.md): tests, development database, API and worker, containers, OCR and local vendor-source search.
 - [bid CLI](guides/cli.md): login, tender workflow, resource maintenance, vendor (厂家) evidence (证据) capture, result handling and tokens.
 - [Sandbox runtime setup and acceptance](guides/sandbox-runtime.md): Colima/Docker, runsc, Unix/mTLS control channels, open capture networking on development nodes, and repeatable verification steps.
+- [Automatic deployment on a single Compose host](guides/pilot-autodeploy.md): pull-based deploys of merged, checked pull requests, database backups before migrations, rollback and operations.
 
 <a id="机制笔记"></a>
 
