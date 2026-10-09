@@ -25,7 +25,7 @@ import httpx
 import pytest
 from app.api.main import create_app
 from app.core.config import Settings
-from app.models.entities import AuditLog, Job, Membership, UsageRecord
+from app.models.entities import AuditLog, Job, UsageRecord
 from app.providers.browser import ArtifactPayload, ExecutionResult
 from conftest import FakeQueue
 from fakes import FakeLLM
@@ -427,15 +427,16 @@ async def test_cancel_and_authorization_loss_fence_publication(
 
 
 async def test_replaced_selection_and_revoked_actor_before_execution(
-    api, headers, application, pdf_bytes, tenants
+    api, headers, application, pdf_bytes, tenants, admin_engine
 ):
     task, spec = await prepared(api, application, headers[0], pdf_bytes)
     run, _ = await submitted(api, headers[0], task, spec)
-    async with application.state.db.transaction(tenants["orgs"][0]) as session:
-        member = await session.scalar(
-            select(Membership).where(Membership.user_id == tenants["users"][0])
+    # Revoke outside the runtime role; bid_app changes members only through admin CAS.
+    with admin_engine.begin() as connection:
+        connection.execute(
+            text("UPDATE memberships SET active=false WHERE org_id=:org AND user_id=:user"),
+            {"org": tenants["orgs"][0], "user": tenants["users"][0]},
         )
-        member.active = False
     await application.state.processor(headers[0]["X-Org-Id"], run["job_id"])
     assert application.state.processor.sandbox_browser.calls == 0
     async with application.state.db.transaction(tenants["orgs"][0]) as session:

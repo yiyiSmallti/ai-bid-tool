@@ -177,7 +177,7 @@ async def test_unknown_hold_survives_attempt_transitions(tenants, tmp_path, tran
         assert len(sent) == 1
 
 
-async def test_revoked_submitter_cannot_dispatch_from_saved_grants(tenants, tmp_path):
+async def test_revoked_submitter_cannot_dispatch_from_saved_grants(tenants, tmp_path, admin_engine):
     sent = []
 
     def vendor(request):
@@ -188,8 +188,14 @@ async def test_revoked_submitter_cannot_dispatch_from_saved_grants(tenants, tmp_
         _, document = await create_document(api, header, pdf_lines())
         await run_job(api, app, header, document, "parse")
         job_id = await extract(api, header, document)
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            await session.execute(update(Membership).values(active=False))
+        # Revoke outside the runtime role: bid_app may only change members through the
+        # admin CAS path, which is not what this test exercises.
+        with admin_engine.begin() as connection:
+            connection.execute(
+                update(Membership)
+                .where(Membership.org_id == tenants["orgs"][0])
+                .values(active=False)
+            )
         await app.state.processor(header["X-Org-Id"], job_id)
         assert not sent
 

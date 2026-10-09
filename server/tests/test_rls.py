@@ -228,7 +228,8 @@ async def test_every_business_table_enforces_read_write_scope(table, seeded, adm
             async with db.transaction(org_a) as session:
                 # Any attempt to relabel an owned row must fail WITH CHECK.
                 await session.execute(text(f'UPDATE "{table}" SET org_id=:org'), {"org": org_b})
-        assert error.value.orig.sqlstate == "42501"
+        # memberships' row guard refuses org_id relabels before the WITH CHECK policy.
+        assert error.value.orig.sqlstate == ("23514" if table == "memberships" else "42501")
         from app.models import Base
 
         table_model = Base.metadata.tables[table]
@@ -242,7 +243,9 @@ async def test_every_business_table_enforces_read_write_scope(table, seeded, adm
         with pytest.raises(DBAPIError) as inserted:
             async with db.transaction(org_a) as session:
                 await session.execute(table_model.insert().values(**foreign))
-        assert inserted.value.orig.sqlstate == "42501"
+        # memberships may only be created through org_add_member; the row guard refuses
+        # direct runtime inserts before the WITH CHECK policy.
+        assert inserted.value.orig.sqlstate == ("23514" if table == "memberships" else "42501")
         with admin_engine.connect() as connection:
             flags = connection.execute(
                 text(
