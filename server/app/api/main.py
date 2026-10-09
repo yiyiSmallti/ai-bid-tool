@@ -462,6 +462,10 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
+        if request.url.path == "/org/members" or request.url.path.startswith("/org/members/"):
+            return error_response(
+                request, ServiceError("invalid_input", "Invalid member input", 400, 2)
+            )
         if request.url.path.startswith(("/platform/enrollment/", "/platform/operators")):
             from app.services.operator_enrollment import invalid_link
 
@@ -688,7 +692,9 @@ def create_app(
             raise
 
     from app.api.budgets import create_router as create_budget_router
+    from app.api.org_members import create_router as create_org_member_router
 
+    app.include_router(create_org_member_router(context, crypto))
     app.include_router(create_budget_router(context, settings))
     app.include_router(create_org_console_router(context, storage, settings))
     app.include_router(create_task_workflow_router(context, settings))

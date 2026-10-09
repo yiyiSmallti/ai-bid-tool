@@ -1,0 +1,976 @@
+{
+  "local:add": {
+    "command": "org member add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "expires_in": 86400,
+      "invitation_url": "/app/setup-password#token=synthetic-link",
+      "member": {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": false,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:add:existing": {
+    "command": "org member add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "expires_in": null,
+      "invitation_url": "/app/org/login",
+      "member": {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": true,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:error:forbidden": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "forbidden",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:invalid_input": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "invalid_input",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:invalid_session": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "invalid_session",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:last_admin_required": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "last_admin_required",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:member_exists": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "member_exists",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:not_found": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "not_found",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:password_already_set": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "password_already_set",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:revision_conflict": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:error:unavailable": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "exit_code": 3,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "local:invite": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "expires_in": 86400,
+      "invitation_url": "/app/setup-password#token=synthetic-link",
+      "member": {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": false,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:list": {
+    "command": "org member list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": false,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:list:empty": {
+    "command": "org member list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:list:restricted": {
+    "command": "org member list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "active": true,
+        "email": "colleague@example.test",
+        "role": "technical",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "local:role": {
+    "command": "org member role",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active": true,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-000000000001",
+      "email": "colleague@example.test",
+      "password_set": false,
+      "revision": 2,
+      "role": "bidder",
+      "updated_at": "2026-10-08T00:00:00Z",
+      "user_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:set-active:false": {
+    "command": "org member set-active",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active": false,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-000000000001",
+      "email": "colleague@example.test",
+      "password_set": false,
+      "revision": 2,
+      "role": "technical",
+      "updated_at": "2026-10-08T00:00:00Z",
+      "user_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "local:set-active:true": {
+    "command": "org member set-active",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active": true,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-000000000001",
+      "email": "colleague@example.test",
+      "password_set": false,
+      "revision": 2,
+      "role": "technical",
+      "updated_at": "2026-10-08T00:00:00Z",
+      "user_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:add": {
+    "command": "org member add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "expires_in": 86400,
+      "invitation_url": "/app/setup-password#token=synthetic-link",
+      "member": {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": false,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:add:existing": {
+    "command": "org member add",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "expires_in": null,
+      "invitation_url": "/app/org/login",
+      "member": {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": true,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:error:forbidden": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "forbidden",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:invalid_input": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "invalid_input",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:invalid_session": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "invalid_session",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:last_admin_required": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "last_admin_required",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:member_exists": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "member_exists",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:not_found": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "not_found",
+        "exit_code": 4,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:password_already_set": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "password_already_set",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:revision_conflict": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "exit_code": 2,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:error:unavailable": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "exit_code": 3,
+        "message": "Synthetic failure"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": false,
+    "warnings": []
+  },
+  "remote:invite": {
+    "command": "org member invite",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "expires_in": 86400,
+      "invitation_url": "/app/setup-password#token=synthetic-link",
+      "member": {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": false,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:list": {
+    "command": "org member list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "active": true,
+        "created_at": "2026-10-08T00:00:00Z",
+        "created_by": "00000000-0000-4000-8000-000000000001",
+        "email": "colleague@example.test",
+        "password_set": false,
+        "revision": 1,
+        "role": "technical",
+        "updated_at": "2026-10-08T00:00:00Z",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:list:empty": {
+    "command": "org member list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:list:restricted": {
+    "command": "org member list",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {},
+    "duration_ms": 0,
+    "items": [
+      {
+        "active": true,
+        "email": "colleague@example.test",
+        "role": "technical",
+        "user_id": "00000000-0000-4000-8000-000000000001"
+      }
+    ],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:role": {
+    "command": "org member role",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active": true,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-000000000001",
+      "email": "colleague@example.test",
+      "password_set": false,
+      "revision": 2,
+      "role": "bidder",
+      "updated_at": "2026-10-08T00:00:00Z",
+      "user_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:set-active:false": {
+    "command": "org member set-active",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active": false,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-000000000001",
+      "email": "colleague@example.test",
+      "password_set": false,
+      "revision": 2,
+      "role": "technical",
+      "updated_at": "2026-10-08T00:00:00Z",
+      "user_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  },
+  "remote:set-active:true": {
+    "command": "org member set-active",
+    "cost": {
+      "basis": "zero",
+      "billing_currency": "USD",
+      "charge": "0",
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "task_amount": "0",
+      "unpriced_calls": 0,
+      "unresolved_calls": 0,
+      "usd": 0.0
+    },
+    "data": {
+      "active": true,
+      "created_at": "2026-10-08T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-000000000001",
+      "email": "colleague@example.test",
+      "password_set": false,
+      "revision": 2,
+      "role": "technical",
+      "updated_at": "2026-10-08T00:00:00Z",
+      "user_id": "00000000-0000-4000-8000-000000000001"
+    },
+    "duration_ms": 0,
+    "items": [],
+    "ok": true,
+    "warnings": []
+  }
+}

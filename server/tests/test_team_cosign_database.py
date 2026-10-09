@@ -720,8 +720,19 @@ async def test_invalidation_audit_and_event_roll_back_with_authority_change(
         with pytest.raises(RuntimeError, match="rollback probe"):
             async with db.transaction(scope["org_id"]) as session:
                 await context(session, scope["user_id"])
+                # Membership changes require the admin's CAS revision (org_member_row_guard).
                 await session.execute(
-                    text("UPDATE memberships SET active=false WHERE user_id=:user"),
+                    text(
+                        "SELECT set_config('app.member_expected_revision', revision::text, true) "
+                        "FROM memberships WHERE user_id=:user"
+                    ),
+                    {"user": scope["members"]["commercial"]["user"]},
+                )
+                await session.execute(
+                    text(
+                        "UPDATE memberships SET active=false, revision=revision+1 "
+                        "WHERE user_id=:user"
+                    ),
                     {"user": scope["members"]["commercial"]["user"]},
                 )
                 audit_row = (

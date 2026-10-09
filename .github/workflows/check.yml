@@ -114,12 +114,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/python-test-env
       - run: uv run pytest -q -m latency --durations=10
-  # The required "python" check: every Python job passed, or none was needed.
+  # The required "python" check: every Python job passed, or none was needed. It fails
+  # on draft pull requests, because GitHub treats a skipped required check as passing.
   python:
     needs: [changes, lint, tests, latency]
-    if: always() && (github.event_name == 'workflow_dispatch' || !github.event.pull_request.draft)
+    if: always()
     runs-on: ubuntu-latest
     steps:
+      - name: Refuse draft pull requests
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        run: |
+          echo "Draft pull requests are not checked; mark the pull request ready for review."
+          exit 1
       - name: Require every Python job
         run: |
           [ "${{ needs.changes.result }}" = success ] || { echo "change detection: ${{ needs.changes.result }}"; exit 1; }
@@ -129,11 +135,24 @@ jobs:
           done
   web:
     needs: changes
+    if: always()
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web
     steps:
+      - name: Refuse draft pull requests
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft
+        working-directory: .
+        run: |
+          echo "Draft pull requests are not checked; mark the pull request ready for review."
+          exit 1
+      - name: Require change detection
+        if: needs.changes.result != 'success'
+        working-directory: .
+        run: |
+          echo "change detection: ${{ needs.changes.result }}"
+          exit 1
       # Same rule as Python: report success without building when web/ is unchanged.
       - uses: actions/checkout@v4
         if: needs.changes.outputs.web == 'true'

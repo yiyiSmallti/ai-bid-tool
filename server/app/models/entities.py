@@ -56,11 +56,15 @@ class User(Identity, Base):
 
 class Membership(Tenant, Base):
     __tablename__ = "memberships"
+    revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
+    created_by: Mapped[UUID | None] = mapped_column(ForeignKey("users.id"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id"))
     role: Mapped[str] = mapped_column(String(20))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
+        CheckConstraint("revision >= 1", name="membership_revision"),
         UniqueConstraint("org_id", "id", "user_id", name="agent_membership_owner"),
         UniqueConstraint("org_id", "user_id"),
         CheckConstraint(
@@ -78,6 +82,7 @@ class ApiToken(Tenant, Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     revoked: Mapped[bool] = mapped_column(Boolean, default=False)
     __table_args__ = (
+        CheckConstraint("NOT (scopes ? 'member:manage')", name="token_forbidden_member_scope"),
         CheckConstraint(
             "NOT (scopes ?| ARRAY['bid-review:upload','bid-review:prepare','bid-review:report:render','bid-review:original:read','bid-review:source:read','bid-review:report:read','bid-review:report:download','bid-review:decide','bid-review:evidence:review','bid-review:price:release','bid-review:outbound:authorize','bid-review:classify'])",
             name="token_forbidden_bid_review_scopes",

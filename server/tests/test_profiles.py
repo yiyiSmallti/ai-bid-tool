@@ -267,6 +267,7 @@ async def test_profile_roles_preserve_old_grants(
         for scope in ROLE_SCOPES[role]
         if scope
         not in {
+            "member:manage",
             "attachment:read",
             "attachment:write",
             "attachment:review",

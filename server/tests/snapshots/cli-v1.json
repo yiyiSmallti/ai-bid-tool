@@ -43797,6 +43797,823 @@
             "type": "object"
           }
         },
+        "org member add": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "email",
+              "options": [
+                "--email"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "role",
+              "options": [
+                "--role"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "email": {
+                "maxLength": 254,
+                "minLength": 3,
+                "title": "Email",
+                "type": "string"
+              },
+              "role": {
+                "enum": [
+                  "admin",
+                  "bidder",
+                  "technical",
+                  "viewer"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "email",
+              "role"
+            ],
+            "title": "OrgMemberAdd",
+            "type": "object"
+          },
+          "output": {
+            "$defs": {
+              "OrgMemberView": {
+                "additionalProperties": false,
+                "description": "Admins receive every field; other roles receive only active members' email and role.",
+                "properties": {
+                  "active": {
+                    "title": "Active",
+                    "type": "boolean"
+                  },
+                  "created_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Created At"
+                  },
+                  "created_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Created By"
+                  },
+                  "email": {
+                    "title": "Email",
+                    "type": "string"
+                  },
+                  "password_set": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Password Set"
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Revision"
+                  },
+                  "role": {
+                    "enum": [
+                      "admin",
+                      "bidder",
+                      "technical",
+                      "viewer"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Updated At"
+                  },
+                  "user_id": {
+                    "format": "uuid",
+                    "title": "User Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id",
+                  "email",
+                  "role",
+                  "active"
+                ],
+                "title": "OrgMemberView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Same shape whether or not the email already had an account; the link is shown once.",
+            "properties": {
+              "expires_in": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expires In"
+              },
+              "invitation_url": {
+                "pattern": "^/app/(setup-password#token=[A-Za-z0-9_.=-]+|org/login)$",
+                "title": "Invitation Url",
+                "type": "string"
+              },
+              "member": {
+                "$ref": "#/$defs/OrgMemberView"
+              }
+            },
+            "required": [
+              "member",
+              "invitation_url"
+            ],
+            "title": "OrgMemberInvited",
+            "type": "object"
+          }
+        },
+        "org member invite": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "user",
+              "options": [
+                "--user"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "output": {
+            "$defs": {
+              "OrgMemberView": {
+                "additionalProperties": false,
+                "description": "Admins receive every field; other roles receive only active members' email and role.",
+                "properties": {
+                  "active": {
+                    "title": "Active",
+                    "type": "boolean"
+                  },
+                  "created_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Created At"
+                  },
+                  "created_by": {
+                    "anyOf": [
+                      {
+                        "format": "uuid",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Created By"
+                  },
+                  "email": {
+                    "title": "Email",
+                    "type": "string"
+                  },
+                  "password_set": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Password Set"
+                  },
+                  "revision": {
+                    "anyOf": [
+                      {
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Revision"
+                  },
+                  "role": {
+                    "enum": [
+                      "admin",
+                      "bidder",
+                      "technical",
+                      "viewer"
+                    ],
+                    "title": "Role",
+                    "type": "string"
+                  },
+                  "updated_at": {
+                    "anyOf": [
+                      {
+                        "format": "date-time",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "default": null,
+                    "title": "Updated At"
+                  },
+                  "user_id": {
+                    "format": "uuid",
+                    "title": "User Id",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id",
+                  "email",
+                  "role",
+                  "active"
+                ],
+                "title": "OrgMemberView",
+                "type": "object"
+              }
+            },
+            "additionalProperties": false,
+            "description": "Same shape whether or not the email already had an account; the link is shown once.",
+            "properties": {
+              "expires_in": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expires In"
+              },
+              "invitation_url": {
+                "pattern": "^/app/(setup-password#token=[A-Za-z0-9_.=-]+|org/login)$",
+                "title": "Invitation Url",
+                "type": "string"
+              },
+              "member": {
+                "$ref": "#/$defs/OrgMemberView"
+              }
+            },
+            "required": [
+              "member",
+              "invitation_url"
+            ],
+            "title": "OrgMemberInvited",
+            "type": "object"
+          }
+        },
+        "org member list": {
+          "cli_parameters": [
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": null,
+          "items": {
+            "additionalProperties": false,
+            "description": "Admins receive every field; other roles receive only active members' email and role.",
+            "properties": {
+              "active": {
+                "title": "Active",
+                "type": "boolean"
+              },
+              "created_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Created At"
+              },
+              "created_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Created By"
+              },
+              "email": {
+                "title": "Email",
+                "type": "string"
+              },
+              "password_set": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Password Set"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              },
+              "role": {
+                "enum": [
+                  "admin",
+                  "bidder",
+                  "technical",
+                  "viewer"
+                ],
+                "title": "Role",
+                "type": "string"
+              },
+              "updated_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Updated At"
+              },
+              "user_id": {
+                "format": "uuid",
+                "title": "User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "user_id",
+              "email",
+              "role",
+              "active"
+            ],
+            "title": "OrgMemberView",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "description": "The member list has no data fields; records are returned in items.",
+            "properties": {},
+            "title": "OrgMemberListData",
+            "type": "object"
+          }
+        },
+        "org member role": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "user",
+              "options": [
+                "--user"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "role",
+              "options": [
+                "--role"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              },
+              "role": {
+                "enum": [
+                  "admin",
+                  "bidder",
+                  "technical",
+                  "viewer"
+                ],
+                "title": "Role",
+                "type": "string"
+              }
+            },
+            "required": [
+              "role",
+              "expected_revision"
+            ],
+            "title": "OrgMemberRoleChange",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "description": "Admins receive every field; other roles receive only active members' email and role.",
+            "properties": {
+              "active": {
+                "title": "Active",
+                "type": "boolean"
+              },
+              "created_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Created At"
+              },
+              "created_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Created By"
+              },
+              "email": {
+                "title": "Email",
+                "type": "string"
+              },
+              "password_set": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Password Set"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              },
+              "role": {
+                "enum": [
+                  "admin",
+                  "bidder",
+                  "technical",
+                  "viewer"
+                ],
+                "title": "Role",
+                "type": "string"
+              },
+              "updated_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Updated At"
+              },
+              "user_id": {
+                "format": "uuid",
+                "title": "User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "user_id",
+              "email",
+              "role",
+              "active"
+            ],
+            "title": "OrgMemberView",
+            "type": "object"
+          }
+        },
+        "org member set-active": {
+          "cli_parameters": [
+            {
+              "default": null,
+              "multiple": false,
+              "name": "user",
+              "options": [
+                "--user"
+              ],
+              "required": true,
+              "type": "uuid"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "active",
+              "options": [
+                "--active"
+              ],
+              "required": true,
+              "type": "text"
+            },
+            {
+              "default": null,
+              "multiple": false,
+              "name": "expected_revision",
+              "options": [
+                "--expected-revision"
+              ],
+              "required": true,
+              "type": "integer range"
+            },
+            {
+              "default": "False",
+              "multiple": false,
+              "name": "json_output",
+              "options": [
+                "--json"
+              ],
+              "required": false,
+              "type": "boolean"
+            }
+          ],
+          "input": {
+            "additionalProperties": false,
+            "properties": {
+              "active": {
+                "title": "Active",
+                "type": "boolean"
+              },
+              "expected_revision": {
+                "minimum": 1,
+                "title": "Expected Revision",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "active",
+              "expected_revision"
+            ],
+            "title": "OrgMemberActiveChange",
+            "type": "object"
+          },
+          "output": {
+            "additionalProperties": false,
+            "description": "Admins receive every field; other roles receive only active members' email and role.",
+            "properties": {
+              "active": {
+                "title": "Active",
+                "type": "boolean"
+              },
+              "created_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Created At"
+              },
+              "created_by": {
+                "anyOf": [
+                  {
+                    "format": "uuid",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Created By"
+              },
+              "email": {
+                "title": "Email",
+                "type": "string"
+              },
+              "password_set": {
+                "anyOf": [
+                  {
+                    "type": "boolean"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Password Set"
+              },
+              "revision": {
+                "anyOf": [
+                  {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Revision"
+              },
+              "role": {
+                "enum": [
+                  "admin",
+                  "bidder",
+                  "technical",
+                  "viewer"
+                ],
+                "title": "Role",
+                "type": "string"
+              },
+              "updated_at": {
+                "anyOf": [
+                  {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Updated At"
+              },
+              "user_id": {
+                "format": "uuid",
+                "title": "User Id",
+                "type": "string"
+              }
+            },
+            "required": [
+              "user_id",
+              "email",
+              "role",
+              "active"
+            ],
+            "title": "OrgMemberView",
+            "type": "object"
+          }
+        },
         "org use": {
           "cli_parameters": [
             {

@@ -43,6 +43,7 @@ export const router = createRouter({
     { path: "/platform/usage", component: Usage, meta: { area: "platform", title: "用量与账单", nav: "usage" } },
     { path: "/platform/audit", component: Audit, meta: { area: "platform", title: "审计", nav: "audit" } },
     { path: "/org/login", component: OrgLogin, meta: { public: true, title: "单位登录" } },
+    { path: "/org/members", component: () => import("./views/OrgMembers.vue"), meta: { area: "org", title: "成员", nav: "members" } },
     { path: "/org/tasks", component: OrgTasks, meta: { area: "org", title: "招标任务", nav: "tasks" } },
     { path: "/org/tasks/:taskId", component: OrgTask, meta: { area: "org", title: "任务详情", nav: "tasks" } },
     { path: "/org/tasks/:taskId/board", component: OrgTaskBoard, meta: { area: "org", title: "任务看板", nav: "tasks" } },

@@ -44,7 +44,8 @@ need no database still run.
 checks in CI on pull requests that are not drafts; it skips the suite whose files a
 pull request leaves unchanged and can be started by hand from the Actions tab. Open a
 pull request as a draft while still pushing fixes, and mark it ready for review to run
-the checks once. With `-n`, each pytest-xdist worker creates and migrates its own
+the checks once; the required `python` and `web` checks fail on drafts so a draft cannot
+be merged on skipped checks. With `-n`, each pytest-xdist worker creates and migrates its own
 `bid_test_gwN` database in the same cluster, because tests truncate shared tables.
 CI splits the suite across runners with `BID_TEST_SHARD=index/count`; `shard_of`,
 `ISOLATED_SHARD_TESTS` and `PINNED_SHARD_TESTS` in
