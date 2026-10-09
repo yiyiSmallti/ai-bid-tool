@@ -4,15 +4,14 @@ kind: plan
 
 # Organization member management
 
-Status: **Pending approval, not implemented**.
+Status: **Approved with all recommended defaults, not implemented**.
 
 This contract covers the member-management part of F04 in the [roadmap](roadmap.md): an
 org (organization/tenant, 单位) admin adds colleagues, changes their roles and
 deactivates them in the org console, without platform operators or database access. The
 importable [Pydantic v2 contract](org-members/org_members_contracts.py) defines payloads,
-Result data and the service Protocol; it registers nothing. The
-[Open decisions](#open-decisions) are recommended defaults for approval, not decisions
-already adopted.
+Result data and the service Protocol; it registers nothing. Implementation follows the
+approved [decisions](#open-decisions) under [agent.md](../../agent.md#workflow).
 
 ## Goal and scope
 
