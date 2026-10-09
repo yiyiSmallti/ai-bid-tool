@@ -4,7 +4,7 @@ kind: plan
 
 # Organization member management
 
-Status: **Approved with all recommended defaults, not implemented**.
+Status: **Approved; implemented**.
 
 This contract covers the member-management part of F04 in the [roadmap](roadmap.md): an
 org (organization/tenant, 单位) admin adds colleagues, changes their roles and

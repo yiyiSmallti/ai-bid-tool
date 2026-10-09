@@ -70,6 +70,7 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [annotation.md](notes/annotation.md): source-bound cloud certificate-page candidates, exact-approval confirmed releases, and explicit human attachment.
 - [screenshot-evidence.md](notes/screenshot-evidence.md): screenshot pixel redaction and privacy clearance, vendor web/PDF capture and archival, vendor-source search, response-card image evidence, prototype (原型) delivery decisions, analysis admission and billing, and invalidation/recomputation.
 - [Organization self-service application](notes/org-signup.md): public admission, platform review and expiry.
+- [Organization member management](notes/org-members.md): invitations, revision CAS, administrator continuity and reversible revocation.
 
 ## Decision records
 

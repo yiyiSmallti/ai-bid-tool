@@ -66,6 +66,7 @@ SCOPES = {
 
 ROLE_SCOPES = {
     "admin": {
+        "member:manage",
         "provider:write",
         # billing:redeem is deliberately absent from SCOPES: tokens can never redeem cards.
         "billing:read",
@@ -214,6 +215,7 @@ for _role in ("admin", "bidder", "technical"):
 
 
 HUMAN_ONLY_SCOPES = {
+    "member:manage",
     "template:file:read",
     "evidence:annotate",
     "certificate:lifecycle",

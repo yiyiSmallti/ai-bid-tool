@@ -80,6 +80,7 @@ from bid_cli.management_providers import register as register_management_provide
 from bid_cli.management_templates import register as register_management_template_commands
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
+from bid_cli.org_members import register as register_org_member_commands
 from bid_cli.platform_clef import app as platform_clef_app
 from bid_cli.platform_credentials import app as platform_credential_app
 from bid_cli.platform_trust_anchors import app as platform_trust_anchor_app
@@ -1548,6 +1549,7 @@ platform_app.add_typer(platform_card_app, name="card")
 app.add_typer(billing_app, name="billing")
 
 register_budget_commands(task_app, billing_app)
+register_org_member_commands(org_app)
 register_team_workflow_commands(task_app, card_app)
 register_management_product_commands(product_app)
 register_management_feature_commands(feature_app)
@@ -1781,6 +1783,7 @@ def main(args: list[str] | None = None):
                 or name in MANAGEMENT_CONFIDENTIAL_COMMANDS
                 or name.startswith("assessment ")
                 or name.startswith("review ")
+                or name.startswith("org member ")
                 or "--view" in arguments
                 or any(argument.startswith("--view=") for argument in arguments)
                 or any(

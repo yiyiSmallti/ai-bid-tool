@@ -21,6 +21,7 @@ const menus = computed(() => area.value === "platform"
       { key: "audit", to: "/platform/audit", title: "审计", icon: Files },
     ]
   : [
+      { key: "members", to: "/org/members", title: "成员", icon: User },
       { key: "tasks", to: "/org/tasks", title: "招标任务", icon: Document },
       { key: "products", to: "/org/products", title: "产品库", icon: Files },
       { key: "features", to: "/org/features", title: "功能库", icon: Files },

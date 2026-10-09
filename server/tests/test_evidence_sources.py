@@ -245,6 +245,7 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         await api.get(f"/evidence-sources/{source['id']}/preview/download-link", headers=headers[0])
     ).status_code == 200
     later = {
+        "member:manage",
         "attachment:read",
         "attachment:write",
         "attachment:review",

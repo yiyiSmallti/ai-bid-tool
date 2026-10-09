@@ -6,6 +6,26 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-09: Required checks fail on drafts
+
+- The required `python` and `web` checks now fail on draft pull requests instead of
+  being skipped, since GitHub counts a skipped required check as passing.
+
+## 2026-10-09: Organization member management
+
+- Add administrator member invitations, role changes and activation controls through
+  the organization console, HTTP Result routes and `bid org member` commands; other
+  roles see active colleagues in a read-only view.
+- Migration 0068 preserves existing memberships, adds revision and creation/update
+  metadata, and provisions members through a restricted `bid_platform_fn` function
+  without replacing global account passwords. Runtime member updates require CAS,
+  retain the last active administrator and exclude management from API-token scopes.
+- Deactivation refuses the next session/token request, revokes this organization's
+  tokens and retains task history; mutation audits exclude invitation links.
+- Add PostgreSQL HTTP and mocked browser acceptance plus reviewed CLI snapshots.
+  See [the approved contract](plan/org-members.md) and
+  [the mechanism](notes/org-members.md).
+
 ## 2026-10-09: Default-on Clef presence triage
 
 - Add platform-only Clef settings, separate Workers AI/gateway credentials, a
