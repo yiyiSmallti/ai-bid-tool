@@ -660,6 +660,14 @@ and those pages with seals removed: 20/20, seal probability 0.91–0.99 and no-s
 probability ≤0.03. These are supplied feasibility signals, not independently rerun
 measurements, general accuracy, calibrated confidence, pricing evidence or an SLA.
 
+A 2026-10-09 rerun sent the same 20 pages as production presence derivatives
+(`presence-gaussian-v1`: whole page at most 256 px, Gaussian blur, text unreadable).
+Seal probability was 0.81–0.97 with seals and 0.02–0.08 without, all on the correct
+side of 0.5; at the production cut-offs 18/20 were classified and 2 seal pages stayed
+uncertain for human review. A 512 px variant with proportionally stronger blur did not
+improve separation. The signature-ink question did not separate these pages and is
+weak triage. The same coverage limits below still apply.
+
 Faint/greyscale scans, partial/misplaced seals, wrong-company seals, required-position
 checks and seam seals are **not yet covered**. A page-level presence result does not
 measure end-to-end required-location recall. Freeze those cases in the acceptance set
