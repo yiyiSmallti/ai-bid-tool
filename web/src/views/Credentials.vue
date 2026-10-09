@@ -4,8 +4,8 @@ import { Plus, Refresh } from "@element-plus/icons-vue";
 import { request } from "../api.js";
 import { formatTime } from "../ui.js";
 
-const purposes = { catalog_llm: "目录模型", standalone_llm: "Standalone / Eval", vendor_search: "厂商搜索" };
-const providers = { anthropic: "Anthropic", openai: "OpenAI 兼容", perplexity: "Perplexity" };
+const purposes = { catalog_llm: "目录模型", standalone_llm: "Standalone / Eval", vendor_search: "厂商搜索", clef_workers_ai: "Clef Workers AI 模型令牌", clef_gateway: "Clef 网关令牌" };
+const providers = { anthropic: "Anthropic", openai: "OpenAI 兼容", perplexity: "Perplexity", cloudflare: "Cloudflare" };
 const states = { active: "已启用", disabled: "已停用", removed: "已移除" };
 const reasons = { setup: "初始配置", scheduled_rotation: "定期轮换", vendor_revoked: "厂商已吊销", incident: "事件处理", retired: "停止使用", migration: "迁移" };
 const outcomes = { passed: "认证通过", auth_failed: "认证失败", unsupported: "不支持认证探针", timeout: "认证超时", rate_limited: "测试次数超限", unavailable: "认证服务不可用", interrupted: "测试中断，结果未知" };
@@ -49,9 +49,11 @@ function create() {
   cancel(); error.value = ""; notice.value = "";
   form.value = { action: "create", name: "", purpose: "catalog_llm", provider: "anthropic", endpoint: "https://api.anthropic.com", api_key: "", active: false, reason: "setup" };
 }
+const isClef = value => ["clef_workers_ai", "clef_gateway"].includes(value);
 function choosePurpose() {
+  if (isClef(form.value.purpose)) { form.value.provider = "cloudflare"; form.value.endpoint = form.value.purpose === "clef_workers_ai" ? "https://gateway.ai.cloudflare.com" : "https://api.cloudflare.com/client/v4"; return; }
   if (form.value.purpose === "vendor_search") { form.value.provider = "perplexity"; form.value.endpoint = "https://api.perplexity.ai"; }
-  else if (form.value.provider === "perplexity") { form.value.provider = "anthropic"; form.value.endpoint = "https://api.anthropic.com"; }
+  else if (["perplexity", "cloudflare"].includes(form.value.provider)) { form.value.provider = "anthropic"; form.value.endpoint = "https://api.anthropic.com"; }
 }
 async function show(row) {
   try { detail.value = (await request("GET", `/platform/credentials/${row.id}`)).data.credential; }
@@ -122,8 +124,8 @@ onBeforeUnmount(cancel);
       <div v-if="form.action === 'create'" class="grid">
         <el-form-item label="凭据名称"><el-input v-model="form.name" name="credential-name" maxlength="40" required placeholder="main" /></el-form-item>
         <el-form-item label="用途"><el-select v-model="form.purpose" name="credential-purpose" @change="choosePurpose"><el-option v-for="(text, value) in purposes" :key="value" :value="value" :label="text" /></el-select></el-form-item>
-        <el-form-item label="服务商"><el-select v-model="form.provider" name="credential-provider" :disabled="form.purpose === 'vendor_search'"><el-option v-for="(text, value) in providers" v-show="form.purpose === 'vendor_search' ? value === 'perplexity' : value !== 'perplexity'" :key="value" :value="value" :label="text" /></el-select></el-form-item>
-        <el-form-item label="HTTPS Base URL"><el-input v-model="form.endpoint" name="credential-endpoint" :disabled="form.purpose === 'vendor_search'" required /></el-form-item>
+        <el-form-item label="服务商"><el-select v-model="form.provider" name="credential-provider" :disabled="form.purpose === 'vendor_search' || isClef(form.purpose)"><el-option v-for="(text, value) in providers" v-show="isClef(form.purpose) ? value === 'cloudflare' : form.purpose === 'vendor_search' ? value === 'perplexity' : !['perplexity', 'cloudflare'].includes(value)" :key="value" :value="value" :label="text" /></el-select></el-form-item>
+        <el-form-item label="HTTPS Base URL"><el-input v-model="form.endpoint" name="credential-endpoint" :disabled="form.purpose === 'vendor_search' || isClef(form.purpose)" required /></el-form-item>
         <div class="hint">名称、用途、服务商和端点保存后不可更改。需要更换端点时须创建新凭据。</div>
         <label class="check"><input v-model="form.active" type="checkbox" name="credential-active" />创建时启用（默认停用）</label>
       </div>

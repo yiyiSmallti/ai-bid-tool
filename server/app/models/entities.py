@@ -233,6 +233,8 @@ class Requirement(Tenant, Base):
 
 
 class UsageRecord(Tenant, Base):
+    gateway_request_id: Mapped[str | None] = mapped_column(String(128))
+    gateway_trace_id: Mapped[str | None] = mapped_column(String(128))
     __tablename__ = "usage_records"
     image_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     image_price_revision: Mapped[str | None] = mapped_column(String(100))
@@ -437,6 +439,10 @@ class Job(Tenant, Base):
     command: Mapped[str | None] = mapped_column(String(100))
     __table_args__ = (
         CheckConstraint(
+            "kind<>'bid_review_report' OR (actor_user_id IS NOT NULL AND actor_kind='session' AND actor_token_id IS NULL AND agent_principal_id IS NULL)",
+            name="bid_review_report_actor",
+        ),
+        CheckConstraint(
             "kind<>'bid_review_prepare' OR (actor_user_id IS NOT NULL AND actor_kind='session' AND actor_token_id IS NULL AND agent_principal_id IS NULL)",
             name="bid_review_prepare_actor",
         ),
@@ -488,7 +494,7 @@ class Job(Tenant, Base):
             ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
         ),
         CheckConstraint(
-            "(kind = 'provider_test' AND task_id IS NULL AND document_id IS NULL) OR (kind='bid_review_prepare' AND task_id IS NOT NULL AND document_id IS NULL) OR (kind='bid_review' AND task_id IS NOT NULL AND document_id IS NULL AND bid_submission_document_id IS NOT NULL) OR (kind NOT IN ('provider_test','bid_review_prepare','bid_review') AND task_id IS NOT NULL AND document_id IS NOT NULL)",
+            "(kind = 'provider_test' AND task_id IS NULL AND document_id IS NULL) OR (kind='bid_review_prepare' AND task_id IS NOT NULL AND document_id IS NULL) OR (kind IN ('bid_review','bid_review_report') AND task_id IS NOT NULL AND document_id IS NULL AND bid_submission_document_id IS NOT NULL) OR (kind NOT IN ('provider_test','bid_review_prepare','bid_review','bid_review_report') AND task_id IS NOT NULL AND document_id IS NOT NULL)",
             name="job_document_binding",
         ),
         ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
@@ -1364,6 +1370,8 @@ class PlatformModel(Base):
     model: Mapped[str] = mapped_column(String(100))
     base_url: Mapped[str | None] = mapped_column(String(300))
     credential: Mapped[str] = mapped_column(String(40))
+    # Reserved Clef catalog metadata; never a tenant provider response field.
+    clef_settings: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     vendor_input_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
     vendor_output_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
     sale_input_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))

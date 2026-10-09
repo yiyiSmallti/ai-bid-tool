@@ -5,6 +5,12 @@ from typing import Any
 LEGACY_COST_FIELDS = frozenset({"llm_tokens", "ocr_pages", "usd"})
 NEW_COMMANDS = frozenset(
     {
+        "review presence prepare",
+        "review presence preview",
+        "review presence authorize",
+        "platform clef show",
+        "platform clef set",
+        "platform clef check",
         "platform trust-anchor list",
         "platform trust-anchor add",
         "platform trust-anchor disable",

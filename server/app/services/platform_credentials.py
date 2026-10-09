@@ -135,7 +135,7 @@ class PlatformCredentialResolver:
         )
 
     async def select_service(
-        self, service: Literal["vendor_search", "standalone_llm"]
+        self, service: Literal["vendor_search", "standalone_llm", "clef_workers_ai", "clef_gateway"]
     ) -> ServiceResolveTarget:
         value = await self._read(
             "SELECT public.platform_credential_readiness(CAST(:target AS jsonb))",
@@ -267,6 +267,8 @@ class PlatformCredentialService:
                 selected = (
                     self.settings.search_provider == "perplexity"
                     if consumer.service == "vendor_search"
+                    else True
+                    if consumer.service in {"clef_workers_ai", "clef_gateway"}
                     else self.settings.llm_provider == view.provider
                 )
                 consumer.selected = selected and view.state != "removed"

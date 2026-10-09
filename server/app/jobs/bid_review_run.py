@@ -18,8 +18,8 @@ from app.providers.base import ProviderFailure
 from app.providers.bid_reviewing import review_provider
 from app.schemas.bid_review_run import BidReviewRequest
 from app.services import bid_review as bids
+from app.services import bid_review_clef, bid_review_findings, bid_review_text, check_semantic
 from app.services import bid_review_compliance as compliance
-from app.services import bid_review_findings, bid_review_text, check_semantic
 from app.services import bid_review_run as review
 from app.services.auth import set_actor_context
 from app.services.versioned import audit
@@ -142,6 +142,21 @@ async def process(execution: JobExecution, storage) -> None:
         fixed.documents,
         fixed.validations,
     )
+    # LLM retains its independent stage ceiling; only after it stops making calls
+    # may the visual stage use its additional fixed 40-call envelope.
+    execution.absolute_call_ceiling = min(
+        140, fixed.manifest["limits"]["llm_calls"] + fixed.manifest["limits"]["visual_calls"]
+    )
+    clef_coverage, clef_usages, clef_errors = await bid_review_clef.triage(
+        execution, fixed, signing, storage
+    )
+    reported.extend(clef_usages)
+    rejected.extend(clef_errors)
+    if any(
+        value["applicability"] == "applies" and value["required_locations"]
+        for value in signing.values()
+    ):
+        rejected.append("signing_presence_human_confirmation_required")
     if compliance.invalid_signatures(fixed.validations)[0] and not any(
         finding["code"] == "signature_validation_invalid" for finding in rule_findings
     ):
@@ -217,9 +232,9 @@ async def process(execution: JobExecution, storage) -> None:
             outcome: sum(f["outcome"] == outcome for f in findings)
             for outcome in ("responded", "deviation", "missing", "unknown")
         },
-        "signature_presence": "not_checked",
+        "signature_presence": "triage_only" if clef_coverage["clef_calls"] else "not_checked",
         "scoring": "not_requested",
-        "clef": "not_implemented",
+        **clef_coverage,
     }
     completion = (
         "partial"
@@ -275,7 +290,7 @@ async def process(execution: JobExecution, storage) -> None:
                         page_id=UUID(location["page_id"]) if location.get("page_id") else None,
                         ordinal=location_index,
                         group_id=location.get("group_id"),
-                        status="unresolved",
+                        status=location["status"],
                     )
                 )
         await session.flush()

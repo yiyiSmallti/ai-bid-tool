@@ -4,8 +4,7 @@ kind: plan
 
 # Uploaded-bid review and score estimate
 
-Status: **Approved; slices 1–2 and slices 3a–3b implemented. Recommended defaults
-are adopted, except that Clef triage is on by default.**
+Status: **Approved; phase 1 implemented (slices 1–5). Clef triage is on by default.**
 
 The first phase is divided into five implementation slices: upload/preparation;
 signature checklist and approved local validation; rule/LLM compliance and human
@@ -13,12 +12,17 @@ dismissal; console/Word report; Clef triage with fixed per-call billing. Slice 3
 implements exact human-authorized sanitized native-text review, cited tender
 obligations and signing-clause applicability with unresolved location inventories.
 Slice 3b adds authorized bid-text compliance findings, deterministic rules and
-append-only classified human decisions within that same run.
+append-only classified human decisions within that same run. Slice 4 adds the
+immutable console/Word snapshot and human-only report artifacts. Slice 5 adds
+platform Clef configuration, exact human-cleared presence JPEGs and fixed per-call
+billing. Database/browser acceptance remains pending for these implementation slices.
 Upload/preparation and local signature evidence are implemented. PostgreSQL and
 browser acceptance remain pending; static checks do not establish those gates.
-The delivered boundaries are in [slice 3a](#slice-3a-authorized-native-text-review)
-and [slice 3b](#slice-3b-native-text-compliance-findings-and-human-decisions), and
-its mechanisms are in [the mechanism note](../notes/bid-review.md).
+The delivered boundaries are in [slice 3a](#slice-3a-authorized-native-text-review),
+[slice 3b](#slice-3b-native-text-compliance-findings-and-human-decisions) and
+[slice 4](#slice-4-console-report-and-word-artifacts) and
+[slice 5](#slice-5-default-on-presence-triage); their mechanisms are in
+[the mechanism note](../notes/bid-review.md).
 
 This contract adds an independent uploaded-bid review flow to B09/B10 in the
 [roadmap](roadmap.md), with B04/B05 evidence, P03 vision and E01/E02 evaluation
@@ -755,6 +759,74 @@ Their database/browser execution remains pending in the main session. Generated
 verification artifacts belong under ignored `data/work/bid-review-findings`.
 Visible mark presence, image evidence review, scoring, Word rendering and Clef
 remain outside this slice.
+
+### Slice 4: Console report and Word artifacts
+
+The report captures one published review and the append-only human events current
+at render admission. Its decision hash and encrypted content remain immutable;
+later decisions require a new render and are shown as a stale-snapshot indicator.
+Published partial reviews remain partial, with explicit unknowns and uncovered
+scope. Unpublished reviews cannot enter report rendering.
+
+The console reads bounded sections from the same snapshot used by the local Word
+renderer. Original-read authority controls protected details; other human readers
+receive a purpose-built cleared projection and tokens receive safe metadata.
+Human admin/bidder render admission uses a call-free, write-free preview and signed
+hash receipt. The report job publishes verified encrypted console/Word artifacts
+together; download links and authenticated byte reads repeat live authority.
+The [runtime schemas](../../server/app/schemas/bid_review_report.py) define this
+bounded subset; [the mechanism note](../notes/bid-review.md#immutable-console-and-word-reports)
+links its implementation.
+
+The [HTTP/worker suite](../../server/tests/test_bid_review_report_db.py) and
+[mocked browser suite](../../web/e2e/bid-review-report.spec.js) cover snapshot drift,
+projections, sections, failures and downloads. Database and browser execution remain
+pending in the main session; static checks and CLI tests do not establish those
+gates. Repeatable acceptance artifacts belong under ignored
+`data/work/bid-review-report`. Scoring, claim-to-image evidence verification,
+visible mark presence and Clef remain outside this slice.
+
+## Slice 5: default-on presence triage
+
+Phase 1 implements page-level company-seal and signature-presence questions only.
+Date-filled, owner identity, required-box position, seam completeness, page-type
+classification, claim-to-image assessment and scoring remain local/human or explicit
+future scope. The visible state is always 初筛 / 需人工确认, never confirmed presence.
+
+Required locations first become available in a published native-text review. A human
+admin/bidder task owner then explicitly prepares presence derivatives from that review,
+inspects the exact JPEGs, authorizes their separate `bid_review_presence` purpose,
+and previews a new review run. Newly extracted required pages must intersect those
+exact authorized source pages; other locations remain uncovered. The first run and
+unconfigured/blocked runs continue with an explicit triage-unavailable coverage code.
+Per-run `clef_enabled=false` remains bound to the preflight and job identity.
+
+The [presence mechanism](../notes/bid-review.md#presence-only-clef-triage) defines
+pixel lineage, approval invalidation and runtime boundaries. Platform operators manage
+`bid platform clef show/set/check`; human owners use
+`bid review presence prepare/preview/authorize`. The latter authorization command also
+records revocation with `allow_external=false`; its receipt cannot authorize text.
+[Runtime image contracts](../../server/app/schemas/bid_review_presence.py) and
+[Clef contracts](../../server/app/schemas/clef.py) define the concrete interfaces.
+
+Presence preparation rejects more than forty eligible pages instead of silently
+truncating the inventory. Such submissions retain local/text review and explicit
+unavailable triage coverage; selecting a smaller image subset before derivation
+is not part of this image-authorization interface.
+
+The application labels probability at or below 0.1 as `triage_absent`, at or above
+0.9 as `triage_present`, and intermediate observations as `triage_uncertain`.
+These thresholds organize human review and are not calibrated accuracy claims;
+multiple required mark types use the lowest relevant probability, and seam groups
+remain uncertain. All locations retain human confirmation, including high-presence
+results. Missing/uncertain marks carry an explicit escalation.
+
+The [HTTP/worker acceptance suite](../../server/tests/test_bid_review_clef_db.py),
+[HTTPS mocked browser suite](../../web/e2e/bid-review-clef.spec.js) and
+[synthetic blur experiment](../../scripts/check_bid_presence_blur.py) cover the slice.
+PostgreSQL and browser execution remain pending; numeric blur checks alone establish
+neither real-document privacy nor missing-mark recall. Artifacts belong under ignored
+`data/work/bid-review-clef`, outside documentation.
 
 ## Open decisions
 

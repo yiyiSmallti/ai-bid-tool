@@ -226,7 +226,11 @@ def model_view(row: PlatformModel, configured: bool = False) -> dict:
 
 
 async def list_models(session: AsyncSession, resolver: PlatformCredentialResolver) -> list[dict]:
-    rows = await session.scalars(select(PlatformModel).order_by(PlatformModel.id))
+    rows = await session.scalars(
+        select(PlatformModel)
+        .where(PlatformModel.capability == "llm_extract")
+        .order_by(PlatformModel.id)
+    )
     views = []
     for row in rows:
         state = await resolver.readiness(

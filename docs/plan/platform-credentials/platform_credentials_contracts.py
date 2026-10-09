@@ -13,8 +13,10 @@ RESULT_CONTRACT_VERSION = CONTRACT_VERSION
 CredentialName = Annotated[str, Field(pattern=r"^[a-z0-9_]{1,40}$")]
 Revision = Annotated[int, Field(strict=True, ge=1)]
 Fingerprint = Annotated[str, Field(pattern=r"^sha256:[a-f0-9]{16}$")]
-Provider = Literal["anthropic", "openai", "perplexity"]
-Purpose = Literal["catalog_llm", "standalone_llm", "vendor_search"]
+Provider = Literal["anthropic", "openai", "perplexity", "cloudflare"]
+Purpose = Literal[
+    "catalog_llm", "standalone_llm", "vendor_search", "clef_workers_ai", "clef_gateway"
+]
 CredentialState = Literal["active", "disabled", "removed"]
 Reason = Literal[
     "setup", "scheduled_rotation", "vendor_revoked", "incident", "retired", "migration"
@@ -99,7 +101,17 @@ class CredentialSpec(CredentialContract):
         if self.purpose == "vendor_search":
             if self.provider != "perplexity" or self.endpoint != "https://api.perplexity.ai":
                 raise ValueError("vendor search requires the fixed Perplexity endpoint")
-        elif self.provider == "perplexity":
+        elif self.purpose in {"clef_workers_ai", "clef_gateway"}:
+            expected = (
+                "https://gateway.ai.cloudflare.com"
+                if self.purpose == "clef_workers_ai"
+                else "https://api.cloudflare.com/client/v4"
+            )
+            if self.provider != "cloudflare" or self.endpoint != expected:
+                raise ValueError(
+                    "Clef credentials require a fixed purpose-bound Cloudflare endpoint"
+                )
+        elif self.provider in {"perplexity", "cloudflare"}:
             raise ValueError("LLM credentials require an LLM provider")
         return self
 
@@ -161,7 +173,7 @@ class CatalogConsumer(CredentialContract):
 
 class ServiceConsumer(CredentialContract):
     kind: Literal["service"] = "service"
-    service: Literal["vendor_search", "standalone_llm"]
+    service: Literal["vendor_search", "standalone_llm", "clef_workers_ai", "clef_gateway"]
     selected: bool
 
 
@@ -333,7 +345,7 @@ class CatalogResolveTarget(CredentialContract):
 
 class ServiceResolveTarget(CredentialContract):
     kind: Literal["service"] = "service"
-    service: Literal["vendor_search", "standalone_llm"]
+    service: Literal["vendor_search", "standalone_llm", "clef_workers_ai", "clef_gateway"]
     credential_id: UUID
     # The ID comes from the server's selection/queued non-secret identity, never an org request.
 

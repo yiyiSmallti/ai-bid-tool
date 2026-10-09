@@ -7,10 +7,12 @@ from fastapi import APIRouter, Depends, Query, Request
 from pydantic import ValidationError
 
 from app.api.bid_upload import receive
-from app.core.errors import ServiceError
+from app.core.errors import ServiceError, not_found
 from app.providers.base import ProviderFailure
 from app.schemas import bid_review_findings as findings_contracts
+from app.schemas import bid_review_presence as presence_contracts
 from app.schemas import bid_review_privacy as privacy_contracts
+from app.schemas import bid_review_report as report_contracts
 from app.schemas import bid_review_run as run_contracts
 from app.schemas.bid_review import (
     BidPreparePreview,
@@ -19,7 +21,14 @@ from app.schemas.bid_review import (
     BidSubmissionCreate,
 )
 from app.schemas.contracts import Cost, Result
-from app.services import bid_review, bid_review_findings, bid_review_privacy, bid_review_run
+from app.services import (
+    bid_review,
+    bid_review_findings,
+    bid_review_presence,
+    bid_review_privacy,
+    bid_review_report,
+    bid_review_run,
+)
 
 
 def create_router(context, settings, storage, queue):
@@ -193,6 +202,80 @@ def create_router(context, settings, storage, queue):
             await bid_review_privacy.revoke(ctx[0], ctx[1], submission_id, body, settings),
         )
 
+    async def presence_binding(ctx):
+        from app.services import platform_clef
+
+        resolved = await platform_clef.resolve(ctx[0], settings)
+        if resolved.config is None or resolved.blockers:
+            raise ServiceError("clef_unavailable", "Inspect platform Clef configuration", 409, 4)
+        return resolved.config.model_dump(mode="json")
+
+    @router.post("/bid-submissions/{submission_id}/presence-preparations", response_model=Result)
+    async def presence_prepare(
+        submission_id: UUID,
+        body: presence_contracts.PresencePrepareRequest,
+        ctx=Depends(context, scope="function"),
+    ):
+        await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id, write=True)
+        return result(
+            "review presence prepare",
+            await bid_review_presence.prepare(
+                ctx[0], ctx[1], submission_id, body, settings, await presence_binding(ctx), storage
+            ),
+        )
+
+    @router.get("/bid-submissions/{submission_id}/presence-preview", response_model=Result)
+    async def presence_preview(submission_id: UUID, ctx=Depends(context, scope="function")):
+        await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id)
+        try:
+            provider_binding = await presence_binding(ctx)
+        except ServiceError:
+            provider_binding = None
+        return result(
+            "review presence preview",
+            await bid_review_presence.preview(
+                ctx[0], ctx[1], submission_id, settings, provider_binding
+            ),
+        )
+
+    @router.post("/bid-submissions/{submission_id}/presence-authorizations", response_model=Result)
+    async def presence_authorize(
+        submission_id: UUID,
+        body: presence_contracts.PresenceAuthorizationRequest,
+        ctx=Depends(context, scope="function"),
+    ):
+        await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id, write=True)
+        provider_binding = await presence_binding(ctx) if body.allow_external else None
+        return result(
+            "review presence authorize",
+            await bid_review_presence.authorize(
+                ctx[0], ctx[1], submission_id, body, settings, provider_binding
+            ),
+        )
+
+    @router.get("/bid-presence-images/{image_id}/content")
+    async def presence_content(image_id: UUID, ctx=Depends(context, scope="function")):
+        from fastapi.responses import Response
+
+        from app.models.bid_review_presence import BidPresenceImage
+
+        image = await ctx[0].get(BidPresenceImage, image_id)
+        if image is None:
+            raise not_found()
+        await bid_review_privacy.human_access(ctx[0], ctx[1], image.submission_id)
+        content = await bid_review_presence.image_content(
+            ctx[0], ctx[1], image_id, settings, await presence_binding(ctx), storage
+        )
+        return Response(
+            content,
+            media_type="image/jpeg",
+            headers={
+                "Cache-Control": "no-store",
+                "Content-Disposition": "inline; filename=presence.jpg",
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
+
     @router.post("/tasks/{task_id}/bid-reviews", response_model=Result)
     async def run(
         task_id: UUID, body: run_contracts.BidReviewRequest, ctx=Depends(context, scope="function")
@@ -229,6 +312,121 @@ def create_router(context, settings, storage, queue):
         response = result("review show", data)
         response.ok = data.run.completion != "partial"
         response.warnings = data.run.uncovered_codes
+        return response
+
+    @router.get("/bid-reviews/{review_id}/report", response_model=Result)
+    async def report(
+        review_id: UUID,
+        section: report_contracts.ReportSectionKey = "overall",
+        snapshot_id: UUID | None = None,
+        cursor: str | None = Query(None, max_length=4096),
+        limit: int = Query(50, ge=1, le=100),
+        ctx=Depends(context, scope="function"),
+    ):
+        data, items = await bid_review_report.show(
+            ctx[0],
+            ctx[1],
+            review_id,
+            settings,
+            section=section,
+            snapshot_id=snapshot_id,
+            cursor=cursor,
+            limit=limit,
+        )
+        response = result("review report show", data)
+        response.items = items
+        response.ok = data.completion != "partial"
+        return response
+
+    @router.get("/bid-reviews/{review_id}/reports", response_model=Result)
+    async def report_history(
+        review_id: UUID,
+        cursor: str | None = Query(None, max_length=4096),
+        limit: int = Query(50, ge=1, le=100),
+        ctx=Depends(context, scope="function"),
+    ):
+        data, items = await bid_review_report.history(
+            ctx[0], ctx[1], review_id, settings, cursor=cursor, limit=limit
+        )
+        response = result("review report list", data)
+        response.items = items
+        return response
+
+    @router.post("/bid-reviews/{review_id}/artifacts", response_model=Result)
+    async def render_report(
+        review_id: UUID,
+        body: report_contracts.BidReportRenderRequest,
+        ctx=Depends(context, scope="function"),
+    ):
+        data = await bid_review_report.submit(ctx[0], ctx[1], review_id, body, queue, settings)
+        response = result("review report", data)
+        if isinstance(data, report_contracts.BidReportRenderPreview):
+            response.cost = data.budget.estimate
+        return response
+
+    @router.get("/bid-review-artifacts/{artifact_id}/download-link", response_model=Result)
+    async def report_link(artifact_id: UUID, ctx=Depends(context, scope="function")):
+        from app.api.common import signed_link
+        from app.core.security import TokenSigner
+        from app.services.versioned import audit
+
+        row, snapshot = await bid_review_report.download_gate(ctx[0], ctx[1], artifact_id)
+        path = f"/bid-review-artifacts/{artifact_id}/download"
+        link = signed_link(
+            TokenSigner.for_tokens(settings),
+            path,
+            "bid-review-report",
+            ctx[1].org_id,
+            id=row.id,
+            sha256=row.sha256,
+            actor_user_id=ctx[1].user_id,
+        )
+        audit(
+            ctx[0],
+            ctx[1],
+            "bid_review.report_download_issued",
+            row.id,
+            {"task_id": str(row.task_id), "snapshot_id": str(snapshot.id), "sha256": row.sha256},
+        )
+        return result(
+            "review report download",
+            report_contracts.BidReportDownloadLink(
+                **link, artifact=bid_review_report.artifact_view(row, snapshot)
+            ),
+        )
+
+    @router.get("/bid-review-artifacts/{artifact_id}/download")
+    async def report_bytes(
+        artifact_id: UUID, signature: str, ctx=Depends(context, scope="function")
+    ):
+        from app.api.common import attachment, check_signature
+        from app.core.security import TokenSigner
+
+        row, _ = await bid_review_report.download_gate(ctx[0], ctx[1], artifact_id)
+        check_signature(
+            TokenSigner.for_tokens(settings),
+            signature,
+            "bid-review-report",
+            ctx[1].org_id,
+            id=row.id,
+            sha256=row.sha256,
+            actor_user_id=ctx[1].user_id,
+        )
+        content, descriptor = await bid_review_report.read_artifact(
+            ctx[0], ctx[1], artifact_id, storage
+        )
+        media = (
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            if descriptor.format == "docx"
+            else "application/json"
+        )
+        response = attachment(
+            content,
+            media,
+            "bid-review-report.docx" if descriptor.format == "docx" else "bid-review-report.json",
+        )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Pragma"] = "no-cache"
         return response
 
     @router.get("/bid-reviews/{review_id}/findings", response_model=Result)

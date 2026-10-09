@@ -1074,7 +1074,8 @@ async def test_complete_clause_extraction_retains_excluded_bid_coverage_and_late
     assert coverage["tender_pages_assessed"] == coverage["tender_pages_total"] == 1
     assert coverage["bid_compliance"] == "partial"
     assert coverage["signature_presence"] == "not_checked"
-    assert coverage["scoring"] == "not_requested" and coverage["clef"] == "not_implemented"
+    assert coverage["scoring"] == "not_requested" and coverage["clef"] == "unavailable"
+    assert coverage["clef_calls"] == 0 and "clef_unavailable" in report["run"]["uncovered_codes"]
     artifact(tmp_path, "complete-extraction", job=finished, report=report, requests=vendor.requests)
 
 

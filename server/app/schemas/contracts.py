@@ -135,6 +135,8 @@ class Extraction(Contract):
 
 
 class ProviderUsage(Contract):
+    gateway_request_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
+    gateway_trace_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
     provider_config_id: UUID | None = None
     image_count: int = Field(default=0, ge=0, le=20)
     image_price_revision: str | None = None
