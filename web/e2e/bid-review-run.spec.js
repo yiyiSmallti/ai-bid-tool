@@ -39,12 +39,11 @@ async function fixture(page, options = {}) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
-    if (path === "/health") return route.fulfill({ json: result("health", { org_signup_enabled: false }) });
+    if (path === "/health") return route.fulfill({ json: result("health", { status: "ok" }) });
     expect(request.headers()["x-org-id"]).toBe(ids.org);
     let response;
     if (path === "/org/current" && method === "GET") response = result("org current", { org_id: ids.org, user_id: ids.user, role: state.role });
-    else if (path === `/tasks/${ids.task}/workflow` && method === "GET") response = result("task workflow", { workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: state.owner ? ids.user : uuid(99) } });
-    else if (path === `/tasks/${ids.task}/members` && method === "GET") response = result("task member list", { org_id: ids.org, task_id: ids.task, next_cursor: null }, [{ user_id: ids.user, role: state.role === "viewer" ? "observer" : state.owner ? "owner" : "contributor", active: true }]);
+    else if (path === `/tasks/${ids.task}/progress` && method === "GET") response = result("task progress", { access: {role:state.role === "viewer" ? "observer" : state.owner ? "owner" : "contributor",review_domains:[]},event_cursor:"opaque-snapshot",workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: state.owner ? ids.user : uuid(99) } });
     else if (path === `/bid-submissions/${ids.submission}` && method === "GET") response = result("review submission show", detail);
     else if (path === `/bid-submissions/${ids.submission}/redaction` && method === "GET") { expect(state.owner).toBe(true); expect(url.searchParams.get("cursor")).toBe("0"); expect(url.searchParams.get("limit")).toBe("25"); response = result("review redaction", redaction()); }
     else if (path === `/bid-submissions/${ids.submission}/outbound-authorizations` && method === "GET") { expect(state.owner).toBe(true); expect(url.searchParams.get("limit")).toBe("100"); const cursor = Number(url.searchParams.get("cursor")), width = state.grantPageSize ?? 100; response = result("review outbound list", { total: state.grants.length, next_cursor: cursor + width < state.grants.length ? cursor + width : null }, state.grants.slice(cursor, cursor + width)); }

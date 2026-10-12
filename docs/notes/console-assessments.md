@@ -37,7 +37,7 @@ requests and services. No console persistence or independent assessment engine i
 
 Read services authorize the parent and its complete dependency graph before exposing
 counts. Task visibility, lifecycle and responsibility domains follow the
-[task-workflow mechanism](team-workflow.md#how-it-works). Projections, capability
+[Task access](../../server/app/services/task_access.py). Projections, capability
 hints and shared human writes reuse its authorization service; hints may reuse a
 permission result within one projection, while every mutation reauthorizes.
 SQL selects keyset positions before hydrating selected row narratives.

@@ -20,7 +20,7 @@ import pytest
 from app.api import task_board as board_api
 from app.core.errors import ServiceError
 from app.schemas.contracts import Result
-from app.schemas.team_workflow import EventReplayView, StreamResetRequired
+from app.schemas.task_board import EventReplayView, StreamResetRequired
 from app.services.auth import Identity
 from cryptography.fernet import Fernet
 from fastapi import FastAPI

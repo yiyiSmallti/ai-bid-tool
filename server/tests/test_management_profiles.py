@@ -18,6 +18,7 @@ from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_access_fixtures import archive_task, remove_member
 
 BASE = "/v4/management/resources/profiles"
 DATA = {
@@ -447,7 +448,7 @@ async def test_live_identity_and_context_for_every_route(
 
 
 async def test_task_pins_survive_lifecycle_and_archive(api, headers):
-    from test_team_workflow_membership import workflow
+    from task_access_fixtures import workflow
 
     row = await create(api, headers[0])
     root = row["profile_id"]
@@ -476,14 +477,8 @@ async def test_task_pins_survive_lifecycle_and_archive(api, headers):
     assert (await api.get(f"/tasks/{tasks[0]}/profiles", headers=headers[0])).json()["items"][0][
         "id"
     ] == pin["id"]
-    state = await workflow(api, headers[0], tasks[0])
-    assert (
-        await api.post(
-            f"/v4/tasks/{tasks[0]}/archive",
-            headers=headers[0],
-            json={"expected_revision": state["revision"], "reason": "Synthetic archive"},
-        )
-    ).status_code == 200
+    await workflow(api, headers[0], tasks[0])
+    await archive_task(api, headers[0], tasks[0])
     assert (await api.post(f"/tasks/{tasks[0]}/profiles", headers=headers[0], json=body)).json()[
         "data"
     ]["error"]["code"] == "task_archived"
@@ -512,7 +507,7 @@ async def test_task_pins_survive_lifecycle_and_archive(api, headers):
 async def test_library_read_never_grants_task_selection(
     org_role, task_role, domains, status, api, headers, tenants, admin_engine
 ):
-    from test_team_workflow_membership import add_member, person
+    from task_access_fixtures import add_member, person
 
     row = await create(api, headers[0])
     task = (
@@ -529,14 +524,9 @@ async def test_library_read_never_grants_task_selection(
             "contributor" if task_role == "removed" else task_role,
             domains,
         )
-        assert added.status_code == 200, added.text
+        assert added.active
         if task_role == "removed":
-            removed = await api.post(
-                f"/tasks/{task}/members/{user}/remove",
-                headers=headers[0],
-                json={"expected_revision": 2, "reason": "Synthetic removed member"},
-            )
-            assert removed.status_code == 200, removed.text
+            await remove_member(api, headers[0], task, user)
     assert (await api.get(f"{BASE}/{row['profile_id']}", headers=auth)).status_code == 200
     reply = await api.post(
         f"/tasks/{task}/profiles",

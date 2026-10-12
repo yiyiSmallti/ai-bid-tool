@@ -151,7 +151,6 @@ def approved_release(renderer, request, receipt, png):
         },
         "decision_kind": "single_domain",
         "review_domain": "commercial",
-        "co_sign": None,
         "card_content_sha256": "d" * 64,
         "evidence_binding_sha256": "e" * 64,
         "approval_binding_sha256": "0" * 64,

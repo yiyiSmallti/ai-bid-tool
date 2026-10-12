@@ -92,7 +92,6 @@ const statusLabels = {
 const gapLabels = {
   requirement_unconfirmed: "招标要求尚未确认",
   requirement_invalidated: "招标要求确认已失效",
-  cosign_required: "响应会签尚未完成",
   missing_card: "尚无响应卡",
   unconfirmed: "响应卡尚未确认",
   rejected: "响应卡已驳回",
@@ -101,7 +100,6 @@ const gapLabels = {
   stale_material: "所选材料已变化",
   invalid_citation: "招标原文引用无效",
   needs_reconfirmation: "当前要求需要重新核对并确认",
-  cosign_required: "需要完成全部必需职责会签",
 };
 
 function gapReviewHref(row) {

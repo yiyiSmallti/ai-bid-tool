@@ -139,14 +139,6 @@ def run_rows(
             select(ResponseItem).where(ResponseItem.draft_id == draft.id).order_by(ResponseItem.id)
         )
     )
-    from app.services import task_cosign
-    from task_fixtures import ServiceSession, service_call
-
-    approvals = service_call(
-        task_cosign.projections(
-            ServiceSession(session), org, [item.card_id for item in items if item.card_id]
-        )
-    )
     manifest_items = []
     for ordinal, item in enumerate(items):
         entry = {
@@ -162,8 +154,6 @@ def run_rows(
             "starred": item.starred,
             "evidence": [],
         }
-        if item.card_id is not None:
-            entry.update(task_cosign.manifest_fields(approvals[item.card_id]))
         if item.kind == "row":
             reviewed = session.get(ResponseCardRevision, item.card_revision_id)
             assert reviewed is not None

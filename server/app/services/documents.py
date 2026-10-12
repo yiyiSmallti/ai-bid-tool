@@ -26,7 +26,7 @@ async def create_task(session: AsyncSession, identity: Identity, body: TaskCreat
     task = Task(org_id=identity.org_id, created_by=identity.user_id, **body.model_dump())
     session.add(task)
     await session.flush()
-    from app.services.task_workflow import seed
+    from app.services.task_access import seed
 
     await seed(session, identity, task)
     return task

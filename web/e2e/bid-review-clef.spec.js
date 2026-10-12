@@ -38,7 +38,7 @@ async function fixture(page, options = {}) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
-    if (path === "/health" && method === "GET") return route.fulfill({ json: result("health", { org_signup_enabled: false }) });
+    if (path === "/health" && method === "GET") return route.fulfill({ json: result("health", { status: "ok" }) });
     let response;
     if (state.platform) {
       expect(req.headers().authorization).toBe("Bearer synthetic-platform-session"); expect(req.headers()["x-org-id"]).toBeUndefined();
@@ -55,8 +55,7 @@ async function fixture(page, options = {}) {
     } else {
       expect(req.headers().authorization).toBe("Bearer synthetic-review-session"); expect(req.headers()["x-org-id"]).toBe(ids.org);
       if (path === "/org/current" && method === "GET") response = result("org current", { org_id: ids.org, user_id: ids.user, role: state.role });
-      else if (path === `/tasks/${ids.task}/workflow` && method === "GET") response = result("task workflow", { workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: state.taskRole === "owner" ? ids.user : uuid(99) } });
-      else if (path === `/tasks/${ids.task}/members` && method === "GET") response = result("task member list", { org_id: ids.org, task_id: ids.task, next_cursor: null }, [{ user_id: ids.user, role: state.role === "viewer" ? "observer" : state.taskRole, active: true }]);
+      else if (path === `/tasks/${ids.task}/progress` && method === "GET") response = result("task progress", { access: {role:state.role === "viewer" ? "observer" : state.taskRole,review_domains:[]},event_cursor:"opaque-snapshot",workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: state.taskRole === "owner" ? ids.user : uuid(99) } });
       else if (path === `/bid-submissions/${ids.submission}/outbound-authorizations` && method === "GET") { expect(state.taskRole).toBe("owner"); response = result("review outbound list", { total: 0, next_cursor: null }, []); }
       else if (path === `/bid-submissions/${ids.submission}/redaction` && method === "GET") { expect(state.taskRole).toBe("owner"); response = result("review redaction", { submission_id: ids.submission, expected_revision: 1, expected_authorization_id: null, expected_submission_manifest_sha256: hash, expected_preparation_input_hash: hash, expected_redaction_manifest_sha256: hash, provider_bindings_sha256: hash, redaction_revision: 1, redaction_rule_version: "synthetic", confidential_binding_sha256: hash, derived_name_lists_sha256: hash, human_name_revision: 0, pages: [], total: 0, next_cursor: null, blockers: [] }); }
       else if (path === `/bid-submissions/${ids.submission}` && method === "GET") response = result("review submission show", { submission: { id: ids.submission, org_id: ids.org, task_id: ids.task, revision: 1, manifest_sha256: hash, state: "prepared", created_by: ids.user, created_at: now, documents: [{ id: ids.tender, role: "tender", kind: "tender", media_type: "application/pdf", sha256: hash, size_bytes: 1000 }, { id: ids.bid, role: "bid", kind: "commercial_technical", media_type: "application/pdf", sha256: hash, size_bytes: 1000 }] }, preparation: null, inventory: [], signature_validations: [], signing_candidates: [], signing_candidate_count: 0, signing_candidates_next_cursor: null });

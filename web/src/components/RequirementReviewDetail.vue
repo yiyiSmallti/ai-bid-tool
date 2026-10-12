@@ -81,14 +81,14 @@ defineExpose({discard,load});
       <h4>{{row.content.starred?'★ ':''}}{{row.content.text}}</h4><p>类别：{{label(categories,row.content.category)}}</p><pre class="condition">{{display(row.content.condition)}}</pre>
       <p>响应状态：{{response ? label({draft:'草稿',pending_review:'待审阅',confirmed:'响应已确认',rejected:'已驳回',needs_material:'需补材料'},response.card_state,'尚无响应卡') : '请在响应页读取当前状态'}}；要求确认与响应、证据确认分别处理。</p><RouterLink :to="`/org/tasks/${taskId}/review?job=${jobId}&requirement=${row.requirement_id}`">进入响应与证据审阅</RouterLink>
       <p v-if="row.confirmed_by_user_id">要求确认人 {{row.confirmed_by_user_id}} · {{formatTime(row.confirmed_at)}}</p>
-      <p v-if="row.next_actor">下一位：{{row.next_actor.user_id ?? '单位管理员恢复负责人'}} · {{row.next_actor.basis==='assignee'?'已分配成员':row.next_actor.basis==='owner'?'任务负责人':'负责人恢复'}} · {{row.next_actor.action}}</p>
-      <template v-if="!row.citation_valid"><p class="warning">引用无效，必须修复后重新核对。请任务负责人协调管理员修复引用。</p><el-button v-if="orgAccess.role==='admin' && writable" :disabled="busy" @click="previewRepair">预检修复集合引用</el-button><RouterLink :to="`/org/tasks/${taskId}/members`">协调负责人或恢复任务</RouterLink></template>
+      <p v-if="row.next_actor">下一位：{{row.next_actor.user_id ?? '当前确认人'}} · {{row.next_actor.action}}</p>
+      <template v-if="!row.citation_valid"><p class="warning">引用无效，必须修复后重新核对。</p><el-button v-if="orgAccess.role==='admin' && writable" :disabled="busy" @click="previewRepair">预检修复集合引用</el-button></template>
       <template v-if="repairPreview"><p>引用修复预检：{{display(repairPreview.data)}}</p><ul><li v-for="item in repairPreview.items" :key="item.requirement_id">{{item.status}} · {{item.proposed_quote ?? item.source.quote}}</li></ul><el-button :disabled="busy || !reason.trim()" @click="repair">按预检修复引用</el-button></template>
       <el-form label-position="top" @submit.prevent>
         <el-form-item label="要求审阅原因" required><el-input v-model="reason" aria-label="要求审阅原因" aria-required="true" type="textarea" :rows="3" maxlength="10000" :disabled="!writable" /></el-form-item>
         <el-checkbox v-if="row.state!=='confirmed'" v-model="reviewed" :disabled="!writable || stale || !originalReady || !row.citation_valid">已核对正文、类别、星标、结构条件和逐字原文</el-checkbox>
         <div class="actions"><el-button v-if="row.state!=='confirmed'" type="primary" :disabled="!writable || busy || stale || !originalReady || !row.citation_valid || !reviewed || !reason.trim()" @click="decide('confirm')">确认要求</el-button><el-button v-else type="warning" :disabled="!writable || busy || stale || !reason.trim()" @click="decide('reopen')">重新打开要求</el-button></div>
-        <p v-if="!writable" class="hint">当前身份或任务状态仅允许读取。任务负责人 / 协作者本人可在有效任务中确认要求。</p>
+        <p v-if="!writable" class="hint">当前身份或任务状态仅允许读取。确认要求需要本人登录，并具备当前任务的确认权限。</p>
       </el-form>
       <h4>不可变决策历史</h4><ol><li v-for="event in events" :key="event.id"><p>{{label(reviewActions,event.action)}} · 修订 {{event.revision}} · {{formatTime(event.occurred_at)}} · {{event.actor_user_id ?? event.actor_kind}}</p><p>{{label(reviewStates,event.state_after)}} · {{event.content.text}}</p><blockquote class="quote">{{event.content.source.quote}}</blockquote><p class="hint">{{locationLabel(event.content.source)}} · {{label(categories,event.content.category)}} · {{event.content.starred?'★ 星标':'非星标'}}</p><pre class="condition">{{display(event.content.condition)}}</pre></li></ol><el-button v-if="next" @click="moreHistory">继续读取历史</el-button>
     </template>

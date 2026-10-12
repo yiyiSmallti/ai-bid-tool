@@ -267,7 +267,6 @@ async def test_profile_roles_preserve_old_grants(
         for scope in ROLE_SCOPES[role]
         if scope
         not in {
-            "member:manage",
             "attachment:read",
             "attachment:write",
             "attachment:review",
@@ -318,12 +317,6 @@ async def test_profile_roles_preserve_old_grants(
             "agent:read",
             "agent:run",
             "agent:cancel",
-            "task:members:write",
-            "task:archive",
-            "card:assign",
-            "card:comment",
-            "task:review-policy",
-            "card:cosign",
             "memory:read",
             "memory:write",
             "memory:retrieve",

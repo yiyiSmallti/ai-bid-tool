@@ -41,7 +41,7 @@ class Settings(PDFSettings):
     encryption_key: SecretStr
     # Retired data keys, comma separated: still decrypt, never encrypt.
     encryption_key_previous: Annotated[list[SecretStr], NoDecode] = []
-    # Sessions, signed links and domain-separated signup source digests; not data encryption.
+    # Sessions and signed links; not data encryption.
     token_key: SecretStr
     secrets_key: SecretStr | None = None
     secrets_key_previous: Annotated[list[SecretStr], NoDecode] = []
@@ -81,7 +81,6 @@ class Settings(PDFSettings):
     platform_admin_emails: str | None = None
     platform_totp_secrets: SecretStr | None = None
     platform_session_seconds: int = 1800
-    org_signup_enabled: bool = False
     # Shared model-job call ceilings; retries of the same job count toward the same ceiling.
     job_max_vendor_calls: int = Field(default=64, ge=1)
     # Per first-pass batch; the call ceiling is the larger of this times the batches and the

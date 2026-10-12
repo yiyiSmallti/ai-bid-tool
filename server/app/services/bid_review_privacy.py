@@ -23,7 +23,7 @@ from app.models.entities import Task
 from app.models.team_workflow import TaskMember
 from app.schemas import bid_review_privacy as c
 from app.services import bid_review as bids
-from app.services import confidential, redaction, task_workflow
+from app.services import confidential, redaction, task_access
 from app.services.versioned import audit
 
 POLICY_VERSION = redaction.RULE_VERSION + ":uploaded-text-v1"
@@ -314,7 +314,7 @@ async def current_snapshot(session, submission_id, settings, provider_binding):
 
 async def human_access(session, actor, submission_id, *, write=False):
     root = await bids.required(session, submission_id)
-    _, _, member = await task_workflow.access(
+    _, _, member = await task_access.access(
         session,
         actor,
         root.task_id,

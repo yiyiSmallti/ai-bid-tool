@@ -15,29 +15,18 @@ from app.schemas.requirement_confirmation import (
     RequirementBoardOverlay,
     RequirementProgressData,
 )
-from app.schemas.team_workflow import BoardCounts, BoardData, BoardQuery, TaskProgressData
+from app.schemas.task_board import BoardCounts, BoardData, BoardQuery, TaskProgressData
 from app.services import requirement_confirmation, requirement_consumption, task_board
 
 
-def actor_hint(actor, workflow, member, people, assignment, citation_valid):
+def actor_hint(actor, workflow, member, people, citation_valid):
     available = {
         person.user_id: person
         for person in people
         if person.can_confirm_requirement and (citation_valid or person.role == "admin")
     }
-    assignee = assignment.assignee_user_id if assignment else None
-    user_id, basis = (
-        (assignee, "assignee")
-        if assignee in available
-        else (workflow.owner_user_id, "owner")
-        if workflow.owner_user_id in available
-        else (
-            workflow.owner_user_id
-            if any(p.user_id == workflow.owner_user_id for p in people)
-            else None,
-            "owner_recovery",
-        )
-    )
+    user_id = workflow.owner_user_id
+    basis = "owner" if user_id in available else "owner_recovery"
     action = "confirm_requirement" if citation_valid else "repair_requirement"
     can_act = (
         actor.actor_kind == "session"
@@ -47,27 +36,14 @@ def actor_hint(actor, workflow, member, people, assignment, citation_valid):
         and member is not None
         and member.role in {"owner", "contributor"}
     )
-    if basis == "owner_recovery":
-        action = "assign"
-        can_act = (
-            actor.actor_kind == "session"
-            and actor.token_id is None
-            and actor.role == "admin"
-            and "task:members:write" in actor.scopes
-        )
+    if basis == "owner_recovery" or workflow.state == "archived":
+        action = "view"
+        can_act = False
     elif not citation_valid:
         can_act = (
             can_act
             and actor.role == "admin"
             and {"req:extract", "evidence:confirm"} <= actor.scopes
-        )
-    if workflow.state == "archived":
-        action = "unarchive"
-        can_act = (
-            actor.actor_kind == "session"
-            and actor.token_id is None
-            and "task:archive" in actor.scopes
-            and (actor.user_id == workflow.owner_user_id or actor.role == "admin")
         )
     return RequirementActorHint(
         user_id=user_id, basis=basis, action=action, can_current_actor_act=can_act
@@ -136,9 +112,7 @@ async def board(session, actor, task_id, query, storage, settings):
                 bucket="requirement_review" if reason else row.bucket,
                 next_action=hint.action
                 if hint and hint.action in {"confirm_requirement", "repair_requirement"}
-                else "unarchive"
-                if hint and hint.action == "unarchive"
-                else "assign"
+                else "view"
                 if hint
                 else row.next_actions[0].code,
                 next_actor=hint,
@@ -162,8 +136,6 @@ async def board(session, actor, task_id, query, storage, settings):
             )
             and (
                 not query.mine
-                or row.owner_user_id == actor.user_id
-                or row.requirement_id in inputs["mentioned"]
                 or overlay.next_actor is not None
                 and overlay.next_actor.can_current_actor_act
                 or task_board.matches(row, ordinary.model_copy(update={"mine": True}), actor)

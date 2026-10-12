@@ -245,7 +245,6 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         await api.get(f"/evidence-sources/{source['id']}/preview/download-link", headers=headers[0])
     ).status_code == 200
     later = {
-        "member:manage",
         "attachment:read",
         "attachment:write",
         "attachment:review",
@@ -277,12 +276,6 @@ async def test_source_role_matrix_preserves_all_prior_grants(
         "agent:read",
         "agent:run",
         "agent:cancel",
-        "task:members:write",
-        "task:archive",
-        "card:assign",
-        "card:comment",
-        "task:review-policy",
-        "card:cosign",
         "memory:read",
         "memory:write",
         "memory:retrieve",
@@ -532,7 +525,7 @@ async def test_render_runs_outside_task_lock_and_rechecks_selection(
 async def test_render_rechecks_workflow_authority_before_publication(
     api, headers, pdf_bytes, application, monkeypatch, tenants, admin_engine, change
 ):
-    from test_team_workflow_membership import add_member, person, workflow
+    from task_access_fixtures import add_member, archive_task, person, remove_member
 
     _, task, _, choice = await source_fixture(api, headers[0], pdf_bytes)
     reader = headers[0]
@@ -540,8 +533,7 @@ async def test_render_rechecks_workflow_authority_before_publication(
     if change == "remove_member":
         contributor, reader = await person(api, admin_engine, tenants["orgs"][0])
         added = await add_member(api, headers[0], task, contributor, 1)
-        assert added.status_code == 200, added.text
-    version = (await workflow(api, headers[0], task))["revision"]
+        assert added.active
     rendering, release = asyncio.Event(), asyncio.Event()
     original_render = services.render_page_async
 
@@ -554,23 +546,10 @@ async def test_render_rechecks_workflow_authority_before_publication(
     pending = asyncio.create_task(add(api, reader, task, choice["id"]))
     try:
         await asyncio.wait_for(rendering.wait(), 10)
-        path = (
-            f"/tasks/{task}/archive"
-            if change == "archive"
-            else f"/tasks/{task}/members/{contributor}/remove"
-        )
-        changed = await asyncio.wait_for(
-            api.post(
-                path,
-                headers=headers[0],
-                json={
-                    "expected_revision": version,
-                    "reason": "Synthetic in-flight authority change",
-                },
-            ),
-            5,
-        )
-        assert changed.status_code == 200, changed.text
+        if change == "archive":
+            await archive_task(api, headers[0], task)
+        else:
+            await remove_member(api, headers[0], task, contributor)
     finally:
         release.set()
     response = await pending

@@ -58,8 +58,7 @@ async function fixture(page,options={}){
   await page.route(url=>!url.pathname.startsWith("/app/"),async route=>{
     const req=route.request(),url=new URL(req.url()),path=url.pathname;requests.push({path,method:req.method(),query:url.search});
     if(path==="/org/current")return route.fulfill({json:result("org current",{org_id:O,user_id:U,role:state.role})});
-    if(path===`/tasks/${T}/workflow`){if(state.taskDenied)return fail(route,"not_found",404);return route.fulfill({json:result("task workflow",{workflow:{org_id:O,task_id:T,state:state.taskArchived?"archived":"active",revision:1,last_event_cursor:"opaque",owner_user_id:U}})});}
-    if(path===`/tasks/${T}/members`){const items=state.taskRole?[{org_id:O,task_id:T,user_id:U,role:state.taskRole,active:true,review_domains:[],revision:1}]:[];return route.fulfill({json:result("task member list",{...meta(items),task_id:T},items)});}
+    if(path===`/tasks/${T}/progress`){if(state.taskDenied)return fail(route,"not_found",404);return route.fulfill({json:result("task progress",{access: state.taskRole ? {role:state.taskRole,review_domains:[]} : null,event_cursor:"opaque-snapshot",workflow:{org_id:O,task_id:T,state:state.taskArchived?"archived":"active",revision:1,last_event_cursor:"opaque",owner_user_id:U}})});}
     if(path==="/management/confidential-fields/query"||path==="/management/confidential-values/query"){
       expect(url.pathname.startsWith("/")).toBe(true);expect(req.method()).toBe("POST");expect(url.search).toBe("");const body=req.postDataJSON();queries.push({path,...body});expect(body.limit).toBe(25);active++;maxActive=Math.max(maxActive,active);
       if(state.delay&&body.q==="旧查询")await new Promise(resolve=>{release=resolve;});active--;
@@ -90,7 +89,7 @@ async function fixture(page,options={}){
       if(path===`/confidential-fields/${F}/revisions`){writes.push({path,...body});if(state.fieldConflict&&!conflicted){conflicted=true;state.revision++;return fail(route,"revision_conflict",409);}expect(body.expected_revision).toBe(state.revision);if(body.label)state.label=body.label;if(body.archived!==undefined)state.archived=body.archived;state.revision++;return route.fulfill({json:result("confidential field update",field())});}
       if(path==="/confidential-fields"){writes.push({path,...body});state.scope=body.scope;state.label=body.label;state.key=body.key;state.kind=body.kind;return route.fulfill({json:result("confidential field add",{...field(),key:body.key,placeholder:`{{secret.${body.key}}}`,kind:body.kind})});}
     }
-    if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
+    if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
     throw new Error(`Unexpected confidential request: ${req.method()} ${path}`);
   });
   return {state,writes,queries,requests,release:()=>release?.(),maxActive:()=>maxActive,setCanary:value=>{canary=value;}};

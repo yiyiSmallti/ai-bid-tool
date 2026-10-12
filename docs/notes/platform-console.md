@@ -2,8 +2,8 @@
 
 ## Problem
 
-The console provisions orgs, manages the model catalog and reviews attributed
-resource usage. It must not expose an org's business data, and nothing in the application may be able to grant
+The console manages model catalogs, service credentials, Clef configuration and
+offline-signature trust anchors during the single-user transition. It must not expose an org's business data, and nothing in the application may be able to grant
 itself operator rights or read other orgs through ordinary queries.
 
 ## Usage
@@ -18,8 +18,8 @@ cross-org access is shaped this way is recorded in
 ## How it works
 
 Operators are the emails in `BID_PLATFORM_ADMIN_EMAILS`. Authentication factors
-come from deployment overrides or encrypted database enrollment, with authority and
-precedence defined by [Operator enrollment](operator-enrollment.md#how-it-works).
+come only from `BID_PLATFORM_TOTP_SECRETS`; stored database enrollment factors
+do not authorize login.
 Sign-in checks the password and an RFC 6238 code with one step of drift. The shared
 password admission and
 atomic TOTP consumption rules are described below. A platform session is a Fernet token under `BID_TOKEN_KEY` of
@@ -29,12 +29,12 @@ API tokens, so the two kinds never cross.
 
 ### Password admission and TOTP consumption
 
-`/auth/orgs`, `/auth/login`, `/platform/auth/login` and operator enrollment use
+`/auth/orgs`, `/auth/login`, `/platform/auth/login` use
 `PasswordAttempts` in [password_attempts.py](../../server/app/core/password_attempts.py). The
 account key is the email after trimming whitespace and lowercasing. Five
 failed attempts in a rolling 15-minute window block every entry point,
 regardless of source or org. The existing `platform.login` failures count
-alongside `auth.password` and `platform.operator.enroll` failures; a successful
+alongside `auth.password` failures; a successful
 password check does not clear them. A platform attempt with invalid or replayed
 TOTP also counts.
 
@@ -56,7 +56,7 @@ Password verification, TOTP verification and audit
 inserts run under those locks. Failures commit before the API raises the
 credential error. For TOTP, `login.consume_totp` in
 [platform.py](../../server/app/services/platform.py) re-reads the last accepted
-counter from login or successful enrollment inside that transaction and rejects
+counter from successful login inside that transaction and rejects
 a counter no greater than it.
 The success row commits before session issuance, so concurrent API workers
 cannot issue two sessions for the same counter. No schema change is needed.
@@ -77,24 +77,10 @@ drains those tasks before disposing of the database and executor.
 [auth.py](../../server/app/services/auth.py) rejects a disabled org, so login,
 sessions and tokens of that org fail at once with `org_inactive`.
 
-Provisioning creates the admin account with the unusable hash `!setup` when the
-email is new. The response carries `/app/setup-password#token=...`: a 24-hour
-signed token bound to a fingerprint of the current hash, so setting a password
-invalidates it. The token sits in the URL fragment, which browsers do not send
-to the server or in a `Referer`. Migration `0011` grants `bid_app` the
-column update this needs.
-
-The `NOLOGIN` role `bid_platform_fn` has no `BYPASSRLS`; its fixed summary
-functions read only orgs, memberships and usage_records across orgs. They never
-return org business content. Catalog adapters use the key in `BID_PLATFORM_CREDENTIAL_<NAME>`.
-Tenant selection,
-fallback order and queued-job identity are defined in
-[provider-config.md](provider-config.md#resolution-and-cache).
-Usage summaries expose only attributed resource counts.
-A default whose credential is missing fails extraction
-with `provider_unavailable` instead of falling back.
-Catalog models may list
-the vendor's official reasoning levels; see
+Catalog credential resolution, explicit model selection and queued-job identity
+are defined in [provider-config.md](provider-config.md#resolution-and-cache) and
+[platform-credentials.md](platform-credentials.md). A missing or disabled
+credential fails with `provider_unavailable`. Official reasoning levels follow
 [reasoning-levels.md](reasoning-levels.md).
 
 The API serves the built console from `BID_WEB_DIR` under `/app`, returning
@@ -103,11 +89,9 @@ strict Content-Security-Policy and `Referrer-Policy: no-referrer`.
 
 ## Pitfalls
 
-- The summary functions are executable by `bid_app`; the operator check in
-  [platform.py](../../server/app/api/platform.py) is what keeps org users out.
+- The operator check in
+  [platform.py](../../server/app/api/platform.py) keeps org sessions out.
   Every new platform route must depend on `operator`.
-- A new column in a summary function's result is a disclosure decision. Keep
-  business tables out of `bid_platform_fn`'s policies.
 - Catalog models cannot be deleted, only disabled, so usage keeps its reference.
 - Catalog edits can stop queued jobs whose fixed model identity no longer matches;
   a fresh submission uses the new catalog revision.
@@ -127,7 +111,7 @@ strict Content-Security-Policy and `Referrer-Policy: no-referrer`.
 
 ## Code
 
-- [0010_platform_admin.py](../../server/migrations/versions/0010_platform_admin.py), [0011_password_setup.py](../../server/migrations/versions/0011_password_setup.py)
+- [0010_platform_admin.py](../../server/migrations/versions/0010_platform_admin.py)
 - [server/app/services/platform.py](../../server/app/services/platform.py), [server/app/api/platform.py](../../server/app/api/platform.py), [server/app/core/totp.py](../../server/app/core/totp.py)
 - [server/app/core/password_attempts.py](../../server/app/core/password_attempts.py), [server/app/services/auth.py](../../server/app/services/auth.py)
 - [server/app/schemas/platform_contracts.py](../../server/app/schemas/platform_contracts.py), `mount_console` in [server/app/api/main.py](../../server/app/api/main.py)

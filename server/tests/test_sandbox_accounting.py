@@ -46,7 +46,7 @@ class Session:
     ],
 )
 async def test_sandbox_admission_uses_pinned_purpose_token_scope(monkeypatch, purpose, scope):
-    from app.services import task_workflow
+    from app.services import task_access as access_service
 
     async def membership(session, user_id, org_id):
         return SimpleNamespace(role="technical")
@@ -78,7 +78,7 @@ async def test_sandbox_admission_uses_pinned_purpose_token_scope(monkeypatch, pu
         worker.require("task:read")
         checked.append(worker)
 
-    monkeypatch.setattr(task_workflow, "access", task_access)
+    monkeypatch.setattr(access_service, "access", task_access)
     actor = await execution.authorized_job(Session(user, token, ["task:read", scope], purpose), job)
     assert scope in actor.scopes
     assert actor.actor_kind == "token" and actor.token_id == token

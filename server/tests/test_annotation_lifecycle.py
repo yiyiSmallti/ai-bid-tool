@@ -28,9 +28,9 @@ from app.models.team_workflow import TaskEvent
 from app.providers.base import ProviderFailure
 from app.services import annotation_jobs, annotations
 from sqlalchemy import func, select, text
+from task_access_fixtures import add_member, person, workflow
 from test_annotation_api import preview_submit, seed_annotation
 from test_response_cards import phase_one_client
-from test_team_workflow_membership import add_member, person, workflow
 
 ARTIFACT = Path(__file__).resolve().parents[2] / "data/work/annotation-lifecycle"
 STATE_TABLES = (
@@ -450,7 +450,7 @@ async def test_annotation_create_task_role_matrix(
         added = await add_member(
             api, headers[0], task, user, current["revision"], task_role, domains
         )
-        assert added.status_code == 200, added.text
+        assert added.active
         before = await state_snapshot(app, tenants["orgs"][0])
         response = await api.post(
             f"/v4/tasks/{task}/annotations",
@@ -583,7 +583,7 @@ async def test_same_org_nonmember_cannot_use_annotation_or_signed_routes(
         user, other_headers = await person(api, admin_engine, tenants["orgs"][0], "bidder")
         current = await workflow(api, headers[0], task_b)
         added = await add_member(api, headers[0], task_b, user, current["revision"], "observer", [])
-        assert added.status_code == 200, added.text
+        assert added.active
         _, _, accepted = await preview_submit(api, headers[0], task_a, target_a)
         job_id = accepted["job_id"]
         await app.state.processor(str(tenants["orgs"][0]), job_id)

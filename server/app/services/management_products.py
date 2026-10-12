@@ -41,7 +41,7 @@ from app.schemas.management_pages import (
 )
 from app.schemas.resource_contracts import ProductRevision as RevisionView
 from app.services.auth import Identity, set_actor_context
-from app.services.task_workflow import live_actor
+from app.services.task_access import live_actor
 from app.services.versioned import audit
 
 WARNINGS = ["Product metadata is a declaration; it is not evidence of parameter compliance"]

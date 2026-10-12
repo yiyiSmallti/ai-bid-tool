@@ -17,6 +17,7 @@ from app.models.entities import Membership
 from docx import Document
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from task_access_fixtures import add_member, person, workflow
 from test_bid_review_findings_db import (
     BID_RESPONSE,
     CLAUSES,
@@ -30,7 +31,6 @@ from test_bid_review_findings_db import (
 )
 from test_bid_review_run_db import assert_private_absent, counts, data, preview, submit
 from test_bid_review_upload_db import run
-from test_team_workflow_membership import add_member, person, workflow
 
 SECTIONS = [
     ("overall", "一、总体结论"),
@@ -275,10 +275,8 @@ async def test_report_projections_scopes_cross_org_and_live_download_authority(
         if role == "viewer":
             user, human = await person(api, admin_engine, tenants["orgs"][0], role="viewer")
             membership = await workflow(api, headers[0], case["task"])
-            data(
-                await add_member(
-                    api, headers[0], case["task"], user, membership["revision"], role="observer"
-                )
+            await add_member(
+                api, headers[0], case["task"], user, membership["revision"], role="observer"
             )
         else:
             human = await reviewer(api, headers, tenants, admin_engine, case, role)

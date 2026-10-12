@@ -43,7 +43,7 @@ or readiness for final export.
 The primary sources are [agent.md](../../agent.md#hard-rules-must-never-be-violated),
 [design](../design.md#org-resources-and-task-creation),
 [org console](org-console.md), [console assessments](console-assessments.md),
-[team workflow](team-workflow.md), [memory](memory.md),
+[Task access](../../server/app/services/task_access.py), [memory](memory.md),
 [provider configuration](provider-config.md),
 [platform credentials](platform-credentials.md),
 [export](export.md), and [confidential values](confidential-values.md).
@@ -71,7 +71,7 @@ The design's OCR/vision/search/embedding configuration and task provider profile
 | Memory | [api/memory.py](../../server/app/api/memory.py), [memory/access.py](../../server/app/memory/access.py), [crud.py](../../server/app/memory/crud.py), [feedback.py](../../server/app/memory/feedback.py), [candidates.py](../../server/app/memory/candidates.py), [retrieval.py](../../server/app/memory/retrieval.py), [safety.py](../../server/app/memory/safety.py) | Org scope and keyword retrieval only; four-scope schema enums do not enable the other scopes or embeddings. Management browse adds current-text/conflict-key/tag prefix search, kind/stored status and expiry filters. Retrieval remains separate from complete library search |
 | Confidential data | [api/confidential.py](../../server/app/api/confidential.py), [confidential.py](../../server/app/services/confidential.py) `update_field/set_value/list_values/history/reveal` | Field label/archive updates mutate a metadata row with a revision counter; there is no field-metadata revision archive. Value versions are immutable and encrypted. Legacy value writes serialize under a field lock without an optimistic precondition; management writes add owner-specific field/value CAS |
 | Console | [router.js](../../web/src/router.js), [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue), [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [api.js](../../web/src/api.js), [task-authority.js](../../web/src/task-authority.js) | Profiles, embedded certificates and confidential fields already have pages. Product, feature, certificate/profile and template management pages are implemented; org model settings, bounded confidential management, org memory and task feedback pages are implemented. The org path allowlist must gain exact new paths, not an unrestricted API proxy |
-| Team and usage | [task_workflow.py](../../server/app/services/task_workflow.py) and [contracts.py](../../server/app/schemas/contracts.py) | Task access and lifecycle remain enforced; Result 5.0 records six resource counters. |
+| Team and usage | [task_access.py](../../server/app/services/task_access.py) and [contracts.py](../../server/app/schemas/contracts.py) | Task access and lifecycle remain enforced; Result 5.0 records six resource counters. |
 
 The design says every resource change is versioned. Confidential field metadata
 and the proposed independent lifecycle state are explicit exceptions to *content*
@@ -327,7 +327,7 @@ own narrower `AGENT_SCOPES`; token eligibility does not expand that allowlist.
 
 Org library permission confers no task permission. Any source link, feedback,
 task confidential value, selection or return-to-task action checks
-`task_workflow.access` and its parent relationship. Owner/contributor writes are
+`task_access.access` and its parent relationship. Owner/contributor writes are
 limited by org scopes; reviewers cannot select resources or run ordinary jobs;
 observers read and discuss only. Archived tasks reject business writes. Org admin
 recovery reads/member management do not grant task writes without membership or
@@ -498,7 +498,7 @@ storage remains authoritative:
 | Provider configs | `provider_configs`, [0020_provider_configs.py](../../server/migrations/versions/0020_provider_configs.py); immutable encrypted revisions |
 | Memory | `memories`, `memory_revisions`, `memory_scope_epochs`, `memory_feedback_events`, `memory_eval_samples`, `memory_retrievals`, `memory_retrieval_items`, `memory_call_inputs`, [0037_memory.py](../../server/migrations/versions/0037_memory.py) |
 | Confidential fields/values | [models/confidential.py](../../server/app/models/confidential.py); retain encrypted immutable values and existing scoped uniqueness |
-| Audit/identity/task authority | `audit_logs`, Membership, TaskWorkflow/TaskMember, existing [team workflow tables](team-workflow.md#data-model-and-migration-outline) |
+| Audit/identity/task authority | `audit_logs`, Membership, TaskWorkflow/TaskMember, existing [Task access](../../server/app/services/task_access.py) |
 
 These are org business tables; preserve NOT NULL `org_id`, enabled **FORCE RLS**,
 USING/WITH CHECK tenant policies and org composite relationships. Approved global

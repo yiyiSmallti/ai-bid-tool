@@ -56,7 +56,7 @@ async function fixture(page, options = {}) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
-    if (path === "/health") return route.fulfill({ json: result("health", { org_signup_enabled: false }) });
+    if (path === "/health") return route.fulfill({ json: result("health", { status: "ok" }) });
     expect(request.headers()["x-org-id"]).toBe(ids.org);
     let response;
     if (path === "/org/current" && method === "GET") response = result("org current", { org_id: ids.org, user_id: ids.user, role: state.role });

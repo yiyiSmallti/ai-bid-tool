@@ -20,7 +20,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
-from test_team_workflow_membership import new_task
+from task_access_fixtures import new_task
 
 ARTIFACT = (
     Path(__file__).resolve().parents[2] / "data/work/team-workflow-acceptance/event-context.json"

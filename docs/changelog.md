@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-12：单人本地安装第一阶段，移除多人功能入口
+
+- 删除单位申请、平台单位管理、运营用量和审计查询、管理员开通、单位成员邀请与管理的 API、CLI 和页面入口。
+- 删除任务成员管理、所有权交接、归档、需求分配、讨论及会签策略和操作入口。
+- 保留任务看板、进度、活动、事件轮询与流，以及响应审阅、人工确认、初稿和导出入口；响应服务改走直接人工审阅路径。
+- 保留单位登录和上下文、API 令牌、平台模型、凭据、Clef 和信任锚管理；平台登录仅使用配置的管理员名单与 TOTP 因子。
+- 按 [ADR 0012](adr/0012-single-user-installation.md) 和[单人安装计划](plan/single-user.md)推进；本阶段保持数据库结构、任务创建者访问和默认无需会签的策略。
+- 既有数据库触发器仍要求审阅轮次，移除轮次服务后普通响应提交与确认仍受阻，数据库兼容问题尚未解决；参见[已知缺陷](plan/roadmap.md#known-defects)。
+
 ## 2026-10-11: Remove billing, prices and task budgets
 
 - Remove balance, recharge-card, price and task-budget storage, APIs, CLI commands,
@@ -35,8 +44,8 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Deactivation refuses the next session/token request, revokes this organization's
   tokens and retains task history; mutation audits exclude invitation links.
 - Add PostgreSQL HTTP and mocked browser acceptance plus reviewed CLI snapshots.
-  See [the approved contract](plan/org-members.md) and
-  [the mechanism](notes/org-members.md).
+  See the approved contract (retained in version-control history) and
+  the mechanism (retained in version-control history).
 
 ## 2026-10-09: Default-on Clef presence triage
 
@@ -153,7 +162,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   enrollment TOTP step for login replay checks; attempts share sign-in failure limits.
 - Prefer deployment factors when present, retain the environment break-glass path
   and include database factors in provider-secrets root rotation. See
-  [Platform operator browser enrollment](notes/operator-enrollment.md).
+  Platform operator browser enrollment (retained in version-control history).
 
 ## 2026-10-08: Sharded CI
 
@@ -170,7 +179,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   account attachment and never replaces an existing password; terminal decisions
   clear the submitted hash.
 - Add daily expiry, platform audit events and pending-review counts. See
-  [Organization self-service application](notes/org-signup.md).
+  Organization self-service application (retained in version-control history).
 
 ## 2026-10-08: Pull-based automatic deployment
 
@@ -626,7 +635,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 
 - Authorize citation-window tasks before validating query fields or section source selectors.
   Nonmembers and cross-org callers retain 404 responses even for malformed queries; authorized
-  callers retain normal input validation. See [task authority](plan/team-workflow.md#membership-ownership-and-authorization).
+  callers retain normal input validation. See task authority (retained in version-control history).
 - Keep section binding checks separate from expensive citation location during score publication.
   The existing shared draft/rubric batch verifies each distinct Source pair once; insertion still
   verifies every new section quotation strictly. See [scoring pitfalls](notes/score.md#pitfalls).
@@ -666,14 +675,14 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   negative-deviation and prototype/final-export gates remain enforced.
 - Added co-sign board projections, Chinese console controls, API/CLI commands,
   schema discovery and intended Result snapshots. See
-  [Team workflow](notes/team-workflow.md) for the mechanism and recovery boundaries.
+  Team workflow (retained in version-control history) for the mechanism and recovery boundaries.
 - Preserve `stale_material` as the sole input reason when screenshot withdrawal
   retires a single-domain response review. Use `needs_reconfirmation` when only
   that approval is lost, and reserve `cosign_required` for multi-domain policies.
 - Align database response-item reasons, new and stale draft projections, export
   readiness and board actions without changing approval or Evidence gates. Keep
   the screenshot regression's exact reason assertion and add cross-consumer
-  reason checks; see [Team workflow](notes/team-workflow.md).
+  reason checks; see Team workflow (retained in version-control history).
 - Reuse a review round's immutable, already-validated citation inputs during
   approval checks, retaining the check/score shared citation batch and strict
   changed-source gates without repeated per-card location work.
@@ -683,7 +692,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Use independent professional reviewers in generated-card, simulation and agent
   acceptance flows; require real renewed review after changing a pinned
   requirement. Align stale-export acceptance with the existing blocked-preflight
-  response. See [Team workflow](notes/team-workflow.md).
+  response. See Team workflow (retained in version-control history).
 - Derive completed round summaries from the valid required-domain signature set,
   including the final signing transaction's recheck before the card decision is
   applied. Keep the independent consumption predicate and strict partial-round
@@ -691,12 +700,12 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Allow either authorized required-domain human to finalize the exact complete
   round through the legacy task-content trigger, including Evidence and independent
   disposition decisions. Retain primary-domain authorization for reject,
-  needs-material and reopen; see [Team workflow](notes/team-workflow.md#how-it-works).
+  needs-material and reopen; see Team workflow (retained in version-control history).
 - Granted only the review-round column update privilege needed for PostgreSQL
   row locks; immutable-history triggers still reject updates. Unit deactivation
   uses an authorization epoch without granting platform functions business-table
   access, and task rule changes advance the existing access epoch.
-- Preserved the [new single-domain review contract](plan/team-workflow.md#co-sign-policy-rounds-and-consumption-gates):
+- Preserved the new single-domain review contract (retained in version-control history):
   successful fixture preparation now submits and confirms through the real service,
   while direct SQL denial cases retain their triggers. Independent professional
   fixture reviewers keep unrelated actor-role changes from retiring their reviews.
@@ -745,7 +754,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   resuming console task streams. Failed discussion parent validation retries the
   snapshot without opening a cursorless stream; org reset discards late snapshot
   results and clears task content and unsaved discussion drafts. See the
-  [snapshot and reconnect contract](plan/team-workflow.md#durable-task-events-and-sse).
+  snapshot and reconnect contract (retained in version-control history).
 
 ## 2026-10-05: Team workflow assignment and discussion
 
@@ -759,7 +768,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
 - Added Chinese Element Plus assignment/discussion controls, shared authenticated
   API/local/remote CLI paths, typed discovery and intentional zero-cost Result
   snapshots. Audit and durable events contain metadata only; co-sign remains the
-  approved next slice. See [Team workflow](notes/team-workflow.md).
+  approved next slice. See Team workflow (retained in version-control history).
 
 ## 2026-10-05: Queued agent authority-loss cleanup
 
@@ -822,7 +831,7 @@ Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for ea
   Added Chinese Element Plus board/member pages and slice 1 CLI/schema commands.
 - Approved all team-workflow defaults and the ADR 0005 co-sign amendment. Assignment,
   discussion and co-sign execution remain later slices. Added API/PostgreSQL,
-  CLI and mocked-API browser acceptance; see [Team workflow](notes/team-workflow.md).
+  CLI and mocked-API browser acceptance; see Team workflow (retained in version-control history).
 
 ## 2026-10-05: Check and score console assessments
 

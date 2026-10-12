@@ -50,7 +50,7 @@ server-derived effective status. History retains reason hashes, never promises
 recoverable reason text. Source
 visibility reuses `crud.visible_sources`; inaccessible task identifiers are omitted.
 
-Feedback visibility shares `task_workflow.require_read_authority` with task access.
+Feedback visibility shares `task_access.require_read_authority` with task access.
 Its cursor also binds the task access epoch. A bounded indexed job lookup returns
 only the recorded event manifest and safe receipt fields. Candidate submission and
 worker publication recheck live task membership and archival in addition to the

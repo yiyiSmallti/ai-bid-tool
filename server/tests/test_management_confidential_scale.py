@@ -28,9 +28,9 @@ from cryptography.fernet import Fernet
 from sqlalchemy import event, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import Session
+from task_access_fixtures import new_task
 from test_management_confidential import FIELDS, VALUES, assert_page
 from test_management_features_scale import plan_work
-from test_team_workflow_membership import new_task
 
 ROOTS = 10_000
 VERSIONS = 10

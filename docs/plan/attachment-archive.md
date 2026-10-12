@@ -62,7 +62,7 @@ All proposed extensions below are requirements, not statements of deployed behav
 | [api/common.py](../../server/app/api/common.py): `signed_link`, `check_signature`, `attachment`; [api/resources.py](../../server/app/api/resources.py): certificate/source download routes; [api/main.py](../../server/app/api/main.py): `context` | Reuse 300-second application links plus live authentication. Existing signatures bind org, purpose and object IDs, not actor/hash; immutable IDs resolve hashes at download. No S3 presigned/public URL or raw-parts download route exists. New part routes and lineage checks must be explicit. |
 | [screenshots.py](../../server/app/services/screenshots.py): `prepare`, `ingest`, `resolve_source`, `rendition_access`, `withdraw`, `resolve_image_material`; [screenshot_renderer.py](../../server/app/providers/screenshot_renderer.py): `render`, `validate_png` | Reuse `ScreenshotAsset`, `ScreenshotRendition`, `ScreenshotPrivacyReview`, existing privacy plans and renderer. Add a server-bound attachment source, not a client download/re-upload receipt or second redaction engine. The attachment branch follows the enabled scope in the first slice. |
 | [response_cards.py](../../server/app/services/response_cards.py): `resolve_material`, `build_evidence`, `confirmation_inputs`; [exports.py](../../server/app/services/exports.py): `build_manifest`, `fresh_manifest`, `download_gate` | Existing `certificate_pdf_page` can contribute to exports after human page review. Do not alias attachments to that kind or to scalar `org_profile` material. New attachment evidence uses the B05 image chain only after its gates are implemented. |
-| [auth.py](../../server/app/services/auth.py): `Identity`, `authenticate`, `membership`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `ROLE_SCOPES`; [task_authorization.py](../../server/app/services/task_authorization.py): `task_authorized`; [task_workflow.py](../../server/app/services/task_workflow.py): `access` | Preserve live org membership, token/role intersection, task membership, write ceilings and archival gates. Same-org resource access is not automatically task access. |
+| [auth.py](../../server/app/services/auth.py): `Identity`, `authenticate`, `membership`, `HUMAN_ONLY_SCOPES`, `SCOPES`, `ROLE_SCOPES`; [task_authorization.py](../../server/app/services/task_authorization.py): `task_authorized`; [task_access.py](../../server/app/services/task_access.py): `access` | Preserve live org membership, token/role intersection, task membership, write ceilings and archival gates. Same-org resource access is not automatically task access. |
 | [contracts.py](../../server/app/schemas/contracts.py): `CONTRACT_VERSION`, `Result`, `Cost`; [preflight.py](../../server/app/services/preflight.py): `attach` |The design's two-field cost example and older draft examples do not define this contract.
 No new billed Provider is introduced. |
 
@@ -133,7 +133,7 @@ explicitly unavailable; enabling B05 requires its additional end-to-end gate bel
 - Custodian/reviewer reassignment changes only root workflow state under an expected
   state version and audit (审计). Removed reviewers block pending work until reassigned.
   A recorded archive decision remains historical after its author leaves; it is not
-  silently erased. Current Evidence/co-sign authority freshness follows B05/B07 and
+  silently erased. Current human Evidence/review-domain authority freshness follows B05/B07 and
   is separate from this archive-review rule.
 - Root, declaration link and task-selection deactivation are one-way. Retain revisions,
   files, parts, links, reviews, pages, privacy/rendition records and audits. No DELETE
@@ -506,7 +506,7 @@ verified ancestry/mapping hashes as well; raw hashes do not authorize removed pi
 
 Do not expose `attachment_page` until the annotation source union/resolver/footer,
 DB source/rendition gates, source-origin read restrictions, job visibility/cancellation,
-privacy mapping, card material resolver, B02 requirement gates, B07 domain/co-sign
+privacy mapping, card material resolver, B02 requirement gates, B07 human review-domain/material
 gates, draft dependencies and export release gates all understand it. Archive approval
 or privacy clearance alone cannot attach/confirm Evidence. B05 produces an unconfirmed
 candidate; the human supplies a visual observation and attaches it to a response
@@ -520,11 +520,11 @@ not confer commercial (商务)/technical (技术) confirmation authority. Tokens
 | Archive root/link withdrawal or pinned approval revoked | Invalidate dependent current material even if hashes are unchanged. Reapproval alone never restores old selection eligibility. Rejected revisions cannot be selected in the first place. |
 | Privacy asset withdrawn, sanitized hash/plan/mapping changed, corrupt/missing original/page/rendition | Deny publication, team-pixel read, B05 acceptance/release and dependent draft/export; keep history and identify recovery owner. Never fall back to raw pages or another revision. |
 | Membership/task write authority lost while rendering | Recheck after work and before publication; no source/decision is published by stale authority. Existing authorized readers still follow their own live grants. |
-| Card/B02/co-sign approval/policy/signature changes | Apply B05 invalidation and retain old decision history; only a current exact confirmation can produce a usable release. |
+| Card/B02/human approval or reviewer-authority changes | Apply B05 invalidation and retain old decision history; only a current exact confirmation can produce a usable release. |
 
 Extend `drafts.evidence_dependency`, `exports.build_manifest`/`fresh_manifest`/
 `download_gate`, the B05 export DB gate and
-`team_cosign_invalidate_dependencies` with these attachment dependencies. Invalidate
+the retained database approval-invalidation trigger with these attachment dependencies. Invalidate
 both new use and previously generated export downloads according to the existing
 live export gate. Library original history downloads remain distinct from export
 authorization. Do not relax ordinary confidential-field, prototype (原型) or human-export
@@ -586,7 +586,7 @@ artifacts under ignored `data/work/attachment-archive-acceptance/`, never under 
 | Complete archive workflow and races | Upload → review → link → task pin → source → privacy-clear receipt, repeat request IDs, divergent replay, concurrent revisions/reviews/selections, removed assignee and reassignment; rendering blocked by concurrent selection change; transaction rollback/orphan behavior and storage failure. New library revision preserves pins; explicit replacement invalidates dependencies. |
 | Byte/render/privacy gates | Real synthetic PDF pixels/hash, single-PDF byte identity, canonical 150-dpi source versus zoom preview; corrupt ciphertext/descriptor, huge page/decompression/allocation bound, child timeout/kill and capacity limit. For later multipart: ordering/rotation/EXIF original retention and sanitized composed output. For later redaction: actual removed pixels, mapping/hash forgery, withdrawn ancestor, legacy-route bypass. |
 | Human/token/evidence gates | Tokens requesting any human-only scope, `evidence:confirm` or `export` fail issuance and raw SQL constraints. Upload/review/privacy never changes Evidence confirmation. Admin archive review cannot sign a domain. Unconfirmed/stale attachment Evidence cannot enter draft/export or download an existing invalidated export. |
-| B05 enablement | One approved linked contract page → privacy-cleared source → cloud annotation candidate → human card attachment → current B02 and exact domain/co-sign approval → confirmed release → draft/export. Revoke each dependency and prove consumption/download fail. Until accepted, source-advertisement/submit tests show the branch disabled. |
+| B05 enablement | One approved linked contract page → privacy-cleared source → cloud annotation candidate → human card attachment → current B02 and exact single-domain human/material approval → confirmed release → draft/export. Revoke each dependency and prove consumption/download fail. Until accepted, source-advertisement/submit tests show the branch disabled. |
 | CLI and schema | Snapshot every command/variant in the route table: success/error, zero-cost Result 5.0, duplicate, dry-run, bounded list/cursor/history, download receipt and terminal codes. `bid schema` and HTTP inputs agree; no interactive fallback, secrets/pixels or partial-success archive. |
 | Browser | Real `admin`/`bidder` uploads, assigned reviewer sees next action, task contributor selects exact linked revision and opens one page; technical/viewer sees only cleared rendition and denied buttons align with server gates. Test wrong org, lost task membership, rejected revision, needs-redaction blocker, failed upload/retry, library-update notice and disabled B05 entry. |
 | Scale/audit/recovery | Seed large archive/review/selection histories; assert bounded query/image reads, stable pagination and batched board updates. Verify encrypted originals/parts/labels and metadata-only audit events. Restore exact retained file and rotate data keys without changing plaintext hashes; current membership still gates access. |
@@ -609,7 +609,7 @@ The owner approved every recommended default; implementation follows these decis
 | --- | --- | --- |
 | First file slice | One unchanged unrotated PDF, all listed attachment categories | Completes responsibility/review/task chain before multipart complexity; scans can initially be supplied as PDFs. |
 | Archive ownership | Uploader is custodian; explicit live admin/bidder reviewer; reassignment under state version | A rejected or blocked item always has a named next actor. |
-| Review separation | Human archive and privacy review; self-review allowed with recorded identity | Small teams can work; it confers no Evidence/co-sign authority. |
+| Review separation | Human archive and privacy review; self-review allowed with recorded identity | The same human may review; archive approval confers no Evidence or professional-domain authority. |
 | Read privacy boundary | Metadata-only explicit tokens; originals/raw pages human admin/bidder; cleared pages available to authorized human task readers | Prevents contract prices/personal data entering automation through generic image routes. This narrows B05 reads for this source kind. |
 | Profile links | Exact revision plus one nonempty declaration field; no automatic copy-forward | Avoids claiming a file supports a changed declaration; multiple explicit links permit legitimate reuse. |
 | Task selection | Require an active exact TaskOrgProfile/link/approval; no unattached task-only files initially | Keeps context visible and reuses current profile selection workflow. |

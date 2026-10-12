@@ -164,7 +164,7 @@ async def load(session, actor, identifier, *, lock=False, deleted=False):
 async def check_source(session, actor, source):
     if source is None:
         return
-    from app.services.task_workflow import access as task_access
+    from app.services.task_access import access as task_access
 
     await task_access(session, actor, source.task_id)
     if (

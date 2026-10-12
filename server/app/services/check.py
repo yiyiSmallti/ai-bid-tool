@@ -894,7 +894,7 @@ async def decide_finding(
         cards.fail(
             "human_session_required", "A human session is required for check decisions", 403, 4
         )
-    from app.services.task_workflow import access as task_access
+    from app.services.task_access import access as task_access
 
     # Resolve the task/report/finding before action errors, then preserve the
     # specific human-session rejection before checking task write/domain grants.

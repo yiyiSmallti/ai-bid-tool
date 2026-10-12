@@ -3,7 +3,6 @@ import { Coin } from "@element-plus/icons-vue";
 import { ref } from "vue";
 import { useRouter } from "vue-router";
 import { request, session } from "../api.js";
-import SignupLink from "../components/SignupLink.vue";
 
 const router = useRouter();
 const email = ref("");
@@ -26,7 +25,7 @@ async function submit() {
       totp: totp.value,
     });
     session.set(result.data.session);
-    router.push("/platform/orgs");
+    router.push("/platform/models");
   } catch (exc) {
     error.value = exc.status === 429 ? "失败次数过多，请 15 分钟后再试" : "邮箱、密码或验证码不正确";
     totp.value = "";
@@ -48,6 +47,5 @@ async function submit() {
       <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" role="alert" class="section" />
       <el-button type="primary" native-type="submit" size="large" :loading="busy">登录</el-button>
     </el-form>
-    <SignupLink />
   </el-card>
 </template>

@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import Database
 from app.core.errors import ServiceError, log_unexpected
-from app.core.security import hash_password, verify_password
+from app.core.security import verify_password
 from app.models.entities import PlatformAuditLog, User
 
 MAX_FAILURES = 5
@@ -23,10 +23,9 @@ FAILURE_WINDOW = timedelta(minutes=15)
 PASSWORD_WORKERS = 4
 PASSWORD_QUEUE = 8
 QUEUE_SECONDS = 1.0
-LOGIN_ACTIONS = ("auth.password", "platform.login", "platform.operator.enroll")
+LOGIN_ACTIONS = ("auth.password", "platform.login")
 DUMMY_HASH = "pbkdf2$600000$MDAwMDAwMDAwMDAwMDAwMA==$MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA="
 SecondFactor = Callable[[AsyncSession, User], Awaitable[dict]]
-EnrollmentPrepare = Callable[[AsyncSession, User | None], Awaitable[User]]
 logger = logging.getLogger(__name__)
 
 
@@ -72,15 +71,6 @@ class PasswordAttempts:
             if error is not None and not isinstance(error, ServiceError):
                 log_unexpected(logger, "Password attempt", error)
 
-    async def hash_password(self, password: str) -> str:
-        """Share sign-in admission, executor and deployment-wide CPU slots."""
-        if self.closed or self.pending >= PASSWORD_WORKERS + PASSWORD_QUEUE:
-            raise busy()
-        task = asyncio.create_task(self.run_hash(password))
-        self.tasks.add(task)
-        task.add_done_callback(self.finished)
-        return await asyncio.shield(task)
-
     async def acquire_database_slot(self, session: AsyncSession) -> None:
         for slot in range(PASSWORD_WORKERS):
             if await session.scalar(
@@ -90,29 +80,12 @@ class PasswordAttempts:
                 return
         raise busy()
 
-    async def run_hash(self, password: str) -> str:
-        try:
-            await asyncio.wait_for(self.slots.acquire(), timeout=QUEUE_SECONDS)
-        except TimeoutError:
-            raise busy() from None
-        try:
-            # This task owns its transaction, including after client cancellation.
-            async with self.db.transaction() as session:
-                await self.acquire_database_slot(session)
-                return await asyncio.get_running_loop().run_in_executor(
-                    self.executor, hash_password, password
-                )
-        finally:
-            self.slots.release()
-
     async def authenticate(
         self,
         email: str,
         password: str,
         source: str | None,
         second_factor: SecondFactor | None = None,
-        *,
-        enrollment_prepare: EnrollmentPrepare | None = None,
     ) -> User:
         email = email.strip().lower()
         # Unicode lowercasing can expand an input that passed the wire length
@@ -124,9 +97,7 @@ class PasswordAttempts:
         if self.closed or self.pending >= PASSWORD_WORKERS + PASSWORD_QUEUE:
             raise busy()
         # No await between admission and registration, so the queue cannot overfill.
-        task = asyncio.create_task(
-            self.run(email, password, source, second_factor, enrollment_prepare)
-        )
+        task = asyncio.create_task(self.run(email, password, source, second_factor))
         self.tasks.add(task)
         task.add_done_callback(self.finished)
         # Cancellation cannot stop an already-running PBKDF2 thread. Keep its
@@ -139,14 +110,13 @@ class PasswordAttempts:
         password: str,
         source: str | None,
         second_factor: SecondFactor | None,
-        enrollment_prepare: EnrollmentPrepare | None = None,
     ) -> User:
         try:
             await asyncio.wait_for(self.slots.acquire(), timeout=QUEUE_SECONDS)
         except TimeoutError:
             raise busy() from None
         try:
-            return await self.check(email, password, source, second_factor, enrollment_prepare)
+            return await self.check(email, password, source, second_factor)
         except DBAPIError as exc:
             if getattr(exc.orig, "sqlstate", None) == "55P03":
                 raise busy() from None
@@ -174,12 +144,9 @@ class PasswordAttempts:
         password: str,
         source: str | None,
         second_factor: SecondFactor | None,
-        enrollment_prepare: EnrollmentPrepare | None = None,
     ) -> User:
         source_actor = "source:" + hashlib.sha256(source.encode()).hexdigest() if source else None
         action = "platform.login" if second_factor is not None else "auth.password"
-        if enrollment_prepare is not None:
-            action = "platform.operator.enroll"
         failure: ServiceError | None = None
         async with self.db.transaction() as session:
             # A waiter must see its predecessor's commit even if the database's
@@ -208,8 +175,6 @@ class PasswordAttempts:
             user = await session.scalar(
                 select(User).where(User.email == email, User.active.is_(True))
             )
-            if enrollment_prepare is not None:
-                user = await enrollment_prepare(session, user)
             # Setup-only identities must not skip the expensive work either.
             encoded = user.password_hash if user is not None else DUMMY_HASH
             if encoded == "!setup":
@@ -228,8 +193,7 @@ class PasswordAttempts:
                         raise
                     failure = exc
 
-            # Successful enrollment is audited atomically by its database function.
-            if failure is not None or (second_factor is not None and enrollment_prepare is None):
+            if failure is not None or second_factor is not None:
                 session.add(
                     PlatformAuditLog(
                         actor_email=email,

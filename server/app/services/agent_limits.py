@@ -171,7 +171,7 @@ async def enforce(
 
 async def task_authority(session: AsyncSession, actor: Identity, task_id):
     """Agent work requires live task write access even when the next tool only reads."""
-    from app.services.task_workflow import access
+    from app.services.task_access import access
 
     try:
         await access(

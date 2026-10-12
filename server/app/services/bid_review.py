@@ -28,7 +28,7 @@ from app.schemas.check_contracts import AssessmentJobAccepted, AssessmentListDat
 from app.schemas.contracts import Cost
 from app.schemas.preflight_contracts import PreflightData
 from app.services import preflight as preflight_service
-from app.services import task_workflow
+from app.services import task_access
 from app.services.versioned import audit
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ def seal(settings, org_id, identifier, value):
 
 
 async def access(session, actor, task_id, scope="bid-review:read", *, write=False, lock=None):
-    return await task_workflow.access(session, actor, task_id, scope=scope, write=write, lock=lock)
+    return await task_access.access(session, actor, task_id, scope=scope, write=write, lock=lock)
 
 
 async def rows(session, submission_id):

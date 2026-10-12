@@ -18,7 +18,7 @@ from app.models.requirement_confirmation import (
     RequirementReviewRequest,
     RequirementReviewSet,
 )
-from app.models.team_workflow import RequirementWorkflow, TaskMember
+from app.models.team_workflow import TaskMember
 from app.schemas import requirement_confirmation as schema
 from app.schemas.contracts import ExtractedRequirement
 from app.services.extraction import fingerprint
@@ -30,7 +30,7 @@ from app.services.requirement_source import (
     raw_digest,
     verify,
 )
-from app.services.task_workflow import access, fail
+from app.services.task_access import access, fail
 from app.services.versioned import audit
 
 __all__ = [
@@ -154,21 +154,6 @@ async def render_many(session, actor, reqs, workflow, *, effective=None):
     if effective is None:
         effective = await effective_reviews(session, reqs)
     eligible = await members(session, actor, workflow.task_id)
-    assigned = (
-        {
-            r.requirement_id: r.assignee_user_id
-            for r in (
-                await session.scalars(
-                    select(RequirementWorkflow).where(
-                        RequirementWorkflow.task_id == workflow.task_id,
-                        RequirementWorkflow.requirement_id.in_([r.id for r in reqs]),
-                    )
-                )
-            ).all()
-        }
-        if reqs
-        else {}
-    )
     out = []
     readable_jobs = {}
     for req in reqs:
@@ -185,17 +170,13 @@ async def render_many(session, actor, reqs, workflow, *, effective=None):
                     if person[1].role == "admin"
                 }
             )
-            user_id = assigned.get(req.id)
-            basis = "assignee"
-            if user_id not in action_people:
-                user_id, basis = workflow.owner_user_id, "owner"
+            user_id = workflow.owner_user_id
+            basis = "owner"
             if user_id not in action_people:
                 user_id, basis = None, "owner_recovery"
             action = "confirm_requirement" if eff.citation_valid else "repair_requirement"
-            if workflow.state == "archived":
-                action = "unarchive"
-            if basis == "owner_recovery" and action != "unarchive":
-                action = "assign"
+            if workflow.state == "archived" or basis == "owner_recovery":
+                action = "view"
             can = actor.actor_kind == "session" and actor.token_id is None
             if action == "confirm_requirement":
                 can = can and actor.user_id in eligible and "req:confirm" in actor.scopes
@@ -207,7 +188,7 @@ async def render_many(session, actor, reqs, workflow, *, effective=None):
                     and {"req:extract", "evidence:confirm"} <= actor.scopes
                 )
             else:
-                can = can and (actor.role == "admin" or actor.user_id == workflow.owner_user_id)
+                can = False
             hint = schema.RequirementActorHint(
                 user_id=user_id, basis=basis, action=action, can_current_actor_act=can
             )

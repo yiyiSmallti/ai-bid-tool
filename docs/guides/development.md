@@ -100,20 +100,6 @@ The API documentation at `http://127.0.0.1:8000/docs` uses the HTTP Bearer
 scheme: choose **Authorize**, paste the session or token value without the
 `Bearer` prefix, and supply `X-Org-Id` on each operation.
 
-## Enable organization applications
-
-1. Apply migrations using the provisioning owner before running the API or worker.
-2. Set `BID_ORG_SIGNUP_ENABLED=true` in the runtime environment (Compose passes it
-   through). The default is `false`; operator reviews remain available when disabled.
-3. Trust only the deployment's own reverse proxy for forwarded client addresses.
-   Application source limits use the effective request peer, never a header read by
-   the signup handler.
-4. Open `/app/apply` to submit a synthetic application, then approve it in the 申请
-   tab on `/app/platform/orgs` using a platform operator session. Sign in with the
-   applicant email and password to verify the new organization admin membership.
-5. Run the worker for daily expiry. The signup protocol and CLI commands are in
-   [Organization self-service application](../notes/org-signup.md).
-
 ## Configure the extraction model
 
 1. Configure a platform operator and the dedicated credential connections using
@@ -152,8 +138,8 @@ Batching and model options are defined by
    for resolution, and a distinct `BID_SECRETS_KEY` into the appropriate API/worker
    processes. The standalone evaluator requires only the reader URL. Keep root keys,
    database credentials and platform authentication factors outside the service
-   credential table. Operator enrollment uses its own
-   [authentication-factor authority](../notes/operator-enrollment.md).
+   credential table. Platform authentication uses the deployment-configured
+   [operator allowlist and TOTP](../notes/platform-console.md#how-it-works).
 3. Sign in through the existing platform password-and-TOTP flow. In `/app/platform/credentials`,
    create the credential, inspect consumers, replace, enable, disable, remove or test it.
    CLI automation uses `bid platform login` followed by these commands:
@@ -257,68 +243,45 @@ Keep
 
 ## Run the platform console
 
-The console at `/app` is for platform operators; it shows org accounts and
-usage totals, never org business data.
+The platform console manages model catalogs, service credentials, Clef settings
+and offline-signature trust anchors. Authentication remains separate from the
+organization workspace during the [single-user transition](../plan/single-user.md).
 
-1. Apply migrations with the provisioning owner. Set `BID_PLATFORM_ADMIN_EMAILS`
-   to the operator emails and inject the independent `BID_SECRETS_KEY` on the API.
-   Leave `BID_PLATFORM_TOTP_SECRETS` empty for browser-managed factors.
+1. Provision the local identity with a usable password through
+   [Provision a development database](#provision-a-development-database).
+   Set `BID_PLATFORM_ADMIN_EMAILS` to its email. Generate a TOTP factor privately:
+
+   ```sh
+   uv run python -m app.admin platform-totp --email OPERATOR_EMAIL
+   ```
+
+   Inject the printed `email:SECRET` pair into `BID_PLATFORM_TOTP_SECRETS` through
+   the local secret configuration. Keep the secret outside logs and repository
+   files. Login requires this configured factor.
 2. Build the console and point the API at it:
 
    ```sh
    cd web && npm ci && npm run build
    ```
 
-   Set `BID_WEB_DIR` to the absolute path of `web/dist`, restart the API, and
-   open `http://127.0.0.1:8000/app/`. For live editing, run `npm run dev` in
-   `web/` with `BID_API_URL` pointing at the API.
-3. Issue the first operator's enrollment link on the trusted host:
+   Set `BID_WEB_DIR` to the absolute path of `web/dist`, restart the API and open
+   `http://127.0.0.1:8000/app/platform/login`. For live editing, run `npm run dev`
+   in `web/` with `BID_API_URL` pointing at the API.
+3. Sign in with the configured email, password and a current authenticator code.
+   Manage catalog keys through
+   [Manage platform credentials](#manage-platform-credentials).
 
-   ```sh
-   uv run python -m app.admin platform-enroll OPERATOR_EMAIL
-   ```
-
-   Deliver the printed relative link privately and open it on the console origin.
-   Links expire after 30 minutes. Set a password for a new/setup-only account or
-   confirm its existing password, scan the QR code or enter the shown secret, and
-   submit a current authenticator code. Enrollment creates no org membership.
-4. Wait for the next authenticator code and sign in at `/app/platform/login`.
-   Signed-in operators can issue another allowlisted email's link from 平台管理员;
-   the host command also supports device recovery. Create any required org
-   separately in the console and attach the operator's existing email. Manage
-   catalog keys through [Manage platform credentials](#manage-platform-credentials).
-
-For the deployment-managed break-glass alternative, use an account with a usable
-password, generate a factor privately, and set its printed `email:SECRET` pair in
-`BID_PLATFORM_TOTP_SECRETS` before restarting:
-
-```sh
-uv run python -m app.admin platform-totp --email OPERATOR_EMAIL
-```
-
-An environment factor always wins over the stored factor and blocks browser
-enrollment for that email. Remove the override and restart before returning to
-browser enrollment. Enrollment-token binding, key rotation and failure semantics
-are defined by [Operator enrollment](../notes/operator-enrollment.md).
-
-If sign-in or org lookup returns `too_many_attempts` (HTTP 429), stop retrying
-and wait for `Retry-After` before retrying; switching pages or orgs does not
-reset the account's limit. For `auth_busy` (HTTP 503), wait for `Retry-After`
-and retry with the current authenticator code. Both errors use CLI exit code 3.
-After a successful platform sign-in, wait for a new authenticator code before
-signing in again. The shared account/source limits, proxy requirements and
-concurrency bounds are defined in
+For `too_many_attempts` (HTTP 429), wait for `Retry-After` before retrying.
+For `auth_busy` (HTTP 503), wait for `Retry-After` and retry with the current
+code. Both errors use CLI exit code 3. After a successful login, wait for a new
+code before signing in again. Shared account/source limits, proxy requirements
+and concurrency bounds are defined in
 [Password admission and TOTP consumption](../notes/platform-console.md#password-admission-and-totp-consumption).
 
-The end-to-end check drives a real browser through sign-in, provisioning,
-models, usage, CSV export, disabling and password setup against a running API
-that serves the build. It needs an operator account with a known password and
-TOTP secret, and writes screenshots, the CSV and `result.json` to a new
-directory:
-
-```sh
-cd web && E2E_BASE_URL=http://127.0.0.1:8000 E2E_EMAIL=OPERATOR_EMAIL E2E_PASSWORD=OPERATOR_PASSWORD E2E_TOTP_SECRET=SECRET E2E_OUTPUT=/tmp/console-e2e npx playwright test
-```
+The browser acceptance entry point is
+[platform.spec.js](../../web/e2e/platform.spec.js). Supply its authentication
+inputs through the local secret environment and place generated artifacts in
+`data/work/` or a controlled temporary directory.
 
 ## Check an export in Word
 

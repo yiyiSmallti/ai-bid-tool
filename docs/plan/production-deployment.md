@@ -121,15 +121,11 @@ nor operator identities/TOTP seeds belong in `platform_credentials`.
 Never put secret values in repository files, command arguments, release evidence,
 terminal transcripts, logs, screenshots or support bundles. Exclude request bodies,
 Authorization/Cookie headers, signed-link query strings, database URLs and expanded
-environment dumps. Provision an allowlisted operator privately through the
-`app.admin platform-enroll EMAIL` link and browser flow in
-[Run the platform console](../guides/development.md#run-the-platform-console).
-The host command's link is sensitive and must not run in a recorded CI job or
-ordinary deployment log. Keep `BID_PLATFORM_TOTP_SECRETS` as the deployment-managed
-break-glass alternative: privately run `app.admin platform-totp`, inject the factor
-and restart. Such an override wins over the stored factor and blocks its browser
-enrollment until removed. Neither authentication path stores factors in
-`platform_credentials`.
+environment dumps. Configure the local operator through
+[Run the platform console](../guides/development.md#run-the-platform-console):
+`BID_PLATFORM_ADMIN_EMAILS` and `BID_PLATFORM_TOTP_SECRETS` are the authentication
+source. Keep the password and factor private; authentication factors do not belong
+in `platform_credentials`.
 
 For a fresh environment, follow
 [Manage platform credentials](../guides/development.md#manage-platform-credentials):
@@ -417,22 +413,10 @@ Decide
 their retention/disablement before inviting business users; retain acceptance records
 without copying confidential content into evidence bundles.
 
-If the owner later requires legacy business data, treat it as a separately approved
-migration with inventory, consent, matching encrypted objects/keyrings, recovery point
-and downtime. Follow [team-workflow cutover](../notes/team-workflow.md#usage):
-
-```sh
-python -m app.admin team-workflow preflight --org-id ORG_UUID
-python -m app.admin team-workflow import --org-id ORG_UUID --mapping REVIEWED_MAPPING_FILE
-python -m app.admin team-workflow cutover --org-id ORG_UUID --workers-drained
-```
-
-Prepare the reviewed mapping with explicit owners/members under
-[`ReviewedMapping`](../../server/app/team_workflow_admin.py). Stop old API admissions
-and workers, resolve unfinished jobs/unsettled calls, and require a clean preflight
-before cutover. These commands repair task authorization; they do not transfer a
-development database or infer human approvals. Fresh tasks use their normal atomic
-workflow creation and do not need a fabricated legacy import.
+Existing multi-org data is not converted by the
+[single-user installation decision](../adr/0012-single-user-installation.md).
+Any future data import requires a separate approved inventory, encrypted-object
+and keyring mapping, recovery point and validation plan.
 
 ## Rollback and incident recovery
 
@@ -473,15 +457,16 @@ inspection. Existing controls remain defined in the linked contracts.
   and trusted-proxy authentication limits. API tokens must fail to obtain human-only
   confirmation/export or `token:create`; inspect
   [token constraints](../../server/migrations/versions/0051_token_creation_scope.py)
-  and [team-workflow authority](../notes/team-workflow.md#how-it-works). Track any
+  and [Task access](../../server/app/services/task_access.py). Track any
   remaining token-management interface limitations through roadmap F05.
 - [ ] **RLS and credential functions:** complete the database gate as `bid_app`, with
   two orgs and missing context, plus dedicated-role positive/negative tests. Verify
   cross-org summary functions expose no business content and credential metadata
   never reveals ciphertext or plaintext. Test disabled credentials fail closed.
 - [ ] **Human gates and authentic materials:** unconfirmed or stale evidence cannot
-  enter confirmed response/export paths; prototype final-use decisions and complete
-  co-sign rules remain enforced. Review
+  enter confirmed response/export paths; prototype final-use decisions and single-domain
+  human/material/B02 gates remain enforced. The legacy response-round trigger
+  compatibility blocker is tracked in [Known defects](roadmap.md#known-defects). Review
   [human-section exports](../notes/human-section-exports.md) and
   [screenshot evidence](../notes/screenshot-evidence.md); search/model output never
   becomes authentic hardware evidence without the required source and human checks.

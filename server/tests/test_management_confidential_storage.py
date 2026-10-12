@@ -23,6 +23,7 @@ from app.services.auth import authenticate
 from sqlalchemy import event, select, text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_access_fixtures import new_task
 from test_management_confidential import (
     FIELDS,
     SECRET,
@@ -32,7 +33,6 @@ from test_management_confidential import (
     create_field,
     write,
 )
-from test_team_workflow_membership import new_task
 
 TOKEN_TABLE = "confidential_field_search_tokens"
 

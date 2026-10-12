@@ -612,8 +612,8 @@ async def test_feedback_saved_dispatch_job_and_result_link(
         )
         assert invented.status_code == 404
         from app.models.team_workflow import TaskWorkflow
-        from app.schemas.team_workflow import WorkflowMutation
-        from app.services.task_workflow import archive
+        from app.schemas.task_board import WorkflowMutation
+        from app.services.task_access import archive
         from task_fixtures import actor_context_async
 
         async with app.state.db.transaction(tenants["orgs"][0]) as session:

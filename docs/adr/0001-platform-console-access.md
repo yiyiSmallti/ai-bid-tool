@@ -4,7 +4,7 @@ kind: adr
 
 # 0001 Cross-org access for the platform operator console (平台运营后台)
 
-Date: 2026-10-01. Status: accepted.
+Date: 2026-10-01. Status: superseded by 0012.
 
 ## Context
 

@@ -9,11 +9,14 @@ draft into an authorization to confirm or deliver a response.
 
 ## Usage
 
-The organization workspace starts at `/app/org/tasks`. Opening a task discovers
+The local task workspace starts at `/app/org/tasks`. Opening a task discovers
 its documents and parse jobs from the API. Review and draft routes require an
 explicit successful extraction in `?job=J`; a requirement ID can locate a detail.
 Source downloads and certificate previews require the organization session as
 well as their short-lived signatures.
+
+The task board, progress, activity and event reconnect behavior are defined in
+[Task board and durable progress](task-progress.md).
 
 Business rules belong to [response-cards.md](response-cards.md), model preview
 semantics to [model-drafting-redaction.md](model-drafting-redaction.md), and the

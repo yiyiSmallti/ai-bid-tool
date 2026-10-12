@@ -1,6 +1,6 @@
 import { ApiError, orgSession } from "./api.js";
 import { orgAccess, orgRequest } from "./org.js";
-import { canEditTask } from "./task-authority.js";
+import { canEditTask, taskAccessGrant } from "./task-authority.js";
 export const templatePath = "/management/resources/templates";
 export const TEMPLATE_BACKSTACK_LIMIT = 50;
 // Retain navigation anchors only; old pages and unbounded cursor history are evicted.
@@ -52,22 +52,15 @@ export function templateReader() {
   function stop(){closed=true;for(const controller of channels.values())controller.abort();for(const job of pending.splice(0))job.reject(new DOMException("读取已取消","AbortError"));}
   return {read,cancel,stop,isStopped:()=>closed};
 }
-// Task membership is separate from library authority. Keep only the current actor.
+// A task grant is separate from library authority and contains only the current actor.
 export async function templateTaskAuthority(reader, taskId) {
   if (!validId(taskId)) throw new ApiError(400,"invalid_input","任务 ID 无效");
   const orgId=orgSession.get()?.orgId;
   const identity=await reader.read("authority","GET","/org/current");
   if(identity.data.org_id!==orgId || !validId(identity.data.user_id) || !["admin","technical","bidder","viewer"].includes(identity.data.role)) invalid("单位身份范围不符合契约");
-  const response=await reader.read("authority","GET",`/tasks/${taskId}/workflow`),workflow=response.data.workflow;
+  const response=await reader.read("authority","GET",`/tasks/${taskId}/progress`),workflow=response.data.workflow;
   if(workflow?.org_id!==orgId || workflow.task_id!==taskId || !["active","archived"].includes(workflow.state)) invalid("任务身份范围不符合契约");
-  let cursor=null,member=null;const seen=new Set();
-  do {
-    const params=new URLSearchParams({limit:"100"});if(cursor)params.set("cursor",cursor);
-    const page=await reader.read("authority","GET",`/tasks/${taskId}/members?${params}`);
-    if(page.data.org_id!==orgId || page.data.task_id!==taskId || page.items.length>100 || page.data.returned!==page.items.length || typeof page.data.has_more!=="boolean" || page.data.has_more!==(page.data.next_cursor!==null) || page.items.some(item=>item.org_id!==orgId || item.task_id!==taskId || !validId(item.user_id) || typeof item.active!=="boolean" || !["owner","contributor","reviewer","observer"].includes(item.role))) invalid("任务成员范围不符合契约");
-    member=page.items.find(item=>item.user_id===identity.data.user_id)??null;cursor=page.data.next_cursor;
-    if(cursor && (typeof cursor!=="string" || seen.has(cursor)))invalid("任务成员分页重复");if(cursor)seen.add(cursor);
-  }while(!member&&cursor);
+  const member=taskAccessGrant(response.data.access);
   orgAccess.role=identity.data.role;orgAccess.userId=identity.data.user_id;
   return {workflow,member,canPin:canEditTask({workflow,member})&&identity.data.role!=="viewer"};
 }

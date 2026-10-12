@@ -1,5 +1,6 @@
 import { ApiError, orgSession } from "./api.js";
 import { orgAccess, orgRequest } from "./org.js";
+import { taskAccessGrant } from "./task-authority.js";
 
 export const fileKinds = { tender: "招标文件", qualification: "资格材料", commercial_technical: "商务技术文件", price: "报价文件", declaration: "声明文件", other: "其他投标材料" };
 export const submissionStates = { uploaded: "已上传，待准备", prepared: "准备完成", withdrawn: "已停用" };
@@ -33,20 +34,10 @@ export const reviewError = error => reviewErrors[error.code] ?? (error.status ==
 
 export async function reviewAuthorityInfo(taskId) {
   const current = orgSession.get()?.orgId;
-  const [identity, task] = await Promise.all([orgRequest("GET", "/org/current"), orgRequest("GET", `/tasks/${enc(taskId)}/workflow`)]);
+  const [identity, task] = await Promise.all([orgRequest("GET", "/org/current"), orgRequest("GET", `/tasks/${enc(taskId)}/progress`)]);
   if (identity.data.org_id !== current || task.data.workflow?.org_id !== current || task.data.workflow?.task_id !== taskId) throw new ApiError(502, "invalid_response", "任务身份无法核验");
   orgAccess.role = identity.data.role; orgAccess.userId = identity.data.user_id;
-  let cursor = null, member = null;
-  const cursors = new Set();
-  do {
-    const query = new URLSearchParams({ limit: "100" }); if (cursor) query.set("cursor", cursor);
-    const response = await orgRequest("GET", `/tasks/${enc(taskId)}/members?${query}`);
-    if (response.data.org_id !== current || response.data.task_id !== taskId || response.items.length > 100) throw new ApiError(502, "invalid_response", "任务成员范围无法核验");
-    member = response.items.find(row => row.user_id === identity.data.user_id) ?? null;
-    cursor = response.data.next_cursor;
-    if (cursor && cursors.has(cursor)) throw new ApiError(502, "invalid_response", "成员分页重复");
-    if (cursor) cursors.add(cursor);
-  } while (!member && cursor);
+  const member = taskAccessGrant(task.data.access);
   const writable = Boolean(task.data.workflow.state === "active" && member?.active && ["owner", "contributor"].includes(member.role) && ["admin", "bidder"].includes(identity.data.role));
   const runWritable = Boolean(task.data.workflow.state === "active" && member?.active && ["owner", "contributor"].includes(member.role) && ["admin", "bidder", "technical"].includes(identity.data.role));
   return { writable, runWritable, owner: writable && member.role === "owner" && task.data.workflow.owner_user_id === identity.data.user_id, role: identity.data.role, member, taskState: task.data.workflow.state };

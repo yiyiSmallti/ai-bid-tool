@@ -198,7 +198,7 @@ async def test_unknown_levels_and_parse_levels_are_rejected(glm):
     assert vendor.bodies == []
 
 
-async def test_catalog_validates_levels_and_tests_each_one(glm):
+async def test_catalog_validates_levels_and_tests_each_one(glm, tenants, admin_engine):
     api, _, vendor, _, ops, _, _ = glm
     for broken in (
         {**GLM, "default_reasoning": "medium"},
@@ -214,13 +214,15 @@ async def test_catalog_validates_levels_and_tests_each_one(glm):
     assert [level["name"] for level in model["reasoning"]] == ["low", "high", "max"]
     assert model["default_reasoning"] == "max"
 
-    created = await api.post(
-        "/platform/orgs",
-        headers=ops,
-        json={"name": "Synthetic reasoning probe", "admin_email": OPERATOR},
-    )
-    assert created.status_code == 200, created.text
-    test_org = created.json()["data"]["org_id"]
+    from app.models.entities import Membership, User
+    from sqlalchemy import select
+    from sqlalchemy.orm import Session
+
+    test_org = str(tenants["orgs"][0])
+    with Session(admin_engine) as session, session.begin():
+        operator_user = session.scalar(select(User).where(User.email == OPERATOR))
+        assert operator_user is not None
+        session.add(Membership(org_id=tenants["orgs"][0], user_id=operator_user.id, role="admin"))
     probe = await api.post(
         "/v4/platform/models/glm/test", headers=ops, json={"test_org_id": test_org}
     )

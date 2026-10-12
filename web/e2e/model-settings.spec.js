@@ -125,7 +125,7 @@ async function fixture(page, options = {}) {
         if (state.failedTest) return route.fulfill({ status: 503, json: result("provider test", { job_id: J, status: "failed", provider_config_id: id, usage: { model: "actually-tested-model", provider: "openai" }, error: { code: "provider_unavailable", message: secret, exit_code: 4 } }, [], false, actual) });
         return send("provider test", { job_id: J, status: "succeeded", provider_config_id: id, reasoning: null, usage: { model: "actually-tested-model", provider: "openai" }, result: {} }, [], actual);
       }
-      if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
+      if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
       throw new Error(`Unexpected models request ${req.method()} ${path}`);
     } finally {
       if (counted) reads.active--;

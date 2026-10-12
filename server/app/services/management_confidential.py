@@ -50,7 +50,7 @@ from app.services.management_templates import (
     settings_for,
     too_large,
 )
-from app.services.task_workflow import access, live_actor
+from app.services.task_access import access, live_actor
 
 COMMANDS = {
     "fields": "confidential field browse",
@@ -71,7 +71,7 @@ async def reader(session: AsyncSession, actor: Identity) -> Identity:
 
 
 async def read_owner(session: AsyncSession, actor: Identity, task_id: UUID | None) -> dict:
-    """Read-only task visibility, matching task_workflow.access's read ceiling.
+    """Read-only task visibility, matching task_access.access's read ceiling.
 
     The caller has refreshed org/identity authority. One joined read keeps task
     pages bounded; writes still use access() and its task-first row locks.

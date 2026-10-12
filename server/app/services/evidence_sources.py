@@ -257,7 +257,7 @@ async def create_source(
     )
     # Certificate selection locks the task first; after taking the same lock, re-read
     # what selection or a concurrent archive may have changed during rendering.
-    from app.services.task_workflow import access as task_access
+    from app.services.task_access import access as task_access
 
     await task_access(session, actor, task_id, scope="evidence:source:write", write=True)
     snapshot, original, existing = await source_inputs(session, task_id, body)
@@ -315,11 +315,11 @@ async def list_sources(
         query = query.where(TaskCertificate.active.is_(True))
     workflow = None
     if limit is not None:
-        from app.services import task_events, task_workflow
+        from app.services import task_access, task_events
 
         if not 1 <= limit <= 100:
             raise ServiceError("invalid_source_limit", "Source limit must be 1 through 100", 422, 2)
-        _, workflow, _ = await task_workflow.access(session, actor, task_id)
+        _, workflow, _ = await task_access.access(session, actor, task_id)
         if cursor:
             value = task_events.open_cursor(
                 cursor, actor, task_id, workflow, settings, purpose="annotation-sources"

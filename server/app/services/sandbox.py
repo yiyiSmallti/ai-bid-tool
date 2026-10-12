@@ -252,7 +252,7 @@ async def actor_for(session: AsyncSession, run: SandboxRun, *, lock: bool = Fals
                 "sandbox_actor_inactive", "Sandbox actor is no longer active", 403, 4
             )
         scopes &= set(token.scopes) & SCOPES
-    from app.services.task_workflow import access as task_access
+    from app.services.task_access import access as task_access
 
     actor = Identity(
         run.requested_by, run.org_id, scopes, member.role, run.token_id, run.actor_kind

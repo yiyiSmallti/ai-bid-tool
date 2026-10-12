@@ -31,7 +31,7 @@ from app.models.attachments import (
 from app.models.entities import AuditLog, Membership, OrgProfileRevision, TaskOrgProfile, User
 from app.schemas import attachment_contracts as c
 from app.schemas.certificate_file_contracts import CertificateScanFile
-from app.services import task_workflow
+from app.services import task_access
 from app.services.auth import set_actor_context
 from app.services.evidence_sources import RENDER_SLOTS
 from app.services.versioned import audit
@@ -59,7 +59,7 @@ def view(model, **values):
 
 
 async def access(session, actor, scope="attachment:read"):
-    live = await task_workflow.live_actor(session, actor)
+    live = await task_access.live_actor(session, actor)
     live.require(scope)
     await set_actor_context(session, live)
     return live
@@ -400,7 +400,7 @@ async def page_rows(session, actor, query, model, body, purpose, parent=None, *,
     binding["membership"] = str(membership_version[0])
     binding["membership_version"] = membership_version[1]
     if task_id:
-        _, workflow, member = await task_workflow.access(session, actor, task_id)
+        _, workflow, member = await task_access.access(session, actor, task_id)
         binding["access"] = str(workflow.access_epoch)
         binding["member"] = str(member.id) if member else None
     signer = TokenSigner.for_tokens(settings_for(session))
@@ -889,7 +889,7 @@ async def selection_context(
     session, actor, selection_id, *, write=False, lock=False, require_active=True
 ):
     selected = await required(session, TaskAttachment, selection_id)
-    _, workflow, _ = await task_workflow.access(
+    _, workflow, _ = await task_access.access(
         session,
         actor,
         selected.task_id,
@@ -991,7 +991,7 @@ def selection_view(selected, link, root, file, review, reasons, *, pinned_revisi
 
 
 async def select(session, actor, task_id, body):
-    await task_workflow.access(session, actor, task_id, scope="task:attachment", write=True)
+    await task_access.access(session, actor, task_id, scope="task:attachment", write=True)
     actor.require("task:profile")
     actor.require("profile:read")
     profile = await required(session, TaskOrgProfile, body.task_org_profile_id, lock=True)
@@ -1059,7 +1059,7 @@ async def select(session, actor, task_id, body):
 
 
 async def selections(session, actor, task_id, query):
-    await task_workflow.access(session, actor, task_id, scope="attachment:read")
+    await task_access.access(session, actor, task_id, scope="attachment:read")
     stmt = sql_select(TaskAttachment).where(TaskAttachment.task_id == task_id)
     if not query.history:
         stmt = stmt.where(TaskAttachment.active.is_(True))
@@ -1188,7 +1188,7 @@ async def resolve_annotation(*args, **kwargs):
 async def profile_candidates(session, actor, task_id, *, history=False, cursor=None, limit=50):
     from app.services.profiles import snapshot_data
 
-    await task_workflow.access(session, actor, task_id, scope="profile:read")
+    await task_access.access(session, actor, task_id, scope="profile:read")
     query = sql_select(TaskOrgProfile).where(TaskOrgProfile.task_id == task_id)
     if not history:
         query = query.where(TaskOrgProfile.active.is_(True))

@@ -6,7 +6,7 @@ kind: plan
 
 ## Background, goals, and non-goals
 
-The tool helps bidders (投标人) understand tender documents (招标文件), verify technical parameters, check bids (标书), and estimate scores. Every conclusion traces to original text or a real source. It runs as SaaS: multiple orgs (organizations/tenants, 单位) share a service with isolated data, and external agents can invoke it directly through CLI.
+The tool helps bidders (投标人) understand tender documents (招标文件), verify technical parameters, check bids (标书), and estimate scores. Every conclusion traces to original text or a real source. It runs as one local installation for one human, with external agents using the CLI. [ADR 0012](adr/0012-single-user-installation.md) defines that decision; [the single-user plan](plan/single-user.md) defines the transition. Its first slice removes multi-person surfaces while retaining existing login, org context, provider configuration and database gates.
 
 Bid preparation is repetitive and time-consuming, and a single omission can cause bid rejection (废标). Nearby bid-preparation staff currently give materials to someone familiar with AI for manual model-assisted checks and parameter organization. Results are difficult to reuse and verify.
 
@@ -17,7 +17,7 @@ Bid preparation is repetitive and time-consuming, and a single omission can caus
 - Check bids against tender documents for bid-rejection and point-deduction (扣分) risks.
 - Estimate scores item by item against scoring criteria (评分标准) and explain lost points.
 - Connect these tasks in a dashboard where humans and agents collaborate.
-- Deploy as SaaS: isolate org accounts/data, with each org maintaining templates, feature lists, products, and qualification materials.
+- Maintain local templates, feature lists, products and qualification materials for the person preparing bids.
 - Make CLI an external interface: internal and external agents (such as Claude Code and Codex) use the same commands.
 - Access all model capabilities (LLM, vision, OCR, search, embeddings) through common interfaces that orgs can replace.
 - Use four memory layers—global, org, user, and project—to learn org practices over time.
@@ -31,7 +31,7 @@ Bid preparation is repetitive and time-consuming, and a single omission can caus
 
 ## Users and core scenarios
 
-There are four user groups: org administrators maintain accounts, resources, and model configuration; bid specialists manage formatting, qualifications, and progress; technical leads handle parameters and solutions; external agents perform repetitive operations through CLI. Initial users are nearby people who regularly prepare bids.
+One human maintains resources and model configuration, prepares responses and reviews results. Agents perform scoped repetitive operations through CLI. Existing role/domain checks remain during the first transition slice; their removal belongs to the later slices.
 
 | Scenario | Primary user | Input | Output |
 | --- | --- | --- | --- |
@@ -62,11 +62,11 @@ The org is the primary isolation boundary: files, resources, memory, model confi
 
 | Role | Capabilities |
 | --- | --- |
-| Platform administrator | Provision orgs; maintain global memory and platform-default models; no org business-data access |
-| Org administrator | Manage org members, resources, model/OCR configuration, tokens, and org memory approval |
+| Platform operator | Maintain models, service credentials, Clef and trust anchors with configured password/TOTP authentication |
+| Org administrator | Manage resources, model/OCR configuration, tokens, and org memory approval |
 | Bid specialist | Create tasks, confirm qualification response cards (响应卡), export bids |
 | Technical lead | Confirm parameter/feature evidence |
-| Read-only reviewer | View tasks/dashboards and comment |
+| Read-only reviewer | View tasks/dashboards |
 | External agent (token) | Invoke granted CLI permissions; no evidence confirmation or export |
 
 A user may join multiple orgs. Every request carries current-org context.
@@ -101,13 +101,13 @@ Requirements and evidence remain central: requirements locate original tender te
 | Org resources | Product | Frequently proposed product | Vendor, exact model/version, official specs page, white paper |
 | Org resources | Certificate | Qualification/personnel certificate (证照) | Name, number, expiry, scans |
 | Org resources | OrgProfile | Org profile (单位资料) and track record | Registration, past contracts, common wording |
-| Tasks | Task | One bid-preparation project | Name, tender number, deadline, members |
+| Tasks | Task | One bid-preparation project | Name, tender number, deadline, creator |
 | Tasks | TaskResource | Selected-resource snapshot | Resource type/ID/version |
 | Tasks | Document, Chunk | Uploaded file and parsed content | Type, content hash, page, section path, OCR flag |
 | Tasks | Requirement | One requirement | Category, starred flag, original text/location, structured condition |
 | Tasks | Evidence | One evidence item | Requirement/product, source, capture time, quote, screenshot/hash, verdict, confirmer |
 | Tasks | ResponseItem, Finding, ScoreItem | Response row, check finding, score estimate | Deviation, risk level, estimate/basis |
-| Tasks | Card | Dashboard card | Related object, state, owner, version |
+| Tasks | Card | Dashboard card | Related object, state, version |
 | Configuration/memory | ProviderConfig | Model/OCR service configuration | Capability, provider, endpoint, encrypted key, scope |
 | Configuration/memory | Memory | One memory | Scope, owner, content, source, state, vector |
 
@@ -158,7 +158,7 @@ Every resource change creates a new version and retains older versions. Certific
 
 **Task creation**
 
-1. Enter name, tender number, deadline, and members.
+1. Enter name, tender number and deadline.
 2. Upload tender documents; background parsing starts.
 3. Select template, products (separately per lot if needed), feature list, certificate set, and provider profile.
 4. Review scope and model configuration, then confirm to generate the dashboard.
@@ -223,7 +223,7 @@ Global, org, user, and project layers remember how an org/person/project works. 
 
 - Explicit: click “记住” or use `bid memory add --scope org`.
 - Automatic proposals: evidence rejection, correcting agent conclusions, or marking false-positive checks creates candidate memory; effective only after human confirmation (人工确认), with org candidates approved by admins.
-- Project decisions (selection, clarification, assignments) enter project memory; retained read-only after archival.
+- Project decisions (selection and clarification) enter project memory.
 - Exclude sensitive quotes, identity numbers, bank accounts; evidence uses the evidence chain rather than memory.
 
 **Reads**
@@ -423,30 +423,24 @@ Python handles most work; Rust owns the bounded annotation CLI; Vue handles the 
 | Database | PostgreSQL + pgvector | RLS isolation, memory retrieval |
 | Storage | S3-compatible | Cloud storage; MinIO for private deployment |
 | Jobs | Procrastinate | PostgreSQL queue; see [queue.py](../server/app/jobs/queue.py); parsing/verification/checks, retry/cancel |
-| Auth | Password + OIDC SSO; scoped tokens | Org identity-system integration |
+| Auth | Password and scoped tokens | Retained during the first transition slice |
 | PDF | PyMuPDF | Text/coordinates, white-paper region rendering |
 | Word | python-docx | Parse bids/apply org templates |
 | Screenshots | Playwright (BrowserProvider default) | Dynamic pages |
 | LLM/vision/embedding/search/OCR | Adapter configuration; defaults remain open decisions | Structured outputs, long context, image understanding, no API-data training |
 | Annotation | Rust clap/serde/image/sha2 | Crop/box/watermark/hash; independent job executable |
 | Frontend | Vue 3 + Vite + Element Plus | Dashboard/resources/providers/memory |
-| Deployment | Docker Compose; Kubernetes later | Same images for SaaS/private |
+| Deployment | Docker Compose | One local installation |
 | Tests/CI | pytest, cargo test, GitHub Actions | Unit/isolation tests, evaluation scripts |
 
 ## Implementation phases
 
-Establish isolation before adding capabilities. Org business tables carry `org_id` and RLS from day one, with approved exceptions defined in hard rules.
-
-| Phase | Window | Scope |
-| --- | --- | --- |
-| 1 | 10/5–11/1 | FastAPI/PostgreSQL RLS/storage foundation; accounts/one org; remote/local CLI; initial `tender parse`, `req extract`, `check`; one LLM/OCR adapter each |
-| 2 | 11/2–11/29 | Products/features; tasks/resource selection; `evidence fetch`, `evidence stamp`, `ui mock`, `draft`; search/vision/browser adapters |
-| 3 | 11/30–12/27 | Dashboard/internal agent/`score`/`export`/org templates; multi-org/roles/tokens/external agents; model/OCR pages; project/org memory |
-| 4 | 12/28–2027/1/24 | User/global memory, audit/usage quotas, `bid mcp serve`, private deployment packaging, polish/demo |
-
-The scope is much larger than originally planned.
-
-These are planning windows, not implementation status. Remaining scope and priorities are maintained in the [roadmap](plan/roadmap.md).
+Follow [Single-user local installation](plan/single-user.md) in dependency order:
+remove multi-person surfaces, replace login with installation access, then replace
+the schema. Existing creator access and the default policy without co-sign remain
+until their owning slices replace them. Task board, progress, activity and events
+follow [Task board and durable progress](notes/task-progress.md).
+Remaining scope and dependencies are maintained in [the roadmap](plan/roadmap.md).
 
 ## Open decisions
 

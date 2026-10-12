@@ -31,12 +31,11 @@ async function fixture(page, options = {}) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
-    if (path === "/health") return route.fulfill({ json: result("health", { org_signup_enabled: false }) });
+    if (path === "/health") return route.fulfill({ json: result("health", { status: "ok" }) });
     expect(request.headers()["x-org-id"]).toBe(ids.org);
     let response;
     if (path === "/org/current" && method === "GET") response = result("org current", { org_id: ids.org, user_id: ids.user, role: state.role });
-    else if (path === `/tasks/${ids.task}/workflow` && method === "GET") response = result("task workflow", { workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: state.taskRole === "owner" ? ids.user : uuid(99) } });
-    else if (path === `/tasks/${ids.task}/members` && method === "GET") response = result("task member list", { org_id: ids.org, task_id: ids.task, next_cursor: null }, [{ user_id: ids.user, role: state.taskRole, active: true, review_domains: state.domains }]);
+    else if (path === `/tasks/${ids.task}/progress` && method === "GET") response = result("task progress", { access: {role:state.taskRole,review_domains:state.domains},event_cursor:"opaque-snapshot",workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: state.taskRole === "owner" ? ids.user : uuid(99) } });
     else if (path === `/bid-submissions/${ids.submission}` && method === "GET") response = result("review submission show", { submission: { id: ids.submission, org_id: ids.org, task_id: ids.task, revision: 1, manifest_sha256: hash, state: "prepared", created_by: ids.user, created_at: now, documents: [] }, preparation: null, inventory: [], signature_validations: [], signing_candidates: [], signing_candidate_count: 0, signing_candidates_next_cursor: null });
     // Admin/bidder owners also load the outbound-authorization history component.
     else if (path === `/bid-submissions/${ids.submission}/outbound-authorizations` && method === "GET") response = result("review outbound list", { total: 0, next_cursor: null }, []);

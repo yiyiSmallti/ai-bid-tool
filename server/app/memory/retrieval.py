@@ -58,7 +58,7 @@ async def access(session, actor, *, task_id=None):
     actor = await memory_access(session, actor, "memory:read")
     actor.require("memory:retrieve")
     if task_id is not None:
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(session, actor, task_id)
         task = await session.get(Task, task_id)

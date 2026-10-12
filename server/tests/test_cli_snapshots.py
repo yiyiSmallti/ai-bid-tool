@@ -565,14 +565,6 @@ async def fake_sandbox_download(self, artifact_id, output):
     ).model_dump(mode="json")
 
 
-PLATFORM_ORG = {
-    "id": IDENTIFIER,
-    "name": "Synthetic tenant",
-    "active": True,
-    "created_at": "2026-10-01T00:00:00+00:00",
-    "member_count": 1,
-    "admin_emails": ["boss@example.test"],
-}
 PLATFORM_MODEL = {
     "id": "opus-standard",
     "capability": "llm_extract",
@@ -586,27 +578,6 @@ PLATFORM_MODEL = {
     "updated_at": "2026-10-01T00:00:00+00:00",
     "default": True,
     "credential_configured": True,
-}
-PLATFORM_USAGE = {
-    "org_id": IDENTIFIER,
-    "org_name": "Synthetic tenant",
-    "month": "2026-10-01",
-    "provider": "anthropic",
-    "model": "claude-opus-5-5",
-    "calls": 1,
-    "tokens": 10,
-    "input_tokens": 8,
-    "output_tokens": 2,
-    "ocr_pages": 0,
-}
-PLATFORM_AUDIT = {
-    "id": IDENTIFIER,
-    "created_at": "2026-10-01T00:00:00+00:00",
-    "actor_email": "ops@example.test",
-    "action": "platform.login",
-    "object_id": None,
-    "outcome": "success",
-    "details": {"totp_counter": 1},
 }
 
 
@@ -675,77 +646,6 @@ async def fake_request(self, method, path, **kwargs):
             "email": "ops@example.test",
             "expires_in": 1800,
         }
-    elif path == "/platform/operators":
-        assert method == "GET" and kwargs["platform"] is True
-        items = [
-            {
-                "email": "ops@example.test",
-                "has_account": True,
-                "factor_source": "database",
-                "enrolled_at": "2026-10-08T00:00:00Z",
-                "enrolled_by": "link",
-            }
-        ]
-    elif path == "/platform/org-applications":
-        assert kwargs["platform"] is True
-        assert kwargs["params"] == {"status": "pending", "limit": 50}
-        items = [
-            {
-                "id": IDENTIFIER,
-                "status": "pending",
-                "org_name": "Synthetic applicant org",
-                "contact_name": "Applicant",
-                "email": "applicant@example.test",
-                "phone": None,
-                "note": None,
-                "created_at": "2026-10-07T00:00:00Z",
-                "expires_at": "2026-11-06T00:00:00Z",
-                "existing_user": False,
-                "source_submissions_24h": 1,
-                "decided_at": None,
-                "decided_by": None,
-                "decision_reason": None,
-                "org_id": None,
-                "admin_user_id": None,
-                "user_created": None,
-                "attached_existing_user": None,
-            }
-        ]
-    elif path == f"/platform/org-applications/{IDENTIFIER}/approve":
-        assert kwargs["platform"] is True
-        assert kwargs["json"] == {"org_name": "Corrected org", "attach_existing_user": True}
-        data = {
-            "application_id": IDENTIFIER,
-            "status": "approved",
-            "org_id": IDENTIFIER_2,
-            "admin_user_id": IDENTIFIER_3,
-            "user_created": False,
-            "attached_existing_user": True,
-        }
-    elif path == f"/platform/org-applications/{IDENTIFIER}/reject":
-        assert kwargs["platform"] is True
-        assert kwargs["json"] == {"reason": "Unable to verify applicant"}
-        data = {
-            "application_id": IDENTIFIER,
-            "status": "rejected",
-            "org_id": None,
-            "admin_user_id": None,
-            "user_created": None,
-            "attached_existing_user": None,
-        }
-    elif path == "/platform/orgs" and method == "POST":
-        data = {
-            "org_id": IDENTIFIER,
-            "admin_user_id": IDENTIFIER,
-            "admin_email": "boss@example.test",
-            "user_created": True,
-            "setup_url": "/app/setup-password#token=synthetic-fixture-link",
-            "setup_expires_in": 86400,
-        }
-    elif path == "/platform/orgs":
-        items = [PLATFORM_ORG]
-    elif path.endswith("/active"):
-        data = {"org_id": IDENTIFIER, "active": False}
     elif path == "/platform/models":
         if method == "POST":
             data = PLATFORM_MODEL
@@ -753,20 +653,6 @@ async def fake_request(self, method, path, **kwargs):
             items = [PLATFORM_MODEL]
     elif path.startswith("/platform/models/"):
         data = {"model_id": "opus-standard", "passed": True, "items": 1, "usage": {"tokens": 10}}
-    elif path == "/platform/usage":
-        data = {
-            "from": "2026-10",
-            "to": "2026-10",
-            "totals": {
-                "calls": 1,
-                "tokens": 10,
-            },
-        }
-        items = [PLATFORM_USAGE]
-    elif path == "/platform/audit":
-        items = [PLATFORM_AUDIT]
-    elif path == "/auth/setup-password":
-        data = {"password_set": True}
     elif path == "/auth/orgs":
         items = [
             {"org_id": IDENTIFIER, "name": "Synthetic tenant", "role": "admin", "active": True}
@@ -1313,7 +1199,6 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             }
         )
     )
-    monkeypatch.setenv("BID_SETUP_TOKEN", "synthetic-fixture-link")
     monkeypatch.setenv("BID_CARD_CODE", "SYNT-HETI-CFIX-TURE")
     common = ["--state", str(tmp_path / "session.enc")]
     commands = {
@@ -1594,21 +1479,9 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             str(tmp_path / "source.png"),
         ],
         "platform login": ["platform", "login", "--email", "ops@example.test", "--totp", "123456"],
-        "platform org list": ["platform", "org", "list"],
-        "platform operator list": ["platform", "operator", "list"],
-        "platform org application list": ["platform", "org", "application", "list"],
-        "platform org application approve": ["platform", "org", "application", "approve", IDENTIFIER, "--org-name", "Corrected org", "--attach-existing-user"],
-        "platform org application reject": ["platform", "org", "application", "reject", IDENTIFIER, "--reason", "Unable to verify applicant"],
-        "platform org create": [
-            "platform", "org", "create", "--name", "Synthetic tenant", "--admin-email", "boss@example.test",
-        ],
-        "platform org set-active": ["platform", "org", "set-active", "--id", IDENTIFIER, "--inactive"],
         "platform model list": ["platform", "model", "list"],
         "platform model set": ["platform", "model", "set", "--input", str(platform_model_input)],
         "platform model test": ["platform", "model", "test", "--id", "opus-standard", "--test-org", IDENTIFIER],
-        "platform usage": ["platform", "usage", "--from", "2026-10", "--to", "2026-10"],
-        "platform audit": ["platform", "audit", "--limit", "5"],
-        "auth setup-password": ["auth", "setup-password"],
         "auth orgs": ["auth", "orgs", "--email", "boss@example.test"],
         "confidential field add": [
             "confidential", "field", "add", "--key", "bid_total", "--label", "投标总价",

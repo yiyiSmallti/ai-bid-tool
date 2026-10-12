@@ -349,7 +349,6 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
     ).status_code == 200
     old = OLD_ROLE_SCOPES
     assert ROLE_SCOPES[role] - {
-        "member:manage",
         "attachment:read",
         "attachment:write",
         "attachment:review",
@@ -384,12 +383,6 @@ async def test_new_scan_roles_and_old_grants(role, api, headers, pdf_bytes, tena
         "agent:read",
         "agent:run",
         "agent:cancel",
-        "task:members:write",
-        "task:archive",
-        "card:assign",
-        "card:comment",
-        "task:review-policy",
-        "card:cosign",
         "memory:read",
         "memory:write",
         "memory:retrieve",

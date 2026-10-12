@@ -19,7 +19,7 @@ from app.models.confidential import ConfidentialValue
 from app.models.entities import ApiToken, AuditLog, Membership, Org, User
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from test_team_workflow_membership import add_member, new_task, person
+from task_access_fixtures import add_member, archive_task, new_task, person, remove_member
 
 FIELDS = "/v4/management/confidential-fields"
 VALUES = "/v4/management/confidential-values"
@@ -154,7 +154,7 @@ async def test_bounded_order_prefix_archive_and_owner_pages(api, headers):
         headers=headers[0],
         json={"expected_revision": 1, "archived": True},
     )
-    assert archived.status_code == 200
+    assert archived.status_code == 200, archived.text
     for path in (FIELDS, VALUES):
         visible = assert_page(
             await api.post(path + "/query", headers=headers[0], json={}), headers[0]
@@ -545,28 +545,18 @@ async def test_removed_task_member_cursor_and_archived_task_write(
     for _ in range(2):
         await legacy_write(api, headers[0], field, task_id=task)
     user, auth = await person(api, admin_engine, tenants["orgs"][0])
-    assert (await add_member(api, headers[0], task, user, 1)).status_code == 200
+    assert (await add_member(api, headers[0], task, user, 1)).active
     path = f"{FIELDS}/{field['id']}/values/history/query"
     page = assert_page(
         await api.post(path, headers=auth, json={"task_id": task, "limit": 1}), auth, limit=1
     )
-    removed = await api.post(
-        f"/tasks/{task}/members/{user}/remove",
-        headers=headers[0],
-        json={"expected_revision": 2, "reason": "Synthetic removal"},
-    )
-    assert removed.status_code == 200, removed.text
+    await remove_member(api, headers[0], task, user)
     assert (
         await api.post(
             path, headers=auth, json={"task_id": task, "cursor": page["data"]["next_cursor"]}
         )
     ).status_code == 404
-    archived = await api.post(
-        f"/tasks/{task}/archive",
-        headers=headers[0],
-        json={"expected_revision": 3, "reason": "Synthetic archive"},
-    )
-    assert archived.status_code == 200, archived.text
+    await archive_task(api, headers[0], task)
     latest = assert_page(
         await api.post(path, headers=headers[0], json={"task_id": task}), headers[0]
     )["items"][0]

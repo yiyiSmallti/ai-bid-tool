@@ -20,12 +20,12 @@ from uuid import UUID, uuid4
 import pytest
 from app.core.security import TokenSigner
 from app.models.entities import Chunk, Document, Job, Requirement
-from app.services import extraction, task_events, task_workflow
+from app.services import extraction, task_access, task_events
 from app.services.auth import ROLE_SCOPES, authenticate, set_actor_context
 from sqlalchemy import event, insert, text
 from sqlalchemy.orm import Session
+from task_access_fixtures import add_member, new_task, person, remove_member
 from test_citation_batch_equivalence import synthetic_page_sources
-from test_team_workflow_membership import add_member, new_task, person
 
 ARTIFACTS = Path(__file__).resolve().parents[2] / "data/work/team-workflow-acceptance/stream"
 PRIVATE_MARKER = "SENSITIVE-SYNTHETIC-FULL-TEXT-NEVER-IN-EVENTS"
@@ -229,7 +229,7 @@ def is_auth_statement(statement):
             "memberships",
             "orgs",
             "tasks",
-            "task_workflows",
+            "task_accesss",
             "task_members",
             "api_tokens",
         )
@@ -619,7 +619,7 @@ async def test_event_cursor_foreign_future_and_expired_are_explicit(
     assert wrong.status_code == 404
     settings = application.state.processor.settings
     async with authenticated(application, headers[0]) as (session, actor):
-        _, workflow, _ = await task_workflow.access(session, actor, scope["task_id"])
+        _, workflow, _ = await task_access.access(session, actor, scope["task_id"])
         head = await task_events.head(session, actor.org_id, scope["task_id"])
         future = task_events.issue_cursor(
             actor, scope["task_id"], workflow, settings, seq=head.last_seq + 1
@@ -780,7 +780,7 @@ async def test_sse_revocation_closes_connection_before_next_batch(
     scope = await seed_scope(api, headers, tenants, admin_engine, count=1)
     user, reader = await person(api, admin_engine, tenants["orgs"][0], "technical")
     added = await add_member(api, headers[0], scope["task_id"], user, 1, "observer")
-    assert added.status_code == 200
+    assert added.active
     baseline = await poll(api, reader, scope["task_id"])
     assert baseline.status_code == 200
     marker = scope["requirement_ids"][0]
@@ -790,12 +790,7 @@ async def test_sse_revocation_closes_connection_before_next_batch(
     ) as stream:
         started = await stream.next()
         assert started["type"] == "http.response.start" and started["status"] == 200
-        removed = await api.post(
-            f"/tasks/{scope['task_id']}/members/{user}/remove",
-            headers=headers[0],
-            json={"expected_revision": 2, "reason": "Synthetic revoke while streaming"},
-        )
-        assert removed.status_code == 200, removed.text
+        await remove_member(api, headers[0], scope["task_id"], user)
         await append_marker(application, headers[0], scope["task_id"], marker)
         assert stream.task is not None
         await asyncio.wait_for(asyncio.shield(stream.task), 5)

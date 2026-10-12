@@ -1,5 +1,5 @@
 <script setup>
-import { DataAnalysis, Document, Files, Lock, Memo, Monitor, OfficeBuilding, User } from "@element-plus/icons-vue";
+import { Document, Files, Lock, Memo, Monitor } from "@element-plus/icons-vue";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -10,17 +10,12 @@ const area = computed(() => route.meta.area);
 const org = computed(() => (area.value === "org" ? orgSession.get() : null));
 const menus = computed(() => area.value === "platform"
   ? [
-      { key: "orgs", to: "/platform/orgs", title: "单位", icon: OfficeBuilding },
-      { key: "operators", to: "/platform/operators", title: "平台管理员", icon: User },
       { key: "models", to: "/platform/models", title: "模型", icon: Monitor },
       { key: "credentials", to: "/platform/credentials", title: "服务凭据", icon: Lock },
       { key: "clef", to: "/platform/clef", title: "Clef 初筛配置", icon: Monitor },
       { key: "trust-anchors", to: "/platform/trust-anchors", title: "信任根证书", icon: Lock },
-      { key: "usage", to: "/platform/usage", title: "用量", icon: DataAnalysis },
-      { key: "audit", to: "/platform/audit", title: "审计", icon: Files },
     ]
   : [
-      { key: "members", to: "/org/members", title: "成员", icon: User },
       { key: "tasks", to: "/org/tasks", title: "招标任务", icon: Document },
       { key: "products", to: "/org/products", title: "产品库", icon: Files },
       { key: "features", to: "/org/features", title: "功能库", icon: Files },

@@ -1,6 +1,5 @@
 """Inputs for the platform operator console."""
 
-import re
 from typing import Any, Literal
 from uuid import UUID
 
@@ -14,35 +13,6 @@ class PlatformLogin(Contract):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
     totp: str = Field(pattern=r"^\d{6}$")
-
-
-class PasswordSetup(Contract):
-    token: str = Field(min_length=1, max_length=4096)
-    password: str = Field(min_length=1, max_length=1024)
-
-
-class PlatformOrgCreate(Contract):
-    name: str = Field(min_length=1, max_length=200)
-    admin_email: str = Field(min_length=3, max_length=254)
-
-    @field_validator("name")
-    @classmethod
-    def meaningful_name(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("name must contain non-whitespace characters")
-        return value.strip()
-
-    @field_validator("admin_email")
-    @classmethod
-    def plausible_email(cls, value: str) -> str:
-        value = value.strip().lower()
-        if not re.fullmatch(r"[^@\s]+@[^@\s]+", value):
-            raise ValueError("admin_email must be an email address")
-        return value
-
-
-class PlatformOrgActive(Contract):
-    active: bool
 
 
 class ReasoningLevel(Contract):

@@ -23,7 +23,7 @@ from app.schemas.requirement_confirmation import (
     RequirementProgressData,
     RequirementReviewData,
 )
-from app.schemas.team_workflow import BoardData, BoardRow
+from app.schemas.task_board import BoardData, BoardRow
 from task_fixtures import reviewer_header
 from test_check import publish_draft
 from test_response_cards import (

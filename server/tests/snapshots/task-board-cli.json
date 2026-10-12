@@ -1,0 +1,830 @@
+{
+  "remote:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "access": {
+        "role": "owner",
+        "review_domains": []
+      },
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 1
+    },
+    "items": [
+      {
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "state": "running",
+        "run_id": "00000000-0000-0000-0000-000000000001",
+        "attempts": 1,
+        "progress": {
+          "completed": 1,
+          "total": null
+        },
+        "updated_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 1,
+        "gap": 1,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 1,
+      "returned": 1,
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [
+      {
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "title": "Synthetic requirement",
+        "category": "technical",
+        "starred": false,
+        "bucket": "gap",
+        "card_id": null,
+        "card_revision": null,
+        "card_state": null,
+        "eligibility": null,
+        "review_domain": "technical",
+        "flags": {
+          "human_needs_material": false,
+          "model_needs_material_hint": false,
+          "certificate_date_advisory": false,
+          "final_export_prototype_blocked": false
+        },
+        "blockers": [
+          "missing_card"
+        ],
+        "next_actions": [
+          {
+            "code": "view",
+            "target": {
+              "kind": "requirement",
+              "id": "00000000-0000-0000-0000-000000000001"
+            },
+            "eligible_user_ids": [],
+            "eligible_domains": []
+          }
+        ]
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "actor_user_id": "00000000-0000-0000-0000-000000000001",
+        "action": "card_changed",
+        "requirement_id": null,
+        "card_id": null,
+        "job_id": null,
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "access": {
+        "role": "owner",
+        "review_domains": []
+      },
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 0
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 0,
+        "gap": 0,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 0,
+      "returned": 0,
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:empty:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP404": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP409": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP429": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "stream_limit",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "remote:HTTP503": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "access": {
+        "role": "owner",
+        "review_domains": []
+      },
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 1
+    },
+    "items": [
+      {
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+        "state": "running",
+        "run_id": "00000000-0000-0000-0000-000000000001",
+        "attempts": 1,
+        "progress": {
+          "completed": 1,
+          "total": null
+        },
+        "updated_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 1,
+        "gap": 1,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 1,
+      "returned": 1,
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [
+      {
+        "requirement_id": "00000000-0000-0000-0000-000000000001",
+        "title": "Synthetic requirement",
+        "category": "technical",
+        "starred": false,
+        "bucket": "gap",
+        "card_id": null,
+        "card_revision": null,
+        "card_state": null,
+        "eligibility": null,
+        "review_domain": "technical",
+        "flags": {
+          "human_needs_material": false,
+          "model_needs_material_hint": false,
+          "certificate_date_advisory": false,
+          "final_export_prototype_blocked": false
+        },
+        "blockers": [
+          "missing_card"
+        ],
+        "next_actions": [
+          {
+            "code": "view",
+            "target": {
+              "kind": "requirement",
+              "id": "00000000-0000-0000-0000-000000000001"
+            },
+            "eligible_user_ids": [],
+            "eligible_domains": []
+          }
+        ]
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "returned": 1,
+      "has_more": false
+    },
+    "items": [
+      {
+        "id": "00000000-0000-0000-0000-000000000001",
+        "actor_user_id": "00000000-0000-0000-0000-000000000001",
+        "action": "card_changed",
+        "requirement_id": null,
+        "card_id": null,
+        "job_id": null,
+        "created_at": "2026-10-05T00:00:00Z"
+      }
+    ],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:progress --limit": {
+    "ok": true,
+    "command": "task progress",
+    "data": {
+      "access": {
+        "role": "owner",
+        "review_domains": []
+      },
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "next_cursor": null,
+      "returned": 0
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:board --job": {
+    "ok": true,
+    "command": "task board",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "extraction_job_id": "00000000-0000-0000-0000-000000000001",
+      "workflow": {
+        "org_id": "00000000-0000-0000-0000-000000000001",
+        "task_id": "00000000-0000-0000-0000-000000000001",
+        "owner_user_id": "00000000-0000-0000-0000-000000000001",
+        "state": "active",
+        "revision": 1,
+        "access_epoch": 1,
+        "last_event_cursor": "opaque-snapshot",
+        "archived_at": null,
+        "archived_by_user_id": null
+      },
+      "counts": {
+        "total": 0,
+        "gap": 0,
+        "draft_card": 0,
+        "pending_review": 0,
+        "needs_material": 0,
+        "confirmed": 0,
+        "comply_only": 0
+      },
+      "matching": 0,
+      "returned": 0,
+      "next_cursor": null,
+      "event_cursor": "opaque-snapshot",
+      "as_of": "2026-10-05T00:00:00Z",
+      "refresh_by": "2026-10-05T00:00:25Z",
+      "jobs": [],
+      "activity": []
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:activity": {
+    "ok": true,
+    "command": "task activity",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "returned": 0,
+      "has_more": false
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:empty:events --wait-seconds": {
+    "ok": true,
+    "command": "task events",
+    "data": {
+      "org_id": "00000000-0000-0000-0000-000000000001",
+      "task_id": "00000000-0000-0000-0000-000000000001",
+      "next_cursor": null,
+      "head_cursor": "opaque-snapshot",
+      "has_more": false,
+      "reset_required": {
+        "type": "reset_required",
+        "reason": "initial_snapshot_required",
+        "head_cursor": "opaque-snapshot"
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP404": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "not_found",
+        "message": "Synthetic failure",
+        "exit_code": 4
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP409": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "revision_conflict",
+        "message": "Synthetic failure",
+        "exit_code": 2
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP429": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "stream_limit",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  },
+  "local:HTTP503": {
+    "ok": false,
+    "command": "task activity",
+    "data": {
+      "error": {
+        "code": "unavailable",
+        "message": "Synthetic failure",
+        "exit_code": 3
+      }
+    },
+    "items": [],
+    "warnings": [],
+    "cost": {
+      "calls": 0,
+      "llm_tokens": 0,
+      "ocr_pages": 0,
+      "search_requests": 0,
+      "browser_units": 0,
+      "unresolved_calls": 0
+    },
+    "duration_ms": 0
+  }
+}

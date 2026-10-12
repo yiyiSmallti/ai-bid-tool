@@ -100,7 +100,7 @@ def worker(job):
 
 
 async def events_access(session, actor, task_id, event_ids, *, execute=True):
-    from app.services.task_workflow import access as task_access
+    from app.services.task_access import access as task_access
 
     # Replays and worker admission need the same live task ceiling as the
     # original human card decision; an org memory scope alone is insufficient.

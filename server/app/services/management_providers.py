@@ -41,7 +41,7 @@ from app.services.management_products import (
     settings_for,
     too_large,
 )
-from app.services.task_workflow import live_actor
+from app.services.task_access import live_actor
 
 COMMANDS = {
     "settings": "provider show",

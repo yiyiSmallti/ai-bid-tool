@@ -15,8 +15,8 @@ from uuid import UUID, uuid4
 import pytest
 from app.models.entities import AuditLog, TaskResource
 from sqlalchemy import func, select, text
+from task_access_fixtures import add_member, archive_task, person, workflow
 from test_resources import DATA, create, task
-from test_team_workflow_membership import add_member, person, workflow
 
 
 async def lifecycle(api, auth, product, content_revision, lifecycle_revision, state):
@@ -157,7 +157,7 @@ async def test_library_access_never_grants_task_pinning(
     user, auth = await person(api, admin_engine, tenants["orgs"][0], org_role)
     if task_role:
         added = await add_member(api, headers[0], task_id, user, 1, task_role, domains)
-        assert added.status_code == 200, added.text
+        assert added.active
     visible = await api.get(
         f"/v4/management/resources/products/{product['product_id']}", headers=auth
     )
@@ -173,13 +173,8 @@ async def test_archive_denies_even_inactive_duplicate_but_keeps_pin_readable(api
     assert selected.status_code == 200
     stopped = await lifecycle(api, headers[0], product["product_id"], 1, 0, "inactive")
     assert stopped.status_code == 200
-    state = await workflow(api, headers[0], task_id)
-    archived = await api.post(
-        f"/v4/tasks/{task_id}/archive",
-        headers=headers[0],
-        json={"expected_revision": state["revision"], "reason": "Synthetic pin archival"},
-    )
-    assert archived.status_code == 200, archived.text
+    await workflow(api, headers[0], task_id)
+    await archive_task(api, headers[0], task_id)
     denied = await pin(api, headers[0], task_id, product["product_id"])
     assert denied.status_code == 409
     assert denied.json()["data"]["error"]["code"] == "task_archived"
@@ -203,7 +198,7 @@ async def test_foreign_missing_and_removed_member_pin_masking(api, headers, tena
         results.append(response.json()["data"]["error"])
     user, auth = await person(api, admin_engine, tenants["orgs"][0], "technical")
     added = await add_member(api, headers[0], own_task, user, 1)
-    assert added.status_code == 200
+    assert added.active
     with admin_engine.begin() as connection:
         connection.execute(
             text("UPDATE memberships SET active=false WHERE org_id=:org AND user_id=:user"),

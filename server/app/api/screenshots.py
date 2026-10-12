@@ -213,7 +213,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         ctx=Depends(context, scope="function"),
     ):
         session, actor = ctx
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(session, actor, task_id, scope="screenshot:read")
         actor = await cards.access(session, actor, "screenshot:read")
@@ -519,7 +519,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     )
     async def decision_list(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
         session, actor = ctx
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(session, actor, task_id, scope="card:read")
         actor = await cards.access(session, actor, "card:read")

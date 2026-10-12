@@ -20,9 +20,9 @@ from app.services.auth import HUMAN_ONLY_SCOPES
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
+from task_access_fixtures import add_member, archive_task, person, workflow
 from test_features import metadata, product, task
 from test_management_products import lifecycle
-from test_team_workflow_membership import add_member, person, workflow
 
 BASE = "/v4/management/resources/features"
 
@@ -410,14 +410,8 @@ async def test_two_task_pins_feature_stop_restore_and_archive(api, headers):
         (empty, 1, None),
     ):
         assert (await pin(api, headers[0], task_id, row, revision, lot)).status_code == 409
-    state = await workflow(api, headers[0], first)
-    assert (
-        await api.post(
-            f"/v4/tasks/{first}/archive",
-            headers=headers[0],
-            json={"expected_revision": state["revision"], "reason": "Synthetic feature archive"},
-        )
-    ).status_code == 200
+    await workflow(api, headers[0], first)
+    await archive_task(api, headers[0], first)
     assert (await pin(api, headers[0], first, row)).json()["data"]["error"][
         "code"
     ] == "task_archived"
@@ -452,9 +446,7 @@ async def test_library_detail_does_not_grant_task_pinning(
     task_id = await task(api, headers[0])
     user, auth = await person(api, admin_engine, tenants["orgs"][0], org_role)
     if task_role:
-        assert (
-            await add_member(api, headers[0], task_id, user, 1, task_role, domains)
-        ).status_code == 200
+        assert (await add_member(api, headers[0], task_id, user, 1, task_role, domains)).active
     assert (await api.get(f"{BASE}/{row['feature_id']}", headers=auth)).status_code == 200
     assert (await pin(api, auth, task_id, row)).status_code == status
 

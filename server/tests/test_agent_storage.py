@@ -92,7 +92,7 @@ async def agent_history(application, tenants):
     )
     from app.models.entities import Document, Job, Membership, Task
     from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
-    from app.services.task_workflow import seed
+    from app.services.task_access import seed
     from sqlalchemy import select
 
     org, user = tenants["orgs"][0], tenants["users"][0]

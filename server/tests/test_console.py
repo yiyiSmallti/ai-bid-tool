@@ -23,7 +23,17 @@ async def test_console_routes_assets_and_traversal(tenants, tmp_path, build):
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        for path in ("/app", "/app/", "/app/platform/orgs", "/app/setup-password"):
+        for path in (
+            "/app",
+            "/app/",
+            "/app/platform/login",
+            "/app/platform/models",
+            "/app/platform/credentials",
+            "/app/platform/clef",
+            "/app/platform/trust-anchors",
+            "/app/org/login",
+            "/app/org/tasks",
+        ):
             response = await api.get(path)
             assert response.status_code == 200 and "<title>console</title>" in response.text
             assert "default-src 'self'" in response.headers["content-security-policy"]

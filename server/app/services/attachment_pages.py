@@ -19,7 +19,7 @@ from app.schemas import attachment_contracts as c
 from app.schemas.evidence_source_contracts import EvidenceSourcePreview
 from app.schemas.screenshot_contracts import ImagePlan
 from app.services import attachments as a
-from app.services import evidence_sources, screenshots, task_workflow
+from app.services import evidence_sources, screenshots, task_access
 from app.services.versioned import audit
 
 
@@ -27,7 +27,7 @@ async def source_row(session, actor, source_id, *, raw=False, write=False, lock=
     row = await a.required(session, EvidenceSource, source_id)
     if row.source_kind != "user_supplied_attachment_pdf":
         raise not_found()
-    await task_workflow.access(
+    await task_access.access(
         session,
         actor,
         row.task_id,
@@ -189,7 +189,7 @@ async def archive_view(session, actor, row):
 
 
 async def create_source(session, actor, task_id, body, storage):
-    await task_workflow.access(
+    await task_access.access(
         session, actor, task_id, scope="task:attachment", write=True, lock=False
     )
     for scope in (
@@ -299,7 +299,7 @@ async def source(session, actor, source_id):
 
 
 async def sources(session, actor, task_id, query):
-    await task_workflow.access(session, actor, task_id, scope="attachment:read")
+    await task_access.access(session, actor, task_id, scope="attachment:read")
     stmt = (
         select(EvidenceSource)
         .join(TaskAttachment, TaskAttachment.id == EvidenceSource.task_attachment_id)
@@ -595,7 +595,7 @@ async def rendition_gate(session, actor, asset_or_id, *, history=False):
     )
     if asset.source_kind != "attachment_page":
         return
-    await task_workflow.access(session, actor, asset.task_id, scope="attachment:page:read")
+    await task_access.access(session, actor, asset.task_id, scope="attachment:page:read")
     for scope in ("screenshot:read", "evidence:source:read"):
         actor.require(scope)
     row = await source_row(session, actor, asset.evidence_source_id)

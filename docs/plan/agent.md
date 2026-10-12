@@ -185,7 +185,7 @@ Scope reduction alone cannot protect human responsibility; retain actor_kind.
 
 The scope intersection also passes the current task membership, task role,
 lifecycle and review-domain boundaries in
-[Team workflow authorization](team-workflow.md#membership-ownership-and-authorization).
+[Task access](../../server/app/services/task_access.py).
 Start, resume and message require active owner/contributor task membership;
 the human administrator's recovery exception does not authorize agent work.
 Every tool, model admission and child publication rechecks that boundary using

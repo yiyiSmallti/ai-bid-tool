@@ -49,8 +49,8 @@ from app.services import drafts, score_generation, score_inputs, score_normaliza
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.extraction import locate_sent_source_quote
+from app.services.task_access import access as task_access
 from app.services.task_authorization import task_authorized
-from app.services.task_workflow import access as task_access
 from app.services.versioned import audit
 
 

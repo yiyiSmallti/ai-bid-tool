@@ -26,6 +26,7 @@ from app.services import bid_review_privacy
 from bid_signature_fixtures import gm_fixture, signed_pdf
 from sqlalchemy import func, select, text
 from sqlalchemy.exc import DBAPIError
+from task_access_fixtures import add_member, person, workflow
 from test_bid_review_run_db import (
     BIDDER,
     PRICE,
@@ -49,7 +50,6 @@ from test_bid_review_upload_db import preview as prepare_preview
 from test_bid_review_upload_db import submit as prepare_submit
 from test_check_combined import install_resolver
 from test_confidential_values import add_field, set_value
-from test_team_workflow_membership import add_member, person, workflow
 
 CLAUSES = (
     "★ Delivery must occur within thirty calendar days.",

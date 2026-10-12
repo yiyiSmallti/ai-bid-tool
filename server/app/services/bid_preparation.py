@@ -16,7 +16,7 @@ from app.core.pdf_raster import MAX_EDGE_PX, MAX_PIXELS, MIN_OCR_DPI, OCR_DPI
 from app.core.security import Secrets
 from app.models.bid_review import BidPreparation, BidSubmission
 from app.providers.converter import MAX_PDF_BYTES
-from app.services import task_workflow
+from app.services import task_access
 from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, Identity, set_actor_context
 
 PREPARATION_VERSION = "bid-prepare-v2"
@@ -147,7 +147,7 @@ async def worker_access(session, job, *, bind_context=True) -> Identity:
         job_id=job.id,
         run_id=job.run_id,
     )
-    _, _, member = await task_workflow.access(
+    _, _, member = await task_access.access(
         session,
         actor,
         job.task_id,
@@ -191,7 +191,7 @@ async def job_access(session, actor, job, *, cancel=False) -> None:
     )
     if submission is None or preparation is None:
         raise not_found()
-    _, _, member = await task_workflow.access(
+    _, _, member = await task_access.access(
         session,
         actor,
         submission.task_id,

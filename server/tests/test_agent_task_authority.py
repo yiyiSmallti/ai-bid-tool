@@ -24,11 +24,11 @@ from app.models.response_cards import ResponseCard
 from app.models.team_workflow import TaskEvent, TaskMember
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
+from task_access_fixtures import add_member, archive_task, person, remove_member, workflow
 from task_fixtures import actor_context_async
 from test_agent_workflow import advance, decision_reply, start_body, workflow_client
 from test_card_generation import DraftVendor
 from test_response_cards import create_tender, sanitized_artifact, select_real_materials
-from test_team_workflow_membership import add_member, person, workflow
 
 
 @pytest.fixture
@@ -57,7 +57,7 @@ async def enroll(case, role="contributor", domains=None):
     result = await add_member(
         case["api"], case["owner"], case["task"], case["user"], current["revision"], role, domains
     )
-    assert result.status_code == 200, result.text
+    assert result.active
 
 
 async def start(case, header=None, body=None):
@@ -107,13 +107,7 @@ async def test_read_or_review_members_cannot_start_work(authority_case, role, do
 async def test_archived_task_blocks_agent_start(authority_case):
     case = authority_case
     await enroll(case)
-    current = await workflow(case["api"], case["owner"], case["task"])
-    archived = await case["api"].post(
-        f"/tasks/{case['task']}/archive",
-        headers=case["owner"],
-        json={"expected_revision": current["revision"], "reason": "Synthetic idle archive"},
-    )
-    assert archived.status_code == 200, archived.text
+    await archive_task(case["api"], case["owner"], case["task"])
     denied = await start(case)
     assert denied.status_code == 409, denied.text
     assert denied.json()["data"]["error"]["code"] == "task_archived"
@@ -148,13 +142,7 @@ async def test_removed_member_stops_worker_and_cannot_resume(
     if checkpoint == "paused":
         paused = await advance(case["api"], case["app"], case["member"], str(sid))
         assert paused["session"]["state"] == "paused"
-    current = await workflow(case["api"], case["owner"], case["task"])
-    removed = await case["api"].post(
-        f"/tasks/{case['task']}/members/{case['user']}/remove",
-        headers=case["owner"],
-        json={"expected_revision": current["revision"], "reason": "Synthetic task revocation"},
-    )
-    assert removed.status_code == 200, removed.text
+    await remove_member(case["api"], case["owner"], case["task"], case["user"])
     before = len(sent)
     cleanup_context = {}
     original_pause = agents.pause
@@ -248,17 +236,8 @@ async def test_revocation_during_dispatched_decision_retains_call_and_stops_outp
     async def revoke_after_dispatch(body):
         assert "session_id" in body
         sent.append(body["session_id"])
-        current = await workflow(case["api"], case["owner"], case["task"])
-        removed = await case["api"].post(
-            f"/tasks/{case['task']}/members/{case['user']}/remove",
-            headers=case["owner"],
-            json={
-                "expected_revision": current["revision"],
-                "reason": "Synthetic revocation after provider dispatch",
-            },
-        )
-        removals.append(removed.status_code)
-        assert removed.status_code == 200, removed.text
+        await remove_member(case["api"], case["owner"], case["task"], case["user"])
+        removals.append(case["user"])
         return decision_reply(
             {
                 "kind": "tool",
@@ -284,7 +263,7 @@ async def test_revocation_during_dispatched_decision_retains_call_and_stops_outp
     # The removed member can no longer poll through advance; execute the admitted
     # controller and inspect its retained checkpoint in the same tenant directly.
     await case["app"].state.processor(str(case["org"]), str(controller_id))
-    assert len(sent) == 1 and removals == [200]
+    assert len(sent) == 1 and removals == [case["user"]]
     async with case["app"].state.db.transaction(case["org"]) as session:
         member = await session.scalar(
             select(TaskMember).where(
@@ -442,13 +421,7 @@ async def test_child_publication_preserves_job_event_provenance(authority_case):
             "events": [event.payload for event in events],
             "audit_actor_kinds": [row.actor_kind for row in audits],
         }
-    current = await workflow(case["api"], case["owner"], case["task"])
-    archived = await case["api"].post(
-        f"/tasks/{case['task']}/archive",
-        headers=case["owner"],
-        json={"expected_revision": current["revision"], "reason": "Synthetic paused archive"},
-    )
-    assert archived.status_code == 200, archived.text
+    await archive_task(case["api"], case["owner"], case["task"])
     resumed = await case["api"].post(
         f"/v4/agent-sessions/{sid}/resume",
         headers=case["member"],

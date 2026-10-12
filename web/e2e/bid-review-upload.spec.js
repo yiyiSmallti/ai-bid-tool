@@ -29,12 +29,11 @@ async function fixture(page, options = {}) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
-    if (path === "/health") return route.fulfill({ json: result("health", { org_signup_enabled: false }) });
+    if (path === "/health") return route.fulfill({ json: result("health", { status: "ok" }) });
     expect(request.headers()["x-org-id"]).toBe(ids.org);
     let response;
     if (path === "/org/current") response = result("org current", { org_id: ids.org, user_id: ids.user, role: state.role });
-    else if (path === `/tasks/${ids.task}/workflow`) response = result("task workflow", { workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: ids.user, revision: 1 } });
-    else if (path === `/tasks/${ids.task}/members`) response = result("task member list", { org_id: ids.org, task_id: ids.task, next_cursor: null }, [{ user_id: ids.user, role: state.role === "viewer" ? "observer" : "contributor", active: true }]);
+    else if (path === `/tasks/${ids.task}/progress`) response = result("task progress", { access: {role:state.role === "viewer" ? "observer" : "contributor",review_domains:[]},event_cursor:"opaque-snapshot",workflow: { org_id: ids.org, task_id: ids.task, state: "active", owner_user_id: ids.user, revision: 1 } });
     else if (method === "GET" && path === `/tasks/${ids.task}/bid-submissions`) {
       expect(url.pathname.startsWith("/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
       response = result("review submission list", { task_id: ids.task, total: state.uploads ? 1 : 0, next_cursor: null }, state.uploads ? [submission()] : []);

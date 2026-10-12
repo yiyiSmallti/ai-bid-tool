@@ -65,7 +65,6 @@ SCOPES = {
 
 ROLE_SCOPES = {
     "admin": {
-        "member:manage",
         "provider:write",
         "evidence:source:read",
         "evidence:source:write",
@@ -162,12 +161,8 @@ for _role, _scopes in ROLE_SCOPES.items():
     _scopes.add("agent:read")
     if _role != "viewer":
         _scopes.update({"agent:run", "agent:cancel"})
-    _scopes.add("card:comment")
     if _role in {"admin", "bidder"}:
-        _scopes.update({"task:members:write", "task:archive", "card:assign", "task:review-policy"})
         _scopes.update({"certificate:lifecycle", "profile:lifecycle"})
-    if _role in {"bidder", "technical"}:
-        _scopes.add("card:cosign")
     _scopes.update({"memory:read", "memory:retrieve"})
     if _role != "viewer":
         _scopes.update({"memory:write", "memory:candidate:run"})
@@ -208,7 +203,6 @@ for _role in ("admin", "bidder", "technical"):
 
 
 HUMAN_ONLY_SCOPES = {
-    "member:manage",
     "template:file:read",
     "evidence:annotate",
     "certificate:lifecycle",
@@ -218,12 +212,6 @@ HUMAN_ONLY_SCOPES = {
     "agent:read",
     "agent:run",
     "agent:cancel",
-    "task:members:write",
-    "task:archive",
-    "card:assign",
-    "card:comment",
-    "task:review-policy",
-    "card:cosign",
     "evidence:confirm",
     "export",
     "confidential:write",

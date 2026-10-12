@@ -46,7 +46,7 @@ export async function fixture(page, options = {}) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
       return route.fulfill({ contentType: { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml" }[extname(file)] ?? "application/octet-stream", body: readFileSync(file) });
     }
-    if (method === "GET" && path === "/health") return route.fulfill({ json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0} });
+    if (method === "GET" && path === "/health") return route.fulfill({ json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0} });
     const body = request.postData() ? request.postDataJSON() : undefined;
     state.requests.push({ method, path, versioned_path: versionedPath, query: Object.fromEntries(url.searchParams), ...(body ? { body } : {}) });
     try {
@@ -58,29 +58,12 @@ export async function fixture(page, options = {}) {
       if (extra) return route.fulfill({ status: extra.status ?? 200, json: extra.payload });
       if (method === "GET" && path === "/org/current") response = result("org current", { org_id: state.org, role: state.role, user_id: uuid(3) });
       else if (method === "GET" && path === `/tasks/${ids.task}`) response = result("task get", { id: ids.task, org_id: state.org, name: "合成评估任务", tender_number: "SYN-001", deadline: null, created_by: uuid(3), created_at: now, model_redaction_enabled: true, model_redaction_revision: 1, model_redaction_by: uuid(3) });
-      // Task pages also load the team workflow header and its live-progress stream; the
-      // assessment flows only need an active task and a stream that sends one heartbeat.
-      else if (method === "GET" && path === `/tasks/${ids.task}/workflow`) response = result("task workflow", { workflow: { org_id: state.org, task_id: ids.task, owner_user_id: uuid(3), state: "active", revision: 1, access_epoch: 1, last_event_cursor: "opaque-snapshot", co_sign_starred: false, rule_revision: 1, archived_at: null, archived_by_user_id: null } });
-      else if (method === "GET" && path === `/tasks/${ids.task}/members`) {
-        // The signed-in user's task membership mirrors the org role used by each scenario.
+      // Task permission reads use the current actor's access grant from progress.
+      else if (method === "GET" && path === `/tasks/${ids.task}/progress`) {
         const [role, review_domains] = { bidder: ["owner", ["commercial"]], technical: ["contributor", ["technical"]] }[state.role] ?? ["observer", []];
-        response = result("task member list", { org_id: state.org, task_id: ids.task, next_cursor: null, returned: 1, has_more: false }, [{ org_id: state.org, task_id: ids.task, user_id: uuid(3), display_label: "合成成员", role, active: true, review_domains, revision: 1 }]);
+        response = result("task progress", { org_id: state.org, task_id: ids.task, access: { role, review_domains }, event_cursor: "opaque-snapshot", workflow: { org_id: state.org, task_id: ids.task, owner_user_id: uuid(3), state: "active", revision: 1, access_epoch: 1, last_event_cursor: "opaque-snapshot", archived_at: null, archived_by_user_id: null } });
       }
       else if (method === "GET" && path === `/tasks/${ids.task}/events`) return route.fulfill({ contentType: "text/event-stream", body: `data: ${JSON.stringify({ type: "heartbeat", cursor: "opaque-snapshot", as_of: now })}\n\n` });
-      else if (method === "GET" && path === `/tasks/${ids.task}/review-rule`) response = result("task review-rule show", { rule: { org_id: state.org, task_id: ids.task, workflow_revision: 1, rule_revision: 1, co_sign_starred: false }, dry_run: false, affected_requirements: 0 });
-      else if (method === "GET" && path === `/tasks/${ids.task}/requirements/${ids.requirement}/review-policy`) {
-        expect(url.searchParams.get("extraction_job_id")).toBe(ids.extract);
-        response = result("card policy show", { policy: { org_id: state.org, task_id: ids.task, extraction_job_id: ids.extract, requirement_id: ids.requirement, revision: 0, primary_domain: "technical", co_sign_required: false, starred: false, co_sign_starred: false, task_rule_revision: 1, required_domains: ["technical"] } });
-      }
-      else if (method === "GET" && path === `/cards/${ids.card}/signoffs`) response = result("card signoff list", { org_id: state.org, task_id: ids.task, card_id: ids.card, thread_id: null, returned: 0, has_more: false, next_cursor: null, round: null, summary: { status: "not_required", round_revision: 0, required_domains: ["technical"], signed_domains: [], pending_domains: ["technical"] } });
-      else if (method === "GET" && path === `/cards/${ids.card}/threads`) {
-        expect(Number(url.searchParams.get("limit"))).toBeLessThanOrEqual(100);
-        response = result("card thread list", { org_id: state.org, task_id: ids.task, card_id: ids.card, thread_id: null, next_cursor: null, returned: 0, has_more: false });
-      }
-      else if (method === "GET" && path.startsWith(`/cards/${ids.card}/threads/`) && path.endsWith("/comments")) {
-        expect(Number(url.searchParams.get("limit"))).toBeLessThanOrEqual(100);
-        response = result("card comment list", { org_id: state.org, task_id: ids.task, card_id: ids.card, thread_id: path.split("/")[4], next_cursor: null, returned: 0, has_more: false });
-      }
       else if (method === "GET" && path === `/tasks/${ids.task}/documents`) response = result("task document list", { task_id: ids.task }, [{ id: ids.document, task_id: ids.task, name: "合成招标文件.pdf", sha256: hash, media_type: "application/pdf", page_count: 5, status: "parsed", citation_mode: "page", created_at: now }]);
       else if (method === "GET" && path === `/tasks/${ids.task}/extractions`) response = result("req history", {}, [{ job_id: ids.extract, document_id: ids.document, reasoning: null, model: "synthetic-model", status: "succeeded", created_at: now, finished_at: now, saved: 1200, rejected: 0, tokens: 0, error: null, latest: true }]);
       else if (method === "GET" && ["/confidential-fields", "/confidential-values", `/tasks/${ids.task}/exports`].includes(path)) response = result(path.endsWith("exports") ? "export list" : "confidential list");

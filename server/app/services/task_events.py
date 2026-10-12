@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.errors import ServiceError, not_found
 from app.core.security import TokenSigner
 from app.models.team_workflow import TaskEvent, TaskEventHead
-from app.schemas.team_workflow import (
+from app.schemas.task_board import (
     EventReplayView,
     StreamResetRequired,
     TaskEventPayload,
@@ -95,7 +95,7 @@ async def head(session, org_id, task_id):
 
 async def current_cursor(session, actor, task_id, settings, workflow=None):
     if workflow is None:
-        from app.services.task_workflow import access
+        from app.services.task_access import access
 
         _, workflow, _ = await access(session, actor, task_id)
     row = await head(session, actor.org_id, task_id)
@@ -109,7 +109,7 @@ async def append(
     value = PAYLOAD.validate_python(payload).model_dump(mode="json")
     if len(json.dumps(value, separators=(",", ":")).encode()) > 1800:
         if value["type"] == "board_changed":
-            from app.schemas.team_workflow import BoardChanged
+            from app.schemas.task_board import BoardChanged
 
             value = BoardChanged(
                 invalidate_all=True, extraction_job_id=value.get("extraction_job_id")
@@ -184,7 +184,7 @@ async def visible_job(session, actor, job, storage):
 
 async def replay(session, actor, task_id, settings, storage, *, cursor=None, limit=100):
     from app.models.entities import Job
-    from app.services.task_workflow import access
+    from app.services.task_access import access
 
     _, workflow, _ = await access(session, actor, task_id)
     actor.require("card:read")
@@ -258,13 +258,21 @@ async def replay(session, actor, task_id, settings, storage, *, cursor=None, lim
             more = True
             break
         scanned = event.seq
+        payload = dict(event.payload)
+        if event.event_kind == "board_changed":
+            # Old durable events can address retired discussion objects. Preserve
+            # their invalidation meaning without exposing those objects publicly.
+            retired = payload.pop("thread_id", None) or payload.pop("comment_id", None)
+            payload.pop("comment_id", None)
+            if retired and not payload.get("requirement_ids") and not payload.get("card_ids"):
+                payload["invalidate_all"] = True
         output.append(
             TaskEventView(
                 event_id=event.id,
                 org_id=actor.org_id,
                 task_id=task_id,
                 cursor=issue_cursor(actor, task_id, workflow, settings, seq=event.seq),
-                payload=event.payload,
+                payload=PAYLOAD.validate_python(payload),
                 created_at=event.created_at,
             )
         )

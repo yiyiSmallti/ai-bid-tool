@@ -1,19 +1,22 @@
-"""Explicit task setup through real workflow services for synthetic DB fixtures.
+"""Explicit owner-connection task setup for synthetic DB fixtures.
 
 Existing SQL gate fixtures own synchronous transactions. The narrow facade keeps
 those transactions and their triggers intact while running the same authorization
 services as the async API. Unexpected asynchronous I/O fails immediately.
 """
 
+import os
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from app.core.config import Settings
 from app.models.entities import Membership, User
 from app.models.team_workflow import TaskMember, TaskWorkflow
-from app.schemas.team_workflow import TaskMemberSet, TaskOwnerHandover
 from app.services.auth import ROLE_SCOPES, Identity, set_actor_context
-from app.services.task_workflow import handover, seed, set_member
-from sqlalchemy import select, text
+from app.services.task_access import seed
+from sqlalchemy import create_engine, select, text
+from sqlalchemy.orm import Session
 
 
 class ServiceSession:
@@ -291,8 +294,28 @@ async def seed_task_async(session, task):
     return task
 
 
+@contextmanager
+def owner_session(org):
+    """Keep legacy access-state setup on the isolated test owner's connection."""
+    engine = create_engine(os.environ["BID_TEST_ADMIN_URL"])
+    try:
+        with Session(engine, expire_on_commit=False) as session, session.begin():
+            assert session.scalar(text("SELECT current_user")) != "bid_app"
+            session.execute(
+                text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org)}
+            )
+            yield session
+    finally:
+        engine.dispose()
+
+
 async def related_task(session, org, user, source_task_id, *, name, task_id=None):
-    """Create another valid task for a same-org relational-binding negative case."""
+    """Create committed same-org parents before exercising runtime binding guards.
+
+    Read the source through the caller's transaction, which may have uncommitted
+    fixture state. Only the independent new task is written by the test owner;
+    runtime task-member management remains denied by the unchanged SQL trigger.
+    """
     from app.models.entities import Task
 
     workflow = await session.scalar(
@@ -310,35 +333,21 @@ async def related_task(session, org, user, source_task_id, *, name, task_id=None
     )
     assert tested_member is not None and tested_member.active
     owner = workflow.owner_user_id
-    task = await seed_task_async(
-        session, Task(id=task_id or uuid4(), org_id=org, created_by=owner, name=name)
-    )
-    if user != owner:
-        owner_org_member = await session.scalar(
-            select(Membership).where(Membership.org_id == org, Membership.user_id == owner)
+    with owner_session(org) as fixture:
+        task = seed_task(
+            fixture, Task(id=task_id or uuid4(), org_id=org, created_by=owner, name=name)
         )
-        assert owner_org_member is not None
-        actor = Identity(owner, org, set(ROLE_SCOPES[owner_org_member.role]), owner_org_member.role)
-        await set_member(
-            session,
-            actor,
-            task.id,
-            user,
-            TaskMemberSet(
-                expected_revision=1,
+        if user != owner:
+            add_member(
+                fixture,
+                org,
+                task.id,
+                user,
                 role=tested_member.role,
                 review_domains=list(tested_member.review_domains),
-                reason="Synthetic cross-task case preserves the tested actor's authority",
-            ),
-            Settings(),
-        )
-    member = await session.scalar(
-        select(Membership).where(Membership.org_id == org, Membership.user_id == user)
-    )
-    assert member is not None
-    await set_actor_context(
-        session, Identity(user, org, set(ROLE_SCOPES[member.role]), member.role)
-    )
+            )
+        finish_scope(fixture)
+    await actor_context_async(session, org, user)
     return task
 
 
@@ -363,6 +372,7 @@ def set_role_in_session(session, org, user, role, *, task_ids=None):
     technical/viewer must not leave an ineligible owner or fabricate review grants
     from its org role alone. Task-membership tests do not use this helper.
     """
+    assert session.scalar(text("SELECT current_user")) != "bid_app"
     session.execute(text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org)})
     query = (
         select(TaskWorkflow)
@@ -381,43 +391,45 @@ def set_role_in_session(session, org, user, role, *, task_ids=None):
     )
     assert member is not None
     manager = _manager(session, org) if workflows else None
-    settings = Settings()
     for workflow in workflows:
         if workflow.owner_user_id == user:
-            service_call(
-                handover(
-                    ServiceSession(session),
-                    manager,
-                    workflow.task_id,
-                    TaskOwnerHandover(
-                        expected_revision=workflow.revision,
-                        target_user_id=manager.user_id,
-                        previous_owner_role="contributor",
-                        previous_owner_review_domains=[],
-                        reason="Synthetic fixture separates ownership from review actor",
-                    ),
-                    settings,
+            assert manager is not None
+            previous = session.scalar(
+                select(TaskMember).where(
+                    TaskMember.task_id == workflow.task_id, TaskMember.user_id == user
                 )
             )
+            assert previous is not None
+            previous.role = "contributor"
+            previous.review_domains = []
+            previous.revision += 1
+            previous.workflow_revision = workflow.revision + 1
+            previous.changed_by_user_id = manager.user_id
+            previous.changed_at = datetime.now(UTC)
+            # Retire the unique active owner before inserting its replacement;
+            # the deferred owner/FK checks run after the full transfer is stored.
+            session.flush()
+            add_member(
+                session,
+                org,
+                workflow.task_id,
+                manager.user_id,
+                role="owner",
+                review_domains=[],
+                changed_by_user_id=manager.user_id,
+            )
+            workflow.owner_user_id = manager.user_id
+            session.flush()
     member.role = role
     session.flush()
     for workflow in workflows:
-        service_call(
-            set_member(
-                ServiceSession(session),
-                manager,
-                workflow.task_id,
-                user,
-                TaskMemberSet(
-                    expected_revision=workflow.revision,
-                    role="observer" if role == "viewer" else "contributor",
-                    review_domains={"technical": ["technical"], "bidder": ["commercial"]}.get(
-                        role, []
-                    ),
-                    reason="Synthetic fixture assigns the tested actor's exact task authority",
-                ),
-                settings,
-            )
+        add_member(
+            session,
+            org,
+            workflow.task_id,
+            user,
+            role="observer" if role == "viewer" else "contributor",
+            review_domains={"technical": ["technical"], "bidder": ["commercial"]}.get(role, []),
         )
     # Fixture callers write subsequent rows as the tested actor, not the manager.
     actor_context(session, org, user)
@@ -430,25 +442,30 @@ def set_role(admin_engine, org, user, role, *, task_ids=None):
         set_role_in_session(session, org, user, role, task_ids=task_ids)
 
 
-def add_member(session, org, task_id, user, *, role, review_domains):
-    """Have the actual owner grant one explicitly named test participant."""
+def add_member(session, org, task_id, user, *, role, review_domains, changed_by_user_id=None):
+    """Construct legacy membership using an explicit migration-owner fixture connection."""
+    assert session.scalar(text("SELECT current_user")) != "bid_app"
     workflow = session.scalar(
         select(TaskWorkflow).where(TaskWorkflow.org_id == org, TaskWorkflow.task_id == task_id)
     )
     assert workflow is not None
-    owner = actor_context(session, org, workflow.owner_user_id)
-    return service_call(
-        set_member(
-            ServiceSession(session),
-            owner,
-            task_id,
-            user,
-            TaskMemberSet(
-                expected_revision=workflow.revision,
-                role=role,
-                review_domains=review_domains,
-                reason="Synthetic fixture explicitly enrolls a second task participant",
-            ),
-            Settings(),
+    workflow.revision += 1
+    workflow.access_epoch += 1
+    member = session.scalar(
+        select(TaskMember).where(
+            TaskMember.org_id == org, TaskMember.task_id == task_id, TaskMember.user_id == user
         )
     )
+    if member is None:
+        member = TaskMember(org_id=org, task_id=task_id, user_id=user, revision=1)
+        session.add(member)
+    else:
+        member.revision += 1
+    member.role = role
+    member.review_domains = review_domains
+    member.active = True
+    member.workflow_revision = workflow.revision
+    member.changed_by_user_id = changed_by_user_id or workflow.owner_user_id
+    member.changed_at = datetime.now(UTC)
+    session.flush()
+    return member

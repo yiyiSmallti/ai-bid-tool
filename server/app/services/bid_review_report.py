@@ -24,7 +24,7 @@ from app.services import bid_review as bids
 from app.services import bid_review_findings as findings
 from app.services import bid_review_privacy as privacy
 from app.services import bid_review_run as runs
-from app.services import bid_signature_views, task_workflow
+from app.services import bid_signature_views, task_access
 from app.services import preflight as preflight_service
 from app.services.bid_review_report_renderer import RENDERER_IDENTITY
 from app.services.versioned import audit
@@ -33,7 +33,7 @@ from app.services.versioned import audit
 async def report_access(
     session, actor, task_id, *, scope="bid-review:report:read", write=False, bind_context=True
 ):
-    await task_workflow.access(
+    await task_access.access(
         session, actor, task_id, scope=scope, write=False, lock=write, bind_context=bind_context
     )
     if scope != "bid-review:report:read" and not findings.protected(actor):

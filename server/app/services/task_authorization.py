@@ -34,7 +34,7 @@ def task_authorized(
 
         @wraps(function)
         async def guarded(*args, **kwargs):
-            from app.services.task_workflow import access
+            from app.services.task_access import access
 
             bound = binding.bind(*args, **kwargs)
             bound.apply_defaults()

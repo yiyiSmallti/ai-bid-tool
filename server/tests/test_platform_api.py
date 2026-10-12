@@ -1,17 +1,16 @@
-"""Platform console routes end to end: access boundaries, provisioning, catalog and usage.
+"""Platform console routes end to end: access boundaries, catalog, model probes and usage persistence.
 
 Output-limit failure mode: a reasoning level can bypass the adapter limit using an alias
 or nested vendor configuration; both new and revised catalog entries must reject it.
 """
 
 import json
-import re
-from urllib.parse import urlsplit
+from uuid import uuid4
 
 import httpx
 import pytest
 from app.api.main import create_app
-from app.models.entities import UsageRecord
+from app.models.entities import Membership, Org, PlatformAuditLog, UsageRecord, User
 from conftest import PASSWORD, FakeQueue, seed_platform_credential
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -30,9 +29,6 @@ MODEL = {
     "enabled": True,
 }
 ROUTES = [
-    ("GET", "/platform/orgs", None),
-    ("POST", "/platform/orgs", {"name": "X", "admin_email": "x@example.test"}),
-    ("POST", "/platform/orgs/00000000-0000-0000-0000-000000000001/active", {"active": False}),
     ("GET", "/platform/models", None),
     ("POST", "/platform/models", MODEL),
     (
@@ -40,8 +36,6 @@ ROUTES = [
         "/platform/models/opus-standard/test",
         {"test_org_id": "00000000-0000-0000-0000-000000000001"},
     ),
-    ("GET", "/platform/usage", None),
-    ("GET", "/platform/audit", None),
 ]
 
 
@@ -86,71 +80,6 @@ async def test_platform_routes_reject_org_sessions_tokens_and_anonymous(console,
         for method, path, body in ROUTES:
             response = await console.request(method, path, headers=credentials, json=body)
             assert response.status_code == 401, (method, path, response.text)
-
-
-async def test_provisioned_admin_sets_password_and_signs_in(console, tenants):
-    created = await console.post(
-        "/platform/orgs",
-        headers=console.ops,
-        json={"name": "New org", "admin_email": "Boss@Example.test"},
-    )
-    assert created.status_code == 200, created.text
-    data = created.json()["data"]
-    assert data["user_created"] is True and data["setup_expires_in"] == 86400
-    link = urlsplit(data["setup_url"])
-    assert link.path == "/app/setup-password" and link.query == ""
-    token = link.fragment.removeprefix("token=")
-    new_password = "synthetic-boss-password"
-    assert (
-        await console.post("/auth/setup-password", json={"token": token, "password": new_password})
-    ).status_code == 200
-    login = await console.post(
-        "/auth/login",
-        json={"email": "boss@example.test", "password": new_password, "org_id": data["org_id"]},
-    )
-    assert login.status_code == 200
-
-    # An account that already has a password is attached without a link.
-    reused = (
-        await console.post(
-            "/platform/orgs",
-            headers=console.ops,
-            json={"name": "Second", "admin_email": "a@example.test"},
-        )
-    ).json()["data"]
-    assert reused["user_created"] is False and reused["setup_url"] is None
-
-    orgs = (await console.get("/platform/orgs", headers=console.ops)).json()["items"]
-    assert set(orgs[0]) == {
-        "id",
-        "name",
-        "active",
-        "created_at",
-        "member_count",
-        "admin_emails",
-    }
-    assert {o["name"]: o["admin_emails"] for o in orgs}["New org"] == ["boss@example.test"]
-    audit = (await console.get("/platform/audit", headers=console.ops)).json()["items"]
-    assert audit[0]["action"] == "platform.org.create"
-    assert token not in json.dumps(audit)
-
-
-async def test_disable_and_enable_org(console, tenants):
-    org = tenants["orgs"][0]
-    path = f"/platform/orgs/{org}/active"
-    assert (
-        await console.post(path, headers=console.ops, json={"active": False})
-    ).status_code == 200
-    body = {"email": "a@example.test", "password": PASSWORD, "org_id": str(org)}
-    assert (await console.post("/auth/login", json=body)).status_code == 403
-    assert (await console.post(path, headers=console.ops, json={"active": True})).status_code == 200
-    assert (await console.post("/auth/login", json=body)).status_code == 200
-    missing = await console.post(
-        "/platform/orgs/00000000-0000-0000-0000-000000000009/active",
-        headers=console.ops,
-        json={"active": False},
-    )
-    assert missing.status_code == 404
 
 
 async def test_model_catalog_revisions_and_single_default(console, monkeypatch):
@@ -271,9 +200,6 @@ async def test_default_platform_model_drives_extraction_and_records_usage(
         300,
         "opus-standard",
     )
-    summary = (await console.get("/platform/usage", headers=console.ops)).json()
-    [row] = [item for item in summary["items"] if item["source"] == "platform"]
-    assert row["org_name"] == "Synthetic tenant A"
 
 
 async def test_missing_platform_credential_fails_extraction_explicitly(
@@ -301,13 +227,14 @@ async def test_model_test_button_reports_success_and_failure(console, admin_engi
     console.vendor.responses.extend(
         [anthropic_reply([]), httpx.Response(401, json={"error": {"type": "authentication_error"}})]
     )
-    organization = (
-        await console.post(
-            "/platform/orgs",
-            headers=console.ops,
-            json={"name": "Internal model probe", "admin_email": OPERATOR},
-        )
-    ).json()["data"]["org_id"]
+    org_id = uuid4()
+    with Session(admin_engine) as database, database.begin():
+        operator = database.scalar(select(User).where(User.email == OPERATOR))
+        assert operator is not None
+        database.add(Org(id=org_id, org_id=org_id, name="Internal model probe"))
+        database.flush()
+        database.add(Membership(org_id=org_id, user_id=operator.id, role="admin"))
+    organization = str(org_id)
     probe = {"test_org_id": organization}
     passed = (
         await console.post(
@@ -321,12 +248,13 @@ async def test_model_test_button_reports_success_and_failure(console, admin_engi
         )
     ).json()["data"]
     assert failed["passed"] is False and failed["error"]["code"] == "provider_unavailable"
-    outcomes = [
-        e["outcome"]
-        for e in (await console.get("/platform/audit", headers=console.ops)).json()["items"]
-    ]
-    assert outcomes[:2] == ["failed", "success"]
     with Session(admin_engine) as database:
+        outcomes = database.scalars(
+            select(PlatformAuditLog.outcome)
+            .where(PlatformAuditLog.action == "platform.model.test")
+            .order_by(PlatformAuditLog.created_at.desc())
+        ).all()
+        assert outcomes == ["failed", "success"]
         records = database.scalars(select(UsageRecord).where(UsageRecord.task_id.is_(None))).all()
         assert len(records) == 1 and str(records[0].org_id) == organization
         assert records[0].job_id is not None and records[0].call_id is not None
@@ -384,18 +312,10 @@ async def test_platform_model_probe_requires_org_membership(console, tenants):
     assert denied.status_code == 404 and console.vendor.requests == []
 
 
-@pytest.mark.parametrize(
-    "query", ["from=2026-13", "from=bad", "from=2026-10&to=2026-09", "from=2020-01&to=2026-12"]
-)
-async def test_usage_rejects_invalid_ranges(console, query):
-    response = await console.get(f"/platform/usage?{query}", headers=console.ops)
-    assert response.status_code == 400
-    assert response.json()["data"]["error"]["code"] == "invalid_month"
-
-
-async def test_audit_lists_operator_sign_in(console):
-    entries = (await console.get("/platform/audit?limit=5", headers=console.ops)).json()["items"]
-    assert entries[-1]["action"] == "platform.login" and entries[-1]["actor_email"] == OPERATOR
-
-
-CODE_PATTERN = re.compile(r"^[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){3}$")
+async def test_operator_sign_in_is_persisted_in_audit(console, admin_engine):
+    with Session(admin_engine) as database:
+        entries = database.scalars(
+            select(PlatformAuditLog).where(PlatformAuditLog.action == "platform.login")
+        ).all()
+    assert len(entries) == 1
+    assert (entries[0].actor_email, entries[0].outcome) == (OPERATOR, "success")

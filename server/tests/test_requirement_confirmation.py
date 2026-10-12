@@ -15,6 +15,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
+from task_access_fixtures import archive_task
 from test_response_cards import create_tender, phase_one_client
 
 TABLES = (
@@ -312,7 +313,7 @@ def route_cases(task, job, value):
 async def test_every_review_route_masks_inaccessible_tasks(
     tenants, tmp_path, admin_engine, scope, route_index
 ):
-    from test_team_workflow_membership import person
+    from task_access_fixtures import person
 
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         task, _, job, requirements = await create_tender(
@@ -340,7 +341,7 @@ async def test_every_mutation_requires_active_human_owner_or_contributor(
 ):
     from datetime import UTC, datetime, timedelta
 
-    from test_team_workflow_membership import add_member, person, workflow
+    from task_access_fixtures import add_member, person, workflow
 
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         task, _, job, requirements = await create_tender(
@@ -372,18 +373,10 @@ async def test_every_mutation_requires_active_human_owner_or_contributor(
                 role=authority,
                 domains=["commercial"] if authority == "reviewer" else [],
             )
-            assert response.status_code == 200, response.text
+            assert response.active
         else:
             state = await workflow(api, headers[0], task)
-            response = await api.post(
-                f"/tasks/{task}/archive",
-                headers=headers[0],
-                json={
-                    "expected_revision": state["revision"],
-                    "reason": "Archive synthetic completed extraction",
-                },
-            )
-            assert response.status_code == 200, response.text
+            response = await archive_task(api, headers[0], task)
         method, path, body = route_cases(task, job, value)[route_index]
         response = await api.request(method, path, headers=auth, json=body)
         assert response.status_code == (409 if authority == "archived" else 403), response.text

@@ -140,7 +140,7 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
     else:
         actor.require(JOB_SCOPES.get(job.kind, "task:read"))
     if job.task_id is not None:
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         # The actual initiator is retained; workers receive no human admin recovery.
         worker = replace(actor, actor_kind="worker", job_id=job.id, run_id=job.run_id)

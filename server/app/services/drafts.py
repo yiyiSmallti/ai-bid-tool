@@ -14,7 +14,7 @@ from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevisi
 from app.providers.storage import Storage
 from app.schemas.contracts import Cost
 from app.schemas.response_card_contracts import DraftPreview, DraftRequest, DraftView
-from app.services import requirement_consumption, task_cosign
+from app.services import requirement_consumption
 from app.services import response_cards as cards
 from app.services.auth import Identity
 from app.services.task_authorization import task_authorized
@@ -86,7 +86,7 @@ def gap_reasons(
             reasons.append("needs_reconfirmation")
     if not valid_citation:
         reasons.append("invalid_citation")
-    return task_cosign.review_gap_reasons(
+    return cards.approval_gap_reasons(
         reasons,
         review,
         state=view["state"] if view else None,
@@ -106,7 +106,7 @@ async def assemble(
     reviews = await requirement_consumption.effective(session, requirements)
     if len(requirements) > 2000:
         cards.fail("requirement_manifest_limit", "At most 2000 requirements can be consumed", 422)
-    cosign = await task_cosign.projections(
+    approvals = await cards.review_approvals(
         session,
         actor.org_id,
         list(
@@ -165,7 +165,7 @@ async def assemble(
         else:
             reasons = gap_reasons(
                 view,
-                cosign[card.id] if card else None,
+                approvals[card.id] if card else None,
                 valid_citation=valid_citation,
                 requirement_gap=review_gap,
                 quote_current=cards.revision_quote_hash(revision, requirement)
@@ -182,7 +182,6 @@ async def assemble(
             {
                 "requirement_id": str(requirement.id),
                 "requirement_review": requirement_consumption.fields(review),
-                **(task_cosign.manifest_fields(cosign[card.id]) if card else {}),
                 "card_revision_id": view["revision_id"] if view else None,
                 "source_hash": digest(entry["source"]),
                 "category": requirement.category,
@@ -461,7 +460,6 @@ def current_draft_inputs(requirements: list[Requirement], batch: cards.CardReadB
         current[str(requirement.id)] = {
             "requirement_id": str(requirement.id),
             "requirement_review": requirement_consumption.fields(review),
-            **(task_cosign.manifest_fields(batch.cosign[card.id]) if card else {}),
             "card_revision_id": view["revision_id"] if view else None,
             "source_hash": digest(cards.source(requirement)),
             "category": requirement.category,
@@ -565,7 +563,7 @@ def draft_view(
             batch.requirement_reviews[item.requirement_id]
         )
         if item.kind != "gap" and (
-            review_gap or card is not None and not batch.cosign[card.id]["approved"]
+            review_gap or card is not None and not batch.approvals[card.id]["approved"]
         ):
             current_view = None
             current_revision = None
@@ -578,7 +576,7 @@ def draft_view(
                 )
             entry["reasons"] = gap_reasons(
                 current_view,
-                batch.cosign[card.id] if card else None,
+                batch.approvals[card.id] if card else None,
                 requirement_gap=review_gap,
                 valid_citation=batch.citation_valid(requirement),
                 quote_current=cards.revision_quote_hash(current_revision, requirement)

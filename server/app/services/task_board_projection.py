@@ -8,7 +8,7 @@ uses current relational lineage and never loads response prose into its output.
 from datetime import date
 from uuid import UUID
 
-from sqlalchemy import func, literal, select, union_all
+from sqlalchemy import literal, select, union_all
 
 from app.core.errors import ServiceError
 from app.models.entities import (
@@ -36,72 +36,14 @@ from app.models.screenshots import (
     ScreenshotVendorArchive,
     ScreenshotWithdrawal,
 )
-from app.models.team_workflow import CardCommentMention, CardCommentThread, RequirementWorkflow
 from app.schemas.screenshot_contracts import ContentMapping, ImageEvidenceInput
 from app.services import requirement_consumption, requirement_source, response_cards
 
 
-async def requirements_with_collaboration(session, actor, task_id, extraction, *, limit, member):
-    """Load assignment, thread counts and personal mentions with the requirement query.
-
-    Grouping is task-scoped and indexed; no card/comment bodies are loaded for the
-    board. A mention only resolves for a current human member, never a recovery
-    admin or a token acting for that user.
-    """
-    threads = (
-        select(ResponseCard.requirement_id, func.count(CardCommentThread.id).label("count"))
-        .join(
-            CardCommentThread,
-            (CardCommentThread.org_id == ResponseCard.org_id)
-            & (CardCommentThread.task_id == ResponseCard.task_id)
-            & (CardCommentThread.card_id == ResponseCard.id),
-        )
-        .where(
-            ResponseCard.org_id == actor.org_id,
-            ResponseCard.task_id == task_id,
-            ResponseCard.extraction_job_id == extraction.id,
-        )
-        .group_by(ResponseCard.requirement_id)
-        .subquery()
-    )
-    mentions = (
-        select(ResponseCard.requirement_id, CardCommentMention.thread_id)
-        .join(
-            CardCommentMention,
-            (CardCommentMention.org_id == ResponseCard.org_id)
-            & (CardCommentMention.task_id == ResponseCard.task_id)
-            & (CardCommentMention.card_id == ResponseCard.id),
-        )
-        .where(
-            ResponseCard.org_id == actor.org_id,
-            ResponseCard.task_id == task_id,
-            ResponseCard.extraction_job_id == extraction.id,
-            CardCommentMention.user_id == actor.user_id,
-            literal(
-                member is not None and actor.actor_kind == "session" and actor.token_id is None
-            ),
-        )
-        .distinct(ResponseCard.requirement_id)
-        .order_by(ResponseCard.requirement_id, CardCommentMention.created_at, CardCommentMention.id)
-        .subquery()
-    )
-    return (
-        await session.execute(
-            select(
-                Requirement,
-                RequirementWorkflow,
-                func.coalesce(threads.c.count, 0),
-                mentions.c.thread_id,
-            )
-            .outerjoin(
-                RequirementWorkflow,
-                (RequirementWorkflow.org_id == Requirement.org_id)
-                & (RequirementWorkflow.task_id == Requirement.task_id)
-                & (RequirementWorkflow.extraction_job_id == Requirement.job_id)
-                & (RequirementWorkflow.requirement_id == Requirement.id),
-            )
-            .outerjoin(threads, threads.c.requirement_id == Requirement.id)
-            .outerjoin(mentions, mentions.c.requirement_id == Requirement.id)
+async def scoped_requirements(session, actor, task_id, extraction, *, limit):
+    return list(
+        await session.scalars(
+            select(Requirement)
             .where(
                 Requirement.org_id == actor.org_id,
                 Requirement.task_id == task_id,
@@ -111,7 +53,7 @@ async def requirements_with_collaboration(session, actor, task_id, extraction, *
             .order_by(Requirement.id)
             .limit(limit)
         )
-    ).all()
+    )
 
 
 async def load(session, actor, requirements, task_id, assessment_day, *, review_details=False):
@@ -255,6 +197,9 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
     evidence_by_revision = {}
     for entry in evidence_rows:
         evidence_by_revision.setdefault(entry[0], []).append(entry)
+    approvals = await response_cards.review_approvals(
+        session, actor.org_id, [card.id for card, _ in pairs]
+    )
     views = {}
     for card, revision in pairs:
         requirement = required[card.requirement_id]
@@ -428,14 +373,21 @@ async def load(session, actor, requirements, task_id, assessment_day, *, review_
             "date_advisory": date_advisory,
             "prototype_blocked": prototype_blocked,
         }
-    from app.services import task_cosign
-
-    cosign = await task_cosign.projections(session, actor.org_id, [card.id for card, _ in pairs])
     for view in views.values():
-        projection = cosign[view["id"]]
-        task_cosign.apply_eligibility(view, projection)
-        view["co_sign"] = projection["summary"]
-        view["co_sign_purpose"] = projection["manifest"]["purpose"]
+        approval = approvals.get(view["id"])
+        if approval is not None:
+            response_cards.apply_approval(view, approval)
+            approval_blockers = response_cards.approval_gap_reasons(
+                view["blockers"], approval, state=view["state"], disposition=None
+            )
+            # Legacy policies still block consumption; the board exposes the
+            # retained confirmation state without offering a removed action.
+            view["blockers"] = list(
+                dict.fromkeys(
+                    "needs_reconfirmation" if reason == "cosign_required" else reason
+                    for reason in approval_blockers
+                )
+            )
     from app.services.annotations import board_metadata
 
     annotation_rows = await board_metadata(session, actor, task_id, [card.id for card, _ in pairs])

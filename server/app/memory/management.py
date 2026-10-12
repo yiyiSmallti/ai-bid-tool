@@ -29,7 +29,7 @@ from app.schemas.management_pages import (
     ResourceDetailQuery,
 )
 from app.services import management_products as bounded
-from app.services.task_workflow import live_actor
+from app.services.task_access import live_actor
 
 WARNINGS = ["Memory is guidance, never evidence or human confirmation"]
 
@@ -448,7 +448,7 @@ def feedback_statement(actor, task_id, body, anchor=None):
 
 
 async def feedback_page(session, actor, task_id, body: PageQuery, settings):
-    from app.services.task_workflow import require_read_authority
+    from app.services.task_access import require_read_authority
 
     session.info["management_settings"] = settings
     async with bounded.read_budget(session, body):

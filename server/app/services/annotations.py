@@ -35,9 +35,8 @@ from app.schemas.screenshot_contracts import PixelRect, PNGDescriptor
 from app.services import (
     evidence_sources,
     requirement_consumption,
-    task_cosign,
+    task_access,
     task_events,
-    task_workflow,
 )
 from app.services import (
     preflight as preflight_service,
@@ -74,7 +73,7 @@ def renderer_for(processor=None):
 
 
 async def access(session, actor, task_id, *, create=False, lock=False):
-    result = await task_workflow.access(
+    result = await task_access.access(
         session,
         actor,
         task_id,
@@ -108,8 +107,8 @@ async def worker_access(session, job, *, bind_context=True):
         job_id=job.id,
         run_id=job.run_id,
     )
-    actor = await task_workflow.live_actor(session, actor)
-    _, workflow, member = await task_workflow.access(
+    actor = await task_access.live_actor(session, actor)
+    _, workflow, member = await task_access.access(
         session,
         actor,
         job.task_id,
@@ -687,11 +686,10 @@ async def approval_binding(session, actor, material, evidence_id, *, storage=Non
         evidence.image_sha256,
     ) != (material.asset_id, material.rendition_id, candidate.rendering.image.sha256):
         fail("release_binding_changed", "Evidence does not bind this candidate image")
-    review = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
+    review = (await cards.review_approvals(session, actor.org_id, [card.id]))[card.id]
     if not review["approved"]:
-        fail("approval_stale", "Review policy, signers or source inputs changed")
+        fail("approval_stale", "Review approval or source inputs changed")
     pin = await requirement_pin(session, requirement, confirmed=True)
-    co_sign = task_cosign.manifest_fields(review).get("co_sign")
     if revision.review_domain not in {"commercial", "technical"}:
         fail("approval_not_complete", "A classified review domain is required")
     values = dict(
@@ -712,11 +710,8 @@ async def approval_binding(session, actor, material, evidence_id, *, storage=Non
         root_mapping_sha256=candidate.rendering.root_mapping_sha256,
         reviewed_region=PixelRect.model_validate(evidence.region),
         requirement=pin,
-        decision_kind="cosign"
-        if len(review["manifest"]["required_domains"]) > 1
-        else "single_domain",
+        decision_kind="single_domain",
         review_domain=revision.review_domain,
-        co_sign=co_sign,
         card_content_sha256=card_content_hash(revision),
         evidence_binding_sha256=digest(
             {

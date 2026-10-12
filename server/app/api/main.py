@@ -30,9 +30,6 @@ from app.api.response_cards import create_router as create_response_router
 from app.api.sandbox import create_router as create_sandbox_router
 from app.api.score import create_router as create_score_router
 from app.api.task_board import create_router as create_task_board_router
-from app.api.task_cosign import create_router as create_task_cosign_router
-from app.api.task_discussion import create_router as create_task_discussion_router
-from app.api.task_workflow import create_router as create_task_workflow_router
 from app.api.tenders import create_router as create_tender_router
 from app.core.config import Settings
 from app.core.credential_db import close_connections, get_connections
@@ -300,7 +297,6 @@ def create_app(
             request.scope["path"] = request.scope["path"][3:]
             request.scope["raw_path"] = request.scope["path"].encode()
         request.state.contract_version = version
-        path = request.scope["path"]
         response = await call_next(request)
         response.headers["X-Bid-Contract-Version"] = version
         response.headers["X-Duration-Ms"] = str(int((time.monotonic() - start) * 1000))
@@ -313,12 +309,7 @@ def create_app(
             )
             payload = json.loads(raw)
             if isinstance(payload, dict) and "command" in payload and "duration_ms" in payload:
-                # Public signup receipts carry no per-request timing discriminator.
-                payload["duration_ms"] = (
-                    0
-                    if path == "/auth/org-applications"
-                    else int((time.monotonic() - start) * 1000)
-                )
+                payload["duration_ms"] = int((time.monotonic() - start) * 1000)
                 if "preflight" in payload.get("data", {}):
                     payload["cost"] = payload["data"]["preflight"]["estimate"]
                 raw = json.dumps(payload, ensure_ascii=False).encode()
@@ -375,16 +366,12 @@ def create_app(
                     retryable=error.exit_code == 3,
                 )
             ).model_dump(mode="json")
-        if request.url.path == "/auth/org-applications":
-            body.command = "auth org-application submit"
         retry = {
             "auth_busy": "1",
             "too_many_attempts": "900",
             "stream_limit": "1",
             "board_busy": "1",
         }.get(error.code)
-        if request.url.path == "/auth/org-applications" and error.code == "too_many_attempts":
-            retry = "86400"
         return JSONResponse(
             status_code=error.status,
             content=body.model_dump(mode="json"),
@@ -400,40 +387,6 @@ def create_app(
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request: Request, error: RequestValidationError):
-        if request.url.path == "/org/members" or request.url.path.startswith("/org/members/"):
-            return error_response(
-                request, ServiceError("invalid_input", "Invalid member input", 400, 2)
-            )
-        if request.url.path.startswith(("/platform/enrollment/", "/platform/operators")):
-            from app.services.operator_enrollment import invalid_link
-
-            # Unknown property names can themselves contain a secret. Never reflect loc/input.
-            bad_link = any(
-                tuple(item.get("loc", ())) in {("body", "token"), ("body", "pending")}
-                for item in error.errors()
-            )
-            return error_response(
-                request,
-                invalid_link()
-                if bad_link
-                else ServiceError("invalid_input", "Invalid enrollment input", 422, 2),
-            )
-        if request.url.path == "/auth/org-applications" or request.url.path.startswith(
-            "/platform/org-applications"
-        ):
-            # Never reflect caller-controlled field names or password input.
-            disabled = (
-                request.url.path == "/auth/org-applications" and not settings.org_signup_enabled
-            )
-            return error_response(
-                request,
-                ServiceError(
-                    "signup_disabled" if disabled else "invalid_input",
-                    "Organization signup is disabled" if disabled else "Invalid application input",
-                    404 if disabled else 400,
-                    4 if disabled else 2,
-                ),
-            )
         if request.url.path in {
             "/providers",
             "/providers/test",
@@ -629,11 +582,7 @@ def create_app(
                     )
             raise
 
-    from app.api.org_members import create_router as create_org_member_router
-
-    app.include_router(create_org_member_router(context, crypto))
     app.include_router(create_org_console_router(context, storage, settings))
-    app.include_router(create_task_workflow_router(context, settings))
     from app.api.requirement_confirmation import create_router as create_requirement_review_router
 
     app.include_router(create_requirement_review_router(context, settings))
@@ -642,8 +591,6 @@ def create_app(
     app.include_router(
         create_annotation_router(context, storage, queue, settings, crypto, processor)
     )
-    app.include_router(create_task_cosign_router(context, settings, storage))
-    app.include_router(create_task_discussion_router(context, settings))
     task_board_router = create_task_board_router(context, db, storage, queue, settings)
     app.state.workflow_stream_caps = task_board_router.stream_caps
     app.include_router(task_board_router)

@@ -397,7 +397,7 @@ def test_requirement_cli_validation_prevents_transport(monkeypatch, capsys, tmp_
 
 def test_requirement_schema_and_legacy_boundaries(capsys):
     from app.schemas import requirement_confirmation as schemas
-    from app.schemas.team_workflow import BoardData, BoardRow, TaskProgressData
+    from app.schemas.task_board import BoardData, BoardRow, TaskProgressData
 
     current = command_schema(cli.app)
     with pytest.raises(ValueError, match="Only contract 5.0"):

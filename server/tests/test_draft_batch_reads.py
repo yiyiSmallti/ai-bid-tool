@@ -37,7 +37,7 @@ from app.models.response_cards import DraftRun, ResponseCard, ResponseCardRevisi
 from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.contracts import Result
 from app.schemas.response_card_contracts import DraftView
-from app.services import drafts, task_cosign
+from app.services import drafts
 from app.services import response_cards as cards
 from app.services.agent_tools import provenance
 from app.services.auth import ROLE_SCOPES, Identity
@@ -141,7 +141,7 @@ async def slow_show_draft(session: AsyncSession, actor: Identity, draft_id: UUID
             current_view = await cards.card_view(
                 session, actor, card, current_revision, requirement, requirement_review_gate=False
             )
-            review = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
+            review = (await cards.review_approvals(session, actor.org_id, [card.id]))[card.id]
             entry["reasons"] = drafts.gap_reasons(
                 current_view,
                 review,

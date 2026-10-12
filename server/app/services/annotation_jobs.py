@@ -411,18 +411,9 @@ async def _attempt(execution, storage, renderer, queue):
                     renderer=identity.model_dump(mode="json"),
                     renderer_identity=service.digest(identity.model_dump(mode="json")),
                     confirmed_by=approval.confirmed_by,
-                    review_round_id=approval.co_sign.round_id if approval.co_sign else None,
-                    commercial_signature_id=next(
-                        (s.id for s in approval.co_sign.signatures if s.domain == "commercial"),
-                        None,
-                    )
-                    if approval.co_sign
-                    else None,
-                    technical_signature_id=next(
-                        (s.id for s in approval.co_sign.signatures if s.domain == "technical"), None
-                    )
-                    if approval.co_sign
-                    else None,
+                    review_round_id=None,
+                    commercial_signature_id=None,
+                    technical_signature_id=None,
                     rendering=rendering.model_dump(mode="json"),
                     content_pixel_sha256=rendering.content_pixel_sha256,
                     root_mapping_sha256=rendering.root_mapping_sha256,

@@ -65,7 +65,7 @@ from app.schemas.management_pages import (
 from app.services.auth import Identity, set_actor_context
 from app.services.certificate_files import MISSING_WARNING, file_data
 from app.services.certificates import inspect_dates
-from app.services.task_workflow import live_actor
+from app.services.task_access import live_actor
 from app.services.versioned import audit
 
 WARNINGS = [

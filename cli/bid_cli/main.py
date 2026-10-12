@@ -21,17 +21,10 @@ from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import Contract, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceCreate
 from app.schemas.feature_contracts import FeatureCreate, FeatureUpdate, TaskFeatureSelection
-from app.schemas.org_signup import (
-    OrgApplicationApprove,
-    OrgApplicationListQuery,
-    OrgApplicationReject,
-)
 from app.schemas.platform_contracts import (
     OrgLookup,
-    PasswordSetup,
     PlatformLogin,
     PlatformModelSet,
-    PlatformOrgCreate,
 )
 from app.schemas.profile_contracts import (
     OrgProfileCreate,
@@ -76,7 +69,6 @@ from bid_cli.management_providers import register as register_management_provide
 from bid_cli.management_templates import register as register_management_template_commands
 from bid_cli.memory import app as memory_app
 from bid_cli.memory import memory_job_exit
-from bid_cli.org_members import register as register_org_member_commands
 from bid_cli.platform_clef import app as platform_clef_app
 from bid_cli.platform_credentials import app as platform_credential_app
 from bid_cli.platform_trust_anchors import app as platform_trust_anchor_app
@@ -87,7 +79,7 @@ from bid_cli.schema import command_schema
 from bid_cli.score import app as score_app
 from bid_cli.score import rubric_job_exit, score_job_exit
 from bid_cli.screenshots import register as register_screenshot_commands
-from bid_cli.team_workflow import register as register_team_workflow_commands
+from bid_cli.task_board import register as register_task_board_commands
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 app.add_typer(provider_app, name="provider")
@@ -1320,14 +1312,9 @@ def token_create(
     emit(body, "token create", json_output)
 
 
-platform_app, platform_org_app, platform_model_app, auth_app = (typer.Typer() for _ in range(4))
+platform_app, platform_model_app, auth_app = (typer.Typer() for _ in range(3))
 app.add_typer(platform_app, name="platform")
 app.add_typer(auth_app, name="auth")
-platform_app.add_typer(platform_org_app, name="org")
-platform_org_application_app = typer.Typer()
-platform_org_app.add_typer(platform_org_application_app, name="application")
-platform_operator_app = typer.Typer()
-platform_app.add_typer(platform_operator_app, name="operator")
 platform_app.add_typer(platform_model_app, name="model")
 platform_app.add_typer(platform_clef_app, name="clef")
 platform_app.add_typer(platform_credential_app, name="credential")
@@ -1356,101 +1343,6 @@ def platform_login(
     client().state.save_platform(result["data"].pop("session"))
     result["data"]["authenticated"] = True
     emit(result, "platform login", json_output)
-
-
-@platform_operator_app.command("list")
-def platform_operator_list(json_output: JsonOption = False):
-    emit(call("GET", "/platform/operators", platform=True), "platform operator list", json_output)
-
-
-@platform_org_app.command("list")
-def platform_org_list(json_output: JsonOption = False):
-    emit(call("GET", "/platform/orgs", platform=True), "platform org list", json_output)
-
-
-@platform_org_application_app.command("list")
-def platform_org_application_list(
-    status: Annotated[str, typer.Option()] = "pending",
-    limit: Annotated[int, typer.Option(min=1, max=200)] = 50,
-    json_output: JsonOption = False,
-):
-    query = OrgApplicationListQuery.model_validate({"status": status, "limit": limit})
-    emit(
-        call(
-            "GET",
-            "/platform/org-applications",
-            platform=True,
-            params=query.model_dump(mode="json", exclude_none=True),
-        ),
-        "platform org application list",
-        json_output,
-    )
-
-
-@platform_org_application_app.command("approve")
-def platform_org_application_approve(
-    application_id: Annotated[UUID, typer.Argument()],
-    org_name: Annotated[str | None, typer.Option()] = None,
-    attach_existing_user: Annotated[bool, typer.Option()] = False,
-    json_output: JsonOption = False,
-):
-    body = OrgApplicationApprove(org_name=org_name, attach_existing_user=attach_existing_user)
-    emit(
-        call(
-            "POST",
-            f"/platform/org-applications/{application_id}/approve",
-            platform=True,
-            json=body.model_dump(mode="json"),
-        ),
-        "platform org application approve",
-        json_output,
-    )
-
-
-@platform_org_application_app.command("reject")
-def platform_org_application_reject(
-    application_id: Annotated[UUID, typer.Argument()],
-    reason: Annotated[str, typer.Option()],
-    json_output: JsonOption = False,
-):
-    body = OrgApplicationReject(reason=reason)
-    emit(
-        call(
-            "POST",
-            f"/platform/org-applications/{application_id}/reject",
-            platform=True,
-            json=body.model_dump(mode="json"),
-        ),
-        "platform org application reject",
-        json_output,
-    )
-
-
-@platform_org_app.command("create")
-def platform_org_create(
-    name: Annotated[str, typer.Option()],
-    admin_email: Annotated[str, typer.Option()],
-    json_output: JsonOption = False,
-):
-    body = PlatformOrgCreate.model_validate({"name": name, "admin_email": admin_email})
-    emit(
-        call("POST", "/platform/orgs", platform=True, json=body.model_dump()),
-        "platform org create",
-        json_output,
-    )
-
-
-@platform_org_app.command("set-active")
-def platform_org_set_active(
-    org_id: Annotated[UUID, typer.Option("--id")],
-    active: Annotated[bool, typer.Option("--active/--inactive")],
-    json_output: JsonOption = False,
-):
-    emit(
-        call("POST", f"/platform/orgs/{org_id}/active", platform=True, json={"active": active}),
-        "platform org set-active",
-        json_output,
-    )
 
 
 @platform_model_app.command("list")
@@ -1487,31 +1379,7 @@ def platform_model_test(
     emit(body, "platform model test", json_output, partial_completion_exit(body))
 
 
-@platform_app.command("usage")
-def platform_usage(
-    start: Annotated[str | None, typer.Option("--from", help="First month, YYYY-MM")] = None,
-    end: Annotated[str | None, typer.Option("--to", help="Last month, YYYY-MM")] = None,
-    json_output: JsonOption = False,
-):
-    params = {key: value for key, value in (("from", start), ("to", end)) if value}
-    emit(
-        call("GET", "/platform/usage", platform=True, params=params), "platform usage", json_output
-    )
-
-
-@platform_app.command("audit")
-def platform_audit(
-    limit: Annotated[int, typer.Option(min=1, max=500)] = 100, json_output: JsonOption = False
-):
-    emit(
-        call("GET", "/platform/audit", platform=True, params={"limit": limit}),
-        "platform audit",
-        json_output,
-    )
-
-
-register_org_member_commands(org_app)
-register_team_workflow_commands(task_app, card_app)
+register_task_board_commands(task_app)
 register_management_product_commands(product_app)
 register_management_feature_commands(feature_app)
 register_management_template_commands(template_app)
@@ -1533,22 +1401,6 @@ def auth_orgs(email: Annotated[str, typer.Option()], json_output: JsonOption = F
     emit(
         call("POST", "/auth/orgs", authenticated=False, json=body.model_dump()),
         "auth orgs",
-        json_output,
-    )
-
-
-@auth_app.command("setup-password")
-def auth_setup_password(json_output: JsonOption = False):
-    # Token and password come from the environment so neither appears in argv.
-    body = PasswordSetup.model_validate(
-        {
-            "token": env_secret("BID_SETUP_TOKEN", "setup_token"),
-            "password": env_secret("BID_PASSWORD", "password"),
-        }
-    )
-    emit(
-        call("POST", "/auth/setup-password", authenticated=False, json=body.model_dump()),
-        "auth setup-password",
         json_output,
     )
 

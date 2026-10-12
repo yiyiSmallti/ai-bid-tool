@@ -533,7 +533,7 @@ class ManagementMemoryReads(Protocol):
 
 
 class ManagementConfidential(Protocol):
-    """Reads never decrypt; task owners remain subject to task_workflow.access.
+    """Reads never decrypt; task owners remain subject to task_access.access.
 
     CAS and existing confidential.set_value must share the field lock/transaction.
     Compare current value for this field and exact org/task owner. Dedicated wire

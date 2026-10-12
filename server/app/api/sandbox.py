@@ -182,7 +182,7 @@ def create_router(context, db, storage, queue, crypto, processor):
     )
     async def submit(task_id: UUID, request: Request, ctx=Depends(context, scope="function")):
         session, actor = ctx
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         _, workflow, member = await task_access(session, actor, task_id)
         if member is None or member.role not in {"owner", "contributor"}:

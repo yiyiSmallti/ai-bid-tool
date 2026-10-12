@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.schemas.contracts import CONTRACT_VERSION, Category, Contract, Cost, Result, Source
 from app.schemas.screenshot_contracts import Sha256
-from app.schemas.team_workflow import (
+from app.schemas.task_board import (
     BoardBlocker,
     BoardBucket,
     BoardCounts,
@@ -135,8 +135,8 @@ class ManualEntryPreview(Contract):
 
 class RequirementActorHint(Contract):
     user_id: UUID | None
-    basis: Literal["assignee", "owner", "owner_recovery"]
-    action: Literal["confirm_requirement", "repair_requirement", "assign", "unarchive"]
+    basis: Literal["owner", "owner_recovery"]
+    action: Literal["confirm_requirement", "repair_requirement", "view"]
     can_current_actor_act: bool
 
 
@@ -340,8 +340,6 @@ class RequirementBoardQuery(Contract):
     bucket: ReviewBucket | None = None
     category: Category | None = None
     starred: bool | None = None
-    owner_user_id: UUID | None = None
-    unassigned: bool = False
     review_domain: Literal["commercial", "technical"] | None = None
     blocker: BoardBlocker | Literal["requirement_unconfirmed", "requirement_invalidated"] | None = (
         None
@@ -349,12 +347,6 @@ class RequirementBoardQuery(Contract):
     mine: bool = False
     cursor: Cursor | None = None
     limit: int = Field(default=50, strict=True, ge=1, le=100)
-
-    @model_validator(mode="after")
-    def assignee_filter(self):
-        if self.unassigned and self.owner_user_id is not None:
-            raise ValueError("unassigned and owner_user_id filters are mutually exclusive")
-        return self
 
 
 class RequirementBoardOverlay(Contract):

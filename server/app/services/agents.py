@@ -49,7 +49,7 @@ from app.services import confidential, redaction
 from app.services import preflight as preflight_service
 from app.services.auth import AGENT_SCOPES, ROLE_SCOPES, membership, set_actor_context
 from app.services.response_cards import access, generation_materials_stale, linked_evidence
-from app.services.task_workflow import access as task_access
+from app.services.task_access import access as task_access
 from app.services.versioned import audit
 
 TERMINAL = {"completed", "partial", "failed", "cancelled"}

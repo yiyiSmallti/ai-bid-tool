@@ -8,8 +8,9 @@ Status: **Approved; first slice implemented.** Certificate pages are enabled;
 database and browser integration acceptance remains pending. Corresponds to
 [roadmap](roadmap.md) B05 and its B07/F03 dependencies.
 
-The owner's cloud-hosted team workflow direction supersedes the earlier, unimplemented
-local-CLI annotation draft.
+The worker-based annotation direction supersedes the earlier, unimplemented
+local-CLI annotation draft; installation scope follows
+[the single-user transition](single-user.md).
 
 The [Pydantic and interface draft](annotation/annotation_contracts.py) and
 [JSON schema inventory](annotation/annotation-schemas.json) retain the approved review contracts;
@@ -56,7 +57,7 @@ profile/contract attachment source enablement remains deferred. The
 | `ScreenshotAsset`, `ScreenshotRendition`, `ScreenshotPrivacyReview`, `ScreenshotVendorArchive` in [screenshots.py](../../server/app/models/screenshots.py); `resolve`, `record`, `verify` in [vendor_screenshots.py](../../server/app/services/vendor_screenshots.py) | Reuse source selection/revision, immutable image/plan/hash/mapping, privacy review and vendor capture archives; do not introduce a second image store. |
 | `RenderRequest`, `render`, `draw_inner_border`, `add_markup_footer` in [stamp/src/main.rs](../../stamp/src/main.rs); `ScreenshotRenderer`, `validate_png`, `_validate_rendering` in [screenshot_renderer.py](../../server/app/providers/screenshot_renderer.py) | `bid-screenshot-renderer` already uses framed in-memory input, a fixed font, redaction/crop/boxes and a source footer. B05 confirmation/provenance profiles are new. Extend the same crate and both validators while keeping old profiles byte-compatible. |
 | `render_manifest`, `create_job`, `process_render` in [screenshot_jobs.py](../../server/app/services/screenshot_jobs.py); `JobExecution` in [execution.py](../../server/app/jobs/execution.py) | Reuse input pinning, locking, immutable publication, cleanup, leases and run fencing. Existing screenshot dispatch commits before enqueue; B05 needs transactional enqueue/recovery. Current API cancellation fences publication but does not immediately interrupt Rust. |
-| `build_evidence`, `update_card`, `confirmation_inputs`, `card_action` in [response_cards.py](../../server/app/services/response_cards.py); `sign`, `projections`, `manifest_fields` in [task_cosign.py](../../server/app/services/task_cosign.py) | Image-region Evidence, immutable card revisions, domain review and team slice 3 complete co-sign rounds already exist. B05 adds no independent material approval authority. |
+| `build_evidence`, `update_card`, `confirmation_inputs`, `card_action` in [response_cards.py](../../server/app/services/response_cards.py) | Image-region Evidence, immutable card revisions, domain review and confirmation gates already exist. B05 adds no independent material approval authority. |
 | `require_confirmed`, `fields`, `preparation`, `current_preparation` in [requirement_consumption.py](../../server/app/services/requirement_consumption.py); [B02 contract](requirement-confirmation.md) | Requirement confirmation is independent of evidence confirmation. Material preparation can precede it; evidence acceptance, confirmed release and consumption must recheck it. |
 | `evidence_dependency`, `assemble` in [drafts.py](../../server/app/services/drafts.py); `build_manifest`, `fresh_manifest`, `release`, `download_gate` in [exports.py](../../server/app/services/exports.py); `export_complete_gate` in [0024_export_images.py](../../server/migrations/versions/0024_export_images.py) | Consumers bind canonical Evidence rendition/hash. Confirmed release images need an additional export dependency and DB gate; substituting a PNG silently violates current bindings. |
 | `CONTRACT_VERSION`, `Result`, `Cost` in [contracts.py](../../server/app/schemas/contracts.py); `attach` in [preflight.py](../../server/app/services/preflight.py) | Reuse the strict seven-key Result 5.0 and six-field resource contract; dry-run uses shared read-only preflight. |
@@ -71,7 +72,7 @@ archived PNG inputs, without adding a binary, dependency, font download or host 
 
 The implemented first slice is one **certificate source page → preview → cloud job →
 persisted candidate → human card attachment/review → confirmed release → draft/export**.
-Include console/API/CLI, roles, B02/co-sign, jobs/events and export binding; an image-only
+Include console/API/CLI, roles, B02, jobs/events and export binding; an image-only
 endpoint is not completion. One request targets one editable card in an explicit
 extraction scope. The worker does not rewrite card text or attach evidence for a reviewer.
 
@@ -132,10 +133,12 @@ Input changes invalidate the preview.
    review; annotation never invents an observation from source text.
 5. **Use existing human review.** Review all Evidence IDs, candidate hashes and warnings
    on the exact revision. B02 must be current/confirmed. Single-domain review uses
-   `card_action`/existing legacy-confirm integration; multi-domain policy uses
-   `CoSignConfirm` and a complete input-bound round. Partial signatures do not admit
-   material. Existing service/DB gates recheck domain, policy, signer authority, warnings
-   and source validity. Disposition-only rounds never confirm Evidence.
+   `card_action` and the retained human response-review integration. Existing service
+   and database gates recheck domain, human authority, warnings and source validity.
+   Legacy multi-domain policy remains blocked by the database gates; this slice
+   exposes no co-sign confirmation contract or operation. Ordinary response submission
+   and confirmation also remain blocked by the retained round-required triggers;
+   see [the compatibility defect](roadmap.md#known-defects).
 6. **Produce a confirmed release.** In the final successful confirmation transaction,
    enqueue `annotation_release` per linked B05 candidate. Recheck the exact approval
    binding and generate a new immutable rendition with a fixed `CONFIRMED` footer.
@@ -148,13 +151,10 @@ the UI separately shows the linked card's current review status. Another card us
 the candidate requires its own confirmation and release. No `annotation confirm` exists.
 
 Approval binds canonical candidate rendition/image/content hashes, Evidence ID,
-confirmed card revision, B02 review revision/hash, and the actual review manifest from
-`task_cosign.manifest_fields`. Co-sign includes round ID/revision, snapshot hashes,
-policy/star-rule revisions and signatures. Single-domain approval retains the actual
-one-domain response round: `legacy_confirm` also creates/signs that round. Only genuine
-older decisions without a round use the historical card/Evidence confirmation binding;
-never invent a round or discard a real one. Canonical approval hash
-and renderer identity select a release; never select “latest confirmation.”
+confirmed card revision and B02 review revision/hash. The single-user transition
+retains existing database approval checks with the default no-co-sign policy.
+Canonical approval hash and renderer identity select a release; never select
+“latest confirmation” or invent a signature.
 
 Keep `Evidence.screenshot_rendition_id`, `image_sha256`, region and plan/mapping on
 the candidate. `drafts.evidence_dependency` consumes those confirmed canonical inputs.
@@ -179,15 +179,15 @@ two-profile `RenditionView`. Include generic screenshot routes in bypass accepta
 Adding a library revision alone does not change a pinned task. Explicit selection
 replacement, withdrawal, different page/file/source hash, invalid privacy lineage or
 integrity failure invalidates dependent usability/releases. Keep historical bytes,
-plans, signatures and audits; new material starts a new review.
+plans, human decisions and audits; new material starts a new review.
 
 Card edit/reopen/relink, requirement meaning/citation change or B02 reopen/invalidation,
-policy/star-rule change, signer authority loss or invalidated co-sign round invalidates
+human reviewer authority loss or invalidated approval inputs invalidate
 the matching release. A source change during a job prevents publication. Task archival
 stops writes/jobs; history remains under live read grants and existing export archive
 policy. Membership removal denies access immediately, including at signed-link download.
 
-Extend `team_cosign_invalidate_dependencies` and current source/requirement checks with
+Extend the retained database approval-invalidation trigger and current source/requirement checks with
 annotation dependencies. Retain historical decisions; do not clear audit history.
 Views expose current/stale validity and fixed reason codes. Acceptance, release download
 and export recompute validity; a delayed dashboard event cannot authorize stale material.
@@ -283,12 +283,12 @@ Release jobs pin the exact approval and candidate content. Worker access retains
 initiator and checks live grants; a restricted execution scope covers only that fixed
 job. Do not grant human-only scopes to workers or forge a session for human card APIs.
 Completed human review authorizes automatic release rendering; retry is a human action.
-The final signer can be a task reviewer without annotation write authority. Automatic
+The human confirmer can be a task reviewer without annotation write authority. Automatic
 release admission therefore validates the complete human approval, not the candidate
 owner/contributor create gate. Register `annotation_release` with `card:read` plus
 kind-specific source-read and approval checks; that read scope alone cannot authorize
-publication. Preserve the actual final signer's identity and verify current round/
-signer authority without giving the worker `evidence:confirm`. Candidate admission
+publication. Preserve the actual human confirmer's identity and verify the exact approval and
+current review-domain authority without giving the worker `evidence:confirm`. Candidate admission
 uses `evidence:annotate`; its worker rechecks the human initiator's live create ceiling
 through a fixed-job gate, not `Identity.require` on a human-only scope stripped from
 workers. Explicit release retry still needs a human owner/contributor creation grant.
@@ -351,7 +351,7 @@ reads/writes. `bid_app` cannot own tables, bypass RLS or update/delete immutable
 | --- | --- |
 | `annotation_requests` | Human request ID/payload hash, task/extraction/requirement/card/expected revision, typed source refs, normalized plan/hash, input hash, reviewed source hash/attestation and optional inherited privacy review, renderer identity, submitter and job. Unique `(org_id,task_id,actor_user_id,request_id)`; exact replay only. Job owns execution state. |
 | `annotation_materials` | Request, successful job/run, candidate asset/rendition, source manifest/hashes, content hash/mapping, renderer build/profile/font/protocol and creation time. Unique `(org_id,request_id)` and candidate rendition binding. Intended card is provenance, not permission to change a newer card. |
-| `annotation_releases` | Material, canonical Evidence/candidate/hash, confirmed card revision, B02 and complete domain/co-sign approval manifest/hash, release job/run/rendition/hash/content mapping/renderer/time. Unique `(org_id,evidence_id,card_revision_id,approval_sha256,renderer_identity)`. Current/stale validity derives from live dependencies, not mutable confirmation flags. |
+| `annotation_releases` | Material, canonical Evidence/candidate/hash, confirmed card revision, B02 and exact single-domain human/material approval binding/hash, release job/run/rendition/hash/content mapping/renderer/time. Unique `(org_id,evidence_id,card_revision_id,approval_sha256,renderer_identity)`. Current/stale validity derives from live dependencies, not mutable confirmation flags. |
 
 Typed nullable source columns plus exactly-one-kind CHECK replace unconstrained source
 UUIDs/JSON-only FKs. Certificate references bind full source/task/TaskCertificate/revision/
@@ -386,7 +386,7 @@ The migration preserves this ordering:
    BEFORE guards do not establish it for these new tables.
 3. Add immutable-row, human request/privacy, exact source/renderer, worker run/lease and
    release-content/approval guards. Extend scope/token CHECKs together. Complete
-   single-domain/co-sign/B02 gates before exposing routes; workers cannot confirm.
+   single-domain human/material/B02 gates before exposing routes; workers cannot confirm.
 4. Extend export attachments/manifests and DB `export_complete_gate` for B05 releases,
    keeping non-B05 behavior. Extend invalidation and task-event statement producers,
    job visibility and batched board metadata without per-row storage reads.
@@ -412,7 +412,7 @@ arbitrary provenance, job kind or release status. Models reuse runtime schema ty
 | `POST /annotations/{id}/releases` | `bid evidence annotation release retry --id UUID --input REVIEW.json --json` | `AnnotationReleaseRetry` names exact Evidence/card revision/approval hash and failed job → `AnnotationJobAccepted`. Normally enqueued automatically at complete confirmation; retry is not a new approval |
 | `GET /annotations/{id}/releases?cursor=…&limit=…` | `bid evidence annotation releases --id UUID [--cursor CURSOR] [--limit N] --json` | Page data / `AnnotationReleaseView[]` |
 | `GET /annotation-releases/{id}/preview` | `bid evidence annotation release preview --id UUID --json` | Signed release preview after current approval/source checks; stale release conflicts |
-| Existing `PUT /cards/{id}`, `POST /cards/{id}/actions`, co-sign routes | Existing card/team-workflow commands | `CardUpdate`, `CardAction`, `CoSignConfirm`; no B05 confirmation shortcut |
+| Existing `PUT /cards/{id}`, `POST /cards/{id}/actions` | Existing card commands | `CardUpdate`, `CardAction`; no B05 confirmation shortcut |
 | Existing `GET /jobs/{id}`, `POST /jobs/{id}/cancel` | `bid job status/wait/cancel --id UUID --json` | Existing safe job envelope, extended annotation kinds/results |
 
 `AnnotationInput` is the plan file: extraction/card/expected card revision, source
@@ -482,7 +482,7 @@ task membership; owner/contributor can create, reviewer/observer cannot. Update
 human-only scopes, `evidence:confirm` and `export`. Tokens/agents never receive it;
 old tokens gain nothing. Workers execute only fixed authorized requests.
 
-| Actor intersection | Read | Create/attach candidate | Confirm Evidence / co-sign | Retry release / export |
+| Actor intersection | Read | Create/attach candidate | Confirm Evidence / response | Retry release / export |
 | --- | --- | --- | --- | --- |
 | Human org admin, task owner/contributor | Existing source/file/screenshot/card scopes | Yes with new scope, existing card write and privacy review | No domain by virtue of admin | Retry yes; export remains existing gate, no override |
 | Human bidder, task owner/contributor | Same scoped reads | Yes | Commercial, when task domain granted | Retry yes; human bidder export gate |
@@ -492,11 +492,11 @@ old tokens gain nothing. Workers execute only fixed authorized requests.
 | Token/agent | Explicit read scopes intersected with live issuer/task/source grants | No | No | No |
 | Worker | Fixed job input | Authorized immutable publication, not human card edit | Never | Render a fixed approved release; never human export |
 
-Use `task_workflow.access`/`live_actor` before source reads/writes. B05 requires active
+Use `task_access.access`/`live_actor` before source reads/writes. B05 requires active
 task membership; admin recovery is not annotation or domain authority. Certificate
 reads additionally need `evidence:source:read`, `task:read`, `certificate:read`,
 `certificate:file:read`; vendor reads use `screenshot:read` and underlying archive/
-product permissions. Card actions retain `card:write`/`evidence:confirm`/`card:cosign`
+product permissions. Card actions retain `card:write`/`evidence:confirm`
 and domain gates. Status/results/cancel use matching task/source access. Cancellation
 is for the initiating human or authorized task owner with the annotation write ceiling,
 never a read-only token. Hidden buttons do not enforce any of these restrictions.
@@ -518,8 +518,8 @@ Extend `task_board_projection.load` using batched metadata. New next actions:
 `inspect_annotated_material` (“核对标注图”), `confirm_annotated_material`
 (“确认标注材料”), `retry_annotation_release` (“重试确认图生成”),
 `replace_annotation_source` (“重新选择来源”). Existing B02 confirmation stays the
-first blocker when needed. Owner comes from assignment; eligible signers come from
-domain/co-sign policy, not necessarily creator. Render success never marks a requirement
+first blocker when needed. The task creator provides the retained owner context;
+the eligible human reviewer comes from live review-domain authority. Render success never marks a requirement
 complete. `BoardNextAction`/target/schema updates are implementation dependencies.
 
 ## Console outline and bounded reads
@@ -540,8 +540,8 @@ come from the worker, never browser canvas export.
 Page sections: paged source picker; page/hash/provenance/warnings; original and proposed/
 actual image; crop/boxes/reset; “预览标注” then “生成标注材料”; job status/cancel.
 After success, show actual candidate before “用于此响应卡”. Existing CardEditor owns
-observation, response, submit and review. Show B02, remaining co-sign domains and release
-generation separately. Conflicts preserve unsent geometry but require new preview.
+observation, response, submit and review. Show B02, the required single review domain, material confirmation and release
+generation separately. Show the legacy database compatibility blocker explicitly. Conflicts preserve unsent geometry but require new preview.
 
 Read one source page/candidate at a time, maximum two in-flight image requests, cancel
 stale requests and revoke object URLs on close. Lists use 50/100 pagination; no task-wide
@@ -561,7 +561,7 @@ visible focus and text errors make state understandable without color alone.
 | Queue interruption, lease takeover, duplicate delivery | Transactional recovery/dedup; one immutable result, stale attempt cannot publish; clean only its unreferenced objects |
 | Cancel/deadline/pipe overflow | Terminate/kill/reap, bounded terminal result, no partial image or automatic cancelled-job restart |
 | Membership/domain loss, archive/withdrawal | Deny writes/consumption; retain authorized history; fence late publication even after object upload |
-| B02 incomplete/invalidated, partial/stale co-sign, wrong evidence/warnings | Candidate preparation may remain readable; acceptance/release/draft/export blocked by the corresponding gate |
+| B02 incomplete/invalidated, stale human approval, wrong evidence/warnings | Candidate preparation may remain readable; acceptance/release/draft/export blocked by the corresponding gate |
 | Release missing/corrupt/stale/content mismatch | Block export with exact reason/next action; no candidate fallback or worker confirmation |
 | Unsupported/untrusted renderer | Explicit configuration failure; no Python or old-profile fallback |
 | UI read failure/org switch | Cancel old reads, remove stale images, require authorized refresh, retain unsent input only in the active context |
@@ -575,14 +575,14 @@ isolation, publication and browser path.
 | --- | --- |
 | Each new table | Two orgs A/B and missing context; runtime SELECT/INSERT/UPDATE/DELETE rejection, FORCE RLS/no bypass, immutability, every source/task/card/Evidence/review/job/actor composite FK. Same-org T1/T2 and mixed parents. Assert RLS/FK before business errors, concurrent/same-statement parents and deferred completeness. |
 | Each route/download/job variant | A cannot list/show/preview/submit/retry/cancel B; uniform missing/unauthorized 404. Signed-link org/object/hash/expiry/tampering/removal, archived tasks, historical source, cursor/filter replay and candidate/release download gates. |
-| Roles and gates | Owner/contributor vs reviewer/observer, admin without domain, bidder commercial, technical technical, inactive/removed member, token/agent/worker. API and DB reject human-only scopes including evidence:confirm/export. Partial co-sign, same signer twice, stale round/policy/B02, wrong Evidence/hash/warnings/reopen fail; worker cannot confirm. |
+| Roles and gates | Owner/contributor vs reviewer/observer, admin without domain, bidder commercial, technical technical, inactive/removed member, token/agent/worker. API and DB reject human-only scopes including evidence:confirm/export. Stale human approval/B02, wrong Evidence/hash/warnings/reopen fail; legacy round-required database policy remains an explicit compatibility blocker; worker cannot confirm. |
 | Real renderer flow | Synthetic pages/archive → API/CLI → real Rust → storage/job → card review → release → draft/export. Artifact includes source/plan/profile hashes, candidate/release PNGs, unchanged original, expected pixels and reversible mapping. Repeat fixed inputs for deterministic bytes and profile changes for cache separation. |
 | Pixel/process limits | No crop/crop/20 boxes, overlap/edge/small boxes, rotation, Chinese source pixels, cropped/redacted parents, bounds/21 boxes/bools/floats/labels, min width/footer overflow, 8192/20M/40MiB/decoded/metadata limits, malformed PNG/receipts. Timeout/cancel/pipe bounds/no-network/CPU-RSS and reap assertions. |
 | Jobs/usage/publication | Transactional enqueue/crash recovery, request replay/conflict, changing input/withdrawal/authority during render, lease takeover, retries/cancel/orphans.
 One verified binding per published object. |
-| Draft/export | Unconfirmed material never reaches rows/files. Complete B02/domain/co-sign admits canonical Evidence; B05 image export additionally requires release. Evidence hash unchanged. Pin replacement/B02 reopen/card relink/signer loss/tampering block consumption; non-B05/prototype paths unchanged. |
+| Draft/export | Unconfirmed material never reaches rows/files. Current B02 and single-domain human/material decisions admit canonical Evidence only after the legacy database compatibility blocker is resolved; B05 image export additionally requires release. Evidence hash unchanged. Pin replacement/B02 reopen/card relink/reviewer authority loss/tampering block consumption; non-B05/prototype paths unchanged. |
 | CLI/schema | Snapshot every new command and dry-run/queued/succeeded/duplicate/retry/cancel/error/empty/paged result; seven keys, resource counts and exit 0/2/3/4. No false partial image. Client never runs Rust or downloads image for processing. |
-| Browser end to end | Follow [requirement-confirmation.spec.js](../../web/e2e/requirement-confirmation.spec.js) Playwright mocked-API pattern: exact routes/bodies, bounded reads, preview/explicit use/review, role/B02/co-sign blockers, cancellation/failure/retry, conflicts, release stale/wait, org-switch races and keyboard use.
+| Browser end to end | Follow [requirement-confirmation.spec.js](../../web/e2e/requirement-confirmation.spec.js) Playwright mocked-API pattern: exact routes/bodies, bounded reads, preview/explicit use/review, role/B02/material and legacy database compatibility blockers, cancellation/failure/retry, conflicts, release stale/wait, org-switch races and keyboard use.
 Retain screenshots, trace and JSON with seed, request counts and replay command. |
 | Events/board | Correct owner/blocker/next action on publish/review/release/invalidate; no success event after rollback; replay/reset/revocation observes task/org boundaries and frame caps. Board state never authorizes consumption. |
 
@@ -617,7 +617,7 @@ The owner approved every recommended default; implementation follows these decis
 | Attachment | Explicit human CardUpdate after render | Preserves concurrent edits and human ownership of observation/response. |
 | Confirmed watermark | Immutable UNCONFIRMED candidate plus exact-approval CONFIRMED release | Preserves image/hash/signature history without overwriting files. |
 | Consumption | Confirmed canonical Evidence for draft, current release for all B05 image exports | Retains human gates and prevents stale/unconfirmed labeled attachments. |
-| Reviewer policy | Existing primary domain/co-sign plus B02 acceptance | No competing or weaker approval path. |
+| Reviewer policy | Existing single human review domain/material plus B02 acceptance; legacy database compatibility remains blocked | No competing or weaker approval path. |
 | Creation role | Human-only evidence:annotate, task owner/contributor; existing professional confirmation | Source/privacy/material choices remain attributable team actions. |
 | Pixel semantics | Existing fixed font, 2px boxes, no labels/rescale, versioned profiles | Reuses bounded renderer while keeping deterministic provenance. |
 | Source change | Invalidate on task pin/source/review change, not library edit alone | Preserves task snapshots and requires explicit reconfirmation when inputs change. |

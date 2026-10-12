@@ -1,12 +1,12 @@
 """Database/API B05 consumption acceptance; no external renderer or converter.
 
-Failure cases: a partial co-sign confirms Evidence or admits a release; a task
+Failure cases: an unconfirmed response confirms Evidence or admits a release; a task
 reviewer without annotation creation authority cannot run the authorized final
 release; draft loses the canonical candidate binding; either export mode embeds
-UNCONFIRMED bytes; archival destroys readable history or permits writes; signer
+UNCONFIRMED bytes; archival destroys readable history or permits writes; human
 revocation leaves a release, old signed DOCX link or export preflight usable.
 
-The common workflow is repeated independently for signer loss, explicit source
+The common workflow is repeated independently for reviewer authority loss, explicit source
 selection replacement, B02 reopening and same-candidate card relinking. Metadata,
 canonical Evidence and byte exports are checked separately after each mutation.
 """
@@ -23,22 +23,22 @@ import pytest
 from app.models.annotations import AnnotationRelease
 from app.models.entities import Job
 from app.models.response_cards import Evidence
+from response_review_fixtures import confirm, submit
 from sqlalchemy import func, select, text
+from task_access_fixtures import add_member, archive_task, person, remove_member, workflow
 from test_annotation_api import preview_submit, seed_annotation
 from test_check import publish_draft
 from test_export_images import commitment
 from test_exports import prepared, setup_template
 from test_response_cards import phase_one_client, require_action
-from test_team_cosign_consumers import signature, submit
-from test_team_workflow_membership import add_member, person, workflow
 
 ARTIFACTS = Path(__file__).resolve().parents[2] / "data/work/annotation-acceptance"
 
 
 @pytest.mark.parametrize(
-    "mutation", ["signer_loss", "source_replacement", "b02_reopen", "card_relink"]
+    "mutation", ["reviewer_loss", "source_replacement", "b02_reopen", "card_relink"]
 )
-async def test_cosign_release_exports_and_dependency_invalidation(
+async def test_human_release_exports_and_dependency_invalidation(
     tenants, tmp_path, admin_engine, monkeypatch, mutation
 ):
     from annotation_test_renderer import configure_renderer
@@ -55,28 +55,24 @@ async def test_cosign_release_exports_and_dependency_invalidation(
         for domain, org_role, task_role in (
             ("commercial", "bidder", "contributor"),
             ("technical", "technical", "reviewer"),
+            ("release", "bidder", "reviewer"),
         ):
             user, auth = await person(api, admin_engine, org, org_role)
             current = await workflow(api, owner, task)
             added = await add_member(
-                api, owner, task, user, current["revision"], task_role, [domain]
+                api,
+                owner,
+                task,
+                user,
+                current["revision"],
+                task_role,
+                ["commercial" if domain == "release" else domain],
             )
-            assert added.status_code == 200, added.text
+            assert added.active
             members[domain] = {"user": user, "headers": auth}
         bidder = members["commercial"]["headers"]
-        reviewer = members["technical"]["headers"]
+        reviewer = members["release"]["headers"]
         scope = {"card": card, "members": members}
-        policy = await api.put(
-            f"/tasks/{task}/requirements/{card['requirement_id']}/review-policy",
-            headers=owner,
-            params={"extraction_job_id": extraction},
-            json={
-                "expected_policy_revision": 0,
-                "co_sign_required": True,
-                "reason": "Both domains inspect this certificate page.",
-            },
-        )
-        assert policy.status_code == 200, policy.text
         denied = await api.post(
             f"/v4/tasks/{task}/annotations",
             headers=reviewer,
@@ -140,9 +136,6 @@ async def test_cosign_release_exports_and_dependency_invalidation(
                 reason="The assigned domain reviewed this synthetic commitment.",
             )
         await submit(api, owner, scope)
-        first = await signature(api, scope, "commercial")
-        assert first.status_code == 200, first.text
-        assert first.json()["data"]["summary"]["status"] == "partial"
         async with app.state.db.transaction(org) as db:
             assert (
                 await db.scalar(
@@ -159,16 +152,17 @@ async def test_cosign_release_exports_and_dependency_invalidation(
             "data"
         ]
         assert partial_view["completion"] == "partial"
-        assert any("cosign_required" in gap["reasons"] for gap in partial_view["gaps"])
-        final = await signature(api, scope, "technical")
+        assert any("unconfirmed" in gap["reasons"] for gap in partial_view["gaps"])
+        final = await confirm(api, scope, domain="release")
         assert final.status_code == 200, final.text
-        assert final.json()["data"]["summary"]["status"] == "complete"
+        assert final.json()["data"]["state"] == "confirmed"
+        scope["card"] = final.json()["data"]
         async with app.state.db.transaction(org) as db:
             release_job = await db.scalar(
                 select(Job).where(Job.task_id == UUID(task), Job.kind == "annotation_release")
             )
             assert release_job is not None
-            assert release_job.actor_user_id == members["technical"]["user"]
+            assert release_job.actor_user_id == members["release"]["user"]
             release_job_id = release_job.id
         # Confirmation can feed a draft immediately, but both image export modes
         # must wait for the immutable CONFIRMED rendition.
@@ -193,9 +187,8 @@ async def test_cosign_release_exports_and_dependency_invalidation(
         assert completed.json()["data"]["status"] == "succeeded", completed.text
         releases = await api.get(f"/v4/annotations/{material_id}/releases", headers=owner)
         release = releases.json()["items"][0]
-        assert release["releasable"] and release["approval"]["decision_kind"] == "cosign"
-        assert len(release["approval"]["co_sign"]["signatures"]) == 2
-        assert release["approval"]["confirmed_by"] == str(members["technical"]["user"])
+        assert release["releasable"] and release["approval"]["decision_kind"] == "single_domain"
+        assert release["approval"]["confirmed_by"] == str(members["release"]["user"])
         draft = await publish_draft(api, app, bidder, task, extraction)
         draft_view = (await api.get(f"/drafts/{draft['draft_id']}", headers=bidder)).json()["data"]
         assert draft_view["completion"] == "complete"
@@ -248,31 +241,14 @@ async def test_cosign_release_exports_and_dependency_invalidation(
                     "docx_sha256": hashlib.sha256(downloaded.content).hexdigest(),
                 }
             )
-        state = await workflow(api, owner, task)
-        archived = await api.post(
-            f"/tasks/{task}/archive",
-            headers=owner,
-            json={
-                "expected_revision": state["revision"],
-                "reason": "Retain finished review history.",
-            },
-        )
-        assert archived.status_code == 200, archived.text
+        await archive_task(api, owner, task)
         history = await api.get(f"/v4/annotations/{material_id}/releases", headers=owner)
         assert history.status_code == 200 and history.json()["items"][0]["id"] == release["id"]
         blocked = await api.post(
             f"/v4/tasks/{task}/annotations", headers=owner, json={"dry_run": True, "input": target}
         )
         assert blocked.status_code == 409, blocked.text
-        restored = await api.post(
-            f"/tasks/{task}/unarchive",
-            headers=owner,
-            json={
-                "expected_revision": archived.json()["data"]["revision"],
-                "reason": "Inspect access revocation.",
-            },
-        )
-        assert restored.status_code == 200, restored.text
+        await archive_task(api, owner, task, archived=False)
         await _invalidate(
             api, owner, bidder, task, scope, source, selected_source, attachment, release, mutation
         )
@@ -306,7 +282,7 @@ async def test_cosign_release_exports_and_dependency_invalidation(
                 "candidate_id": candidate["id"],
                 "release_id": release["id"],
                 "exports": evidence_artifact,
-                "partial_blocked": True,
+                "unconfirmed_blocked": True,
                 "reviewer_release_succeeded": True,
                 "revoked_links_blocked": True,
             },
@@ -317,16 +293,9 @@ async def test_cosign_release_exports_and_dependency_invalidation(
 async def _invalidate(
     api, owner, bidder, task, scope, source, selected_source, attachment, release, mutation
 ):
-    if mutation == "signer_loss":
-        current = await workflow(api, owner, task)
-        changed = await api.post(
-            f"/tasks/{task}/members/{scope['members']['technical']['user']}/remove",
-            headers=owner,
-            json={
-                "expected_revision": current["revision"],
-                "reason": "Retire this signer authority.",
-            },
-        )
+    if mutation == "reviewer_loss":
+        await remove_member(api, owner, task, scope["members"]["release"]["user"])
+        return
     elif mutation == "source_replacement":
         current = await api.get(
             "/resources/certificates",
@@ -389,7 +358,7 @@ def _artifact(value, exported_files):
     mutation = value["mutation"]
     for mode, content in exported_files.items():
         (ARTIFACTS / f"consumption-{mutation}-{mode}.docx").write_bytes(content)
-    (ARTIFACTS / f"cosign-export-consumption-{mutation}.json").write_text(
+    (ARTIFACTS / f"human-export-consumption-{mutation}.json").write_text(
         json.dumps(
             {"command": "pytest server/tests/test_annotation_consumption.py -q", **value}, indent=2
         )

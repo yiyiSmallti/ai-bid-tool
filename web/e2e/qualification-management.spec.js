@@ -68,14 +68,13 @@ async function fixture(page,options={}){
    if(path==='/tasks')return route.fulfill({json:result('task list',{org_id:B},[])});
    const match=path.match(/^\/management\/resources\/(profiles|certificates)\/query$/);
    if(match){const kind=match[1],items=[{org_id:B,ref:{kind,resource_id:rid(kind,8000)},name:kind==='profiles'?'乙单位专属资料':'乙单位专属证照',revision_id:rid(kind,8001),revision:1,lifecycle:{state:'active',revision:0},provenance:'declared',created_at:date,revised_at:date,revised_by:U,actions:actions()}];return route.fulfill({json:result('resource query',{org_id:B,as_of:date,returned:items.length,next_cursor:null,has_more:false},items)});}
-   if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
+   if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
    throw new Error(`Unexpected org B request: ${req.method()} ${path}`);
   }
   const failure=(code,status=409)=>route.fulfill({status,json:result('resource write',{error:{code,message:code,exit_code:status===403||status===404?4:2}},[],false)});
   if(path==='/org/current')return route.fulfill({json:result('org current',{org_id:O,user_id:U,role:state.role})});
   if(path==='/confidential-fields')return route.fulfill({json:result('confidential field list',{},[{key:'bank_account',label:'开户账号',scope:'org'}])});
-  if(path===`/tasks/${T}/workflow`)return route.fulfill({json:result('task workflow',{workflow:{org_id:O,task_id:T,state:state.archived?'archived':'active'}})});
-  if(path===`/tasks/${T}/members`){const items=state.taskRole?[{org_id:O,task_id:T,user_id:U,role:state.taskRole,active:true,review_domains:[]}]:[];return route.fulfill({json:result('task members',{...meta(items),task_id:T},items)});}
+  if(path===`/tasks/${T}/progress`)return route.fulfill({json:result('task progress',{access: state.taskRole ? {role:state.taskRole,review_domains:[]} : null,event_cursor:"opaque-snapshot",workflow:{org_id:O,task_id:T,state:state.archived?'archived':'active'}})});
   const match=path.match(/^\/management\/resources\/(profiles|certificates)(?:\/(.*))?$/);
   if(match){expect(url.pathname.startsWith('/')).toBe(true);const kind=match[1],tail=match[2],id=rootId(kind);
    if(tail==='query'){const body=req.postDataJSON();queries.push({kind,...body});expect(url.search).toBe('');if(state.delay&&body.q==='迟到查询')await new Promise(r=>{release=r;});if(state.cursorError&&body.cursor)return failure('management_cursor_expired');let items=body.q==='空结果'?[]:[{org_id:state.foreign?'00000000-0000-0000-0000-000000000099':O,ref:{kind,resource_id:id},name:content(kind,state.head).name,revision_id:rid(kind,state.head),revision:state.head,lifecycle:lifecycle(),provenance:'declared',created_at:date,revised_at:date,revised_by:U,actions:actions()}];let next=state.paginated&&!body.cursor?'opaque-next':null;
@@ -102,7 +101,7 @@ async function fixture(page,options={}){
   if(path.includes('/file/download-link'))return route.fulfill({json:result('resource certificate download link',{url:`/resources/certificates/revisions/${rid('certificates',1)}/file/download?signature=synthetic`,expires_in:300})});
   if(path.includes('/file/download')){expect(req.headers()['x-org-id']).toBe(O);expect(req.headers().authorization).toBeTruthy();return route.fulfill({contentType:'application/pdf',body:'%PDF-synthetic'});}
   if(path.includes('/file/pages/')){expect(req.headers().authorization).toBe('Bearer synthetic-qualification-session');expect(requestOrg).toBe(O);return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgaPj/HwAEggJ/59habAAAAABJRU5ErkJggg==','base64')});}
-  if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
+  if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
   throw new Error(`Unexpected qualification request: ${req.method()} ${path}`);
   }finally{if(read)reads.active--;}
  });return {state,writes,queries,requests,pins,reads,totals,release:()=>release?.(),releaseRead:path=>gates.get(path)?.()};

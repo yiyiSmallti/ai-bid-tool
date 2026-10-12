@@ -5,8 +5,9 @@ leak parent counts/citations/history; observers and org viewers make decisions;
 org roles imply unassigned task domains; admin recovery becomes review authority;
 archival admits previews or writes; tokens/workers inherit human grants or hide
 behind actor_kind=session. Rejected actions must leave saved state and vendors
-unchanged. All task grants use the production membership service, with synthetic
-users, documents and fake Providers. Requires an isolated PostgreSQL runtime.
+unchanged. Task grants and archived states are seeded through the isolated admin
+database; tested operations use production APIs, synthetic users and documents,
+and fake Providers. Requires an isolated PostgreSQL runtime.
 """
 
 from hashlib import sha256
@@ -25,6 +26,7 @@ from app.models.score import (
 from app.services.auth import ROLE_SCOPES, Identity
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from task_access_fixtures import archive_task, person
 from task_fixtures import add_member
 from test_card_generation import token_header
 from test_check import check_case as check_case
@@ -37,7 +39,6 @@ from test_score_review import base, classify_all, decision, replacement, show
 from test_score_run import counts as score_counts
 from test_score_run import finish_score, preview_score, submit_score
 from test_score_run import score_case as score_case
-from test_team_workflow_membership import person, workflow
 
 
 async def participant(case, admin_engine, *, org_role="bidder", task_role=None, domains=()):
@@ -394,13 +395,7 @@ async def test_archived_task_blocks_rubric_mutations_but_retains_console_reads(
     admin_user, admin = await participant(
         case, admin_engine, org_role="admin", task_role="contributor"
     )
-    current = await workflow(case["api"], admin, case["task"])
-    archived = await case["api"].post(
-        f"/tasks/{case['task']}/archive",
-        headers=admin,
-        json={"expected_revision": current["revision"], "reason": "Synthetic console archive"},
-    )
-    assert archived.status_code == 200, archived.text
+    await archive_task(case["api"], admin, case["task"])
     before = await rubric_business_counts(case)
     for path, body in rubric_writes(case, report):
         classification = path.endswith("/classification")
@@ -422,13 +417,7 @@ async def test_archived_task_blocks_score_preview_and_submission(score_case, adm
     case = score_case
     preview = await preview_score(case)
     _, admin = await participant(case, admin_engine, org_role="admin")
-    current = await workflow(case["api"], admin, case["task"])
-    archived = await case["api"].post(
-        f"/tasks/{case['task']}/archive",
-        headers=admin,
-        json={"expected_revision": current["revision"], "reason": "Synthetic score archive"},
-    )
-    assert archived.status_code == 200, archived.text
+    await archive_task(case["api"], admin, case["task"])
     body = {
         "draft_id": case["draft_id"],
         "rubric_id": case["rubric"]["rubric"]["id"],
@@ -535,13 +524,7 @@ async def test_archived_task_blocks_check_preview_run_and_decision(check_case, a
         domains=["commercial"],
     )
     _, admin = await participant(case, admin_engine, org_role="admin")
-    current = await workflow(case["api"], admin, case["task"])
-    archived = await case["api"].post(
-        f"/tasks/{case['task']}/archive",
-        headers=admin,
-        json={"expected_revision": current["revision"], "reason": "Synthetic check archive"},
-    )
-    assert archived.status_code == 200, archived.text
+    await archive_task(case["api"], admin, case["task"])
     before = await row_counts(case["app"], UUID(admin["X-Org-Id"]))
     body = {
         "draft_id": case["draft"]["id"],
@@ -584,13 +567,7 @@ async def test_archived_task_blocks_check_preview_run_and_decision(check_case, a
 async def test_archived_task_blocks_rubric_generation_preview_and_run(rubric_case, admin_engine):
     case = rubric_case
     _, admin = await participant(case, admin_engine, org_role="admin")
-    current = await workflow(case["api"], admin, case["task"])
-    archived = await case["api"].post(
-        f"/tasks/{case['task']}/archive",
-        headers=admin,
-        json={"expected_revision": current["revision"], "reason": "Synthetic rubric archive"},
-    )
-    assert archived.status_code == 200, archived.text
+    await archive_task(case["api"], admin, case["task"])
     before = await rubric_counts(case)
     calls = len(case["vendor"].requests)
     await post_error(

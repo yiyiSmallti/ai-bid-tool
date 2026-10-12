@@ -40,7 +40,7 @@ path from an informal note to an apparently sourced bid (标书) statement.
 
 The slice excludes cross-extraction merging, inferred equivalence, automatic confirmation,
 new OCR, typed parameter algebra (B03), extraction-completeness certification, requirement
-deletion/exclusion, general requirement-content editing, and response co-sign changes.
+deletion/exclusion, general requirement-content editing, and response-review policy changes.
 A disputed saved requirement can remain unconfirmed, with a review reason; it cannot be
 silently removed from coverage. General correction/supersession of saved semantics needs
 a later contract. Existing quote repair remains available with its actual authority.
@@ -60,7 +60,7 @@ No duplicate Source or Result definition is needed. |
 | `repair_citations` in [services/citation_repair.py](../../server/app/services/citation_repair.py) | Existing repair previews/updates quote and model_quote for saved requirements only. It cannot re-enter rejected items or accept a new position. Its human admin check also requires `evidence:confirm`; B02 must not silently widen this endpoint. |
 | `citation_valid_in_chunk`, `citation_validity_batch`, `extraction_scope` in [services/response_cards.py](../../server/app/services/response_cards.py) | Current consumers recheck literal presence and unique normalized location. `extraction_scope` requires a successful extract job with saved requirements; it is also used by historical reads and must not become a global confirmation gate. |
 | [api/tenders.py](../../server/app/api/tenders.py), `req extract/list/history/repair-citations` in [cli/bid_cli/main.py](../../cli/bid_cli/main.py), [schema.py](../../cli/bid_cli/schema.py) | These entry points retain their meanings; [requirement confirmation routes](../../server/app/api/requirement_confirmation.py) add review and manual creation. `partial_completion_exit` does not return 5 merely because a successful extraction reports rejected items. |
-| `access`, `live_actor` in [task_workflow.py](../../server/app/services/task_workflow.py), [team workflow](team-workflow.md#membership-ownership-and-authorization) | Live org/task grants and archive guards already exist. The older code-basis statements about absent task membership/SSE in that plan are superseded by these functions, [documents.list_tasks](../../server/app/services/documents.py) and [api/task_board.py](../../server/app/api/task_board.py). Co-sign remains a separate response policy. |
+| `access`, `live_actor` in [task_access.py](../../server/app/services/task_access.py), [Task access](../../server/app/services/task_access.py) | Live org/task grants and archive guards already exist. The older code-basis statements about absent task membership/SSE in that plan are superseded by these functions, [documents.list_tasks](../../server/app/services/documents.py) and [api/task_board.py](../../server/app/api/task_board.py). Co-sign remains a separate response policy. |
 | `row_projection`, `matches`, `board`, `progress`, `activity` in [task_board.py](../../server/app/services/task_board.py), `requirements_with_collaboration`, `load` in [task_board_projection.py](../../server/app/services/task_board_projection.py) | The default projection retains response enums with requirement gaps; [the opt-in overlay](../../server/app/services/requirement_board.py) adds requirement buckets and a live next actor. Citation repair remains admin-only. |
 
 [The design's typical flow](../design.md#users-and-core-scenarios) includes “confirm
@@ -105,7 +105,7 @@ this same slice. Do not ship a confirm button before its consumption boundaries.
 ## Review identity, state and source verification
 
 The stable identity is `(org_id, task_id, extraction_job_id, requirement_id)`. Add a
-review revision independent of response-card and assignment revisions. Effective states
+review revision independent of response-card revisions. Effective states
 are `unconfirmed`, `legacy_unconfirmed`, `confirmed`, `invalidated`; only `confirmed`
 is consumable. Missing review metadata fails closed as `legacy_unconfirmed`, including
 during migration, and never means approval.
@@ -228,7 +228,7 @@ multiple semantically different requirements is deferred.
 
 Re-extraction under different model/reasoning/version creates a distinct set with all
 new requirements unconfirmed. Same-job cache hits retain review metadata and manual adds
-but do not recalculate the original publication counts. Confirmations, assignments and
+but do not recalculate the original publication counts. Confirmations and
 response history stay on their original IDs; even identical fingerprints across jobs
 do not transfer approval. Merely discovering a newer set warns about history, not source
 invalidation. Explicitly selecting it changes the working scope. Multi-job union remains B08.
@@ -300,14 +300,14 @@ these gates is not a safe downgrade. Stop affected writes and restore a gate-awa
 
 ## Permissions and human ownership
 
-Use `task_workflow.access`, `live_actor`, `Identity.require` and the caller's org transaction.
+Use `task_access.access`, `live_actor`, `Identity.require` and the caller's org transaction.
 Require actual task membership for writes, including org admins; admin management recovery
 can repair membership under the existing contract but cannot impersonate confirmation.
 `req:confirm` and `req:manual` are **new human-only** capabilities for org admin/bidder/
 technical roles intersected with active task owner/contributor. They are excluded from
 `SCOPES`, included in `HUMAN_ONLY_SCOPES` and the token database CHECK, stripped from
 agent/worker delegation, and never granted to platform identities. Leave them out of
-`task_workflow.DECISIONS`: that set deliberately permits domain reviewers, while this
+`task_access.DECISIONS`: that set deliberately permits domain reviewers, while this
 contract requires contributor/owner rights. Keep `evidence:confirm` and `export` forbidden
 to tokens as before.
 
@@ -315,17 +315,17 @@ to tokens as before.
 | --- | --- |
 | Review/list/show/history/source read | `task:read`, current task read access; rejected receipts additionally `job:read` and job-origin access. Existing original-file/page gates still apply. Authorized tokens may read. |
 | Manual preview/add | Human session, `req:manual`, owner/contributor, active task; same-document rejected reference access when supplied. No token/agent/manual-add delegation in this slice. |
-| Confirm/reopen one | Human session, `req:confirm`, owner/contributor, active task. Assignment suggests who acts; it neither grants rights nor prevents another authorized contributor from acting. |
+| Confirm/reopen one | Human session, `req:confirm`, owner/contributor, active task. The first transition slice exposes no assignment operation; eligible human authority is checked directly. |
 | Confirm explicit batch | Same human scope plus **task owner**; max 100 explicit IDs/revisions/hashes, reviewed_each=true and reason. Atomic all-or-nothing. No “all unseen rows” or automatic browser write loops. |
 | Source repair | Keep the existing admin human `req:extract`/`evidence:confirm` predicate of `repair_citations`; invalidate B02 binding when needed. A technical contributor may request repair but cannot execute that existing handler. |
-| Response/evidence decisions, co-sign, rubric decisions/export | Existing domain, role, task and human-only gates plus B02 acceptance predicates; requirement confirmation grants none of those powers. |
+| Response/evidence decisions, rubric decisions/export | Existing domain, role, task and human-only gates plus B02 acceptance predicates; requirement confirmation grants none of those powers. |
 
-No review domain (职责) or co-sign rule is added to requirement confirmation, even for
+Requirement confirmation adds no review-domain (职责) rule, even for
 a starred (★) mandatory clause (★条款). The action checks what the tender requires;
 specialist authority for the proposed response stays with the existing domain reviewer.
-Requiring two domain decisions at both stages would duplicate work and leave task owners
-unable to resolve extraction errors. A starred badge still calls attention to the source;
-it never weakens later response co-sign policy. Archived tasks retain reads/history and
+Requirement confirmation checks the tender interpretation; the separate professional
+response decision checks the proposed answer and materials. A starred badge still calls attention to the source;
+it never bypasses human response/material/B02 gates or the retained database compatibility blocker. Archived tasks retain reads/history and
 reject all add/confirm/reopen/repair writes until authorized restoration.
 
 ## Consumer gates and freshness
@@ -362,8 +362,10 @@ Preserve later `rubric_shape_complete` changes in
 and every ordered section-source binding in
 [0046_score_section_sources.py](../../server/migrations/versions/0046_score_section_sources.py).
 Requirement-level gap reasons precede the specific response/material/citation cause;
-the gap reason `cosign_required` and export blocker `export_cosign_required` remain
-exclusive to multi-domain policies.
+legacy multi-domain database policy may still produce `cosign_required` and
+`export_cosign_required`. These are legacy blockers, not available co-sign operations;
+ordinary round-required trigger compatibility is tracked in
+[Known defects](roadmap.md#known-defects).
 Whole-rubric and score acceptance check every section source as well as all fixed
 scoring requirements, reusing the loaded review batch and existing citation verifier.
 Preparation-time `rubric_current_inputs` cannot globally require confirmation, since it
@@ -410,18 +412,17 @@ after confirmation; outstanding response next actions remain in the response pro
 All projections use contract 5.0; older contract versions are rejected.
 
 `RequirementActorHint` gives one accountable next actor, not a truncated list pretending
-to enumerate all authority. Choose an active eligible assignee, otherwise the eligible
-task owner. If neither is currently eligible, return owner-recovery with the named owner
-and a membership/ownership action; if the owner is unavailable, show human org-admin
-recovery without inventing an admin ID. Compute eligibility from live Membership, task
-role and scope. Other authorized contributors can act; the chosen actor is responsibility
-guidance, not an ACL. A viewer/token sees that person and action but no executable button.
+to enumerate all authority. The single-user surface uses the eligible task owner/human.
+Compute eligibility from live Membership, task role and scope. Missing human authority
+is an explicit blocker; do not advertise removed membership, ownership-transfer or
+assignment operations as recovery. The hint is guidance, not an ACL. A viewer/token
+sees the blocker and action but no executable human-decision button.
 
 `row_projection` must prefer archive recovery first, then source repair, then
 `confirm_requirement`, then response work. Provider/resource blockers cannot replace a local
 requirement action. Existing `repair_citation` actions must use the real admin predicate;
 an ordinary contributor instead sees “请任务负责人协调管理员修复引用”. Update `matches(mine)`
-and assignment filters for the named next actor, and `progress` for independent confirmed/
+for the eligible current human, and `progress` for independent confirmed/
 unconfirmed/legacy/invalidated/manual/rejected counts. A response that was previously
 complete cannot continue counting complete while its requirement is unconfirmed.
 
@@ -613,13 +614,13 @@ The owner approved every recommended default; the models implement these decisio
 
 | Decision | Approved default | Reason |
 | --- | --- | --- |
-| Who confirms requirements? | Human task owner/contributor with org admin/bidder/technical and req:confirm; no domain or co-sign; same-person entry/confirm allowed | Accepting the extracted basis is coordination work. Professional response and evidence approval keep their separate domain gates. |
+| Who confirms requirements? | Human task owner/contributor with org admin/bidder/technical and req:confirm; no domain decision; same-person entry/confirm allowed | Accepting the extracted basis is coordination work. Professional response and evidence approval keep their separate domain gates. |
 | Hard stop before any preparation? | Allow labelled preparation; gate accepted response/comply-only, accepted draft rows, rubric set confirmation and score inputs | Preserves useful work while keeping an unambiguous next-human action and preventing provisional text becoming accepted output. |
 | Uncited notes as requirements? | Do not add a free-text requirement kind | A parallel unsourced kind adds accidental consumption and coverage ambiguity; discussion already holds informal notes. |
 | Ambiguous quotation override? | No offsets/override in the initial input; request a longer unique literal quote in its page/block | Reuses verifier guarantees without weakening SQL parity or silently selecting the first occurrence. |
 | Manual target / all-rejected path? | Explicitly append to a chosen successful set, or create a clearly manual-origin extract receipt on the real document | Existing successful-scope/FK consumers remain coherent; failed model history and costs remain truthful. Membership-changing appends explicitly invalidate affected downstream manifests. |
 | Latest/default manual visibility? | Manual scopes require explicit selection and never silently replace latest model extraction | A one-item recovery set must not hide the full extracted requirement list. |
-| Re-extraction inheritance? | No automatic approval/assignment transfer; identical cache hit retains the same scope | Same words are insufficient proof of identical source and human intent across runs. |
+| Re-extraction inheritance? | No automatic approval transfer; identical cache hit retains the same scope | Same words are insufficient proof of identical source and human intent across runs. |
 | Migration and bulk confirmation? | Legacy-unconfirmed; owner-only explicit max-100 atomic batches | No fabricated historical human act; bounded bulk review makes migration manageable. |
 | Source invalidation granularity? | Pin full chunk/location/content/review hashes and verifier policy; invalidate on any mismatch, including change-back | Conservative invalidation is understandable and protects immutable human decisions. |
 | Board presentation? | Add requirement_review bucket, preserve separate response state and named assignee/owner/recovery | Staff can see who must act next without interpreting a second response-review badge. |

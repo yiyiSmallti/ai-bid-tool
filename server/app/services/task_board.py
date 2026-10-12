@@ -11,7 +11,7 @@ from sqlalchemy import case, literal, select, text
 from app.core.errors import ServiceError, not_found
 from app.models.entities import Job, Membership, User
 from app.models.team_workflow import TaskMember
-from app.schemas.team_workflow import (
+from app.schemas.task_board import (
     BoardActionView,
     BoardActivityView,
     BoardCounts,
@@ -23,11 +23,12 @@ from app.schemas.team_workflow import (
     JobProgress,
     PageData,
     PageView,
+    TaskActorAccess,
     TaskProgressQuery,
     TaskProgressView,
     TaskWorkflowView,
 )
-from app.services import requirement_consumption, task_events, task_workflow
+from app.services import requirement_consumption, task_access, task_events
 from app.services.auth import ROLE_SCOPES
 
 MAX_REQUIREMENTS = 5000
@@ -42,8 +43,6 @@ def workflow_view(workflow, cursor):
         state=workflow.state,
         revision=workflow.revision,
         access_epoch=workflow.access_epoch,
-        co_sign_starred=workflow.co_sign_starred,
-        rule_revision=workflow.rule_revision,
         archived_at=workflow.archived_at,
         archived_by_user_id=workflow.archived_by_user_id,
         last_event_cursor=cursor,
@@ -126,7 +125,7 @@ def validate_page(cursor, actor, task_id, workflow, settings, watermark, *, purp
 
 
 async def progress(session, actor, task_id, query: TaskProgressQuery, storage, settings):
-    _, workflow, _ = await task_workflow.access(session, actor, task_id)
+    _, workflow, member = await task_access.access(session, actor, task_id)
     actor.require("job:read")
     watermark = await task_events.head(session, actor.org_id, task_id)
     as_of = datetime.now(UTC)
@@ -147,6 +146,11 @@ async def progress(session, actor, task_id, query: TaskProgressQuery, storage, s
     items, next_key = await job_page(session, actor, task_id, storage, limit=query.limit, after=key)
     cursor = task_events.issue_cursor(actor, task_id, workflow, settings, seq=watermark.last_seq)
     return TaskProgressView(
+        access=TaskActorAccess.model_validate(
+            {"role": member.role, "review_domains": member.review_domains}
+        )
+        if member
+        else None,
         org_id=actor.org_id,
         task_id=task_id,
         workflow=workflow_view(workflow, cursor),
@@ -179,7 +183,7 @@ async def activity(
     from app.models.response_cards import ResponseCard
 
     if authorized is None:
-        _, workflow, _ = await task_workflow.access(session, actor, task_id)
+        _, workflow, _ = await task_access.access(session, actor, task_id)
         watermark = await task_events.head(session, actor.org_id, task_id)
     else:
         workflow, watermark = authorized
@@ -200,22 +204,6 @@ async def activity(
         if cursor
         else None
     )
-    actions = {
-        "task.member_set": "member_set",
-        "task.member_removed": "member_removed",
-        "task.owner_handed_over": "owner_handed_over",
-        "task.archived": "task_archived",
-        "task.unarchived": "task_restored",
-        "task.assignment_changed": "assignment_set",
-        "task.thread_created": "thread_created",
-        "task.comment_added": "comment_replied",
-        "task.review_rule_changed": "task_rule_set",
-        "task.review_policy_changed": "cosign_policy_set",
-        "task.review_round_opened": "card_changed",
-        "task.review_round_invalidated": "review_invalidated",
-        "task.domain_signed": "review_signed",
-        "task.cosign_completed": "review_signed",
-    }
     card_actions = {
         f"card.{value}"
         for value in (
@@ -235,12 +223,11 @@ async def activity(
         ResponseCard.org_id == actor.org_id, ResponseCard.task_id == task_id
     )
     task_jobs = select(Job.id).where(Job.org_id == actor.org_id, Job.task_id == task_id)
-    # Existing card audits bind their object directly; member actions bind the task.
+    # Existing card audits bind their object directly.
     # Job audits bind a real stored job rather than trusting arbitrary detail IDs.
     query = select(AuditLog).where(
         AuditLog.org_id == actor.org_id,
         or_(
-            and_(AuditLog.object_id == task_id, AuditLog.action.in_(actions)),
             and_(AuditLog.object_id.in_(cards), AuditLog.action.in_(card_actions)),
             and_(
                 AuditLog.object_id.in_(task_jobs),
@@ -270,11 +257,7 @@ async def activity(
             query.order_by(AuditLog.created_at.desc(), AuditLog.id.desc()).limit(limit + 1)
         )
     )
-    job_ids = {
-        row.object_id
-        for row in rows
-        if row.action not in actions and row.action not in card_actions
-    }
+    job_ids = {row.object_id for row in rows if row.action not in card_actions}
     jobs = (
         {
             job.id: job
@@ -298,7 +281,7 @@ async def activity(
         job_id = row.object_id if row.object_id in jobs else None
         if job_id is not None and job_id not in visible_jobs:
             continue
-        action = actions.get(row.action, "card_changed" if card_id else "job_changed")
+        action = "card_changed" if card_id else "job_changed"
         projected.append(
             (
                 row,
@@ -307,11 +290,7 @@ async def activity(
                         id=row.id,
                         actor_user_id=row.actor_user_id,
                         action=action,
-                        card_id=row.details.get("card_id") if row.action in actions else card_id,
-                        requirement_id=row.details.get("requirement_id")
-                        if row.action in actions
-                        else None,
-                        thread_id=row.details.get("thread_id") if row.action in actions else None,
+                        card_id=card_id,
                         job_id=job_id,
                         created_at=row.created_at,
                     )
@@ -356,10 +335,6 @@ def row_projection(
     actor,
     member,
     reviewers,
-    *,
-    assignment=None,
-    thread_count=0,
-    mentioned_thread_id=None,
 ):
     blockers = []
     if view is None:
@@ -392,69 +367,11 @@ def row_projection(
         if view
         else {"technical": "technical", "qualification": "commercial"}.get(requirement.category)
     )
-    co_sign = view.get("co_sign") if view else None
-    required_domains = (
-        co_sign["required_domains"]
-        if co_sign
-        else (
-            ["commercial", "technical"]
-            if domain
-            and (
-                bool(assignment and assignment.co_sign_required)
-                or workflow.co_sign_starred
-                and requirement.starred
-            )
-            else [domain]
-            if domain
-            else []
-        )
-    )
-    if co_sign is None:
-        co_sign = {
-            "status": "pending" if len(required_domains) > 1 else "not_required",
-            "round_revision": 0,
-            "required_domains": required_domains,
-            "signed_domains": [],
-            "pending_domains": required_domains,
-        }
-    pending_domains = co_sign["pending_domains"]
     eligible = [entry.user_id for entry in reviewers if domain in entry.review_domains]
-    missing_domains = [
-        required
-        for required in required_domains
-        if not any(required in entry.review_domains for entry in reviewers)
-    ]
-    signer_domains = [
-        required
-        for required in pending_domains
-        if any(
-            entry.user_id == actor.user_id and required in entry.review_domains
-            for entry in reviewers
-        )
-    ]
-    if co_sign and co_sign["status"] in {"pending", "partial"}:
-        if len(required_domains) > 1:
-            blockers.append("pending_cosign")
-        if view and view.get("co_sign_purpose") == "disposition":
-            bucket = "pending_review"
-    elif co_sign and co_sign["status"] == "invalidated":
-        if len(required_domains) > 1:
-            blockers.append("invalidated_cosign")
-        elif not {"stale_material", "invalid_citation", "needs_reconfirmation"}.intersection(
-            blockers
-        ):
-            blockers.append("needs_reconfirmation")
-        bucket = "gap"
     if view:
         blockers.extend(view.get("blockers", []))
-    if missing_domains:
+    if domain and not eligible:
         blockers.append("missing_reviewer")
-    assignee = assignment.assignee_user_id if assignment else None
-    available = any(entry.user_id == assignee and entry.can_edit for entry in reviewers)
-    if assignee is None:
-        blockers.append("unassigned")
-    elif not available:
-        blockers.append("assignee_unavailable")
     actions = []
     target = {
         "kind": "card" if view else "requirement",
@@ -462,21 +379,6 @@ def row_projection(
     }
     if workflow.state == "archived":
         blockers.append("task_archived")
-        if (
-            actor.actor_kind == "session"
-            and actor.token_id is None
-            and "task:archive" in actor.scopes
-            and (workflow.owner_user_id == actor.user_id or actor.role == "admin")
-        ):
-            actions.append(
-                BoardActionView.model_validate(
-                    dict(
-                        code="unarchive",
-                        target={"kind": "task", "id": workflow.task_id},
-                        eligible_user_ids=[actor.user_id],
-                    )
-                )
-            )
     elif member and member.role in ("owner", "contributor", "reviewer"):
         code = (
             "create_card"
@@ -498,17 +400,8 @@ def row_projection(
             and actor.actor_kind == "session"
             and actor.token_id is None
             and actor.user_id in eligible
-            else "cosign"
-            if bucket == "pending_review"
-            and len(required_domains) > 1
-            and co_sign is not None
-            and co_sign["status"] in {"pending", "partial"}
-            and signer_domains
-            and actor.actor_kind == "session"
-            and actor.token_id is None
             else "confirm"
             if bucket == "pending_review"
-            and (co_sign is None or len(co_sign["required_domains"]) <= 1)
             and actor.actor_kind == "session"
             and actor.token_id is None
             and actor.user_id in eligible
@@ -530,7 +423,6 @@ def row_projection(
             "refresh_material": "card:write",
             "repair_citation": "req:extract",
             "confirm": "evidence:confirm",
-            "cosign": "card:cosign",
             "view": "card:read",
         }
         if code == "repair_citation" and not (
@@ -541,8 +433,7 @@ def row_projection(
         ):
             code = "view"
         if scopes[code] in actor.scopes and (
-            code in ("view", "confirm", "cosign", "reopen")
-            or member.role in ("owner", "contributor")
+            code in ("view", "confirm", "reopen") or member.role in ("owner", "contributor")
         ):
             actions.append(
                 BoardActionView.model_validate(
@@ -552,50 +443,12 @@ def row_projection(
                         if code == "repair_citation"
                         else target,
                         eligible_user_ids=[actor.user_id],
-                        eligible_domains=signer_domains
-                        if code == "cosign"
-                        else [domain]
+                        eligible_domains=[domain]
                         if code in {"confirm", "reopen"} and domain
                         else [],
                     )
                 )
             )
-    if (
-        workflow.state == "active"
-        and "missing_reviewer" in blockers
-        and actor.actor_kind == "session"
-        and "task:members:write" in actor.scopes
-        and actor.token_id is None
-        and (actor.role == "admin" or member and member.role == "owner")
-    ):
-        actions.append(
-            BoardActionView.model_validate(
-                dict(
-                    code="find_reviewer",
-                    target={"kind": "task", "id": workflow.task_id},
-                    eligible_user_ids=[actor.user_id],
-                    eligible_domains=missing_domains,
-                )
-            )
-        )
-    if (
-        workflow.state == "active"
-        and (assignee is None or not available)
-        and actor.actor_kind == "session"
-        and actor.token_id is None
-        and "card:assign" in actor.scopes
-        and (actor.role == "admin" or member and member.role == "owner")
-    ):
-        actions.insert(
-            0,
-            BoardActionView.model_validate(
-                dict(
-                    code="assign",
-                    target={"kind": "requirement", "id": requirement.id},
-                    eligible_user_ids=[actor.user_id],
-                )
-            ),
-        )
     annotation = view.get("annotation") if view else None
     if annotation and view is not None and workflow.state == "active":
         can_create = (
@@ -617,7 +470,7 @@ def row_projection(
             action_code = "inspect_annotated_material"
         elif view["state"] == "pending_review" and actor.user_id in eligible:
             action_code = "confirm_annotated_material"
-            action_domains = signer_domains or ([domain] if domain else [])
+            action_domains = [domain] if domain else []
         elif view["state"] == "confirmed" and not annotation["released"]:
             failed = annotation["job_status"] in {"failed", "cancelled"}
             blockers.append("annotation_release_failed" if failed else "annotation_release_pending")
@@ -638,16 +491,6 @@ def row_projection(
                     )
                 ),
             )
-    if mentioned_thread_id is not None:
-        actions.append(
-            BoardActionView.model_validate(
-                dict(
-                    code="view",
-                    target={"kind": "thread", "id": mentioned_thread_id},
-                    eligible_user_ids=[actor.user_id],
-                )
-            )
-        )
     if not actions:
         actions = [
             BoardActionView.model_validate(
@@ -666,9 +509,6 @@ def row_projection(
             card_state=view["state"] if view else None,
             eligibility=view["eligibility"] if view else None,
             review_domain=domain,
-            owner_user_id=assignee,
-            assignment_revision=assignment.assignment_revision if assignment else 0,
-            co_sign=co_sign,
             flags=BoardRowFlags(
                 human_needs_material=bool(view and view["state"] == "needs_material"),
                 model_needs_material_hint=bool(
@@ -679,7 +519,6 @@ def row_projection(
             ),
             blockers=list(dict.fromkeys(blockers)),
             next_actions=actions,
-            comment_thread_count=thread_count,
         )
     )
 
@@ -689,27 +528,15 @@ def matches(row, query, actor, *, bucket=True, mentioned=False):
         (not bucket or query.bucket is None or row.bucket == query.bucket)
         and (query.category is None or row.category == query.category)
         and (query.starred is None or row.starred == query.starred)
-        and (query.owner_user_id is None or row.owner_user_id == query.owner_user_id)
-        and (not query.unassigned or row.owner_user_id is None)
-        and (
-            query.review_domain is None
-            or row.review_domain == query.review_domain
-            or row.co_sign is not None
-            and query.review_domain in row.co_sign.required_domains
-        )
+        and (query.review_domain is None or row.review_domain == query.review_domain)
         and (query.blocker is None or query.blocker in row.blockers)
         and (
             not query.mine
-            or row.owner_user_id == actor.user_id
-            or mentioned
             or (
                 actor.token_id is None
                 and actor.actor_kind == "session"
                 and any(
-                    (
-                        action.code in {"confirm", "cosign", "reopen"}
-                        or action.target.kind == "thread"
-                    )
+                    (action.code in {"confirm", "reopen"})
                     and actor.user_id in action.eligible_user_ids
                     for action in row.next_actions
                 )
@@ -721,7 +548,7 @@ def matches(row, query, actor, *, bucket=True, mentioned=False):
 async def board(
     session, actor, task_id, query: BoardQuery, storage, settings, *, review_details=False
 ):
-    task, workflow, member = await task_workflow.access(session, actor, task_id)
+    task, workflow, member = await task_access.access(session, actor, task_id)
     actor.require("card:read")
     actor.require("job:read")
     extraction = await session.get(Job, query.extraction_job_id)
@@ -731,12 +558,12 @@ async def board(
         raise ServiceError("invalid_extraction_job", "Choose a succeeded extraction job", 422, 2)
     if not await task_events.visible_job(session, actor, extraction, storage):
         raise not_found()
-    from app.services.task_board_projection import load, requirements_with_collaboration
+    from app.services.task_board_projection import load, scoped_requirements
 
-    scoped = await requirements_with_collaboration(
-        session, actor, task_id, extraction, limit=MAX_REQUIREMENTS + 1, member=member
+    scoped = await scoped_requirements(
+        session, actor, task_id, extraction, limit=MAX_REQUIREMENTS + 1
     )
-    requirements = [entry[0] for entry in scoped]
+    requirements = scoped
     if len(requirements) > MAX_REQUIREMENTS:
         raise ServiceError(
             "board_limit_exceeded", "Extraction exceeds 5000 saved requirements", 422, 2
@@ -784,7 +611,7 @@ async def board(
     reviewers = [
         SimpleNamespace(
             user_id=entry.user_id,
-            review_domains=set(entry.review_domains) & set(task_workflow.domains(role)),
+            review_domains=set(entry.review_domains) & set(task_access.domains(role)),
             can_edit=entry.role in {"owner", "contributor"} and "card:write" in ROLE_SCOPES[role],
             can_confirm_requirement=entry.role in {"owner", "contributor"}
             and "req:confirm" in ROLE_SCOPES[role],
@@ -807,7 +634,7 @@ async def board(
     rows = []
     all_rows = []
     review_hints = {}
-    for requirement, assignment, thread_count, mentioned_thread_id in scoped:
+    for requirement in requirements:
         view = views.get(requirement.id)
         row = row_projection(
             requirement,
@@ -816,9 +643,6 @@ async def board(
             actor,
             member,
             reviewers,
-            assignment=assignment,
-            thread_count=thread_count,
-            mentioned_thread_id=mentioned_thread_id,
         )
         if view is None and not session.info["board_requirement_citations"][requirement.id]:
             row = BoardRow.model_validate(
@@ -861,7 +685,6 @@ async def board(
                 workflow,
                 member,
                 reviewers,
-                assignment,
                 session.info["board_requirement_citations"][requirement.id],
             )
             if review_details and review.state != "confirmed"
@@ -885,7 +708,7 @@ async def board(
                 }
             )
         all_rows.append(row)
-        if matches(row, query, actor, bucket=False, mentioned=mentioned_thread_id is not None):
+        if matches(row, query, actor, bucket=False):
             rows.append(row)
     session.info["requirement_board_inputs"] = {
         "rows": all_rows,
@@ -893,7 +716,7 @@ async def board(
         "hints": review_hints,
         "workflow": workflow,
         "watermark": watermark,
-        "mentioned": {entry[0].id for entry in scoped if entry[3] is not None},
+        "mentioned": set(),
     }
     # Eligibility and citation checks use shared pure validators; SQL performs
     # the grouped count of that bounded metadata set rather than per-row reads.
@@ -921,12 +744,7 @@ async def board(
             )
         },
     }
-    mentioned_requirements = {entry[0].id for entry in scoped if entry[3] is not None}
-    matching = [
-        row
-        for row in rows
-        if matches(row, query, actor, mentioned=row.requirement_id in mentioned_requirements)
-    ]
+    matching = [row for row in rows if matches(row, query, actor)]
     page = [row for row in matching if key is None or str(row.requirement_id) > key][: query.limit]
     remaining = bool(
         page and any(str(row.requirement_id) > str(page[-1].requirement_id) for row in matching)

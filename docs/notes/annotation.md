@@ -43,8 +43,8 @@ existing recovery commands.
 After inspecting the actual candidate, “用于此响应卡” opens the existing response
 editor. A human writes a visual observation, stages an `ImageEvidenceInput`, and
 explicitly saves the response. Neither render success nor attachment confirms
-Evidence. Current requirement confirmation (人工确认), professional-domain review,
-and any complete co-sign (会签) round remain independent gates. Complete response
+Evidence. Current requirement confirmation (人工确认), professional-domain review
+and current response approval remain independent gates. Complete response
 approval queues the confirmed rendition. Release history and preview use
 `evidence annotation releases` and `evidence annotation release preview`; the
 explicit `release retry` command takes `AnnotationReleaseRetry` with a failed job
@@ -84,14 +84,14 @@ no SDK retries; the job processor owns retries.
 Candidate pixels retain the fixed `UNCONFIRMED` footer. The worker does not attach
 materials, edit card text or create a human decision.
 
-Existing response-card actions and co-sign services supply the approval binding.
+Existing response-card actions supply the approval binding.
 The server normalizes the approval's `confirmed_at` to UTC before hashing; reloading
 the same PostgreSQL timestamp through another connection time zone must retain the
 same complete approval JSON and hash. The exact-approval comparison remains required.
 Release rendering removes the candidate footer and retains already marked content;
 it must not crop or draw boxes a second time. Only the fixed `CONFIRMED` footer may
 change. Content-pixel hashes, the candidate mapping, canonical Evidence identity,
-and the complete current requirement/domain/co-sign decision bind consumption.
+and the complete current requirement/domain decision bind consumption.
 Drafts use confirmed canonical Evidence. B05 image exports additionally require
 its current confirmed release; stale, absent or corrupt release images cannot fall
 back to candidate bytes.
@@ -112,7 +112,7 @@ attach or retry.
   fallback, and declaration text is not an image source.
 - A requirement awaiting B02 confirmation can have prepared material. Preparation
   does not authorize response acceptance, a confirmed release, drafting or export.
-- A partial or stale co-sign round is not complete approval. The current card,
+- A stale response decision is not current approval. The current card,
   requirement and source must still match when retrying or downloading a release.
 - Geometry previews and queued receipts contain no published image. Only a
   succeeded, verified publication provides an actual candidate or release.

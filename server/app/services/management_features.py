@@ -54,7 +54,7 @@ from app.schemas.management_pages import (
     FeatureRow as ResourceRow,
 )
 from app.services.auth import Identity, set_actor_context
-from app.services.task_workflow import live_actor
+from app.services.task_access import live_actor
 from app.services.versioned import audit
 
 WARNINGS = ["Implementation status is a declaration; evidence has not been verified"]

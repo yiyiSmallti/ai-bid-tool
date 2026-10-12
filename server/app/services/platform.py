@@ -1,7 +1,5 @@
-"""Platform operator identity, login with TOTP, audit and one-time password setup."""
+"""Configured platform operator login, model configuration and internal audit."""
 
-import asyncio
-import hashlib
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
@@ -13,7 +11,7 @@ from app.core.config import Settings
 from app.core.db import Database
 from app.core.errors import ServiceError, not_found
 from app.core.password_attempts import PasswordAttempts, invalid_login
-from app.core.security import TokenSigner, hash_password
+from app.core.security import TokenSigner
 from app.core.totp import matching_counter
 from app.models.entities import PlatformAuditLog, PlatformModel, User
 from app.providers.llm import HTTPExtractor, platform_llm
@@ -24,8 +22,6 @@ from app.schemas.platform_credentials import CatalogResolveTarget, PlatformOpera
 from app.services.platform_credentials import PlatformCredentialResolver
 
 LOGIN_ACTION = "platform.login"
-SETUP_SECONDS = 24 * 3600
-UNUSABLE_PASSWORD = "!setup"
 
 
 PlatformIdentity = PlatformOperator
@@ -63,11 +59,9 @@ async def login(
     email = email.strip().lower()
 
     async def consume_totp(session: AsyncSession, _user: User) -> dict:
-        from app.services.operator_enrollment import factor_secret
-
         if email not in settings.platform_admins():
             raise invalid_login()
-        secret = await factor_secret(settings, session, email)
+        secret = settings.platform_totp().get(email)
         counter = matching_counter(secret, code) if secret else None
         if counter is None:
             raise invalid_login()
@@ -76,7 +70,7 @@ async def login(
         last_counter = await session.scalar(
             select(func.max(PlatformAuditLog.details["totp_counter"].as_integer())).where(
                 PlatformAuditLog.actor_email == email,
-                PlatformAuditLog.action.in_((LOGIN_ACTION, "platform.operator.enroll")),
+                PlatformAuditLog.action == LOGIN_ACTION,
                 PlatformAuditLog.outcome == "success",
             )
         )
@@ -109,37 +103,6 @@ def identify(settings: Settings, crypto: TokenSigner, bearer: str) -> PlatformId
     )
 
 
-def fingerprint(password_hash: str) -> str:
-    return hashlib.sha256(password_hash.encode()).hexdigest()[:32]
-
-
-def setup_token(crypto: TokenSigner, user_id: UUID, password_hash: str) -> str:
-    # Bound to the current hash, so the link stops working once a password is set.
-    return crypto.issue(
-        {"kind": "password-setup", "user_id": str(user_id), "fp": fingerprint(password_hash)},
-        SETUP_SECONDS,
-    )
-
-
-async def setup_password(db: Database, crypto: TokenSigner, token: str, password: str) -> None:
-    invalid = ServiceError("invalid_setup_link", "Setup link is invalid or expired", 400, 4)
-    try:
-        payload = crypto.open(token)
-    except ServiceError:
-        raise invalid from None
-    if payload.get("kind") != "password-setup":
-        raise invalid
-    if len(password) < 12:
-        raise ServiceError("weak_password", "Password must have at least 12 characters", 400, 2)
-    async with db.transaction() as session:
-        user = await session.scalar(
-            select(User).where(User.id == UUID(payload["user_id"])).with_for_update()
-        )
-        if user is None or not user.active or fingerprint(user.password_hash) != payload.get("fp"):
-            raise invalid
-        user.password_hash = await asyncio.to_thread(hash_password, password)
-
-
 def plain(value):
     """JSON-ready values for aggregate rows (Decimal, dates, UUIDs)."""
     if isinstance(value, Decimal):
@@ -149,60 +112,6 @@ def plain(value):
     if isinstance(value, UUID):
         return str(value)
     return value
-
-
-async def list_orgs(session: AsyncSession) -> list[dict]:
-    rows = (await session.execute(text("SELECT * FROM platform_org_summaries()"))).mappings()
-    return [{key: plain(value) for key, value in row.items()} for row in rows]
-
-
-async def create_org(
-    session: AsyncSession, crypto: TokenSigner, actor: PlatformIdentity, name: str, admin_email: str
-) -> dict:
-    created = (
-        await session.execute(
-            text("SELECT * FROM platform_create_org(:name, :email, :hash)"),
-            {"name": name, "email": admin_email, "hash": UNUSABLE_PASSWORD},
-        )
-    ).one()
-    user = await session.get(User, created.admin_user_id)
-    assert user is not None
-    # A link is issued whenever the admin has never set a password, including reused accounts.
-    link = None
-    if user.password_hash == UNUSABLE_PASSWORD:
-        link = "/app/setup-password#token=" + setup_token(crypto, user.id, user.password_hash)
-    audit(
-        session,
-        actor.email,
-        "platform.org.create",
-        "success",
-        str(created.new_org_id),
-        {
-            "admin_email": admin_email,
-            "user_created": created.user_created,
-            "setup_link": link is not None,
-        },
-    )
-    return {
-        "org_id": str(created.new_org_id),
-        "admin_user_id": str(created.admin_user_id),
-        "admin_email": admin_email,
-        "user_created": created.user_created,
-        "setup_url": link,
-        "setup_expires_in": SETUP_SECONDS if link else None,
-    }
-
-
-async def set_org_active(
-    session: AsyncSession, actor: PlatformIdentity, org_id: UUID, active: bool
-) -> dict:
-    changed = await session.scalar(
-        text("SELECT platform_set_org_active(:org, :active)"), {"org": org_id, "active": active}
-    )
-    if not changed:
-        raise not_found()
-    audit(session, actor.email, "platform.org.active", "success", str(org_id), {"active": active})
-    return {"org_id": str(org_id), "active": active}
 
 
 MODEL_FIELDS = (
@@ -392,87 +301,6 @@ async def test_model(
             {"job_id": str(job.id), "test_org_id": str(identity.org_id)},
         )
     return view
-
-
-def parse_month(value: str) -> date:
-    try:
-        year, month = (int(part) for part in value.split("-"))
-        return date(year, month, 1)
-    except ValueError:
-        raise ServiceError("invalid_month", "Months use the YYYY-MM format", 400, 2) from None
-
-
-async def usage(
-    session: AsyncSession, start: str | None, end: str | None
-) -> tuple[dict, list[dict]]:
-    today = datetime.now(UTC).date()
-    first = parse_month(start) if start else today.replace(day=1)
-    last = parse_month(end) if end else first
-    if last < first or (last.year - first.year) * 12 + last.month - first.month > 36:
-        raise ServiceError("invalid_month", "Choose a range of at most 36 months", 400, 2)
-    names = {row["id"]: row["name"] for row in await list_orgs(session)}
-    rows = (
-        await session.execute(
-            text("SELECT * FROM platform_usage_summary(:a, :b)"), {"a": first, "b": last}
-        )
-    ).mappings()
-    items = [
-        {
-            **{key: plain(value) for key, value in row.items()},
-            "org_name": names.get(str(row["org_id"])),
-        }
-        for row in rows
-    ]
-    totals = {
-        "calls": sum(item["calls"] for item in items),
-        "tokens": sum(item["tokens"] for item in items),
-    }
-    return {"from": first.isoformat()[:7], "to": last.isoformat()[:7], "totals": totals}, items
-
-
-async def audit_entries(session: AsyncSession, limit: int) -> list[dict]:
-    rows = await session.scalars(
-        select(PlatformAuditLog).order_by(PlatformAuditLog.created_at.desc()).limit(limit)
-    )
-    rows = list(rows)
-    probe_ids = [
-        row.details.get("probe_id") for row in rows if row.action == "credential.probe_start"
-    ]
-    finished = (
-        set(
-            await session.scalars(
-                select(PlatformAuditLog.details["probe_id"].as_string()).where(
-                    PlatformAuditLog.action == "credential.probe_finish",
-                    PlatformAuditLog.details["probe_id"].as_string().in_(probe_ids),
-                )
-            )
-        )
-        if probe_ids
-        else set()
-    )
-
-    def outcome(row):
-        if row.action == "credential.probe_start" and row.outcome == "success":
-            if row.details.get("probe_id") not in finished:
-                return (
-                    "interrupted"
-                    if (datetime.now(UTC) - row.created_at).total_seconds() > 30
-                    else "in_progress"
-                )
-        return row.outcome
-
-    return [
-        {
-            "id": str(row.id),
-            "created_at": row.created_at.isoformat(),
-            "actor_email": row.actor_email,
-            "action": row.action,
-            "object_id": row.object_id,
-            "outcome": outcome(row),
-            "details": row.details,
-        }
-        for row in rows
-    ]
 
 
 async def user_orgs(

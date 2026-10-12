@@ -27,8 +27,7 @@ export async function annotationFixture(page,options={}){
       expect(req.headers()["x-org-id"]).toBe(ids.org);
       if(/\/annotations|\/annotation-releases/.test(path))expect(url.pathname.startsWith("/")).toBe(true);
       if(method==="GET"&&path==="/org/current")response=result("org current",{org_id:ids.org,user_id:ids.user,role:options.role??"technical"});
-      else if(path===`/tasks/${ids.task}/workflow`)response=result("task workflow",{workflow:{...boundary,owner_user_id:ids.user,state:"active",revision:1,access_epoch:1,last_event_cursor:"opaque-seed"}});
-      else if(path===`/tasks/${ids.task}/members`)response=result("task member list",{...boundary,next_cursor:null},[{...boundary,user_id:ids.user,role:options.taskRole??"contributor",active:true,review_domains:["technical"]}]);
+      else if(path===`/tasks/${ids.task}/progress`)response=result("task progress",{access: {role:options.taskRole??"contributor",review_domains:["technical"]},event_cursor:"opaque-snapshot",workflow:{...boundary,owner_user_id:ids.user,state:"active",revision:1,access_epoch:1,last_event_cursor:"opaque-seed"}});
       else if(path===`/tasks/${ids.task}/events`)return route.fulfill({contentType:"text/event-stream",body:`data: ${JSON.stringify({type:"heartbeat",cursor:"opaque-seed"})}\n\n`});
       else if(path===`/tasks/${ids.task}/events/poll`)response=result("task events",{...boundary,next_cursor:"opaque-seed"});
       else if(path===`/cards/${ids.card}`&&method==="GET")response=result("card show",card);
@@ -53,8 +52,6 @@ export async function annotationFixture(page,options={}){
         response=result("card update",card);
       }
       else if(path===`/requirements/${ids.requirement}/review`)response=result("req show",{requirement:{...boundary,extraction_job_id:ids.extract,requirement_id:ids.requirement,content:{text:"合成要求",source:citation,category:"qualification",starred:false},state:options.requirementState??"confirmed"}});
-      else if(path===`/cards/${ids.card}/signoffs`)response=result("card signoff list",{...boundary,card_id:ids.card,round:null,next_cursor:null,summary:{status:options.cosign??"not_required",round_revision:0,required_domains:["technical","commercial"],signed_domains:options.cosign==="partial"?["technical"]:[],pending_domains:options.cosign==="partial"?["commercial"]:["technical","commercial"]}});
-      else if(path===`/tasks/${ids.task}/requirements/${ids.requirement}/review-policy`)response=result("card policy show",{policy:{...boundary,extraction_job_id:ids.extract,requirement_id:ids.requirement,revision:0,primary_domain:"technical",co_sign_required:false,starred:false,co_sign_starred:false,task_rule_revision:1,required_domains:["technical"]}});
       else if(path===`/tasks/${ids.task}/evidence-sources`){if(url.searchParams.has("limit"))expect(Number(url.searchParams.get("limit"))).toBe(50);response=result("evidence source list",{history:true,active_source_ids:[ids.source],...(url.searchParams.has("limit")?{next_cursor:null,returned:1,has_more:false}:{})},[source]);}
       else if(path===`/evidence-sources/${ids.source}/preview/download-link`)response=result("evidence source preview",{url:`/evidence-sources/${ids.source}/preview/download?signature=synthetic`,expires_in:300});
       else if((path.endsWith("/preview/download")||path.endsWith("/content"))){state.images++;state.maxImages=Math.max(state.maxImages,state.images);try{if(options.sourceDelay&&path.startsWith("/evidence-sources/"))await new Promise(resolve=>setTimeout(resolve,500));return await route.fulfill({contentType:"image/png",body:png});}finally{state.images--;}}

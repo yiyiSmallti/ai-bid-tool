@@ -9,7 +9,7 @@ kind: reference
 A verified citation proves where a quotation occurs. It does not prove that an
 extracted interpretation is faithful or that extraction found every requirement.
 Requirement review accepts the exact interpretation and source independently of
-response, Evidence, rubric and co-sign decisions. The approved boundaries and
+response, Evidence and rubric decisions. The approved boundaries and
 payloads are in [the B02 contract](../plan/requirement-confirmation.md).
 
 ## Usage
@@ -29,9 +29,9 @@ creates an explicitly selected manual set; an existing ID appends to that set wi
 its observed revision. Manual sets never replace the default latest model result.
 
 Owners/contributors with eligible org roles and `req:confirm` or `req:manual` may
-write. Tokens and delegated workers cannot receive those capabilities. Archived
-tasks retain readable history and reject review/manual writes. Assignment routes
-responsibility; it does not grant confirmation rights.
+write. Tokens and delegated workers cannot receive those capabilities. Existing archived
+tasks retain readable history and reject review/manual writes. The first transition
+slice exposes no assignment or archival operations.
 
 ## How it works
 
@@ -58,10 +58,10 @@ current confirmation. Draft assembly partitions every saved requirement into an
 accepted row, comply-only item or explicit gap. Checks can diagnose partial drafts;
 unconfirmed tender interpretations remain provisional. Export freshness follows
 the fixed draft and review inputs. Existing evidence, professional-domain,
-prototype and co-sign gates remain independent.
+prototype and retained database confirmation gates remain independent.
 
 The opt-in board places pending review in `requirement_review`, names the eligible
-assignee/owner or recovery action, and keeps response completion separate. Legacy
+reviewer/owner or recovery action, and keeps response completion separate. Legacy
 boards retain their existing enums and show pending requirement review as a gap.
 Default-board state reads skip full pins only for missing or nonconfirmed review
 metadata; confirmed rows still recheck current meaning, complete source and policy.

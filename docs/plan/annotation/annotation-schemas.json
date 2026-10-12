@@ -13,15 +13,14 @@
   "scope": {
     "write": "human-only evidence:annotate; immutable server candidates and separately gated releases",
     "confirmation": [
-      "#/schemas/CardAction",
-      "#/schemas/CoSignConfirm"
+      "#/schemas/CardAction"
     ],
     "read": "existing source/screenshot/card scopes and same-org task membership",
     "vendor_sources": "typed but blocked with vendor_source_not_enabled in first certificate slice",
     "preparation": "unconfirmed/legacy_unconfirmed/confirmed/invalidated ReviewState pins can be rendered; release requires current confirmed requirement source binding",
     "release_retry": "explicit existing job retry; delivery recovery only; cannot confirm evidence or alter approval",
     "source_privacy_review": "submit reviewed_source_png_sha256 must equal server manifest source.source_png.sha256; checked by AnnotationService before job admission",
-    "single_domain": "Retain every actual one-domain complete response review round; only genuine historical decisions may omit a round."
+    "single_domain": "Current human response confirmation binds the exact card, Evidence and requirement; retained database gates block legacy multi-domain policy without a co-sign operation."
   },
   "renderer_protocol": {
     "request": "#/schemas/AnnotationRenderRequest",
@@ -213,25 +212,12 @@
           "$ref": "#/schemas/AnnotationRequirementPin"
         },
         "decision_kind": {
-          "enum": [
-            "single_domain",
-            "cosign"
-          ],
+          "const": "single_domain",
           "title": "Decision Kind",
           "type": "string"
         },
         "review_domain": {
           "$ref": "#/schemas/ReviewDomain"
-        },
-        "co_sign": {
-          "anyOf": [
-            {
-              "$ref": "#/schemas/AnnotationCoSignManifest"
-            },
-            {
-              "type": "null"
-            }
-          ]
         },
         "card_content_sha256": {
           "pattern": "^[0-9a-f]{64}$",
@@ -267,7 +253,6 @@
         "requirement",
         "decision_kind",
         "review_domain",
-        "co_sign",
         "card_content_sha256",
         "evidence_binding_sha256",
         "approval_binding_sha256"
@@ -389,146 +374,6 @@
         "mapping"
       ],
       "title": "AnnotationCanvas",
-      "type": "object"
-    },
-    "AnnotationCoSignManifest": {
-      "additionalProperties": false,
-      "description": "Exact co_sign shape emitted by task_cosign.manifest_fields.",
-      "properties": {
-        "policy_revision": {
-          "minimum": 0,
-          "title": "Policy Revision",
-          "type": "integer"
-        },
-        "task_rule_revision": {
-          "minimum": 1,
-          "title": "Task Rule Revision",
-          "type": "integer"
-        },
-        "round_id": {
-          "anyOf": [
-            {
-              "format": "uuid",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Round Id"
-        },
-        "round_revision": {
-          "minimum": 0,
-          "title": "Round Revision",
-          "type": "integer"
-        },
-        "purpose": {
-          "anyOf": [
-            {
-              "enum": [
-                "response",
-                "disposition"
-              ],
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Purpose"
-        },
-        "required_domains": {
-          "items": {
-            "$ref": "#/schemas/ReviewDomain"
-          },
-          "maxItems": 2,
-          "minItems": 1,
-          "title": "Required Domains",
-          "type": "array"
-        },
-        "status": {
-          "enum": [
-            "not_required",
-            "pending",
-            "partial",
-            "complete",
-            "invalidated"
-          ],
-          "title": "Status",
-          "type": "string"
-        },
-        "evidence_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Evidence Sha256"
-        },
-        "requirement_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Requirement Sha256"
-        },
-        "citation_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Citation Sha256"
-        },
-        "content_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Content Sha256"
-        },
-        "signatures": {
-          "items": {
-            "$ref": "#/schemas/AnnotationSignaturePin"
-          },
-          "maxItems": 2,
-          "title": "Signatures",
-          "type": "array"
-        }
-      },
-      "required": [
-        "policy_revision",
-        "task_rule_revision",
-        "round_id",
-        "round_revision",
-        "purpose",
-        "required_domains",
-        "status",
-        "evidence_sha256",
-        "requirement_sha256",
-        "citation_sha256",
-        "content_sha256",
-        "signatures"
-      ],
-      "title": "AnnotationCoSignManifest",
       "type": "object"
     },
     "AnnotationCurrentStatus": {
@@ -1464,51 +1309,6 @@
       "title": "AnnotationShowData",
       "type": "object"
     },
-    "AnnotationSignaturePin": {
-      "additionalProperties": false,
-      "description": "Exact signature keys emitted by task_cosign.projections.",
-      "properties": {
-        "id": {
-          "format": "uuid",
-          "title": "Id",
-          "type": "string"
-        },
-        "domain": {
-          "$ref": "#/schemas/ReviewDomain"
-        },
-        "signer_user_id": {
-          "format": "uuid",
-          "title": "Signer User Id",
-          "type": "string"
-        },
-        "request_sha256": {
-          "pattern": "^[0-9a-f]{64}$",
-          "title": "Request Sha256",
-          "type": "string"
-        },
-        "reason_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Reason Sha256"
-        }
-      },
-      "required": [
-        "id",
-        "domain",
-        "signer_user_id",
-        "request_sha256",
-        "reason_sha256"
-      ],
-      "title": "AnnotationSignaturePin",
-      "type": "object"
-    },
     "AnnotationSubmit": {
       "additionalProperties": false,
       "properties": {
@@ -1889,77 +1689,6 @@
         "page_count"
       ],
       "title": "CertificateScanFile",
-      "type": "object"
-    },
-    "CoSignConfirm": {
-      "additionalProperties": false,
-      "description": "expected_revision is the exact card revision; partial signatures do not advance it.",
-      "properties": {
-        "expected_revision": {
-          "$ref": "#/schemas/Revision"
-        },
-        "action": {
-          "const": "confirm",
-          "default": "confirm",
-          "title": "Action",
-          "type": "string"
-        },
-        "reviewed_evidence_ids": {
-          "items": {
-            "format": "uuid",
-            "type": "string"
-          },
-          "maxItems": 100,
-          "title": "Reviewed Evidence Ids",
-          "type": "array"
-        },
-        "reviewed_warning_codes": {
-          "items": {
-            "type": "string"
-          },
-          "maxItems": 100,
-          "title": "Reviewed Warning Codes",
-          "type": "array"
-        },
-        "reason": {
-          "anyOf": [
-            {
-              "maxLength": 10000,
-              "minLength": 1,
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Reason"
-        },
-        "purpose": {
-          "const": "response",
-          "default": "response",
-          "title": "Purpose",
-          "type": "string"
-        },
-        "selected_domain": {
-          "$ref": "#/schemas/ReviewDomain"
-        },
-        "expected_round": {
-          "$ref": "#/schemas/Revision"
-        },
-        "client_request_id": {
-          "format": "uuid",
-          "title": "Client Request Id",
-          "type": "string"
-        }
-      },
-      "required": [
-        "expected_revision",
-        "selected_domain",
-        "expected_round",
-        "client_request_id"
-      ],
-      "title": "CoSignConfirm",
       "type": "object"
     },
     "ContentMapping": {

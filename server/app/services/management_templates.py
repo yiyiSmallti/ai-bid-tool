@@ -41,7 +41,7 @@ from app.schemas.management_pages import (
 )
 from app.schemas.template_contracts import TemplateRevision as RevisionView
 from app.services.auth import Identity, set_actor_context
-from app.services.task_workflow import live_actor
+from app.services.task_access import live_actor
 from app.services.versioned import audit
 
 WARNINGS = [

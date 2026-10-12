@@ -25,7 +25,7 @@ product (拟投产品) or feature source fixed to the task (任务). An org
 The flow is typed condition proposal → deterministic source and shape validation →
 comparison against exact task resource revisions → human confirmation (人工确认) →
 explicit attachment to a response card (响应卡). A comparison is advisory until
-accepted; it never confirms a requirement, response (响应), evidence (证据), co-sign,
+accepted; it never confirms a requirement, response (响应), evidence (证据),
 scoring rubric or export. Parameter satisfaction, response deviation (偏离), and
 bid-rejection (废标) or point-deduction (扣分) risk are separate decisions.
 
@@ -61,7 +61,7 @@ The following paths describe the integration baseline, not implementation of thi
 | `evaluate_item` in [check_rules.py](../../server/app/services/check_rules.py) | `negative_deviation` reads an assembled response's negative deviation and note. It signals disqualification risk for starred/substantive clauses (实质性条款), deduction risk otherwise, with human consequence review. It neither compares parameters nor establishes an actual penalty. |
 | `assemble`, `current_draft_inputs` in [drafts.py](../../server/app/services/drafts.py); `fixed_rows`, `snapshot` in [score_run_inputs.py](../../server/app/services/score_run_inputs.py); `accept_batch` in [score_semantic.py](../../server/app/services/score_semantic.py) | Assembly partitions every requirement into a response, comply-only (须遵守), or gap (缺口). Scoring uses fixed inputs and guards `negative_deviation_conflict`; an assessment cannot grant full marks or silently remove a requirement. |
 | `build_manifest`, `fresh_manifest`, `release`, `download_gate` in [exports.py](../../server/app/services/exports.py) | Export revalidates approvals and input freshness; negative deviation requires acknowledgment rather than blanket prohibition. Final sections (正式件) block simulated materials; review copies (审阅件) retain their acknowledgment policy. |
-| `Identity`, `SCOPES`, `HUMAN_ONLY_SCOPES` in [auth.py](../../server/app/services/auth.py); `live_actor`, `access` in [task_workflow.py](../../server/app/services/task_workflow.py); `sign`, `apply_eligibility`, `manifest_fields` in [task_cosign.py](../../server/app/services/task_cosign.py) | Live task/domain authority and complete/current co-sign consumption predicates already exist. Org admin alone is not technical-review authority. A summary saying complete is not an approval predicate. |
+| `Identity`, `SCOPES`, `HUMAN_ONLY_SCOPES` in [auth.py](../../server/app/services/auth.py); `live_actor`, `access` in [task_access.py](../../server/app/services/task_access.py) | Live task/domain authority and current approval consumption predicates already exist. Org admin alone is not technical-review authority. A summary saying complete is not an approval predicate. |
 | `CONTRACT_VERSION`, `Result`, `Cost` in [contracts.py](../../server/app/schemas/contracts.py); `PreflightData` in [preflight_contracts.py](../../server/app/schemas/preflight_contracts.py) |B03 reuses these types, not older cost examples in the design. |
 
 The [design's example](../design.md#data-model) uses `tech_param`, `param/op/value/unit`
@@ -92,7 +92,7 @@ and already captured genuine product material support the complete path below.
    the four-state result and the next actor. Confirm B02, the exact condition and the
    conclusive comparison through their separate human decisions.
 5. Explicitly attach the accepted result to a draft response card. Reuse evidence
-   binding, response review, co-sign and assembly. Inspect the deviation table, B09
+   binding, human response review and assembly. Inspect the deviation table, B09
    risk, scoring inputs and review/final export behavior through their actual routes.
 6. Replace a task product pin or reopen the requirement. Show stale assessment and
    dependent artifacts, remove consumption eligibility and guide re-review. Old
@@ -304,7 +304,7 @@ revision's dependency set and is never silently applied to an existing card.
 | Consumer | Proposed B03 behavior and retained gates |
 | --- | --- |
 | Response preparation | `CardAttach` adds the exact accepted assessment/review IDs to a new draft card revision, subject to expected card version. It refuses a protected/confirmed card until the human uses existing reopen/withdraw. No automatic revision overwrite or weakening of existing negative deviation. A meets result may suggest no deviation (无偏离); does-not-meet may suggest negative. Humans write the actual response and note. Positive is always a human proposal requiring justification. |
-| Response acceptance | Validate B02, condition acceptance, assessment acceptance/freshness, material/Evidence confirmation and current task/domain permissions. Preserve `task_cosign` complete/current round gates; summary completeness and an assessment confirmer are insufficient. An attached does-not-meet plus nonnegative card is a conflict requiring input revision or attachment withdrawal with human reason; it cannot be waived as meets. |
+| Response acceptance | Validate B02, condition acceptance, assessment acceptance/freshness, material/Evidence confirmation and current task/domain permissions. Retain database confirmation gates that block existing multi-domain policies; this slice exposes no co-sign operation. Summary completeness and an assessment confirmer are insufficient. An attached does-not-meet plus nonnegative card is a conflict requiring input revision or attachment withdrawal with human reason; it cannot be waived as meets. |
 | Table assembly (组表) | Extend `card_eligibility` and `current_draft_inputs` with exact assessment and review receipt bindings. Stale/reopened attached dependencies produce `parameter_assessment_invalidated`; they remain gaps until re-reviewed. Unknown/ambiguous proposals stay in the work panel, not confirmed rows. Preserve the exhaustive response/comply-only/gap partition and independent comply-only authority. |
 | B09 check | Reuse `check_inputs.snapshot` and `check_rules.evaluate_item`. Human-confirmed negative rows still generate `negative_deviation`; add linked tender/product comparison citations as supporting details, not fabricated bid quotes. Provisional assessments can produce a clearly provisional advisory observation, never an accepted response. Do not infer statutory rejection or a numeric penalty; existing risk severity remains a review signal. |
 | Scoring | Bind accepted assessment IDs/hashes into `score_run_inputs.fixed_rows` and report stale input if they change. Only confirmed scoring criteria (评分标准), the accepted rubric and actual bid (标书) material can support points. Preserve `score_semantic.accept_batch` negative-deviation protections. No “meets = full score” or “unknown = zero” shortcut. |
@@ -312,7 +312,7 @@ revision's dependency set and is never silently applied to an existing card.
 | Review copy / final section | Reuse `build_manifest`, `fresh_manifest`, `release`, `download_gate`, Evidence confirmation, human-only export, prototype decisions and simulated-material policy. Stale attached assessments follow existing stale-input/gap rules, including explicit gaps in review copies; never print an unconfirmed assessment as a response. Accepted negative deviations retain `export_negative_deviation` acknowledgment, not a new blanket block. Previously generated artifacts retain historical snapshots but cannot receive a fresh release/download eligibility claim after invalidation. |
 
 An authorized human may detach an assessment through a new card revision with a reason;
-the full response review and co-sign cycle restarts. This is not deletion of the failed
+the full human response review restarts; retained database gates still block legacy multi-domain policies. This is not deletion of the failed
 result, a change to its verdict, or a means to erase the underlying negative-deviation
 conflict from assessment history/check notices. The existing manual evidence standard
 still applies. Detach is a proposed addition to card revision metadata, not a new route
@@ -323,9 +323,9 @@ that bypasses the existing card update/reopen workflow.
 `InputManifest` binds org/task/extraction scope and set revision, exact requirement review revision/hash
 and source binding, condition revision/hash and human receipt, fact set ID/hash, product
 or feature selection/revision/lot/configuration, parent product, provenance marks,
-rule versions and task membership/review-policy state. Assessment review has its own
+rule versions and live task membership and review-domain authority. Assessment review has its own
 monotone revision. Card consumers additionally bind Evidence source/rendition hashes,
-assessment review receipt and co-sign manifest. Server-computed hashes cannot be supplied
+assessment review receipt and exact human response/material approval bindings. Server-computed hashes cannot be supplied
 as authorization by a client.
 
 | Change | Required effect |
@@ -336,7 +336,7 @@ as authorization by a client.
 | Library head revision changes while task pin is unchanged | Notify that a newer library revision exists; do not silently repin or invalidate solely because the library head moved. |
 | Withdrawn/replaced source, Evidence/rendition changes or root simulation mark | Recheck relevant source/provenance/material bindings; invalidate affected consumers. Source archives are immutable; replacement has a new identity. |
 | Reviewed rule release | Retain pinned historic release; expose recompute available. Explicit task adoption creates new assessment inputs and requires re-review. A revoked unsafe rule release blocks acceptance/consumption immediately without rewriting history. |
-| Membership/domain/co-sign policy changes or task archival | Re-evaluate live acceptance and consumption. Loss of authorized signers cannot be overridden by cached success; archived tasks allow authorized history reads only. |
+| Membership/domain authority changes or existing task archival state | Re-evaluate live acceptance and consumption. Loss of the authorized human reviewer cannot be overridden by cached success; archived tasks allow authorized history reads only. |
 
 No publication against changed inputs:
 return `parameter_inputs_changed` with recoverable receipts and accounted cost.
@@ -505,9 +505,9 @@ or retry already published items silently.
 | List/detail/history/source preview | `parameter:read` | Active org membership plus readable task; admin/bidder/technical/viewer within existing task visibility. Tokens need task/read and resource/source read grants where applicable. |
 | Extract/compare and preview | `parameter:run` | Admin/bidder/technical with task owner/contributor write authority; explicitly scoped tokens may prepare. Archived tasks reject mutation. |
 | Propose/revise condition or facts | `parameter:write` | Same task write authority; tokens may propose source-checked candidates but cannot resolve their approval state. |
-| Confirm/reject/reopen condition or assessment | `parameter:confirm` | Human session only, technical org role and live technical task review-domain grant under existing domain predicates. Admin/bidder alone cannot perform a technical decision. Assignment routes work; assignment alone grants no authority. |
+| Confirm/reject/reopen condition or assessment | `parameter:confirm` | Human session only, technical org role and live technical task review-domain grant under existing domain predicates. Admin/bidder alone cannot perform a technical decision. Preparation and human review retain their separate grants. |
 | Attach assessment to response | `parameter:write` + existing `card:write` | Current accepted assessment and writable draft card; no token can confirm the resulting card or withdraw a protected human decision. |
-| Response approval/co-sign/export | Existing scopes | Preserve `evidence:confirm`, `card:cosign`, review-domain roles and `export`, plus live B02/assessment gates. No new export permission. |
+| Response approval/export | Existing scopes | Preserve `evidence:confirm`, review-domain roles and `export`, plus live B02/assessment gates. No new export permission. |
 
 Add `parameter:confirm` to `HUMAN_ONLY_SCOPES` and database token-scope denial constraints;
 it is never in token-issuable `SCOPES`.
@@ -567,8 +567,9 @@ needs product material, awaiting technical review, and accepted/stale. Verdict a
 review state remain separate labels; ★ and known failures remain visible in all views.
 
 The row shows requirement, selected lot/model/version, observed versus required value,
-comparison status, assigned person, blocker and next action. “Unassigned” routes to task
-owner assignment; a technical confirmation button identifies the eligible review domain.
+comparison status, eligible human reviewer, blocker and next action. Missing review
+authority is an explicit blocker; a technical confirmation button identifies the
+required single review domain. No assignment operation is exposed.
 Do not require bid staff to understand hashes, source parsers, jobs or migrations.
 
 The detail panel puts literal tender and product sources side by side with locations,
@@ -576,7 +577,7 @@ exact selected version and capture time. Show the original units first, with a s
 expandable deterministic-conversion explanation. Ambiguity highlights the conflicting
 words and offers allowed interpretations or “request source/clarification”; it never
 defaults to meets. Confirmation names exactly what is being accepted and separately
-shows B02, response/Evidence and co-sign blockers. Comparison reruns do not tick any of
+shows B02, response/Evidence and review-domain blockers, plus the explicit legacy database compatibility blocker. Comparison reruns do not tick any of
 those checkboxes.
 
 Batch extraction/assessment starts with selected count, missing inputs and resource estimates
@@ -615,10 +616,10 @@ the comparator are prescribed.
 | --- | --- |
 | Two-org database isolation | For **each of the eight new tables**, org A cannot SELECT/INSERT/UPDATE/reference B; missing org context fails; composite FK rejects mixed org/task/selection parents; immutable UPDATE/DELETE denied to `bid_app`. Include source object prefix/download isolation and task-private visibility within the same org. Retain machine-readable case results. |
 | Two-org HTTP/job isolation | For **each route in the HTTP table**, A against B and A against a nonexistent parent both return 404, including cursor/history/source/facts/card/job children. Revoke token/membership between submit and publication; check no B data enters Provider input, caches, SSE or error details. |
-| Real workflow gates | Human with technical task authority accepts B02/condition/result separately, attaches a card, completes Evidence and required co-sign, assembles and exports. Negative cases cover every missing gate, wrong role, token scope issuance/request, stale source/pin/rules, a changed-back revision, simulated/prototype declarations and contradictory card. Reopen/reject recovery remains usable. |
+| Real workflow gates | Human with technical task authority accepts B02/condition/result separately, attaches a card, completes the separate human Evidence and response decisions, assembles and exports. Negative cases cover every missing gate, wrong role, token scope issuance/request, stale source/pin/rules, a changed-back revision, simulated/prototype declarations and contradictory card. Reopen/reject recovery remains usable. |
 | Parameter end-to-end vectors | Run source → condition → facts → assessment through actual API with fake model proposals: Chinese inequalities/negation/full-width digits, 64 GB/64 GiB, 23/24 ports, exact boundaries, negative temperature, open/closed ranges, all/any sets, per-port versus total, installed versus maximum, explicit tolerance, unsupported/ambiguous statements, missing or conflicting facts, ★ preservation and quote-matched-but-semantically-wrong proposals. |
 | CLI snapshots | Snapshot `--json` for **every listed command**, dry-run/job wait, page/cursor, human denial, stale gate, retryable/nonretryable/partial outcomes and Result 5.0 costs. Import schema discovery and ensure no unregistered command or older cost projection is advertised as B03. Snapshot decimal strings, both source sides and empty-result pages. |
-| Browser end-to-end | Two humans with distinct required review domains and a read-only user exercise next-owner assignment, source inspection, ambiguity correction, card attachment, co-sign, negative-deviation acknowledgment and export. Replace the product pin during an open review and test SSE reconnect/stale refresh. Retain a redacted Playwright trace and assertions tied to immutable IDs, not screenshots alone. |
+| Browser end-to-end | One human with the required review-domain authority exercises source inspection, ambiguity correction, card attachment, separate human/material/B02 decisions, negative-deviation acknowledgment and export; unauthorized identities retain read/write denial assertions. Replace the product pin during an open review and test SSE reconnect/stale refresh. Retain a redacted Playwright trace and assertions tied to immutable IDs, not screenshots alone. |
 | Boundedness/concurrency | Seed enough data to cross each page/batch/quote/byte/manifest bound. Assert SQL bounded reads, no N+1 source loading, correct UTF-8 envelope shrinking, cursor forward progress, timeout mapping and changed-input publication rejection. Queue replay and cancellation retain cost and one receipt per target. |
 
 Keep repeatable acceptance artifacts under git-ignored `data/work/b03-acceptance/<run>/`
@@ -670,7 +671,7 @@ The owner approved every recommended default; implementation follows these decis
 | Tolerance | No implicit tolerance; only cited absolute/percent numeric equality in v1. | Prevents an apparent match created by relaxing the tender. |
 | Fact extraction | Human/source-checked fact entry and local archive text parsing initially; LLM proposes tender conditions only. | Keeps the first slice auditable and resource limits understandable; future automated product extraction can reuse facts. |
 | Product/feature proof | Exact task pin and applicable genuine source; declaration, simulated proposal and prototype alone yield unknown. | Prevents implementation-state or simulation markers being laundered into proof. |
-| Human authority | Technical review-domain humans decide typed meaning/result; B02 and response/co-sign gates remain independent. | Gives a visible responsible owner without granting technical authority to every admin. |
+| Human authority | Technical review-domain humans decide typed meaning/result; B02 and human response/material gates remain independent. | Gives a visible responsible owner without granting technical authority to every admin. |
 | Require B03 for every response? | No; explicit optional attachment, then strict freshness and contradiction gates. | Preserves valid manual work while making machine-supported claims auditable. |
 | Model-before-B02 work | Permit provisional preparation; require current B02 for typed acceptance and downstream confirmed consumption. | Staff can prepare material while coordination review is pending. |
 | Negative deviations | Suggest only from established failure; retain current B09 risk and export acknowledgment semantics. | Missing proof is not failure and parameter failure is not a penalty formula. |

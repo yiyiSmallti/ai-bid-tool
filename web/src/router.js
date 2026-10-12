@@ -1,8 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { orgSession, session } from "./api.js";
 import { errorText, orgAccess, orgRequest } from "./org.js";
-import Audit from "./views/Audit.vue";
-import Apply from "./views/Apply.vue";
 import Credentials from "./views/Credentials.vue";
 import Login from "./views/Login.vue";
 import Models from "./views/Models.vue";
@@ -12,40 +10,25 @@ import OrgLogin from "./views/OrgLogin.vue";
 import OrgTasks from "./views/OrgTasks.vue";
 import OrgTaskBoard from "./views/OrgTaskBoard.vue";
 import OrgTaskProgress from "./views/OrgTaskProgress.vue";
-import OrgTaskMembers from "./views/OrgTaskMembers.vue";
 import OrgTask from "./views/OrgTask.vue";
 import OrgRequirements from "./views/OrgRequirements.vue";
 import OrgReview from "./views/OrgReview.vue";
 import OrgDrafts from "./views/OrgDrafts.vue";
-import Orgs from "./views/Orgs.vue";
-import OperatorEnrollment from "./views/OperatorEnrollment.vue";
-import Operators from "./views/Operators.vue";
-import SetupPassword from "./views/SetupPassword.vue";
-import Usage from "./views/Usage.vue";
 export const router = createRouter({
   history: createWebHistory("/app/"),
   routes: [
     { path: "/", redirect: "/org/tasks" },
-    { path: "/apply", component: Apply, meta: { public: true, title: "组织申请开通" } },
-    { path: "/setup-password", component: SetupPassword, meta: { public: true, title: "设置密码" } },
-    { path: "/platform/enroll", component: OperatorEnrollment, meta: { public: true, title: "平台管理员开通" } },
     { path: "/platform/login", component: Login, meta: { public: true, title: "平台后台登录" } },
-    { path: "/platform", redirect: "/platform/orgs" },
-    { path: "/platform/orgs", component: Orgs, meta: { area: "platform", title: "单位", nav: "orgs" } },
-    { path: "/platform/operators", component: Operators, meta: { area: "platform", title: "平台管理员", nav: "operators" } },
+    { path: "/platform", redirect: "/platform/models" },
     { path: "/platform/models", component: Models, meta: { area: "platform", title: "模型", nav: "models" } },
     { path: "/platform/credentials", component: Credentials, meta: { area: "platform", title: "服务凭据", nav: "credentials" } },
     { path: "/platform/clef", component: () => import("./views/Clef.vue"), meta: { area: "platform", title: "Clef 初筛配置", nav: "clef" } },
     { path: "/platform/trust-anchors", component: () => import("./views/TrustAnchors.vue"), meta: { area: "platform", title: "信任根证书", nav: "trust-anchors" } },
-    { path: "/platform/usage", component: Usage, meta: { area: "platform", title: "用量", nav: "usage" } },
-    { path: "/platform/audit", component: Audit, meta: { area: "platform", title: "审计", nav: "audit" } },
     { path: "/org/login", component: OrgLogin, meta: { public: true, title: "单位登录" } },
-    { path: "/org/members", component: () => import("./views/OrgMembers.vue"), meta: { area: "org", title: "成员", nav: "members" } },
     { path: "/org/tasks", component: OrgTasks, meta: { area: "org", title: "招标任务", nav: "tasks" } },
     { path: "/org/tasks/:taskId", component: OrgTask, meta: { area: "org", title: "任务详情", nav: "tasks" } },
     { path: "/org/tasks/:taskId/board", component: OrgTaskBoard, meta: { area: "org", title: "任务看板", nav: "tasks" } },
     { path: "/org/tasks/:taskId/progress", component: OrgTaskProgress, meta: { area: "org", title: "作业进度", nav: "tasks" } },
-    { path: "/org/tasks/:taskId/members", component: OrgTaskMembers, meta: { area: "org", title: "成员与归档", nav: "tasks" } },
     { path: "/org/tasks/:taskId/requirements", component: OrgRequirements, meta: { area: "org", title: "要求确认与补录", nav: "tasks" } },
     { path: "/org/tasks/:taskId/cards/:cardId/annotation", component: () => import("./views/OrgAnnotation.vue"), meta: { area: "org", title: "证据标注", nav: "tasks" } },
     { path: "/org/tasks/:taskId/review", component: OrgReview, meta: { area: "org", title: "要求与响应审阅", nav: "tasks" } },

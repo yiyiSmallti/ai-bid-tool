@@ -1,7 +1,7 @@
 // End-to-end check of the platform console. Requires E2E_BASE_URL, E2E_EMAIL,
 // E2E_PASSWORD, E2E_TOTP_SECRET and E2E_OUTPUT (a new artifact directory).
 import { createHmac } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
@@ -25,7 +25,7 @@ function totp(secret, offset = 0) {
   return String((digest.readUInt32BE(start) & 0x7fffffff) % 1_000_000).padStart(6, "0");
 }
 
-test("operator manages orgs, models, usage and audit", async ({ page, browser }) => {
+test("operator manages models and credentials", async ({ page }) => {
   const steps = [];
   const consoleErrors = [];
   page.on("console", (message) => message.type() === "error" && consoleErrors.push(message.text()));
@@ -35,7 +35,7 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
     steps.push(name);
   };
 
-  const first = await page.goto("/app/platform/orgs");
+  const first = await page.goto("/app/platform/models");
   expect(first.headers()["content-security-policy"]).toContain("default-src 'self'");
   await expect(page).toHaveURL(/\/app\/platform\/login$/);
 
@@ -49,18 +49,10 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await page.fill("input[name=password]", env("E2E_PASSWORD"));
   await page.fill("input[name=totp]", totp(env("E2E_TOTP_SECRET")));
   await page.click("button[type=submit]");
-  await expect(page).toHaveURL(/\/app\/platform\/orgs$/);
-  await expect(page.getByText("用量演示单位")).toBeVisible();
-  await shot("orgs");
-
-  await page.click("text=开通单位");
-  await page.fill("input[name=org-name]", "端到端测试单位");
-  await page.fill("input[name=admin-email]", "e2e-admin@example.test");
-  await page.click("form.panel button[type=submit]");
-  const link = (await page.getByTestId("setup-link").textContent()).trim();
-  expect(link).toMatch(/\/app\/setup-password#token=/);
-  await expect(page.getByRole("row", { name: /端到端测试单位/ })).toContainText("e2e-admin@example.test");
-  await shot("org-created");
+  await expect(page).toHaveURL(/\/app\/platform\/models$/);
+  await expect(page.getByRole("heading", { name: "模型" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "平台导航" }).getByRole("link", { name: /单位|用量|审计|平台管理员/ })).toHaveCount(0);
+  await shot("models-entry");
 
   await page.click("nav >> text=服务凭据");
   await page.getByRole("button", { name: "添加凭据" }).click();
@@ -116,70 +108,14 @@ test("operator manages orgs, models, usage and audit", async ({ page, browser })
   await expect(row.getByTestId("level-result-max")).toContainText("max：未通过：provider_unavailable");
   await shot("model-levels");
 
-  await page.click("nav >> text=用量");
-  const usageRow = page.getByRole("row", { name: /用量演示单位/ });
-
-
-  const [download] = await Promise.all([page.waitForEvent("download"), page.click("text=导出 CSV")]);
-  const csvPath = join(output, download.suggestedFilename());
-  await download.saveAs(csvPath);
-  const csv = readFileSync(csvPath, "utf8");
-  expect(csv.split("\n")[0]).toContain("month,org_name,org_id,provider");
-  expect(csv).toContain("用量演示单位");
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "用量" })).toBeVisible();
-  await shot("usage");
-
-
-  await page.click("nav >> text=审计");
-  for (const label of ["登录", "开通单位", "修改模型", "测试模型"]) {
-    await expect(page.getByRole("cell", { name: label, exact: true }).first()).toBeVisible();
-  }
-  await shot("audit");
-
-  const anonymous = await browser.newPage();
-  await anonymous.goto(link);
-  await expect(anonymous).toHaveURL(/\/app\/setup-password$/);
-  await anonymous.fill("input[name=new-password]", "e2e-admin-password-1");
-  await anonymous.fill("input[name=confirm-password]", "e2e-admin-password-1");
-  await anonymous.click("button[type=submit]");
-  await expect(anonymous.getByRole("status")).toContainText("密码已设置");
-  await anonymous.screenshot({ path: join(output, "org-1-setup-password.png") });
-
-  // The new org admin signs in.
-  await anonymous.getByRole("link", { name: "登录单位" }).click();
-  await anonymous.fill("input[name=email]", "e2e-admin@example.test");
-  await anonymous.fill("input[name=password]", "e2e-admin-password-1");
-  await anonymous.click("button[type=submit]");
-  await expect(anonymous).toHaveURL(/\/app\/org\/tasks$/);
-  // Opening the same link again in a fresh tab must not allow a second password change.
-  const reuse = await browser.newPage();
-  await reuse.goto(link);
-  await reuse.fill("input[name=new-password]", "e2e-admin-password-2");
-  await reuse.fill("input[name=confirm-password]", "e2e-admin-password-2");
-  await reuse.click("button[type=submit]");
-  await expect(reuse.getByRole("alert")).toContainText("链接已失效或已使用");
-  await reuse.screenshot({ path: join(output, "org-3-setup-link-reused.png") });
-  await reuse.close();
-
-  await page.click("nav >> text=单位");
-  const created = page.getByRole("row", { name: /端到端测试单位/ });
-
-  await created.getByRole("button", { name: "停用" }).click();
-  await expect(created).toContainText("已停用");
-  await shot("org-disabled");
-  await anonymous.reload();
-  await expect(anonymous.getByRole("alert")).toHaveText("该单位已停用，请联系平台管理员");
-  await anonymous.close();
-
   await page.click("text=退出登录");
   await expect(page).toHaveURL(/\/app\/platform\/login$/);
-  await page.goto("/app/platform/orgs");
+  await page.goto("/app/platform/models");
   await expect(page).toHaveURL(/\/app\/platform\/login$/);
 
   expect(consoleErrors.filter((text) => !text.includes("401"))).toEqual([]);
   writeFileSync(
     join(output, "result.json"),
-    JSON.stringify({ passed: true, steps: [...steps, "setup-password", "link-reuse-rejected", "disabled-org-blocked", "signed-out"], csv: download.suggestedFilename() }, null, 2),
+    JSON.stringify({ passed: true, steps: [...steps, "signed-out"] }, null, 2),
   );
 });

@@ -1,8 +1,7 @@
-"""Platform operator sign-in, org disabling and one-time password setup through the API."""
+"""Platform operator sign-in and retained organization login access boundaries."""
 
 import json
 import time
-from uuid import uuid4
 
 import httpx
 import pytest
@@ -10,13 +9,13 @@ from app.api.main import create_app
 from app.core.config import Settings
 from app.core.password_attempts import MAX_FAILURES
 from app.core.totp import STEP_SECONDS, code_at
-from app.models.entities import PlatformAuditLog, User
+from app.models.entities import Org, PlatformAuditLog
 from app.services import platform
 from conftest import OPERATOR, OPERATOR_PASSWORD, PASSWORD, FakeQueue
 from conftest import OPERATOR_SECRET as SECRET
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 
@@ -145,7 +144,7 @@ def test_operator_without_environment_factor_can_start_but_malformed_factor_cann
         )
 
 
-async def test_disabled_org_rejects_login_sessions_and_tokens(client, tenants):
+async def test_disabled_org_rejects_login_sessions_and_tokens(client, tenants, admin_engine):
     org = str(tenants["orgs"][0])
     body = {"email": "a@example.test", "password": PASSWORD, "org_id": org}
     session = (await client.post("/auth/login", json=body)).json()["data"]["session"]
@@ -164,10 +163,10 @@ async def test_disabled_org_rejects_login_sessions_and_tokens(client, tenants):
     token_header = {"Authorization": f"Bearer {token}", "X-Org-Id": org}
 
     async def set_active(value):
-        async with client.app.state.db.transaction() as db_session:
-            await db_session.execute(
-                text("SELECT platform_set_org_active(:org, :active)"), {"org": org, "active": value}
-            )
+        with Session(admin_engine) as database, database.begin():
+            organization = database.get(Org, tenants["orgs"][0])
+            assert organization is not None
+            organization.active = value
 
     await set_active(False)
     for response in (
@@ -183,32 +182,3 @@ async def test_disabled_org_rejects_login_sessions_and_tokens(client, tenants):
     await set_active(True)
     assert (await client.get("/tasks", headers=header)).status_code == 200
     assert (await client.get("/tasks", headers=token_header)).status_code == 200
-
-
-async def test_setup_link_sets_password_once(client, tenants, admin_engine):
-    user_id = uuid4()
-    with Session(admin_engine) as session, session.begin():
-        session.add(
-            User(id=user_id, email="new@example.test", password_hash=platform.UNUSABLE_PASSWORD)
-        )
-    token = platform.setup_token(client.app.state.crypto, user_id, platform.UNUSABLE_PASSWORD)
-    weak = await client.post("/auth/setup-password", json={"token": token, "password": "short"})
-    assert weak.status_code == 400 and weak.json()["data"]["error"]["code"] == "weak_password"
-    new_password = "synthetic-new-password"
-    first = await client.post(
-        "/auth/setup-password", json={"token": token, "password": new_password}
-    )
-    assert first.status_code == 200, first.text
-    again = await client.post(
-        "/auth/setup-password", json={"token": token, "password": "another-password-1"}
-    )
-    assert (
-        again.status_code == 400 and again.json()["data"]["error"]["code"] == "invalid_setup_link"
-    )
-    garbage = await client.post(
-        "/auth/setup-password", json={"token": "garbage", "password": new_password}
-    )
-    assert garbage.status_code == 400
-    with Session(admin_engine) as session:
-        stored = session.get(User, user_id)
-        assert stored is not None and stored.password_hash.startswith("pbkdf2$")

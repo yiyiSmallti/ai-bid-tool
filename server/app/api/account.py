@@ -39,7 +39,6 @@ def create_router(
                 "status": "ok",
                 "version": CONTRACT_VERSION,
                 "real_llm_configured": configured,
-                "org_signup_enabled": settings.org_signup_enabled,
             },
         )
 

@@ -15,7 +15,7 @@ from app.schemas.requirement_confirmation import (
     RequirementDecision,
     ReviewPageQuery,
 )
-from app.schemas.team_workflow import TaskProgressQuery
+from app.schemas.task_board import TaskProgressQuery
 from pydantic import ValidationError
 
 INPUT_BYTE_LIMIT = 256 * 1024

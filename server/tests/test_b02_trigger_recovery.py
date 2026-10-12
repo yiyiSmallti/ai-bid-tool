@@ -35,10 +35,10 @@ from app.services import drafts
 from app.services.auth import Identity, set_actor_context
 from sqlalchemy import event, text
 from sqlalchemy.exc import DBAPIError
+from task_access_fixtures import add_member, person, workflow
 from test_check import publish_draft
 from test_requirement_confirmation import review
 from test_response_cards import create_tender, phase_one_client
-from test_team_workflow_membership import add_member, person, workflow
 
 ARTIFACTS = Path(__file__).resolve().parents[2] / "data/work/b02-residual/trigger-regressions"
 
@@ -469,7 +469,7 @@ async def test_live_org_role_remains_required_for_human_review(trigger_case, adm
         state["revision"],
         role="contributor",
     )
-    assert added.status_code == 200, added.text
+    assert added.active
     with pytest.raises(DBAPIError, match="requirement human role required"):
         async with case["app"].state.db.transaction(case["org"]) as session:
             # Emulate stale actor grants; the DB must intersect the live membership.

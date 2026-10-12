@@ -4,7 +4,7 @@ kind: adr
 
 # 0010 Offline PDF signature validation and platform trust anchors
 
-Date: 2026-10-08. Status: **accepted.**
+Date: 2026-10-08. Status: accepted; trust-anchor authority amended by 0012.
 
 ## Context
 

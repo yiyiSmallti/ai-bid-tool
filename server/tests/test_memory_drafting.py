@@ -192,9 +192,8 @@ async def test_changed_memory_fences_dispatch_or_publication_and_keeps_usage(
                 assert calls[0].usage_record_id == calls[0].call_id
 
 
-@pytest.mark.parametrize("cosign_required", [False, True])
 async def test_memory_stale_review_gate_preserves_already_confirmed_card(
-    tenants, tmp_path, admin_engine, cosign_required
+    tenants, tmp_path, admin_engine
 ):
     from task_fixtures import reviewer_header
     from test_card_generation import slots
@@ -220,51 +219,8 @@ async def test_memory_stale_review_gate_preserves_already_confirmed_card(
         _, human = await reviewer_header(
             api, admin_engine, tenants["orgs"][0], UUID(task), "technical"
         )
-        if cosign_required:
-            policy = await api.put(
-                f"/tasks/{task}/requirements/{requirements[2]['id']}/review-policy",
-                headers=headers[0],
-                params={"extraction_job_id": extraction},
-                json={
-                    "expected_policy_revision": 0,
-                    "co_sign_required": True,
-                    "reason": "Both domains must retain current generation inputs",
-                },
-            )
-            assert policy.status_code == 200, policy.text
         pending = await require_action(api, human, current[2]["card"], "submit")
-        if cosign_required:
-            _, commercial = await reviewer_header(
-                api, admin_engine, tenants["orgs"][0], UUID(task), "commercial"
-            )
-            listing = await api.get(f"/cards/{pending['id']}/signoffs", headers=human)
-            assert listing.status_code == 200, listing.text
-            review_round = listing.json()["data"]["round"]
-            for domain, signer in (("technical", human), ("commercial", commercial)):
-                signed = await api.post(
-                    f"/cards/{pending['id']}/signoffs",
-                    headers=signer,
-                    json={
-                        "purpose": "response",
-                        "action": "confirm",
-                        "expected_revision": pending["revision"],
-                        "expected_round": review_round["round_revision"],
-                        "selected_domain": domain,
-                        "reviewed_evidence_ids": [],
-                        "reviewed_warning_codes": pending["warning_codes"],
-                        "reason": "Reviewed the current response and its guidance",
-                        "client_request_id": str(uuid4()),
-                    },
-                )
-                assert signed.status_code == 200, signed.text
-                assert signed.json()["data"]["summary"]["status"] == (
-                    "partial" if domain == "technical" else "complete"
-                )
-            confirmed = (await api.get(f"/cards/{pending['id']}", headers=human)).json()["data"]
-        else:
-            confirmed = await require_action(
-                api, human, pending, "confirm", reviewed_evidence_ids=[]
-            )
+        confirmed = await require_action(api, human, pending, "confirm", reviewed_evidence_ids=[])
         another = await require_action(api, human, current[3]["card"], "submit")
         admin = headers[0]
         disabled = await api.post(
@@ -276,9 +232,7 @@ async def test_memory_stale_review_gate_preserves_already_confirmed_card(
         shown = await api.get(f"/cards/{confirmed['id']}", headers=admin)
         assert shown.status_code == 200, shown.text
         assert shown.json()["data"]["state"] == "confirmed"
-        assert shown.json()["data"]["eligibility"] == (
-            "needs_reconfirmation" if cosign_required else "eligible"
-        )
+        assert shown.json()["data"]["eligibility"] == "eligible"
         assert "memory_changed_after_review" in shown.json()["data"]["warning_codes"]
         preview = await api.post(
             f"/tasks/{task}/drafts",
@@ -286,7 +240,7 @@ async def test_memory_stale_review_gate_preserves_already_confirmed_card(
             json={"extraction_job_id": extraction, "dry_run": True},
         )
         assert preview.status_code == 200, preview.text
-        assert preview.json()["data"]["response_requirements"] == (0 if cosign_required else 1)
+        assert preview.json()["data"]["response_requirements"] == 1
         result = await api.post(
             f"/cards/{another['id']}/actions",
             headers=human,

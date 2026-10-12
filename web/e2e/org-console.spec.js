@@ -85,6 +85,7 @@ async function login(page, role, org = "a") {
   await page.getByRole("button", { name: "登录" }).click();
   await expect(page).toHaveURL(/\/app\/org\/tasks$/);
   await expect(page.getByRole("heading", { name: "招标任务" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "单位导航" }).getByRole("link", { name: "成员", exact: true })).toHaveCount(0);
 }
 
 // Element Plus selects open a listbox; options are chosen by their visible text.

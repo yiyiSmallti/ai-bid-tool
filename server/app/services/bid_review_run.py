@@ -28,7 +28,7 @@ from app.schemas.preflight_contracts import PreflightData
 from app.services import bid_review as bids
 from app.services import bid_review_privacy as privacy
 from app.services import bid_review_text as text_review
-from app.services import check_semantic, task_workflow
+from app.services import check_semantic, task_access
 from app.services import preflight as preflight_service
 from app.services.auth import Identity
 from app.services.versioned import audit
@@ -47,7 +47,7 @@ async def resolve_binding(session, settings):
 async def run_access(session, actor, task_id, *, write=True, lock=True):
     if actor.actor_kind not in {"session", "token", "worker"}:
         raise not_found()
-    return await task_workflow.access(
+    return await task_access.access(
         session,
         actor,
         task_id,

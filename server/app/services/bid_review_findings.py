@@ -21,7 +21,7 @@ from app.schemas import bid_review_findings as c
 from app.services import bid_review as bids
 from app.services import bid_review_privacy as privacy
 from app.services import bid_review_run as runs
-from app.services import confidential, redaction, task_workflow
+from app.services import confidential, redaction, task_access
 from app.services.versioned import audit
 
 
@@ -566,7 +566,7 @@ async def decide(session, actor, review_id, finding_id, body, settings, *, class
     current = await state(session, finding)
     if not classify and current["review_domain"] is None:
         bids.fail("unclassified", "Classify this finding before deciding", 409, 2)
-    await task_workflow.access(
+    await task_access.access(
         session,
         actor,
         run.task_id,

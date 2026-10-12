@@ -12,7 +12,7 @@ from app.schemas.console_assessments import AssessmentJobQuery, CitationRequest
 from app.schemas.contracts import Result
 from app.services import assessment_reads
 from app.services.assessment_bounds import bounded_result, query_model
-from app.services.task_workflow import access as task_access
+from app.services.task_access import access as task_access
 
 
 def _serial(row: Any, fields: tuple[str, ...]) -> dict[str, Any]:

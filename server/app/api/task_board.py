@@ -21,7 +21,7 @@ from app.core.errors import ServiceError
 from app.core.security import TokenSigner
 from app.schemas.contracts import Category, Cost, Result
 from app.schemas.response_card_contracts import ReviewDomain
-from app.schemas.team_workflow import (
+from app.schemas.task_board import (
     BoardQuery,
     EventReplayQuery,
     TaskProgressQuery,
@@ -218,8 +218,6 @@ def create_router(context, db, storage, queue, settings):
         bucket: str | None = None,
         category: Category | None = None,
         starred: bool | None = None,
-        owner_user_id: UUID | None = None,
-        unassigned: bool = False,
         review_domain: ReviewDomain | None = None,
         blocker: str | None = None,
         mine: bool = False,
@@ -230,7 +228,7 @@ def create_router(context, db, storage, queue, settings):
     ):
         async def operation(session, actor):
             if extraction_job_id is None:
-                from app.services.task_workflow import access
+                from app.services.task_access import access
 
                 await access(session, actor, task_id)
                 raise ServiceError("extraction_required", "Choose an extraction job", 422, 2)
@@ -244,8 +242,6 @@ def create_router(context, db, storage, queue, settings):
                         bucket=bucket,
                         category=category,
                         starred=starred,
-                        owner_user_id=owner_user_id,
-                        unassigned=unassigned,
                         review_domain=review_domain,
                         blocker=blocker,
                         mine=mine,
@@ -308,7 +304,7 @@ def create_router(context, db, storage, queue, settings):
         async def operation(session, actor):
             if view == "requirement-review":
                 from app.services import requirement_board
-                from app.services.task_workflow import access
+                from app.services.task_access import access
 
                 await access(session, actor, task_id)
                 if request.state.contract_version != "5.0":
@@ -430,7 +426,7 @@ def create_router(context, db, storage, queue, settings):
                         yield item
                     cursor = page.next_cursor or cursor
                     if time.monotonic() >= heartbeat:
-                        from app.schemas.team_workflow import StreamHeartbeat
+                        from app.schemas.task_board import StreamHeartbeat
 
                         yield frame(
                             StreamHeartbeat(
@@ -450,7 +446,7 @@ def create_router(context, db, storage, queue, settings):
                             "invalid_event_cursor",
                         ):
                             _, fresh = await replay(credentials, x_org_id, task_id, None, 100)
-                            from app.schemas.team_workflow import StreamResetRequired
+                            from app.schemas.task_board import StreamResetRequired
 
                             reason = (
                                 "retention_expired"

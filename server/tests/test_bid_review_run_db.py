@@ -39,6 +39,7 @@ from app.providers.llm import OpenAICompatibleExtractor
 from app.schemas.bid_review_privacy import SanitizedPageRef, sanitized_context_sha256
 from bid_signature_fixtures import signed_pdf, standard_fixture
 from sqlalchemy import func, select, text
+from task_access_fixtures import add_member, person, workflow
 from test_bid_review_upload_db import (
     PDF,
     run,
@@ -57,7 +58,6 @@ from test_bid_review_upload_db import (
 from test_check_combined import install_resolver
 from test_confidential_values import add_field, set_value
 from test_provider_config import save as save_provider
-from test_team_workflow_membership import add_member, person, workflow
 
 DATE = "2026-10-08"
 REGISTERED = "SyntheticRegisteredIdentity943817"
@@ -245,7 +245,7 @@ def document(lines, *, image=False):
 
 
 def data(response):
-    assert response.status_code == 200, response.text
+    assert response.active
     assert set(response.json()) == {
         "ok",
         "command",
@@ -431,7 +431,7 @@ async def terminal(api, header, application, org, accepted):
         accepted["review_id"] = str(row.id)
     await run(application, org, accepted["job_id"])
     response = await api.get(f"/v4/jobs/{accepted['job_id']}", headers=header)
-    assert response.status_code == 200, response.text
+    assert response.active
     return response.json()["data"]
 
 
@@ -808,7 +808,7 @@ async def test_nonowner_task_participants_cannot_inspect_or_authorize_text(
     user, participant = await person(api, admin_engine, tenants["orgs"][0], role=role)
     current = await workflow(api, headers[0], case["task"])
     response = await add_member(api, headers[0], case["task"], user, current["revision"])
-    assert response.status_code == 200, response.text
+    assert response.active
     for method, suffix, body in (
         ("get", "redaction", None),
         ("post", "outbound-authorizations", case["body"]),

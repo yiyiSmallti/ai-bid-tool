@@ -11,7 +11,7 @@ from typing import NoReturn
 from uuid import UUID, uuid4
 
 import pymupdf
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ServiceError, not_found
@@ -571,6 +571,52 @@ def revision_quote_hash(revision: ResponseCardRevision, requirement: Requirement
     )
 
 
+async def review_approvals(session, org_id, card_ids):
+    """Keep the unchanged database approval fence until the baseline replaces it.
+
+    Existing non-default policies must still block consumption. No review rounds,
+    signatures or policy manifests are created or exposed by the application.
+    """
+    if not card_ids:
+        return {}
+    rows = await session.execute(
+        select(
+            ResponseCard.id,
+            func.team_cosign_card_approved(ResponseCard.org_id, ResponseCard.id),
+            func.jsonb_array_length(func.team_cosign_domains(ResponseCard.org_id, ResponseCard.id)),
+        ).where(ResponseCard.org_id == org_id, ResponseCard.id.in_(card_ids))
+    )
+    return {
+        card_id: {
+            "approved": bool(approved),
+            "reason": "cosign_required" if domains > 1 else "needs_reconfirmation",
+        }
+        for card_id, approved, domains in rows
+    }
+
+
+def apply_approval(view, approval):
+    if not approval["approved"] and view["eligibility"] in {"eligible", "comply_only"}:
+        view["eligibility"] = "needs_reconfirmation"
+    return view
+
+
+def approval_gap_reasons(reasons, approval, *, state, disposition):
+    reasons = list(reasons)
+    if approval is None or approval["approved"]:
+        return reasons
+    if approval["reason"] == "cosign_required":
+        if "cosign_required" not in reasons:
+            reasons.append("cosign_required")
+    elif (state == "confirmed" or disposition == "comply_only") and not {
+        "stale_material",
+        "invalid_citation",
+        "needs_reconfirmation",
+    }.intersection(reasons):
+        reasons.append("needs_reconfirmation")
+    return reasons
+
+
 async def card_view(
     session: AsyncSession,
     actor: Identity,
@@ -616,10 +662,8 @@ async def card_view(
         memory_lineage,
         requirement_review=reviews.get(requirement.id),
     )
-    from app.services import task_cosign
-
-    projection = (await task_cosign.projections(session, actor.org_id, [card.id]))[card.id]
-    task_cosign.apply_eligibility(view, projection)
+    approval = (await review_approvals(session, actor.org_id, [card.id]))[card.id]
+    apply_approval(view, approval)
     from app.services.agent_tools import provenance
 
     origin_job = revision.model_job_id
@@ -852,7 +896,7 @@ class CardReadBatch:
     _generation_stale: dict[UUID, bool] = field(default_factory=dict)
     _views: dict[tuple[UUID, bool], dict] = field(default_factory=dict)
     memory_epoch: int = 0
-    cosign: dict[UUID, dict] = field(default_factory=dict)
+    approvals: dict[UUID, dict] = field(default_factory=dict)
     requirement_reviews: dict = field(default_factory=dict)
 
     @classmethod
@@ -972,16 +1016,14 @@ class CardReadBatch:
 
             actor.require("memory:read")
             memory_epoch = await epoch(session, actor.org_id)
-        from app.services import task_cosign
-
-        cosign = await task_cosign.projections(session, actor.org_id, list(loaded_cards))
+        approvals = await review_approvals(session, actor.org_id, list(loaded_cards))
         citations = citation_validity_batch(requirements, chunks)
         reviews = await requirement_consumption.effective(
             session, requirements, citations=citations
         )
         return cls(
             requirement_reviews=reviews,
-            cosign=cosign,
+            approvals=approvals,
             memory_epoch=memory_epoch,
             actor=actor,
             requirements=required,
@@ -1110,9 +1152,7 @@ class CardReadBatch:
                 if requirement_review_gate
                 else None,
             )
-        from app.services import task_cosign
-
-        return task_cosign.apply_eligibility(self._views[key], self.cosign[card.id])
+        return apply_approval(self._views[key], self.approvals[card.id])
 
 
 async def append_revision(
@@ -1387,7 +1427,7 @@ async def classify_card(session: AsyncSession, actor: Identity, card_id: UUID, b
 
 
 async def confirmation_inputs(session, actor, card, previous, requirement, storage):
-    """Expose actionable stale-input failures before a legacy round conflict."""
+    """Reject stale requirements, citations, memory and materials before confirmation."""
     await requirement_consumption.require_confirmed(session, [requirement])
     view = await card_view(session, actor, card, previous, requirement, storage)
     if "memory_input_stale" in view["warning_codes"]:
@@ -1398,7 +1438,7 @@ async def confirmation_inputs(session, actor, card, previous, requirement, stora
 
 
 async def validate_confirmation(session, actor, card, previous, requirement, body, storage):
-    """Validate every legacy human gate without writing Evidence or revisions."""
+    """Validate every human gate without writing Evidence or revisions."""
     view = await confirmation_inputs(session, actor, card, previous, requirement, storage)
     materials = await linked_evidence(session, previous.id)
     if not all(getattr(previous, name) for name in CONTENT_FIELDS):
@@ -1464,7 +1504,7 @@ async def card_action(
     card, previous, requirement = await require_card(session, card_id, lock=True)
     expected(card, body.expected_revision)
     if decision:
-        from app.services.task_workflow import access as task_access
+        from app.services.task_access import access as task_access
 
         await task_access(
             session,
@@ -1486,18 +1526,39 @@ async def card_action(
     before, after = transitions[body.action]
     if previous.state != before or previous.disposition == "comply_only":
         fail("invalid_transition", "Action is unavailable in the current state", 409)
-    from app.services import task_cosign
-
     if body.action == "confirm":
-        if settings is None:
-            from app.core.config import Settings
-
-            settings = Settings.load()
-        return await task_cosign.legacy_confirm(
-            session, actor, card, previous, requirement, body, storage, settings
-        )
+        required = await session.scalar(select(func.team_cosign_domains(actor.org_id, card.id)))
+        if required is None:
+            fail("invalid_state", "The saved response review policy is unavailable", 409)
+        if len(required) > 1:
+            fail(
+                "cosign_required", "The existing review policy requires unavailable co-signing", 409
+            )
+        await validate_confirmation(session, actor, card, previous, requirement, body, storage)
     materials = await linked_evidence(session, previous.id)
     values = {"state": after, "reason": body.reason}
+    if body.action == "confirm":
+        now = datetime.now(UTC)
+        for evidence in materials:
+            if evidence.confirmed_by is None:
+                evidence.confirmed_by, evidence.confirmed_at = actor.user_id, now
+                if evidence.kind in {"certificate_pdf_page", "image_region"}:
+                    evidence.quote_check = (
+                        "human_page_review"
+                        if evidence.kind == "certificate_pdf_page"
+                        else "human_image_review"
+                    )
+        values |= {
+            "confirmed_by": actor.user_id,
+            "confirmed_at": now,
+            "reviewed_warning_codes": body.reviewed_warning_codes,
+        }
+        if previous.disposition is None:
+            values |= {
+                "disposition": "respond",
+                "disposition_by": actor.user_id,
+                "disposition_at": now,
+            }
     correlation_id = uuid4()
     revision = await append_revision(
         session,
@@ -1509,9 +1570,7 @@ async def card_action(
         values=values,
         correlation_id=correlation_id,
     )
-    if body.action == "submit":
-        await task_cosign.create_round(session, actor, card, revision)
-    if body.action == "reject":
+    if body.action in {"confirm", "reject"}:
         from app.memory.feedback import record_feedback
 
         await record_feedback(
@@ -1520,10 +1579,14 @@ async def card_action(
             card,
             previous,
             revision,
-            "card_rejected",
+            "card_confirmed" if body.action == "confirm" else "card_rejected",
             body.reason,
         )
-    return await card_view(session, actor, card, revision, requirement)
+    if body.action == "confirm":
+        from app.services.annotations import enqueue_releases
+
+        await enqueue_releases(session, actor, card, revision)
+    return await card_view(session, actor, card, revision, requirement, storage)
 
 
 @task_authorized("evidence:confirm", write=True, review=True)
@@ -1566,7 +1629,9 @@ async def dispose_cards(
         if item.requirement_id in required_flags or (
             workflow is not None and workflow.co_sign_starred and requirement.starred
         ):
-            fail("cosign_required", "Use a disposition review round for every required domain", 409)
+            fail(
+                "cosign_required", "The existing review policy requires unavailable co-signing", 409
+            )
     correlation = uuid4()
     output = {}
     for item in sorted(body.items, key=lambda value: str(value.requirement_id)):
