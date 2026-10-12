@@ -120,7 +120,6 @@ async def draft(api, app, header, task, extraction):
     assert terminal["data"]["status"] == "succeeded", result.text
     assert terminal["data"]["result"]["cost"] == terminal["cost"]
     assert terminal["cost"]["llm_tokens"] == 0
-    assert terminal["cost"]["usd"] == 0.0
     return terminal["data"]["result"]["draft_id"]
 
 

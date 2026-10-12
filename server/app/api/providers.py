@@ -4,10 +4,8 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 
 from app.models.entities import Job, UsageRecord
-from app.models.provider_configs import ProviderConfig
-from app.schemas.budget_contracts import BudgetProviderTest
 from app.schemas.contracts import ProviderUsage, Result
-from app.schemas.provider_contracts import ProviderConfigSet
+from app.schemas.provider_contracts import ProviderConfigSet, ProviderTest
 from app.services import provider_configs as service
 
 
@@ -18,10 +16,6 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
     async def provider_list(history: bool = False, ctx=Depends(context, scope="function")):
         session, actor = ctx
         data, items, active = await service.list_configs(session, actor, settings, history=history)
-        # Release the read transaction before a vendor's optional balance endpoint.
-        await session.commit()
-        if items and not history:
-            items[0]["balance"] = await service.balance_view(active, settings, transport)
         return Result(
             ok=True,
             command="provider history" if history else "provider list",
@@ -38,7 +32,7 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
         )
 
     @router.post("/providers/test", name="provider_test", response_model=Result)
-    async def provider_test(body: BudgetProviderTest, ctx=Depends(context, scope="function")):
+    async def provider_test(body: ProviderTest, ctx=Depends(context, scope="function")):
         session, actor = ctx
         await service.require_access(session, actor, write=True)
         provider = await resolve(session) if resolve else llm
@@ -49,7 +43,7 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
                 command="provider test",
                 data=data,
                 warnings=warnings,
-                cost=data["budget_preflight"]["estimate"],
+                cost=data["preflight"]["estimate"],
             )
         job = await service.submit_test(session, actor, body, provider, settings)
         await session.commit()
@@ -59,11 +53,6 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
         async with db.transaction(actor.org_id) as read:
             saved = await read.get(Job, job.id)
             assert saved is not None
-            config = (
-                await read.get(ProviderConfig, saved.provider_config_id)
-                if saved.provider_config_id
-                else None
-            )
             recorded = await read.scalar(select(UsageRecord).where(UsageRecord.job_id == job.id))
             data = {
                 "job_id": str(saved.id),
@@ -82,7 +71,6 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
                 key: value for key, value in saved.result.items() if key != "submission"
             }
             cost, warnings = saved.result.get("cost", {}), saved.result.get("warnings", [])
-        data["balance"] = await service.balance_view(config, settings, transport)
         return Result(
             ok=saved.status == "succeeded",
             command="provider test",

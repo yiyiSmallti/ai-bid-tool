@@ -9,7 +9,8 @@ from decimal import Decimal
 from typing import Annotated, Literal, Protocol, Self
 from uuid import UUID
 
-from app.schemas.budget_contracts import BudgetJobResult, BudgetPreflightData, BudgetProviderUsage
+from app.schemas.preflight_contracts import PreflightData
+from app.schemas.contracts import ProviderUsage
 from app.schemas.contracts import CONTRACT_VERSION, Contract, Cost, Result, Source
 from app.schemas.feature_contracts import FeatureRevision
 from app.schemas.requirement_confirmation import (
@@ -663,7 +664,6 @@ class RunSummary(Contract):
     failed: int = Field(strict=True, ge=0, le=100)
     input_hash: Sha256
     next_action: NextAction
-    budget: BudgetJobResult | None = None
 
 
 class TargetReceipt(Contract):
@@ -759,7 +759,7 @@ class ExtractionCandidate(Contract):
 
 class ProviderBatch(Contract):
     items: list[ExtractionCandidate] = Field(max_length=20)
-    usage: BudgetProviderUsage
+    usage: ProviderUsage
 
 
 class ConditionProvider(Protocol):
@@ -801,7 +801,7 @@ class ParameterAssessmentService(Protocol):
 
     async def extract(
         self, actor: Identity, task_id: UUID, request: ExtractionRequest
-    ) -> BudgetPreflightData | JobAccepted: ...
+    ) -> PreflightData | JobAccepted: ...
 
     async def revise_condition(
         self, actor: Identity, task_id: UUID, requirement_id: UUID, request: ConditionCreate
@@ -823,7 +823,7 @@ class ParameterAssessmentService(Protocol):
 
     async def run(
         self, actor: Identity, task_id: UUID, request: RunRequest
-    ) -> BudgetPreflightData | JobAccepted: ...
+    ) -> PreflightData | JobAccepted: ...
 
     async def list_assessments(
         self, actor: Identity, task_id: UUID, query: AssessmentQuery

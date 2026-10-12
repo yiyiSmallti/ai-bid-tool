@@ -405,7 +405,11 @@ def run_review(
             if not isinstance(output, dict):
                 raise ValueError("missing review job result")
             result["data"] = runs.BidReviewJobResult.model_validate(
-                {key: value for key, value in output.items() if key not in {"submission", "budget"}}
+                {
+                    key: value
+                    for key, value in output.items()
+                    if key not in {"submission", "preflight"}
+                }
             ).model_dump(mode="json")
             result["warnings"] = terminal.get("warnings", [])
             result["cost"] = terminal.get("cost", result["cost"])

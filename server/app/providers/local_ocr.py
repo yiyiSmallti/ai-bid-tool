@@ -6,9 +6,9 @@ import pymupdf
 
 from app.providers.base import ProviderFailure
 from app.providers.calls import accounted_call
-from app.providers.quotes import serialized_request, zero_quote
-from app.schemas.budget_contracts import BudgetCallQuote
+from app.providers.quotes import call_plan, serialized_request
 from app.schemas.contracts import OCRText, ProviderUsage
+from app.schemas.preflight_contracts import CallPlan
 
 
 class LocalOCR:
@@ -20,11 +20,9 @@ class LocalOCR:
         self.language = language
         self.data_dir = data_dir
 
-    def quote(self, image: bytes, page: int) -> BudgetCallQuote:
+    def quote(self, image: bytes, page: int) -> CallPlan:
         request = serialized_request({"page": page, "language": self.language}) + b"\x00" + image
-        return zero_quote(
-            "ocr", "local_free", self.name, self.language, self.version, request, ocr_pages=1
-        )
+        return call_plan("ocr", self.name, self.language, self.version, request, ocr_pages=1)
 
     async def recognize(self, image: bytes, page: int) -> OCRText:
         started = time.monotonic()
@@ -52,7 +50,6 @@ class LocalOCR:
                 version=self.version,
                 duration_ms=int((time.monotonic() - started) * 1000),
                 ocr_pages=1,
-                usd=0,
             )
 
         result, usage = await accounted_call(self.quote(image, page), operation)

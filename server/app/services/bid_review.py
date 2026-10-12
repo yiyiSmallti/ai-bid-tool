@@ -24,10 +24,11 @@ from app.models.bid_review import (
 from app.models.bid_signature import BidPreparationTrust
 from app.models.entities import AuditLog, Job
 from app.schemas import bid_review as c
-from app.schemas.budget_contracts import BudgetPreflightData
 from app.schemas.check_contracts import AssessmentJobAccepted, AssessmentListData
 from app.schemas.contracts import Cost
-from app.services import budget_preflight, task_workflow
+from app.schemas.preflight_contracts import PreflightData
+from app.services import preflight as preflight_service
+from app.services import task_workflow
 from app.services.versioned import audit
 
 logger = logging.getLogger(__name__)
@@ -207,7 +208,7 @@ async def upload(session, actor, task_id, body, files, storage, settings):
             files=body.files,
             payload_sha256=payload_hash,
             limits=cap,
-            cost=Cost(billing_currency=settings.billing_currency),
+            cost=Cost(),
         )
     await replay_lock(session, actor, "upload", body.request_id)
     previous = await session.scalar(
@@ -396,29 +397,28 @@ async def prepare(session, actor, task_id, body, queue, settings):
     signer = TokenSigner.for_tokens(settings)
     binding = receipt_binding(actor, task_id, root.id, input_hash)
     if body.dry_run:
-        attached = await budget_preflight.attach(
+        attached = await preflight_service.attach(
             session,
             {},
             command="review prepare",
             task_id=task_id,
             input_hash=input_hash,
-            currency=settings.billing_currency,
             quotes=[],
             planned_calls=0,
         )
-        budget = BudgetPreflightData.model_validate(attached["budget_preflight"])
-        budget.maximum_calls = 0
-        budget.as_of = budget.as_of.replace(microsecond=0)
-        expiry = budget.as_of + timedelta(seconds=c.PREFLIGHT_TTL_SECONDS)
+        preview = PreflightData.model_validate(attached["preflight"])
+        preview.maximum_calls = 0
+        preview.as_of = preview.as_of.replace(microsecond=0)
+        expiry = preview.as_of + timedelta(seconds=c.PREFLIGHT_TTL_SECONDS)
         token = signer.issue(
-            {**binding, "issued_at": budget.as_of.isoformat()},
+            {**binding, "issued_at": preview.as_of.isoformat()},
             c.PREFLIGHT_TTL_SECONDS,
             expires_at=int(expiry.timestamp()),
         )
         return c.BidPreparePreview(
             submission_id=root.id,
             input_hash=input_hash,
-            budget=budget,
+            preflight=preview,
             expires_at=expiry,
             preflight_token=token,
             admission_blockers=blockers,

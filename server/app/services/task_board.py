@@ -27,7 +27,7 @@ from app.schemas.team_workflow import (
     TaskProgressView,
     TaskWorkflowView,
 )
-from app.services import budgets, requirement_consumption, task_events, task_workflow
+from app.services import requirement_consumption, task_events, task_workflow
 from app.services.auth import ROLE_SCOPES
 
 MAX_REQUIREMENTS = 5000
@@ -794,9 +794,6 @@ async def board(
     ]
     jobs, _ = await job_page(session, actor, task_id, storage)
     admission_codes = {
-        "insufficient_balance",
-        "spend_cap_reached",
-        "job_charge_limit_exceeded",
         "job_call_limit_exceeded",
     }
     job_blockers = set()
@@ -853,22 +850,6 @@ async def board(
                 {
                     **row.model_dump(mode="json"),
                     "blockers": list(dict.fromkeys([*row.blockers, *sorted(job_blockers)])),
-                    "next_actions": [
-                        BoardActionView.model_validate(
-                            dict(
-                                code="resolve_budget",
-                                target={"kind": "task", "id": task_id},
-                                eligible_user_ids=[actor.user_id],
-                            )
-                        ).model_dump(mode="json")
-                    ]
-                    if job_blockers & admission_codes
-                    and workflow.state == "active"
-                    and actor.token_id is None
-                    and actor.role in ("admin", "bidder")
-                    and actor.actor_kind == "session"
-                    and "task:budget:write" in actor.scopes
-                    else [action.model_dump(mode="json") for action in row.next_actions],
                 }
             )
         review = session.info["board_requirement_reviews"][requirement.id]
@@ -954,7 +935,6 @@ async def board(
         session, actor, task_id, storage, settings, limit=20, authorized=(workflow, watermark)
     )
     cursor = task_events.issue_cursor(actor, task_id, workflow, settings, seq=watermark.last_seq)
-    budget = await budgets.view(session, task, settings)
     midnight = datetime.combine(as_of.date() + timedelta(days=1), datetime.min.time(), UTC)
     return BoardView(
         org_id=actor.org_id,
@@ -964,7 +944,6 @@ async def board(
         counts=BoardCounts(**counts),
         matching=len(matching),
         returned=len(page),
-        budget=budget,
         next_cursor=page_cursor(
             actor,
             task_id,

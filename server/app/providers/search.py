@@ -16,9 +16,9 @@ from app.core.config import Settings
 from app.core.errors import ServiceError
 from app.providers.base import ProviderFailure
 from app.providers.calls import accounted_call
-from app.providers.quotes import serialized_request, zero_quote
-from app.schemas.budget_contracts import BudgetCallQuote
+from app.providers.quotes import call_plan, serialized_request
 from app.schemas.contracts import ProviderUsage
+from app.schemas.preflight_contracts import CallPlan
 
 MAX_RESULTS_PER_QUERY = 30
 TIMEOUT_SECONDS = 20.0
@@ -68,11 +68,10 @@ class SearXNGSearch:
             params={"q": query, "format": "json", "language": "zh-CN"},
         )
 
-    def quote(self, query: str, domains: Sequence[str] = ()) -> BudgetCallQuote:
+    def quote(self, query: str, domains: Sequence[str] = ()) -> CallPlan:
         request = self.request(query)
-        return zero_quote(
+        return call_plan(
             "search",
-            "platform_absorbed",
             self.name,
             "search",
             self.version,
@@ -161,10 +160,9 @@ class PerplexitySearch:
             body["search_domain_filter"] = list(domains)[:20]
         return body
 
-    def quote(self, query: str, domains: Sequence[str] = ()) -> BudgetCallQuote:
-        return zero_quote(
+    def quote(self, query: str, domains: Sequence[str] = ()) -> CallPlan:
+        return call_plan(
             "search",
-            "platform_absorbed",
             self.name,
             "search",
             self.version,

@@ -89,7 +89,6 @@ def check_run(
     reasoning: Annotated[str | None, typer.Option()] = None,
     dry_run: Annotated[bool, typer.Option()] = False,
     expected_input_hash: Annotated[str | None, typer.Option()] = None,
-    max_charge: Annotated[str | None, typer.Option()] = None,
     retry: Annotated[bool, typer.Option()] = False,
     wait: Annotated[bool, typer.Option()] = False,
     timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
@@ -108,7 +107,6 @@ def check_run(
         dry_run=dry_run,
         retry=retry,
         expected_input_hash=expected_input_hash,
-        max_charge=max_charge,  # pyright: ignore[reportArgumentType]
     )
     body = cli.call("POST", f"/tasks/{task}/checks", json=request.model_dump(mode="json"))
     if wait:
@@ -148,7 +146,7 @@ def check_run(
                 )
             try:
                 validated = CheckJobResult.model_validate(
-                    {key: value for key, value in output.items() if key != "budget"}
+                    {key: value for key, value in output.items() if key != "preflight"}
                 )
             except (TypeError, ValueError) as exc:
                 raise ServiceError(
@@ -158,8 +156,8 @@ def check_run(
                     4,
                 ) from exc
             body["data"] = validated.model_dump(mode="json")
-            if "budget" in output:
-                body["data"]["budget"] = output["budget"]
+            if "preflight" in output:
+                body["data"]["preflight"] = output["preflight"]
             body["warnings"] = terminal.get("warnings", [])
             body["cost"] = terminal.get("cost", body["cost"])
         except ServiceError as exc:

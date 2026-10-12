@@ -15,7 +15,7 @@ def create_router(context, settings):
     router = APIRouter(prefix="/management/memories")
 
     async def management_context(request: Request, ctx=Depends(context, scope="function")):
-        if getattr(request.state, "contract_version", None) != "4.0":
+        if getattr(request.state, "contract_version", None) != "5.0":
             raise not_found()
         return ctx
 
@@ -26,7 +26,6 @@ def create_router(context, settings):
         return management.page_result(
             "memory browse",
             page,
-            settings.billing_currency,
             round((time.monotonic() - started) * 1000),
         )
 
@@ -43,7 +42,6 @@ def create_router(context, settings):
         return management.detail_result(
             "memory show",
             value,
-            settings.billing_currency,
             round((time.monotonic() - started) * 1000),
         )
 
@@ -58,7 +56,6 @@ def create_router(context, settings):
         return management.page_result(
             "memory history",
             page,
-            settings.billing_currency,
             round((time.monotonic() - started) * 1000),
         )
 

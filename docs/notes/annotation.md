@@ -22,7 +22,7 @@ The source picker reads archived certificate PDF pages. The human inspects the
 original, enters a crop and up to 20 boxes in source pixels, and selects “预览标注”.
 This is a read-only geometry and binding preview; it does not create a candidate.
 After acknowledging the exact original page and ranges, “生成标注材料” submits a
-server job. The CLI uses the same Result 4.0 routes (`/v4` HTTP prefix):
+server job. The CLI uses the same Result 5.0 routes (unversioned HTTP paths):
 
 ```sh
 bid evidence stamp --task UUID --input PLAN.json --dry-run --json

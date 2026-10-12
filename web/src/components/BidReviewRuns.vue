@@ -1,6 +1,5 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { money } from "../api.js";
 import { orgRequest, formatTime } from "../org.js";
 import { reviewError } from "../bid-review.js";
 import JobPanel from "./JobPanel.vue";
@@ -44,7 +43,7 @@ async function inspect() {
     const result = await orgRequest("POST", path.value, { request_id: requestId, submission_id: props.submissionId, assessment_date: asOf.value, scope: "uploaded_bid", review_slice: "compliance", clef_enabled: clefEnabled.value, presence_authorization_id: presenceAuthorizationId.value, dry_run: true }, { signal: controller?.signal });
     if (token !== generation) return;
     const fixed = result.data;
-    if (fixed.input.task_id !== props.taskId || fixed.input.submission_id !== props.submissionId || !/^[a-f0-9]{64}$/.test(fixed.input.input_hash) || fixed.budget.input_hash !== fixed.input.input_hash || !Number.isFinite(Date.parse(fixed.expires_at))) throw new Error("review preview parent mismatch");
+    if (fixed.input.task_id !== props.taskId || fixed.input.submission_id !== props.submissionId || !/^[a-f0-9]{64}$/.test(fixed.input.input_hash) || fixed.preflight.input_hash !== fixed.input.input_hash || !Number.isFinite(Date.parse(fixed.expires_at))) throw new Error("review preview parent mismatch");
     preview.value = fixed; expiryTimer = setTimeout(() => { invalidate(); error.value = "预检已过期，请重新预检"; }, Math.max(0, Date.parse(fixed.expires_at) - Date.now()));
   } catch (exc) { if (token === generation && exc.name !== "AbortError") error.value = reviewError(exc); }
   finally { if (token === generation) busy.value = false; }
@@ -95,11 +94,11 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
       <div v-if="preview" role="status" data-testid="review-preview" class="section">
         <p>预检未创建作业或调用模型。有效至 {{ formatTime(preview.expires_at) }}</p>
         <p>输入哈希 <code>{{ preview.input.input_hash }}</code></p>
-        <p>预估平台扣费 {{ money(preview.budget.estimate.charge, preview.budget.estimate.billing_currency) }} · 计入任务预算 {{ money(preview.budget.estimate.task_amount, preview.budget.estimate.billing_currency) }} · 计划调用 {{ preview.budget.planned_calls ?? '未确定' }}</p>
-        <div v-if="preview.input.clef" data-testid="clef-preview"><p>Clef 初筛：{{ !preview.input.clef.enabled ? '本次已关闭' : preview.input.clef.available ? '可用' : '不可用，继续文本检验' }} · 计划 {{ preview.input.clef.planned_calls }} 次图片调用 · 每次固定售价 {{ preview.input.clef.fixed_sale_price ?? '未配置' }} {{ preview.input.clef.currency }}<span v-if="preview.input.clef.price_revision"> · 价格第 {{ preview.input.clef.price_revision }} 版</span></p><p v-for="code in preview.input.clef.blockers" :key="code">初筛未覆盖：{{ reviewError({ code }) }}</p></div>
+        <p>计划调用 {{ preview.preflight.planned_calls ?? '未确定' }} 次 · 预计 tokens {{ preview.preflight.estimate.llm_tokens }}</p>
+        <div v-if="preview.input.clef" data-testid="clef-preview"><p>Clef 初筛：{{ !preview.input.clef.enabled ? '本次已关闭' : preview.input.clef.available ? '可用' : '不可用，继续文本检验' }} · 计划 {{ preview.input.clef.planned_calls }} 次图片调用</p><p v-for="code in preview.input.clef.blockers" :key="code">初筛未覆盖：{{ reviewError({ code }) }}</p></div>
         <el-alert v-for="code in preview.admission_blockers" :key="code" :title="reviewError({ code })" type="warning" :closable="false" />
         <p v-for="code in preview.uncovered_codes" :key="code">未覆盖：{{ reviewError({ code }) }}</p>
-        <el-checkbox v-model="consent" :disabled="busy">确认费用与已授权文本，提交检验运行</el-checkbox>
+        <el-checkbox v-model="consent" :disabled="busy">确认已授权文本与配置，提交检验运行</el-checkbox>
         <div class="actions"><el-button type="primary" :loading="busy" :disabled="!consent || expired || preview.admission_blockers.length > 0" @click="submit">提交检验运行</el-button></div>
       </div>
     </template>
@@ -120,8 +119,8 @@ const marks = { company_seal: "单位公章", legal_representative_signature: "�
       <el-alert v-if="selected.validity === 'stale'" title="此检验结果的输入或授权已变化；请重新预检并运行，当前仅显示安全状态信息。" type="warning" :closable="false" />
       <p v-if="selected.coverage.tender_pages_total !== undefined">招标页面覆盖：已检验 {{ selected.coverage.tender_pages_assessed }} / 共 {{ selected.coverage.tender_pages_total }} 页；已授权 {{ selected.coverage.tender_pages_authorized }} 页</p>
       <p v-for="code in selected.uncovered_codes" :key="code">未覆盖：{{ reviewError({ code }) }}</p>
-      <p v-if="selected.coverage.clef" data-testid="clef-coverage">Clef 初筛覆盖：{{ ({ available: '可用', unavailable: '不可用', disabled: '本次已关闭', partial: '部分完成', triaged: '已完成初筛' })[selected.coverage.clef] ?? '未确定' }} · 已结算 {{ selected.coverage.clef_completed_calls ?? 0 }} 次 / 尝试 {{ selected.coverage.clef_calls ?? 0 }} 次 · 固定计费合计 {{ selected.coverage.clef_cost ?? '未知' }} {{ selected.coverage.clef_currency ?? selected.cost?.billing_currency ?? 'USD' }} · 需人工确认</p>
-      <p v-if="selected.coverage.clef_unresolved_calls">{{ selected.coverage.clef_unresolved_calls }} 次调用完成状态未知，保留预算 {{ selected.coverage.clef_reserved_amount }} {{ selected.coverage.clef_currency ?? 'USD' }}，待核对后结算。</p>
+      <p v-if="selected.coverage.clef" data-testid="clef-coverage">Clef 初筛覆盖：{{ ({ available: '可用', unavailable: '不可用', disabled: '本次已关闭', partial: '部分完成', triaged: '已完成初筛' })[selected.coverage.clef] ?? '未确定' }} · 已完成 {{ selected.coverage.clef_completed_calls ?? 0 }} 次 / 尝试 {{ selected.coverage.clef_calls ?? 0 }} 次 · 需人工确认</p>
+      <p v-if="selected.coverage.clef_unresolved_calls">{{ selected.coverage.clef_unresolved_calls }} 次调用完成状态未知，待核对调用结果。</p>
       <p v-if="selected.coverage.clef">浅色、灰度、部分印章、错误单位、指定位置及骑缝章尚未验证；单位归属与日期仍需人工核对。</p>
       <h4>招标义务与引用</h4>
       <el-table :data="obligations" role="table" aria-label="招标义务与引用"><el-table-column label="义务"><template #default="{ row }">{{ row.text }}<span v-if="row.starred"> · ★ 条款</span><span v-if="row.rejection_trigger"> · 废标条件</span></template></el-table-column><el-table-column label="原文位置"><template #default="{ row }"><p>{{ citationPosition(row.citation) }}</p><blockquote>{{ row.citation.quote }}</blockquote></template></el-table-column></el-table>

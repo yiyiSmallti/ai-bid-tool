@@ -15,13 +15,14 @@ from app.schemas.check_contracts import (
     AssessmentListData,
     AssessmentPreview,
     AssessmentRequest,
-    Money,
     NonBlank,
     OutboundContext,
+    ScoreValue,
     Sha256,
     VerifiedCitation,
 )
 from app.schemas.contracts import Category, Contract, ProviderUsage, Result, Source
+from app.schemas.preflight_contracts import PreflightData
 from app.schemas.response_card_contracts import ModelEvidenceRef, ReviewDomain
 
 type ScoreCLIResult = Result
@@ -57,8 +58,8 @@ class CandidateScoreRange(Contract):
 
 
 class ScoreRange(Contract):
-    minimum: Money
-    maximum: Money
+    minimum: ScoreValue
+    maximum: ScoreValue
 
     @model_validator(mode="after")
     def ordered(self) -> Self:
@@ -73,7 +74,6 @@ class RubricGenerateRequest(Contract):
     dry_run: bool = False
     retry: bool = False
     expected_input_hash: Sha256 | None = None
-    max_charge: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=8)] | None = None
 
     @model_validator(mode="after")
     def submission_binds_preview(self) -> Self:
@@ -94,6 +94,7 @@ class RubricInput(Contract):
 
 
 class RubricPreview(AssessmentPreview[RubricInput]):
+    preflight: PreflightData
     scoring_requirement_ids: list[UUID]
     prompt_version: NonBlank
     schema_version: NonBlank
@@ -117,8 +118,6 @@ class RubricGenerateResult(Contract):
     candidate_items: int = Field(ge=0)
     unresolved_requirements: int = Field(ge=0)
     usage_record_ids: list[UUID]
-    charge: Money | None
-    billing_currency: str = Field(min_length=3, max_length=3)
     stop_reason: str | None = None
 
 
@@ -601,6 +600,7 @@ class ScoreRequest(AssessmentRequest):
 
 
 class ScorePreview(AssessmentPreview[AssessmentInput]):
+    preflight: PreflightData
     rubric_id: UUID
     rubric_version: int = Field(ge=1)
     rubric_input_hash: Sha256
@@ -634,7 +634,7 @@ class ScoreItemView(Contract):
     anchor_partition: ScorePartition
     outcome: ScoreOutcome
     score_range: ScoreRange | None = None
-    estimated_score: Money | None = None
+    estimated_score: ScoreValue | None = None
     reason_code: NonBlank
     reason: NonBlank
     deduction_reasons: list[NonBlank]
@@ -673,14 +673,14 @@ class ScoreSectionSummary(Contract):
     aggregation: AggregationRule
     aggregation_assessable: bool
     aggregation_rule_text: NonBlank | None = None
-    cap: Money | None = None
+    cap: ScoreValue | None = None
     configured_range: ScoreRange | None = None
     assessed_items: int = Field(ge=0)
     unassessable_items: int = Field(ge=0)
-    assessed_subtotal: Money
+    assessed_subtotal: ScoreValue
     possible_range: ScoreRange | None = None
     status: Literal["estimated", "range_only", "unavailable"]
-    estimated_score: Money | None = None
+    estimated_score: ScoreValue | None = None
 
     @model_validator(mode="after")
     def subtotal_is_not_an_estimate(self) -> Self:
@@ -718,14 +718,14 @@ class ScoreRunView(Contract):
     invalidation_codes: list[str]
     assessed_items: int = Field(ge=0)
     unassessable_items: int = Field(ge=0)
-    assessed_subtotal: Money
+    assessed_subtotal: ScoreValue
     overall_aggregation: AggregationRule
     overall_aggregation_assessable: bool
     overall_rule_text: NonBlank | None = None
-    overall_cap: Money | None = None
+    overall_cap: ScoreValue | None = None
     possible_range: ScoreRange | None = None
     total_status: Literal["estimated", "range_only", "unavailable"]
-    estimated_total: Money | None = None
+    estimated_total: ScoreValue | None = None
     limitations: list[str]
     usage_record_ids: list[UUID]
     advisory_only: Literal[True] = True
@@ -760,9 +760,9 @@ class ScoreReportData(Contract):
 class ScoreJobResult(AssessmentJobResult):
     assessed_items: int = Field(ge=0)
     unassessable_items: int = Field(ge=0)
-    assessed_subtotal: Money
+    assessed_subtotal: ScoreValue
     total_status: Literal["estimated", "range_only", "unavailable"]
-    estimated_total: Money | None = None
+    estimated_total: ScoreValue | None = None
 
     @model_validator(mode="after")
     def total_is_complete_or_absent(self) -> Self:
@@ -922,7 +922,7 @@ class ScoreProviderRequest(Contract):
 class ProposedScoreAssessment(Contract):
     rubric_item_id: UUID
     outcome: ScoreOutcome
-    estimated_score: Money | None = None
+    estimated_score: ScoreValue | None = None
     reason_code: NonBlank
     reason: NonBlank
     deduction_reasons: list[NonBlank]

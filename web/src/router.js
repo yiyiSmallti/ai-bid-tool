@@ -3,11 +3,9 @@ import { orgSession, session } from "./api.js";
 import { errorText, orgAccess, orgRequest } from "./org.js";
 import Audit from "./views/Audit.vue";
 import Apply from "./views/Apply.vue";
-import Cards from "./views/Cards.vue";
 import Credentials from "./views/Credentials.vue";
 import Login from "./views/Login.vue";
 import Models from "./views/Models.vue";
-import OrgBilling from "./views/OrgBilling.vue";
 import OrgConfidential from "./views/OrgConfidential.vue";
 import OrgProfiles from "./views/OrgProfiles.vue";
 import OrgLogin from "./views/OrgLogin.vue";
@@ -39,8 +37,7 @@ export const router = createRouter({
     { path: "/platform/credentials", component: Credentials, meta: { area: "platform", title: "服务凭据", nav: "credentials" } },
     { path: "/platform/clef", component: () => import("./views/Clef.vue"), meta: { area: "platform", title: "Clef 初筛配置", nav: "clef" } },
     { path: "/platform/trust-anchors", component: () => import("./views/TrustAnchors.vue"), meta: { area: "platform", title: "信任根证书", nav: "trust-anchors" } },
-    { path: "/platform/cards", component: Cards, meta: { area: "platform", title: "卡密", nav: "cards" } },
-    { path: "/platform/usage", component: Usage, meta: { area: "platform", title: "用量与账单", nav: "usage" } },
+    { path: "/platform/usage", component: Usage, meta: { area: "platform", title: "用量", nav: "usage" } },
     { path: "/platform/audit", component: Audit, meta: { area: "platform", title: "审计", nav: "audit" } },
     { path: "/org/login", component: OrgLogin, meta: { public: true, title: "单位登录" } },
     { path: "/org/members", component: () => import("./views/OrgMembers.vue"), meta: { area: "org", title: "成员", nav: "members" } },
@@ -80,7 +77,6 @@ export const router = createRouter({
     { path: "/org/tasks/:taskId/memory-feedback", component: () => import("./views/OrgMemoryFeedback.vue"), meta: { area: "org", title: "记忆反馈队列", nav: "tasks" } },
     { path: "/org/settings/models", component: () => import("./views/OrgModels.vue"), meta: { area: "org", title: "模型与服务配置", nav: "org-models" } },
     { path: "/org/confidential", component: OrgConfidential, meta: { area: "org", title: "保密字段", nav: "confidential" } },
-    { path: "/org/billing", component: OrgBilling, meta: { area: "org", admin: true, title: "余额与充值", nav: "billing" } },
     { path: "/:rest(.*)", redirect: "/org/tasks" },
   ],
 });

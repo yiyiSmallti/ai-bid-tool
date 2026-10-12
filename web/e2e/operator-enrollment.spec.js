@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 
 const output = resolve(process.env.E2E_OUTPUT ?? "../data/work/operator-enrollment/browser");
-const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { llm_tokens: 0, ocr_pages: 0, usd: "0" }, duration_ms: 0 });
+const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 }, duration_ms: 0 });
 const token = "synthetic.enrollment-token", pending = "synthetic.encrypted-pending";
 const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP", password = "synthetic-enrollment-password";
 const email = "operator@example.test", expiresAt = "2036-10-08T18:30:00Z";

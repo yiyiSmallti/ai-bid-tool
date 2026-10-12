@@ -96,13 +96,8 @@ def validated(body: dict, command: str) -> dict:
             set(body) != {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
             or not value.ok
             or value.command != command
-            or value.cost.basis != "zero"
             or value.cost.llm_tokens != 0
             or value.cost.ocr_pages != 0
-            or value.cost.usd != 0
-            or value.cost.charge != 0
-            or value.cost.task_amount != 0
-            or value.cost.unpriced_calls != 0
             or value.cost.unresolved_calls != 0
         ):
             raise ValueError("invalid attachment result")

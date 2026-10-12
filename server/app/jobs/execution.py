@@ -1,4 +1,4 @@
-"""Attempt ownership, budget admission and durable accounting for any model job."""
+"""Attempt ownership, call admission and durable usage for any model job."""
 
 import asyncio
 import math
@@ -6,10 +6,9 @@ from collections.abc import Awaitable, Callable
 from contextlib import asynccontextmanager, suppress
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import case, func, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +20,6 @@ from app.models.entities import (
     ApiToken,
     AuditLog,
     Job,
-    OrgBalance,
     Task,
     UsageRecord,
     User,
@@ -29,28 +27,11 @@ from app.models.entities import (
 )
 from app.providers.base import ProviderFailure
 from app.providers.calls import current_accounting, current_drafting_input
-from app.schemas.budget_contracts import (
-    BudgetCallQuote,
-    BudgetCost,
-    BudgetIntervention,
-    BudgetJobResult,
-)
 from app.schemas.contracts import Cost, ProviderUsage
-from app.services import billing, budgets
+from app.schemas.preflight_contracts import CallPlan
 from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership
 
-MONEY_UNIT = Decimal("0.00000001")
-TASK_STOPS = {
-    "task_budget_exceeded",
-    "task_budget_unpriced",
-    "task_budget_currency_review_required",
-}
-ADMISSION_STOPS = TASK_STOPS | {
-    "insufficient_balance",
-    "spend_cap_reached",
-    "job_charge_limit_exceeded",
-    "job_call_limit_exceeded",
-}
+ADMISSION_STOPS = {"job_call_limit_exceeded"}
 JOB_SCOPES = {
     "annotation_render": "evidence:annotate",
     "annotation_release": "card:read",
@@ -167,63 +148,29 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
     return actor
 
 
-async def job_cost(session: AsyncSession, job_id: UUID, currency: str | None = None) -> dict:
-    vendor_history_complete = await session.scalar(
-        select(Job.vendor_cost_history_complete).where(Job.id == job_id)
-    )
-    tokens, pages, usd, count, priced, charge, task_amount, task_priced = (
+async def job_cost(session: AsyncSession, job_id: UUID) -> dict:
+    tokens, pages, searches, browser_units, calls = (
         await session.execute(
             select(
                 func.coalesce(func.sum(UsageRecord.tokens), 0),
                 func.coalesce(func.sum(UsageRecord.ocr_pages), 0),
-                func.coalesce(func.sum(UsageRecord.usd), 0),
+                func.coalesce(func.sum(UsageRecord.search_requests), 0),
+                func.coalesce(func.sum(UsageRecord.browser_units), 0),
                 func.count(UsageRecord.id),
-                func.count(UsageRecord.usd),
-                func.coalesce(func.sum(UsageRecord.charge), 0),
-                func.coalesce(func.sum(UsageRecord.task_amount), 0),
-                func.count(UsageRecord.task_amount),
             ).where(UsageRecord.job_id == job_id)
         )
     ).one()
-    unresolved, unpriced_holds = (
-        await session.execute(
-            select(
-                func.count(VendorCall.id),
-                func.count().filter(VendorCall.reserved_task_amount.is_(None)),
-            ).where(VendorCall.job_id == job_id, VendorCall.state.in_(["pending", "unknown"]))
-        )
-    ).one()
-    if currency is None:
-        currency = await session.scalar(
-            select(UsageRecord.billing_currency)
-            .where(UsageRecord.job_id == job_id)
-            .order_by(UsageRecord.created_at)
-            .limit(1)
-        )
-        if currency is None:
-            currency = await session.scalar(
-                select(Task.budget_currency)
-                .join(Job, Job.task_id == Task.id)
-                .where(Job.id == job_id)
-            )
-    wrong_currency = await session.scalar(
-        select(func.count(UsageRecord.id)).where(
-            UsageRecord.job_id == job_id,
-            UsageRecord.billing_currency != (currency or "USD"),
-            (UsageRecord.task_amount > 0) | (UsageRecord.charge > 0),
+    unresolved = await session.scalar(
+        select(func.count(VendorCall.id)).where(
+            VendorCall.job_id == job_id, VendorCall.state.in_(["pending", "unknown"])
         )
     )
     return Cost(
+        calls=calls,
         llm_tokens=tokens,
         ocr_pages=pages,
-        usd=float(usd) if count == priced and vendor_history_complete else None,
-        basis="actual",
-        charge=charge if not wrong_currency else None,
-        billing_currency=currency or "USD",
-        task_amount=task_amount
-        if count == task_priced and not unpriced_holds and not wrong_currency
-        else None,
-        unpriced_calls=count - task_priced + unpriced_holds,
+        search_requests=searches,
+        browser_units=browser_units,
         unresolved_calls=unresolved or 0,
     ).model_dump(mode="json")
 
@@ -236,7 +183,6 @@ class JobExecution:
         self.planned_calls = 0
         self.absolute_call_ceiling: int | None = None
         self.before_admit: Callable[[AsyncSession], Awaitable[None]] | None = None
-        self.intervention: BudgetIntervention | None = None
         self.call_deadline: datetime | None = None
 
     def plan(self, first_pass_calls: int) -> None:
@@ -339,41 +285,6 @@ class JobExecution:
             current_accounting.reset(token)
             await self.finalize_result()
 
-    async def admission_failure(self, session, job, quote, code, message):
-        task = await session.get(Task, job.task_id) if job.task_id else None
-        view = await budgets.view(session, task, self.settings) if task else None
-        required = quote.reserved_task_amount
-        known = view is not None and view.history_complete and not view.unpriced_calls
-        action = (
-            "recharge_org"
-            if code == "insufficient_balance"
-            else "review_currency"
-            if code == "task_budget_currency_review_required"
-            else "configure_price"
-            if code == "task_budget_unpriced"
-            else "raise_task_budget"
-            if code == "task_budget_exceeded"
-            else "review_job_limit"
-        )
-        self.intervention = BudgetIntervention(
-            code=code,
-            org_id=self.org_id,
-            task_id=job.task_id,
-            job_id=self.job_id,
-            budget_revision=view.revision if view else None,
-            currency=self.settings.billing_currency,
-            available=view.available if view and action != "recharge_org" else None,
-            required_next_call=required if action != "recharge_org" else quote.reserved_charge,
-            minimum_new_limit=view.spent + view.reserved + required
-            if known and view is not None and required is not None
-            else None,
-            action=action,
-            authorized_roles=["admin", "bidder"]
-            if action in {"raise_task_budget", "review_currency"}
-            else ["admin"],
-        )
-        raise self.stop(code, message)
-
     async def audit_stop(self, action: str, code: str) -> None:
         # The denied admission transaction is already rolled back. Task/Job locks
         # also serialize duplicate error reports from concurrent batches.
@@ -381,12 +292,10 @@ class JobExecution:
             job = await locked_job(session, self.job_id)
             if job is None or job.actor_user_id is None:
                 return
-            revision = self.intervention.budget_revision if self.intervention else None
             details = {
                 "job_id": str(self.job_id),
                 "run_id": str(self.run_id),
                 "task_id": str(job.task_id) if job.task_id else None,
-                "budget_revision": revision,
                 "reason_code": code,
                 "actor_kind": "worker",
                 "submitter_kind": job.actor_kind,
@@ -421,142 +330,63 @@ class JobExecution:
                 await set_actor_context(session, actor)
                 audit(session, actor, action, self.job_id, details)
 
-    async def admit(
-        self, quote: BudgetCallQuote | Decimal, platform_billed: bool | None = None
-    ) -> UUID:
+    async def admit(self, quote: CallPlan) -> UUID:
         if self.stopped is not None:
             raise self.stopped
-        if not isinstance(quote, BudgetCallQuote):
+        if not isinstance(quote, CallPlan):
             raise self.stop(
-                "billing_price_unavailable", "Admission requires a fixed provider quote"
+                "provider_plan_required", "Admission requires a fixed provider call plan"
             )
         try:
             return await self._admit_once(quote)
         except ProviderFailure as error:
             if error.code in ADMISSION_STOPS:
-                await self.audit_stop("task.budget.admission_denied", error.code)
+                await self.audit_stop("job.call.admission_denied", error.code)
             raise
 
-    async def _admit_once(self, quote: BudgetCallQuote) -> UUID:
+    async def _admit_once(self, quote: CallPlan) -> UUID:
         call_id = uuid4()
         async with self.db.transaction(self.org_id) as session:
             job = await self.owned_job(session)
-            try:
-                await authorized_job(session, job)
-            except ServiceError as error:
-                raise self.stop(error.code, "Submission authorization is no longer valid") from None
-            if quote.currency != self.settings.billing_currency:
-                raise self.stop(
-                    "billing_currency_mismatch", "Call currency differs from deployment currency"
-                )
             if job.agent_session_id is not None:
                 from app.services.agent_limits import guard_job
 
                 guarded = await guard_job(session, job, self.settings, quote)
                 assert guarded is not None
                 _, self.call_deadline = guarded
-            task = await session.get(Task, job.task_id) if job.task_id else None
-            if task is not None:
-                view = await budgets.view(session, task, self.settings)
-                amount = quote.reserved_task_amount
-                # Explicit zero liability remains available for local work even when
-                # old pricing or currency needs human review.
-                if amount != 0:
-                    if view.state != "active" or view.currency != quote.currency:
-                        await self.admission_failure(
-                            session,
-                            job,
-                            quote,
-                            "task_budget_currency_review_required",
-                            "Review the task currency before more paid work",
-                        )
-                    if view.limit is not None:
-                        if amount is None or not view.history_complete or view.unpriced_calls:
-                            await self.admission_failure(
-                                session,
-                                job,
-                                quote,
-                                "task_budget_unpriced",
-                                "The task has unknown cost exposure",
-                            )
-                        assert amount is not None
-                        if view.spent + view.reserved + amount > view.limit:
-                            await self.admission_failure(
-                                session,
-                                job,
-                                quote,
-                                "task_budget_exceeded",
-                                "Task budget cannot cover the next call",
-                            )
-            submitted_cap = (job.result or {}).get("submission", {}).get("max_charge")
-            user_cap = Decimal(submitted_cap) if submitted_cap is not None else None
             if self.before_admit is not None:
                 await self.before_admit(session)
-            count, spent = (
-                await session.execute(
-                    select(
-                        func.count(VendorCall.id),
-                        func.coalesce(
-                            func.sum(
-                                case(
-                                    (VendorCall.state == "completed", VendorCall.charge),
-                                    else_=VendorCall.reserved_charge,
-                                )
-                            ),
-                            0,
-                        ),
-                    ).where(VendorCall.job_id == self.job_id, VendorCall.state != "not_sent")
+            count = await session.scalar(
+                select(func.count(VendorCall.id)).where(
+                    VendorCall.job_id == self.job_id, VendorCall.state != "not_sent"
                 )
-            ).one()
-            if count >= self.call_ceiling:
-                await self.admission_failure(
-                    session,
-                    job,
-                    quote,
-                    "job_call_limit_exceeded",
-                    "Job vendor-call ceiling reached",
-                )
-            reserved_charge = quote.reserved_charge
-            if user_cap is not None and user_cap < self.settings.job_max_charge:
-                if spent + reserved_charge > user_cap:
-                    await self.admission_failure(
-                        session,
-                        job,
-                        quote,
-                        "spend_cap_reached",
-                        "The requested charge cap cannot cover another call",
-                    )
-            elif spent + reserved_charge > self.settings.job_max_charge:
-                await self.admission_failure(
-                    session,
-                    job,
-                    quote,
-                    "job_charge_limit_exceeded",
-                    "Job charge ceiling cannot cover another call",
-                )
-            if quote.payer == "org_platform":
-                balance = await session.scalar(select(OrgBalance).with_for_update())
-                held = await session.scalar(
-                    select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
-                        VendorCall.state.in_(["pending", "unknown"])
-                    )
-                )
-                assert held is not None
-                if balance is None or balance.balance - held < reserved_charge:
-                    await self.admission_failure(
-                        session,
-                        job,
-                        quote,
-                        "insufficient_balance",
-                        "Available balance cannot cover another call",
-                    )
-                assert balance is not None
-                if balance.currency != quote.currency:
-                    raise self.stop(
-                        "billing_currency_mismatch", "Balance currency does not match call currency"
-                    )
+            )
+            if (count or 0) >= self.call_ceiling:
+                raise self.stop("job_call_limit_exceeded", "Job vendor-call ceiling reached")
             if self.stopped is not None:
                 raise self.stopped
+            unresolved_query = select(VendorCall.id).where(
+                VendorCall.job_id == self.job_id,
+                VendorCall.request_sha256 == quote.request_sha256,
+            )
+            if job.agent_session_id is not None or quote.capability == "browser":
+                # Stateful execution must reconcile an uncertain dispatch before replay.
+                unresolved_query = unresolved_query.where(
+                    VendorCall.state.in_(["pending", "unknown"])
+                )
+            else:
+                # Inference can retry an unknown response and concurrently inspect
+                # identical inputs. Only a still-running predecessor blocks takeover;
+                # every retry retains its own admission and counts toward the ceiling.
+                unresolved_query = unresolved_query.where(
+                    VendorCall.state == "pending", VendorCall.run_id != self.run_id
+                )
+            unresolved = await session.scalar(unresolved_query.limit(1))
+            if unresolved is not None:
+                raise self.stop(
+                    "unresolved_call",
+                    "Verify the previous identical request before dispatching again",
+                )
             session.add(
                 VendorCall(
                     id=call_id,
@@ -564,15 +394,9 @@ class JobExecution:
                     job_id=self.job_id,
                     run_id=self.run_id,
                     task_id=job.task_id,
-                    budget_revision=task.budget_revision if task else None,
                     capability=quote.capability,
-                    payer=quote.payer,
-                    currency=quote.currency,
-                    price_revision=quote.price_revision,
                     request_sha256=quote.request_sha256,
-                    reserved_charge=reserved_charge,
-                    reserved_task_amount=quote.reserved_task_amount,
-                    quote=quote.model_dump(mode="json"),
+                    provider_identity=quote.model_dump(mode="json"),
                 )
             )
             await session.flush()
@@ -582,9 +406,9 @@ class JobExecution:
                 await attach_call(session, self, call_id, current_drafting_input.get())
         return call_id
 
-    async def _complete_once(self, call_id: UUID, usage: ProviderUsage) -> bool:
+    async def _complete_once(self, call_id: UUID, usage: ProviderUsage) -> None:
         async with self.db.transaction(self.org_id) as session:
-            # A late completed call is billable even after cancellation or takeover.
+            # A late receipt remains durable even after cancellation or takeover.
             job = await locked_job(session, self.job_id)
             if job is None:
                 raise ProviderFailure("Accounting job is missing", code="usage_accounting_failed")
@@ -598,63 +422,24 @@ class JobExecution:
             if call is None:
                 raise ProviderFailure("Call admission is missing", code="usage_accounting_failed")
             if call.state == "not_sent":
-                raise ProviderFailure("Unsent calls cannot settle", code="usage_accounting_failed")
-            quote = BudgetCallQuote.model_validate(call.quote)
-            actual_identity = (
-                usage.capability,
-                usage.payer,
-                usage.billing_currency,
-                usage.price_revision,
-                usage.provider,
-                usage.version,
-                usage.provider_config_id,
-                usage.platform_model_id,
-                usage.image_count,
-                usage.image_price_revision,
-            )
-            admitted_identity = (
-                quote.capability,
-                quote.payer,
-                quote.currency,
-                quote.price_revision,
-                quote.provider,
-                quote.version,
-                quote.provider_config_id,
-                quote.platform_model_id,
-                quote.image_count,
-                quote.image_price_revision,
-            )
-            if actual_identity != admitted_identity:
                 raise ProviderFailure(
-                    "Usage does not match admitted pricing identity", code="usage_accounting_failed"
+                    "Unsent calls cannot complete", code="usage_accounting_failed"
                 )
-            if usage.platform_model_id is not None and usage.charge is None:
-                raise ProviderFailure("Platform call has no price", code="usage_accounting_failed")
-            task_amount = (
-                usage.task_amount.quantize(MONEY_UNIT, rounding=ROUND_HALF_UP)
-                if usage.task_amount is not None
-                else None
+            quote = CallPlan.model_validate(call.provider_identity)
+            fields = (
+                "capability",
+                "provider",
+                "version",
+                "provider_config_id",
+                "platform_model_id",
+                "image_count",
             )
-            # The provider retains exact liability as Decimal. charge/usd retain
-            # legacy float wire types and must not round-trip the ledger through float.
-            amount = task_amount if quote.payer == "org_platform" else Decimal(0)
-            if (
-                (quote.payer == "org_platform" and amount is None)
-                or (quote.payer in {"local_free", "platform_absorbed"} and task_amount != 0)
-                or (quote.payer != "org_platform" and usage.charge not in (None, 0))
-                or (
-                    quote.payer == "org_direct"
-                    and task_amount is not None
-                    and quote.currency != "USD"
-                )
-            ):
+            if any(getattr(usage, field) != getattr(quote, field) for field in fields):
                 raise ProviderFailure(
-                    "Usage liability does not match its payer", code="usage_accounting_failed"
+                    "Usage does not match admitted provider identity",
+                    code="usage_accounting_failed",
                 )
-            assert amount is not None
-            stored_usage = {**usage.model_dump(), "charge": amount, "task_amount": task_amount}
-            if quote.payer == "org_direct" and task_amount is not None:
-                stored_usage["usd"] = task_amount
+            stored_usage = usage.model_dump()
             record_id = await session.scalar(
                 insert(UsageRecord)
                 .values(
@@ -672,41 +457,20 @@ class JobExecution:
             if record_id is not None:
                 record = await session.get(UsageRecord, record_id)
                 assert record is not None
-                # Release the reservation before the balance mutation so low-balance
-                # triggers observe either the hold or the final charge, never both.
-                call.state, call.charge = "completed", amount
+                call.state = "completed"
                 await session.flush()
-                await billing.charge_usage(session, self.org_id, record, quote.currency)
-                await session.flush()
-                job.result = {
-                    **job.result,
-                    "cost": await job_cost(session, self.job_id, quote.currency),
-                }
-                if job.result.get("budget"):
-                    await self.refresh_budget_totals(session, job)
+                job.result = {**job.result, "cost": await job_cost(session, self.job_id)}
             if job.kind == "card_generate":
                 from app.memory.retrieval import settle_call
 
                 await settle_call(
                     session, self.org_id, self.job_id, self.run_id, call_id, "completed"
                 )
-            exceeded = amount > call.reserved_charge or (
-                task_amount is not None
-                and call.reserved_task_amount is not None
-                and task_amount > call.reserved_task_amount
-            )
-            if job.agent_session_id is not None and quote.vendor_usd_upper_bound is not None:
-                exceeded = (
-                    exceeded
-                    or usage.usd is None
-                    or (Decimal(str(usage.usd)) > quote.vendor_usd_upper_bound)
-                )
-        return exceeded
 
     async def complete(self, call_id: UUID, usage: ProviderUsage) -> None:
         for attempt in range(3):
             try:
-                exceeded = await self._complete_once(call_id, usage)
+                await self._complete_once(call_id, usage)
                 break
             except DBAPIError as exc:
                 code = getattr(exc.orig, "sqlstate", None)
@@ -728,17 +492,11 @@ class JobExecution:
                 ) from None
         else:
             raise AssertionError("unreachable")
-        if exceeded:
-            await self.audit_stop("task.budget.bound_exceeded", "call_charge_bound_exceeded")
-            raise self.stop(
-                "call_charge_bound_exceeded",
-                "Vendor usage exceeded its reserved bound; usage was retained",
-            )
 
     async def unknown(self, call_id: UUID) -> None:
         try:
             async with self.db.transaction(self.org_id) as session:
-                # Match completion's Task -> Job -> call lock order. Late settlement is
+                # Match completion's Task -> Job -> call lock order. Late completion is
                 # allowed even when the original lease or membership has ended.
                 await locked_job(session, self.job_id)
                 await session.execute(
@@ -757,7 +515,7 @@ class JobExecution:
                     session, self.org_id, self.job_id, self.run_id, call_id, "unknown"
                 )
         except SQLAlchemyError:
-            # A failed marker leaves the durable pending reservation in place.
+            # A failed marker leaves the durable pending call in place.
             # Never replace an accounting stop with a raw pool/driver exception.
             raise self.stop(
                 "usage_accounting_failed",
@@ -768,7 +526,7 @@ class JobExecution:
         """Release this attempt's pending admission after credential preparation failed.
 
         The call boundary invokes this only before starting the HTTP operation, so no
-        usage exists and the reservation cannot represent an unknown vendor charge.
+        usage exists and the admission cannot represent an unknown dispatch.
         """
         try:
             async with self.db.transaction(self.org_id) as session:
@@ -783,9 +541,6 @@ class JobExecution:
                     )
                     .values(
                         state="not_sent",
-                        reserved_charge=Decimal(0),
-                        reserved_task_amount=Decimal(0),
-                        charge=None,
                     )
                 )
         except SQLAlchemyError:
@@ -794,7 +549,7 @@ class JobExecution:
             ) from None
 
     async def finalize_result(self) -> None:
-        """Attach a cumulative budget result without publishing an obsolete attempt."""
+        """Refresh cumulative usage without publishing an obsolete attempt."""
         async with self.db.transaction(self.org_id) as session:
             job = await locked_job(session, self.job_id)
             if (
@@ -803,143 +558,4 @@ class JobExecution:
                 or job.status not in {"succeeded", "failed", "cancelled"}
             ):
                 return
-            cost = await job_cost(session, self.job_id, self.settings.billing_currency)
-            task = await session.get(Task, job.task_id) if job.task_id else None
-            view = await budgets.view(session, task, self.settings) if task else None
-            result = job.result or {}
-            stop = result.get("stop_reason") or (job.error or {}).get("code")
-            completion = (
-                "failed" if job.status != "succeeded" else (result.get("completion") or "complete")
-            )
-            unresolved = list(
-                (
-                    await session.scalars(
-                        select(VendorCall.id)
-                        .where(
-                            VendorCall.job_id == self.job_id,
-                            VendorCall.state.in_(["pending", "unknown"]),
-                        )
-                        .order_by(VendorCall.created_at, VendorCall.id)
-                    )
-                ).all()
-            )
-            usage_ids = list(
-                (
-                    await session.scalars(
-                        select(UsageRecord.id)
-                        .where(UsageRecord.job_id == self.job_id)
-                        .order_by(UsageRecord.created_at, UsageRecord.id)
-                    )
-                ).all()
-            )
-            published = list(result.get("created_revision_ids", result.get("published_ids", [])))
-            if job.status == "succeeded":
-                published.extend(
-                    result[key]
-                    for key in (
-                        "report_id",
-                        "rubric_id",
-                        "analysis_run_id",
-                        "draft_id",
-                        "review_id",
-                    )
-                    if result.get(key)
-                )
-                published.extend(
-                    result[key]["id"]
-                    for key in ("prototype_generation", "vendor_search")
-                    if isinstance(result.get(key), dict) and result[key].get("id")
-                )
-            remaining = list(result.get("remaining_ids", []))
-            if job.kind == "bid_review":
-                remaining.extend(result.get("coverage", {}).get("unassessed_page_ids", []))
-            if job.kind == "card_generate":
-                from app.services.card_generation import PROTECTED
-
-                remaining.extend(
-                    key
-                    for key, reason in result.get("skipped", {}).items()
-                    if reason not in PROTECTED
-                )
-                remaining.extend(result.get("needs_material", []))
-                remaining.extend(result.get("rejected_references", {}))
-            published, remaining = list(dict.fromkeys(published)), list(dict.fromkeys(remaining))
-            continuation = (
-                "none"
-                if completion == "complete"
-                else (
-                    "reconcile_first"
-                    if unresolved
-                    else "submit_remaining"
-                    if completion == "partial"
-                    else "retry_job"
-                )
-            )
-            budget = BudgetJobResult(
-                job_id=self.job_id,
-                run_id=self.run_id,
-                task_id=job.task_id,
-                completion=completion,
-                stop_reason=stop,
-                intervention=self.intervention,
-                cost=BudgetCost.model_validate(cost),
-                task_budget=view,
-                published_ids=published,
-                remaining_ids=remaining,
-                usage_record_ids=usage_ids,
-                unresolved_call_ids=unresolved,
-                continuation=continuation,
-            )
-            warnings = list(result.get("warnings", []))
-            if not job.vendor_cost_history_complete:
-                warnings.append("historical_vendor_cost_unavailable")
-            low = await session.scalar(select(OrgBalance.low_balance_active))
-            if low and "low_balance" not in warnings:
-                warnings.append("low_balance")
-            job.result = {
-                **result,
-                "cost": cost,
-                "budget": budget.model_dump(mode="json"),
-                "warnings": warnings,
-            }
-
-    async def refresh_budget_totals(self, session: AsyncSession, job: Job) -> None:
-        """Late settlement refreshes accounting only, preserving successor decisions."""
-        previous = dict(job.result["budget"])
-        task = await session.get(Task, job.task_id) if job.task_id else None
-        view = await budgets.view(session, task, self.settings) if task else None
-        unresolved = list(
-            (
-                await session.scalars(
-                    select(VendorCall.id)
-                    .where(
-                        VendorCall.job_id == job.id, VendorCall.state.in_(["pending", "unknown"])
-                    )
-                    .order_by(VendorCall.created_at, VendorCall.id)
-                )
-            ).all()
-        )
-        usage_ids = list(
-            (
-                await session.scalars(
-                    select(UsageRecord.id)
-                    .where(UsageRecord.job_id == job.id)
-                    .order_by(UsageRecord.created_at, UsageRecord.id)
-                )
-            ).all()
-        )
-        previous.update(
-            cost=job.result["cost"],
-            task_budget=view.model_dump(mode="json") if view else None,
-            usage_record_ids=[str(identifier) for identifier in usage_ids],
-            unresolved_call_ids=[str(identifier) for identifier in unresolved],
-        )
-        if previous.get("continuation") == "reconcile_first" and not unresolved:
-            previous["continuation"] = (
-                "none"
-                if previous["completion"] == "complete"
-                else "submit_remaining"
-                if previous["completion"] == "partial"
-                else "retry_job"
-            )
-        job.result = {**job.result, "budget": previous}
+            job.result = {**(job.result or {}), "cost": await job_cost(session, self.job_id)}

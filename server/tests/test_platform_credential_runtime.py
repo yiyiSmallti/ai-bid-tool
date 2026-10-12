@@ -1,6 +1,5 @@
 """DB-free integration of credential resolution, outbound requests and admission hooks."""
 
-from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -122,7 +121,6 @@ async def test_admission_wait_rechecks_and_releases_proven_unsent_call():
                     "https://api.openai.com/v1/chat/completions",
                     {},
                     {"max_tokens": 4},
-                    reserved_charge=Decimal(0),
                 )
     finally:
         current_accounting.reset(token)

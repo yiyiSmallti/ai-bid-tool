@@ -455,7 +455,7 @@ async def _attempt(execution, storage, renderer, queue):
             job.result = {
                 **job.result,
                 **data,
-                "cost": await job_cost(session, job.id, execution.settings.billing_currency),
+                "cost": await job_cost(session, job.id),
             }
     finally:
         # Only this attempt's fresh key is considered. A lost lease cannot delete

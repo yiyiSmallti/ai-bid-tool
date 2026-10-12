@@ -114,8 +114,6 @@ class ProviderConfigInput(Contract):
     json_mode: Literal["json_schema", "json_object"] = "json_schema"
     reasoning: list[ReasoningLevel] = Field(default_factory=list, max_length=8)
     default_reasoning: str | None = None
-    input_usd_per_mtok: float | None = Field(default=None, ge=0, allow_inf_nan=False)
-    output_usd_per_mtok: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     expected_revision: int | None = Field(default=None, ge=1)
 
     @field_validator("reasoning", mode="before")
@@ -167,8 +165,6 @@ class ProviderConfigInput(Contract):
                         self.provider,
                         self.model,
                         self.base_url,
-                        self.input_usd_per_mtok,
-                        self.output_usd_per_mtok,
                         self.default_reasoning,
                     )
                 )
@@ -203,6 +199,7 @@ class ProviderConfigSet(ProviderConfigInput):
 
 
 class ProviderTest(Contract):
+    dry_run: bool = False
     capability: Literal["llm_extract"] = "llm_extract"
     reasoning: str | None = Field(default=None, pattern=r"^[a-z0-9_-]{1,20}$")
 
@@ -220,8 +217,6 @@ class ProviderConfigView(Contract):
     json_mode: str
     reasoning: list[ReasoningLevel]
     default_reasoning: str | None
-    input_usd_per_mtok: float | None
-    output_usd_per_mtok: float | None
     key_last4: str | None
     updated_by: UUID
     updated_at: datetime

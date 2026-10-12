@@ -27,7 +27,7 @@ ATTEMPT_ID = "00000000-0000-0000-0000-000000000004"
 SHA256 = "a" * 64
 
 
-@pytest.fixture(params=("3.0", "4.0"))
+@pytest.fixture(params=("5.0",))
 def contract_version(request):
     """Version metadata endpoints while preserving signed raw download paths."""
     return request.param
@@ -100,8 +100,6 @@ def run_view() -> dict:
         "metrics": None,
         "issues": [],
         "usage_ids": [],
-        "charge": None,
-        "charge_currency": None,
     }
 
 
@@ -114,10 +112,15 @@ def preview() -> dict:
         "policy_revision": "policy-v1",
         "ready": True,
         "issues": [],
-        "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+        "estimated_cost": {
+            "calls": 0,
+            "llm_tokens": 0,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "browser_units": 0,
+            "unresolved_calls": 0,
+        },
         "estimate_basis": "no_vendor_call",
-        "reserved_charge": None,
-        "charge_currency": None,
         "estimated_duration_ms": None,
     }
 
@@ -341,14 +344,14 @@ def test_render_cli_rejects_bad_local_input_before_network(failure, monkeypatch,
     assert error.value.code == 2 and body["command"] == "sandbox render" and not calls
 
 
-def sandbox_download_client(tmp_path, content, *, link=None, served=None, contract_version="3.0"):
+def sandbox_download_client(tmp_path, content, *, link=None, served=None, contract_version="5.0"):
     client = Client(
         "remote",
         "https://synthetic.example.test",
         SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
-    prefix = "/v4" if contract_version == "4.0" else ""
+    prefix = "/v4" if contract_version == "5.0" else ""
     path = f"/sandbox-artifacts/{IDENTIFIER}/download"
     calls = []
 

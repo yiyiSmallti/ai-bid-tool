@@ -32,7 +32,7 @@ def seed_scale(admin_engine, tenants):
     with admin_engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO platform_models(id,capability,provider,model,base_url,credential,vendor_input_usd_per_mtok,vendor_output_usd_per_mtok,sale_input_per_mtok,sale_output_per_mtok,is_default,enabled,reasoning,revision,updated_by) SELECT 'scale-'||lpad(n::text,5,'0'),'llm_extract','openai','Scale model '||n,'https://scale.example.test/v1','model_settings_scale',1,2,3,4,false,true,'[]'::jsonb,1,'fixture@example.test' FROM generate_series(1,:catalog) n"
+                "INSERT INTO platform_models(id,capability,provider,model,base_url,credential,is_default,enabled,reasoning,revision,updated_by) SELECT 'scale-'||lpad(n::text,5,'0'),'llm_extract','openai','Scale model '||n,'https://scale.example.test/v1','model_settings_scale',false,true,'[]'::jsonb,1,'fixture@example.test' FROM generate_series(1,:catalog) n"
             ),
             {"catalog": CATALOG},
         )
@@ -46,7 +46,7 @@ def seed_scale(admin_engine, tenants):
             connection.execute(text("SELECT set_config('app.current_org',:org,true)"), values)
             connection.execute(
                 text(
-                    "INSERT INTO provider_configs(id,org_id,capability,revision,source,platform_model_id,data,updated_by,created_at) SELECT md5(:org||'|provider|'||n)::uuid,CAST(:org AS uuid),'llm_extract',n,'platform','scale-00001',jsonb_build_object('provider','openai','model','Saved scale model','reasoning','[]'::jsonb,'default_reasoning',NULL,'catalog_revision',1,'sale_input_per_mtok',3,'sale_output_per_mtok',4),:actor,TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' FROM generate_series(1,:revisions) n"
+                    "INSERT INTO provider_configs(id,org_id,capability,revision,source,platform_model_id,data,updated_by,created_at) SELECT md5(:org||'|provider|'||n)::uuid,CAST(:org AS uuid),'llm_extract',n,'platform','scale-00001',jsonb_build_object('provider','openai','model','Saved scale model','reasoning','[]'::jsonb,'default_reasoning',NULL,'catalog_revision',1),:actor,TIMESTAMPTZ '2026-01-01T00:00:00Z'+n*interval '1 second' FROM generate_series(1,:revisions) n"
                 ),
                 values,
             )
@@ -78,7 +78,7 @@ async def test_fixed_scale_provider_history_catalog_and_exact_reads(
     receipt = {
         "mode": "real_api",
         "scenario": "u01-model-settings-fixed-scale-v1",
-        "schema": "4.0",
+        "schema": "5.0",
         "status": "running",
         "fixture": {"orgs": 2, "config_revisions_per_org": REVISIONS, "catalog_choices": CATALOG},
         "hardware": {

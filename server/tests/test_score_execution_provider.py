@@ -260,10 +260,9 @@ async def test_concurrent_admission_error_drains_an_already_admitted_call(tmp_pa
             self.attempts = 0
 
         async def admit(self, quote):
-            reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
             self.attempts += 1
-            self.reservations.append(reserved_charge)
-            self.platform_billed.append(platform_billed)
+            self.plans.append(quote)
+            self.platform_billed.append(quote.platform_model_id is not None)
             if self.attempts == 1:
                 return uuid4()
             await transport_entered.wait()
@@ -318,7 +317,6 @@ async def test_concurrent_admission_error_drains_an_already_admitted_call(tmp_pa
             await provider.score(provider_request())
     finally:
         current_accounting.reset(token)
-
     assert stopped.value.code == "score_input_changed"
     assert transport_finished is True
     assert len(accounting.completed) == 1

@@ -166,19 +166,17 @@ def interface():
             "preflight_token": "synthetic-receipt",
             "local_only": True,
             "admission_blockers": [],
-            "budget": {
+            "preflight": {
                 "dry_run": True,
                 "command": "review prepare",
                 "task_id": ID,
                 "input_hash": SHA,
                 "as_of": NOW,
-                "task_budget": None,
                 "planned_calls": 0,
                 "maximum_calls": 0,
                 "estimate": zero,
                 "next_call": None,
                 "admission_blocker": None,
-                "first_pass_fits": True,
                 "full_run_guaranteed": False,
             },
         }
@@ -266,7 +264,7 @@ def test_bid_review_commands_snapshot_both_modes(monkeypatch, tmp_path, capsys):
     for mode in ("remote", "local"):
         for name, flags in commands.items():
             code, body = invoke(["--mode", mode, *flags], capsys)
-            assert code == 0
+            assert code == 0, body
             assert set(body) == {
                 "ok",
                 "command",
@@ -321,7 +319,8 @@ def test_schema_exposes_slice_one_and_legacy_rejects_it(capsys):
         "review submission show",
     ):
         assert name in commands
-        assert name not in command_schema(cli.app, "3.0")["commands"]
+        with pytest.raises(ValueError, match="Only contract 5.0"):
+            command_schema(cli.app, "3.0")
     assert commands["review prepare"]["preflight"]["title"] == "BidPreparePreview"
     assert commands["review submission show"]["output"]["title"] == "BidSubmissionDetail"
     code, body = invoke(

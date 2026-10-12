@@ -6,8 +6,8 @@
 // - Citations: PDF quotes must be found in the sorted extracted page text and Word
 //   quotes in the cited structural block; tests must not assume PDF space runs.
 // - Cost and jobs: a dry-run must not create a job or vendor call; queued is not
-//   completed, partial is not failure, and the paid generation control must stay
-//   disabled until a human authorizes the exact preview hash and a spending cap.
+//   completed, partial is not failure, and the model generation control must stay
+//   disabled until a human authorizes the exact preview hash.
 // - Review gates: viewers, admins, wrong-domain reviewers, tokens and workers must
 //   not perform human decisions; evidence and warnings need explicit review.
 // - Concurrency: stale revisions must retain local edits, clear old review checks and
@@ -295,16 +295,14 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
   test("task entry, official reasoning history and live role affordances", async ({ browser }) => {
     const admin = await browser.newPage();
     await login(admin, "admin");
-    await expect(admin.getByRole("link", { name: "余额与充值" })).toBeVisible();
     await admin.getByRole("button", { name: "新建任务" }).click();
     await expect(admin.getByRole("heading", { name: "创建任务" })).toBeVisible();
-    for (const label of ["任务名称", "招标编号", "截止时间", "预算记录（USD）"]) {
+    for (const label of ["任务名称", "招标编号", "截止时间"]) {
       await expect(admin.getByLabel(label)).toBeVisible();
     }
     await admin.getByLabel("任务名称").fill("浏览器创建与上传恢复任务");
     await admin.getByLabel("招标编号").fill("BROWSER-UPLOAD-2026");
     await admin.getByLabel("截止时间").fill("2027-04-03T10:30");
-    await admin.getByLabel("预算记录（USD）").fill("88.5");
     await admin.getByRole("button", { name: "创建任务" }).click();
     await expect(admin.getByRole("heading", { name: "浏览器创建与上传恢复任务" })).toBeVisible();
     const createdTaskId = new URL(admin.url()).pathname.split("/").at(-1);
@@ -349,7 +347,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     expect(afterPreview.payload.items.map((item) => item.job_id)).toEqual(
       beforePreview.payload.items.map((item) => item.job_id),
     );
-    await admin.getByRole("button", { name: "开始抽取（可能产生费用）" }).click();
+    await admin.getByRole("button", { name: "开始抽取" }).click();
     await expect(admin.getByTestId("job-status")).toContainText("作业状态：已成功", {
       timeout: 30_000,
     });
@@ -509,15 +507,15 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     );
   });
 
-  test("review gates, conflict, atomic comply-only, drafts and the bound paid generation run", async ({ browser }) => {
+  test("review gates, conflict, atomic comply-only, drafts and the bound model generation run", async ({ browser }) => {
     const technical = await browser.newPage();
     technical.on("dialog", (dialog) => dialog.accept());
     await login(technical, "technical");
-    const paidRequests = [];
+    const modelRequests = [];
     technical.on("request", (request) => {
       if (request.method() !== "POST" || !request.url().endsWith("/cards/generations")) return;
       const body = request.postDataJSON();
-      if (body && body.dry_run !== true) paidRequests.push(body);
+      if (body && body.dry_run !== true) modelRequests.push(body);
     });
 
     const pending = fixture.review.cards.pending_evidence;
@@ -650,17 +648,14 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await batchDialog.getByRole("button", { name: "提交整批处置" }).click();
     await expect(technical.getByRole("status")).toContainText("整批处置已保存");
 
-    await technical.getByText("模型起草费用预览", { exact: true }).click();
-    await technical.getByRole("button", { name: "预检外发范围与费用" }).click();
+    await technical.getByText("模型起草预检", { exact: true }).click();
+    await technical.getByRole("button", { name: "预检外发范围与配置" }).click();
     await expect(technical.getByRole("heading", { name: "本次预检" })).toBeVisible();
-    await expect(technical.getByText("服务商 USD 估算", { exact: true })).toBeVisible();
-    await expect(technical.getByText(/USD$/).first()).toBeVisible();
-    // The paid run stays disabled until a human authorizes this exact preview and cap.
-    const paid = technical.getByRole("button", { name: "确认并付费运行" });
-    await expect(paid).toBeDisabled();
-    await expect(technical.getByLabel(/本次平台扣款上限/)).not.toHaveValue("");
-    await expect(technical.getByText(/上限只约束平台扣费/)).toBeVisible();
-    expect(paidRequests).toEqual([]);
+    // The run stays disabled until a human authorizes this exact preview.
+    const model = technical.getByRole("button", { name: "确认并运行" });
+    await expect(model).toBeDisabled();
+
+    expect(modelRequests).toEqual([]);
 
     await technical.goto(`/app/org/tasks/${taskId}/drafts?job=${extractionJobId}`);
     await expect(technical.getByRole("heading", { name: "响应表初稿" })).toBeVisible();
@@ -668,7 +663,7 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(technical.getByText("响应行", { exact: true })).toBeVisible();
     await expect(technical.getByText("须遵守", { exact: true })).toBeVisible();
     await expect(technical.getByText("缺口", { exact: true })).toBeVisible();
-    await expect(technical.getByText(/本次预检实际模型成本为 0/)).toBeVisible();
+    await expect(technical.getByText(/本次预检不调用模型/)).toBeVisible();
     await technical.getByRole("button", { name: "确认生成初稿" }).click();
     await expect(technical.getByTestId("job-status")).toContainText("作业状态：已成功", {
       timeout: 30_000,
@@ -710,28 +705,28 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
     await expect(viewer.getByRole("button", { name: "预检组表" })).toHaveCount(0);
     await viewer.close();
 
-    // A human-authorized paid run carries the exact preview hash and the chosen cap.
+    // A human-authorized run carries the exact preview hash.
     await technical.goto(reviewUrl);
     await choose(technical, "类别", "技术");
     await choose(technical, "状态", "缺卡片");
     await technical.getByTestId("requirement-row").getByRole("checkbox").first().check();
-    await technical.getByText("模型起草费用预览", { exact: true }).click();
-    await technical.getByRole("button", { name: "预检外发范围与费用" }).click();
+    await technical.getByText("模型起草预检", { exact: true }).click();
+    await technical.getByRole("button", { name: "预检外发范围与配置" }).click();
     await expect(technical.getByRole("heading", { name: "本次预检" })).toBeVisible();
     const inputHash = (await technical.locator(".details-list code").last().textContent()).trim();
-    const runPaid = technical.getByRole("button", { name: "确认并付费运行" });
-    await expect(runPaid).toBeDisabled();
-    await technical.getByLabel(/本次平台扣款上限/).fill("5");
+    const runModel = technical.getByRole("button", { name: "确认并运行" });
+    await expect(runModel).toBeDisabled();
+
     await technical.getByLabel(/授权按本次预检运行/).check();
-    await expect(runPaid).toBeEnabled();
-    await runPaid.click();
+    await expect(runModel).toBeEnabled();
+    await runModel.click();
     await expect(technical.getByTestId("job-status")).toContainText("作业状态：已成功", {
       timeout: 30_000,
     });
-    expect(paidRequests).toHaveLength(1);
-    expect(paidRequests[0].expected_input_hash).toBe(inputHash);
-    expect(paidRequests[0].max_charge).toBe("5");
-    expect(paidRequests[0].requirement_ids).toHaveLength(1);
+    expect(modelRequests).toHaveLength(1);
+    expect(modelRequests[0].expected_input_hash).toBe(inputHash);
+
+    expect(modelRequests[0].requirement_ids).toHaveLength(1);
 
     const result = sanitized({
       passed: true,
@@ -746,8 +741,8 @@ test.describe.serial("单位招标、审阅与初稿控制台", () => {
         "revision-conflict",
         "atomic-comply-only",
         "partial-stale-drafts",
-        "generation-dry-run-paid-unauthorized",
-        "generation-paid-bound-run",
+        "generation-dry-run-model-unauthorized",
+        "generation-model-bound-run",
       ],
       rerun: {
         command: "cd web && npx playwright test e2e/org-console.spec.js",

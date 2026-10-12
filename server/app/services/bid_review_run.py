@@ -23,12 +23,13 @@ from app.providers.bid_reviewing import VERSION, review_provider
 from app.providers.configured import model_identity
 from app.providers.llm import HTTPExtractor, with_reasoning
 from app.schemas import bid_review_run as c
-from app.schemas.budget_contracts import BudgetPreflightData
 from app.schemas.check_contracts import AssessmentJobAccepted
+from app.schemas.preflight_contracts import PreflightData
 from app.services import bid_review as bids
 from app.services import bid_review_privacy as privacy
 from app.services import bid_review_text as text_review
-from app.services import budget_preflight, check_semantic, task_workflow
+from app.services import check_semantic, task_workflow
+from app.services import preflight as preflight_service
 from app.services.auth import Identity
 from app.services.versioned import audit
 
@@ -37,7 +38,10 @@ async def resolve_binding(session, settings):
     llm = await llm_providers.resolve_llm(session, settings)
     if not isinstance(llm, HTTPExtractor):
         return llm, None
-    return llm, {"model": model_identity(llm), "price": check_semantic.prices(llm)}
+    return llm, {
+        "model": model_identity(llm),
+        "provider_options": check_semantic.provider_options(llm),
+    }
 
 
 async def run_access(session, actor, task_id, *, write=True, lock=True):
@@ -122,7 +126,6 @@ async def snapshot(session, actor, task_id, body, settings):
             "tender_anchors_per_finding": 20,
             "bid_anchors_per_finding": 20,
         },
-        "max_charge": str(body.max_charge) if body.max_charge is not None else None,
     }
     requests, refs, candidate_refs, candidates, bid_pages = [], {}, {}, [], []
     authorized_bid_pages, document_inventory, validations = [], [], []
@@ -304,8 +307,6 @@ async def snapshot(session, actor, task_id, body, settings):
         "available": False,
         "blockers": [],
         "planned_calls": 0,
-        "fixed_sale_price": None,
-        "currency": settings.billing_currency,
         "binding": None,
         "authorization_id": None,
     }
@@ -317,11 +318,6 @@ async def snapshot(session, actor, task_id, body, settings):
         clef["blockers"] = list(resolved.blockers)
         if clef_config is not None:
             clef["binding"] = clef_config.model_dump(mode="json")
-            clef["fixed_sale_price"] = str(clef_config.fixed_sale_price)
-            clef["price_revision"] = str(clef_config.price_revision)
-            clef["currency"] = clef_config.currency
-            if clef_config.currency != settings.billing_currency:
-                clef["blockers"].append("clef_currency_mismatch")
         if clef_config is not None and not clef["blockers"]:
             presence = await bid_review_presence.planned(
                 session,
@@ -341,7 +337,7 @@ async def snapshot(session, actor, task_id, body, settings):
         uncovered.append("clef_disabled")
     manifest["clef"] = clef
     # Compliance calls depend on extracted obligations; their exact bytes and
-    # price are unknowable during preflight. Quote only the known first stage.
+    # work size is unknown during preflight. Plan only the known first stage.
     dependent_max = 2000 * len(authorized_bid_pages)
     manifest["dependent_compliance_calls_maximum"] = dependent_max
     manifest["planned_calls"] = (
@@ -404,29 +400,27 @@ async def submit(session, actor, task_id, body, queue, settings):
     if clef["available"]:
         from app.services.bid_review_clef import preview_quote
 
-        # Preflight prices the pinned shape/hash without reading pixels. The quote
-        # amount is fixed; actual byte-bound quotes are built again on dispatch.
+        # Preflight binds the image shape/hash without reading pixels. Exact
+        # byte-bound call plans are built again on dispatch.
         for image in clef["images"][: clef["planned_calls"]]:
             quotes.append(preview_quote(image, fixed.clef_config))
-    attached = await budget_preflight.attach(
+    attached = await preflight_service.attach(
         session,
         {},
         command="review run",
         task_id=task_id,
         input_hash=fixed.input_hash,
-        currency=settings.billing_currency,
         settings=settings,
         quotes=quotes,
         planned_calls=fixed.manifest["planned_calls"] if not blockers else None,
-        max_charge=body.max_charge,
         dynamic=bool(fixed.manifest["dependent_compliance_calls_maximum"]),
     )
-    budget = BudgetPreflightData.model_validate(attached["budget_preflight"])
-    budget.maximum_calls = fixed.manifest["limits"]["external_calls"]
-    budget.as_of = budget.as_of.replace(microsecond=0)
-    if budget.admission_blocker:
-        blockers.append(budget.admission_blocker)
-    expiry = budget.as_of + timedelta(seconds=900)
+    preview = PreflightData.model_validate(attached["preflight"])
+    preview.maximum_calls = fixed.manifest["limits"]["external_calls"]
+    preview.as_of = preview.as_of.replace(microsecond=0)
+    if preview.admission_blocker:
+        blockers.append(preview.admission_blocker)
+    expiry = preview.as_of + timedelta(seconds=900)
     signer = TokenSigner.for_tokens(settings)
     binding = receipt_binding(actor, task_id, body, fixed.input_hash)
     if body.dry_run:
@@ -438,7 +432,7 @@ async def submit(session, actor, task_id, body, queue, settings):
         public_clef["binding_sha256"] = bids.digest(fixed.manifest["clef"]["binding"])
         return c.BidReviewPreview(
             input={**fixed.manifest, "clef": public_clef, "input_hash": fixed.input_hash},
-            budget=budget,
+            preflight=preview,
             expires_at=expiry,
             preflight_token=signer.issue(binding, 900, expires_at=int(expiry.timestamp())),
             admission_blockers=sorted(set(blockers)),
@@ -481,12 +475,12 @@ async def submit(session, actor, task_id, body, queue, settings):
         if body.retry and prior is None:
             if job.status not in {"failed", "cancelled"}:
                 bids.fail("bid_retry_not_terminal", "Only failed or cancelled work can be retried")
-            holds = await session.scalar(
+            unresolved_calls = await session.scalar(
                 select(VendorCall.id)
                 .where(VendorCall.job_id == job.id, VendorCall.state.in_(["pending", "unknown"]))
                 .limit(1)
             )
-            if holds:
+            if unresolved_calls:
                 bids.fail(
                     "bid_review_unresolved_usage", "Reconcile unknown usage before retry", 409, 4
                 )
@@ -521,7 +515,6 @@ async def submit(session, actor, task_id, body, queue, settings):
                     "request": body.model_dump(
                         mode="json", exclude={"preflight_token", "expected_input_hash"}
                     ),
-                    "max_charge": fixed.manifest["max_charge"],
                 }
             },
         )
@@ -578,6 +571,12 @@ async def job_access(session, actor, job, *, cancel=False):
         raise not_found()
 
 
+def public_coverage(coverage):
+    """Project retired metadata without changing the hash-bound publication."""
+    retired = {"clef_cost", "clef_reserved_amount", "clef_currency"}
+    return {key: value for key, value in coverage.items() if key not in retired}
+
+
 async def run_view(session, row):
     job = await session.get(Job, row.job_id)
     publication = await session.scalar(
@@ -594,7 +593,7 @@ async def run_view(session, row):
         created_at=row.created_at,
         coverage={
             key: value
-            for key, value in publication.coverage.items()
+            for key, value in public_coverage(publication.coverage).items()
             if not key.endswith("_page_ids")
         }
         if publication

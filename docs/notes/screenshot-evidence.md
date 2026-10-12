@@ -12,9 +12,7 @@ are different actions. Reusing a file must not transfer one card's confirmation
 to another card or allow changed pixels to inherit an earlier decision.
 
 The product boundary and source classifications are defined in the
-[screenshot contract](../plan/screenshots.md). Human response review follows
-[response cards (响应卡)](response-cards.md); model reservations and settlement follow
-[prepaid billing](prepaid-billing.md).
+[screenshot contract](../plan/screenshots.md).
 
 ## Usage
 
@@ -31,13 +29,12 @@ result remains an unconfirmed material. `card create/update` can link an
 `card confirm` action is the only path that confirms the resulting Evidence.
 
 `screenshot analyze --dry-run` fixes the selected requirement citations,
-redacted text, image hashes, pixel mappings, model identity and image-price
+redacted text, image hashes, pixel mappings, model identity and image capability
 revision. A non-dry submission must provide the returned input hash. Its
 suggestions remain unreviewed and cannot populate a legacy exact-text quote.
 
 `ui mock --dry-run` fixes one requirement, one selected feature revision, the
-model identity and the prompt version, and prices the single planned call. The
-paid run must carry that input hash; its job result is the prototype run.
+model identity and the prompt version, and estimates resource usage for the single planned call.
 `screenshot prepare --prototype-run` then downloads the run's source PNG and
 applies the same local plan as any upload, and `screenshot add` ingests it as an
 `origin=prototype` asset.
@@ -134,15 +131,15 @@ prototype provenance and does not alter the feature library's delivery status.
 
 [`screenshot_vision.py`](../../server/app/providers/screenshot_vision.py) uses
 the existing OpenAI-compatible HTTP adapter, reasoning selection, safe metadata
-handling and accounted call boundary. The selected platform model's request
+handling and accounted call boundary.
+The selected platform model's request
 options must contain a verified `screenshot_vision` capability with image-count
-and pixel limits, a price revision, and an explicit token-bound rule. That
-server-owned block is stripped before vendor dispatch. Rule fields are defined
-by `_capability` and `_ImageTokenBound` in that module; configured coefficients
-must come from the endpoint's verified billing contract.
+and pixel limits, a capability revision, and an explicit token-bound rule.
+That
+server-owned block is stripped before vendor dispatch.
 
 Image token allowances are calculated from image count and pixels. Base64 length
-is excluded from the text allowance. Missing capability or prices prevents
+is excluded from the text allowance. Missing capability or verified input bounds prevents
 external calls. Analysis sends one image per bounded call and requires the total
 selected image bytes to fit the service input bound. The vendor receives local
 refs and the selected redacted requirement text, never storage keys, signatures,
@@ -152,7 +149,7 @@ The worker conservatively retains all declared inputs as dependencies. It
 checks authorization, selection state, hashes, redaction revision and model
 identity before each admitted call and again before publication. Usage settles
 before model output is parsed, including invalid or refused output. Per-call
-usage records also retain image count, image-price revision and a digest of the
+usage records also retain image count, image capability revision and a digest of the
 outbound request. Valid proposals are stored with resolved input foreign keys;
 unknown refs and invalid regions yield safe reason codes. Wire regions are
 translated from the sent PNG to its content coordinates before persistence.

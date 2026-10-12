@@ -114,7 +114,7 @@ async def test_submit_approve_login_empty_org_and_atomic_audit(
     row = await submitted(signup, admin_engine, email=" APPLICANT@EXAMPLE.TEST ")
     assert row["email"] == "applicant@example.test"
     assert verify_password(APPLICANT_PASSWORD, row["password_hash"])
-    assert (row["expires_at"] - row["created_at"]) == timedelta(days=30)
+    assert row["expires_at"] - row["created_at"] == timedelta(days=30)
     assert len(row["source_digest"]) == 64 and SOURCE not in str(row)
     assert row["source_digest"] == source_digest(signup[3], SOURCE)
     assert row["source_digest"] != hashlib.sha256(SOURCE.encode()).hexdigest()
@@ -157,11 +157,7 @@ async def test_submit_approve_login_empty_org_and_atomic_audit(
         )
     logged_in = await api.post(
         "/auth/login",
-        json={
-            "email": row["email"],
-            "password": APPLICANT_PASSWORD,
-            "org_id": decision["org_id"],
-        },
+        json={"email": row["email"], "password": APPLICANT_PASSWORD, "org_id": decision["org_id"]},
     )
     assert logged_in.status_code == 200, logged_in.text
     session = logged_in.json()["data"]["session"]
@@ -173,9 +169,6 @@ async def test_submit_approve_login_empty_org_and_atomic_audit(
         "role": "admin",
         "user_id": decision["admin_user_id"],
     }
-    balance = await api.get("/billing", headers=applicant_headers)
-    assert balance.status_code == 200, balance.text
-    assert balance.json()["data"]["balance"] == 0 and balance.json()["items"] == []
     tasks = await api.get("/tasks", headers=applicant_headers)
     assert tasks.status_code == 200 and tasks.json()["items"] == []
     async with app.state.db.transaction() as transaction:

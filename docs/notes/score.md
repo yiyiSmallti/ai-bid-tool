@@ -10,7 +10,7 @@ errors would create a precise-looking result from an unconfirmed interpretation.
 ## Usage
 
 Run `bid score rubric generate --dry-run` for a successful extraction job, inspect the fixed input
-hash and cost ceiling, and submit the same input hash to create a candidate rubric. Use the list and
+hash and nonmonetary call limits, and submit the same input hash to create a candidate rubric. Use the list and
 show commands to inspect sections, items, requirement coverage, source citations, and completeness.
 
 An admin classifies each section and item as commercial or technical. The responsible bidder or
@@ -58,9 +58,8 @@ bounds, weights, caps, and aggregation must be coherent. `sum`, `weighted_sum`, 
 only executable aggregation forms. Formula and non-additive wording can be preserved and confirmed,
 but remains unavailable for automatic aggregation.
 
-Dry-run writes no job, review event, audit row, or usage record and makes no provider call. A paid
-submission binds the dry-run input hash and follows the shared queue, lease, retry, cancellation,
-provider resolution, redaction, usage, and prepaid charge controls. Cached input returns the retained
+Dry-run writes no job, review event, audit row, or usage record and makes no provider call.
+Cached input returns the retained
 job without duplicating review or usage history.
 
 Rubric generation uses two stages. Stage 1 sends the entire fixed scoring table in one request, with
@@ -82,16 +81,22 @@ validated sections when no item was accepted. Ordinary HTTP retries repeat the s
 batch.
 
 The write-free preview upper bound covers both stages, including the entire fixed section list
-repeated in each stage-2 batch. Because the structure is unknown at preview time, the item-call
+repeated in each stage-2 batch.
+Because the structure is unknown at preview time, the item-call
 input bound conservatively uses twice the enforced compact request-byte ceiling plus the shared
-framing allowance. Each actual item batch must fit the configured byte ceiling before admission. Stage-specific prompt and schema versions are part of preview
-cache/input identity. Old queued jobs with incompatible versions fail explicitly and must be
-resubmitted. The published rubric hash derives from the manifest containing stage-1 output and its
-structure hash. The queued job `cache_key` remains the preview input; submission stores
-`preview_input_hash` as provenance. The existing rubric `input_manifest` stores the verified proposal.
-Each call continues through shared per-call admission, reservation, metering, and settlement. Preflight carries a quote for the structure
-call and each planned item batch; actual calls obtain quotes for their exact request bodies. Shared
-[task-budget admission](task-budgets.md) reserves platform charges or direct-provider liability.
+framing allowance.
+Each actual item batch must fit the configured byte ceiling before admission.
+Stage-specific prompt and schema versions are part of preview
+cache/input identity.
+Old queued jobs with incompatible versions fail explicitly and must be
+resubmitted.
+The published rubric hash derives from the manifest containing stage-1 output and its
+structure hash.
+The queued job `cache_key` remains the preview input; submission stores
+`preview_input_hash` as provenance.
+The existing rubric `input_manifest` stores the verified proposal.
+Preflight carries a quote for the structure
+call and each planned item batch; actual calls obtain quotes for their exact request bodies.
 Cached previews resolve the same actor-bound cache key as submission, independently of the final
 published structure hash.
 
@@ -215,7 +220,7 @@ version participates in the preview identity, so queued work with an incompatibl
 resubmitted from a new preview.
 
 Output-token exhaustion is `provider_output_truncated`, distinct from malformed JSON/schema
-`invalid_provider_output`; the [Provider failure table](../plan/score.md#providers-jobs-and-prepaid-billing)
+`invalid_provider_output`; the [Provider failure table](../plan/score.md#providers-jobs-and-usage)
 defines both. Lower reasoning or raise `BID_LLM_MAX_OUTPUT_TOKENS`, then preview and resubmit.
 Stage-1 truncation makes no item calls; stage-2 truncation can retain independent valid batches,
 with the same action guidance in job warnings and the incurred usage preserved.

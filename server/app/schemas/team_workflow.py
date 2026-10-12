@@ -8,7 +8,6 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, StringConstraints, field_validator, model_validator
 
-from app.schemas.budget_contracts import TaskBudgetView
 from app.schemas.contracts import Category, Contract
 from app.schemas.response_card_contracts import CardAction, CardState, ReviewDomain
 
@@ -42,9 +41,6 @@ type BoardBlocker = Literal[
     "unassigned",
     "assignee_unavailable",
     "job_failed",
-    "insufficient_balance",
-    "spend_cap_reached",
-    "job_charge_limit_exceeded",
     "job_call_limit_exceeded",
 ]
 type BoardNextAction = Literal[
@@ -66,7 +62,6 @@ type BoardNextAction = Literal[
     "assign",
     "find_reviewer",
     "view_job",
-    "resolve_budget",
     "prototype_decide",
     "unarchive",
 ]
@@ -715,7 +710,6 @@ class BoardData(Contract):
     counts: BoardCounts
     matching: int = Field(strict=True, ge=0)
     returned: int = Field(strict=True, ge=0, le=100)
-    budget: TaskBudgetView
     next_cursor: Cursor | None = None
     event_cursor: Cursor
     as_of: AwareDatetime

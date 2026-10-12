@@ -1,6 +1,7 @@
 """Frozen human decision reports, bounded projections and local render admission."""
 
 import hashlib
+import re
 from datetime import timedelta
 from uuid import uuid4
 
@@ -16,14 +17,15 @@ from app.models.bid_review_run import BidReviewObligation, BidReviewSigningRequi
 from app.models.bid_signature import BidPDFValidation
 from app.models.entities import AuditLog, Job, Task, UsageRecord
 from app.schemas import bid_review_report as c
-from app.schemas.budget_contracts import BudgetPreflightData
 from app.schemas.check_contracts import AssessmentJobAccepted
 from app.schemas.contracts import Cost, ProviderUsage
+from app.schemas.preflight_contracts import PreflightData
 from app.services import bid_review as bids
 from app.services import bid_review_findings as findings
 from app.services import bid_review_privacy as privacy
 from app.services import bid_review_run as runs
-from app.services import bid_signature_views, budget_preflight, task_workflow
+from app.services import bid_signature_views, task_workflow
+from app.services import preflight as preflight_service
 from app.services.bid_review_report_renderer import RENDERER_IDENTITY
 from app.services.versioned import audit
 
@@ -268,15 +270,15 @@ async def build_snapshot(session, actor, run, publication, settings):
     clef_status = publication.coverage.get("clef", "unavailable")
     clef_notice = notice(
         "Clef 初筛",
-        f"状态：{clef_status}；完成调用：{publication.coverage.get('clef_completed_calls', 0)} / 尝试 {publication.coverage.get('clef_calls', 0)}；已结算固定调用费用：{publication.coverage.get('clef_cost', '0')} {publication.coverage.get('clef_currency', settings.billing_currency)}；需人工确认。",
+        f"状态：{clef_status}；完成调用：{publication.coverage.get('clef_completed_calls', 0)} / 尝试 {publication.coverage.get('clef_calls', 0)}；需人工确认。",
         publication.coverage.get("clef_unvalidated_cases", []),
     )
     rows["signatures"].append(clef_notice)
     if publication.coverage.get("clef_unresolved_calls"):
         rows["signatures"].append(
             notice(
-                "Clef 未确定费用",
-                f"{publication.coverage['clef_unresolved_calls']} 次调用尚未确定完成状态，保留预算 {publication.coverage.get('clef_reserved_amount', '0')} {publication.coverage.get('clef_currency', settings.billing_currency)}；已结算金额不代表这些调用免费。",
+                "Clef 未确定调用",
+                f"{publication.coverage['clef_unresolved_calls']} 次调用尚未确定完成状态；请核验调用记录，避免重复执行。",
             )
         )
     rows["risks"] = machine_risks or [
@@ -300,11 +302,11 @@ async def build_snapshot(session, actor, run, publication, settings):
         clef_notice,
         notice(
             "Clef 验证范围",
-            "淡印、灰度、残缺、错误公司、要求位置和骑缝章尚未验证；签名身份与日期保持人工检查。返回 token 仅为遥测，费用按已固定的每次调用售价结算。",
+            "淡印、灰度、残缺、错误公司、要求位置和骑缝章尚未验证；签名身份与日期保持人工检查。返回 token 仅为遥测，调用次数与完成状态记录在用量中。",
         ),
         notice(
-            "Clef 费用边界",
-            f"已结算费用之外，{publication.coverage.get('clef_unresolved_calls', 0)} 次未确定调用保留预算 {publication.coverage.get('clef_reserved_amount', '0')} {publication.coverage.get('clef_currency', settings.billing_currency)}；超时不会自动免费或重试。",
+            "Clef 调用状态",
+            f"{publication.coverage.get('clef_unresolved_calls', 0)} 次调用尚未确定完成状态；超时不会自动重试。",
         ),
         notice("运行发布时间", publication.created_at.isoformat()),
         notice(
@@ -342,9 +344,9 @@ async def build_snapshot(session, actor, run, publication, settings):
     rows["methodology"].append(
         {
             "kind": "cost",
-            "cost": Cost.model_validate(
-                await job_cost(session, run.job_id, settings.billing_currency)
-            ).model_dump(mode="json"),
+            "cost": Cost.model_validate(await job_cost(session, run.job_id)).model_dump(
+                mode="json"
+            ),
         }
     )
     last_decision_time = await session.scalar(
@@ -385,6 +387,64 @@ def open_snapshot(row, settings):
     ):
         bids.fail("bid_review_output_integrity", "Report snapshot integrity mismatch", 409, 4)
     return payload
+
+
+def current_snapshot(payload):
+    """Copy the authenticated snapshot into the current public report vocabulary.
+
+    Integrity checks always apply to the stored original. Historical snapshots lack
+    complete call counters, so their cost row cannot be presented as a current Cost.
+    """
+    sections = {}
+    for section, rows in payload["rows"].items():
+        values = []
+        for row in rows:
+            kind = row["kind"]
+            if kind == "cost":
+                if not Cost.model_fields.keys() <= row["cost"].keys():
+                    row = notice(
+                        "历史用量记录",
+                        "历史快照未保存完整调用状态；请核对已记录用量，调用状态以当前作业账本为准。",
+                    )
+                else:
+                    row = {
+                        **row,
+                        "cost": {key: row["cost"][key] for key in Cost.model_fields},
+                    }
+            elif kind == "usage":
+                row = {
+                    **row,
+                    "usage": {
+                        key: value
+                        for key, value in row["usage"].items()
+                        if key in ProviderUsage.model_fields
+                    },
+                }
+            elif kind == "notice" and section in {"signatures", "methodology"}:
+                label, text_value = row["label"], row["text"]
+                if label == "Clef 初筛" and "；已结算固定调用费用：" in text_value:
+                    row = {
+                        **row,
+                        "text": text_value.split("；已结算固定调用费用：", 1)[0] + "；需人工确认。",
+                    }
+                elif label == "Clef 验证范围":
+                    row = {
+                        **row,
+                        "text": "淡印、灰度、残缺、错误公司、要求位置和骑缝章尚未验证；签名身份与日期保持人工检查。返回 token 仅为遥测，调用次数与完成状态记录在用量中。",
+                    }
+                elif label in {"Clef 未确定费用", "Clef 费用边界"}:
+                    count = re.search(r"(?:^|，)([0-9]+) 次", text_value)
+                    recorded = f"{count.group(1)} 次调用尚未确定完成状态；" if count else ""
+                    row = {
+                        **row,
+                        "label": "Clef 未确定调用"
+                        if label == "Clef 未确定费用"
+                        else "Clef 调用状态",
+                        "text": recorded + "请核验调用记录，避免重复执行；超时不会自动重试。",
+                    }
+            values.append(row)
+        sections[section] = values
+    return {**payload, "rows": sections}
 
 
 def artifact_view(row, snapshot):
@@ -432,20 +492,19 @@ async def submit(session, actor, review_id, body, queue, settings):
         bids.fail(
             "bid_review_decisions_changed", "Human decisions changed; read the report again", 409, 2
         )
-    attached = await budget_preflight.attach(
+    attached = await preflight_service.attach(
         session,
         {},
         command="review report",
         task_id=run.task_id,
         input_hash=payload["input_hash"],
-        currency=settings.billing_currency,
         settings=settings,
         quotes=[],
         planned_calls=0,
     )
-    budget = BudgetPreflightData.model_validate(attached["budget_preflight"])
-    budget.as_of = budget.as_of.replace(microsecond=0)
-    expires = budget.as_of + timedelta(seconds=900)
+    preview = PreflightData.model_validate(attached["preflight"])
+    preview.as_of = preview.as_of.replace(microsecond=0)
+    expires = preview.as_of + timedelta(seconds=900)
     binding = {
         "purpose": "bid_review_report",
         "org_id": str(actor.org_id),
@@ -463,7 +522,7 @@ async def submit(session, actor, review_id, body, queue, settings):
             report_input_hash=run.input_hash,
             decisions_snapshot_sha256=payload["decisions_snapshot_sha256"],
             renderer_identity=RENDERER_IDENTITY,
-            budget=budget,
+            preflight=preview,
             expires_at=expires,
             preflight_token=signer.issue(binding, 900, expires_at=int(expires.timestamp())),
         )
@@ -769,7 +828,7 @@ async def show(
         project = await findings.cleared_projector(session, run, settings)
     identity = f"report:{snapshot_id or 'live'}:{section}:{payload['input_hash']}:{projection}"
     start = runs.offset(actor, review_id, identity, cursor, settings)
-    values = payload["rows"][section]
+    values = current_snapshot(payload)["rows"][section]
     if safe:
         values = [value for row in values if (value := safe_row(row)) is not None]
         output_artifacts = []

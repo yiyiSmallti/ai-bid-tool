@@ -112,7 +112,6 @@ def result(response):
     value = response.json()
     assert set(value) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
     assert value["ok"] is True
-    assert value["cost"]["charge"] == value["cost"]["task_amount"] == "0"
     assert SENTINEL not in response.text
     assert "synthetic-private-signature-field" not in response.text
     return value["data"]
@@ -200,14 +199,14 @@ async def test_upload_prepare_inventory_and_encryption(api, headers, tenants, ap
     assert result(await upload(api, headers[0], task_id, files, body)) == uploaded
     before = await counts(application, tenants["orgs"][0])
     receipt = result(await preview(api, headers[0], task_id, uploaded["id"]))
-    assert receipt["local_only"] is True and receipt["budget"]["planned_calls"] == 0
+    assert receipt["local_only"] is True and receipt["preflight"]["planned_calls"] == 0
     assert (
-        receipt["budget"]["maximum_calls"] == 0
-        and receipt["budget"]["full_run_guaranteed"] is False
+        receipt["preflight"]["maximum_calls"] == 0
+        and receipt["preflight"]["full_run_guaranteed"] is False
     )
     assert (
         datetime.fromisoformat(receipt["expires_at"])
-        - datetime.fromisoformat(receipt["budget"]["as_of"])
+        - datetime.fromisoformat(receipt["preflight"]["as_of"])
     ).total_seconds() == 900
     assert await counts(application, tenants["orgs"][0]) == before
     request_id = str(uuid4())
@@ -447,7 +446,11 @@ async def test_receipt_expiry_mismatch_and_pagination(api, headers, application)
         await api.get(f"/v4/tasks/{task_id}/bid-submissions?limit=101", headers=headers[0]),
         status=422,
     )
-    error(await api.get(f"/tasks/{task_id}/bid-submissions", headers=headers[0]), status=404)
+    for prefix in ("", "/v4", "/v5"):
+        current = await api.get(f"{prefix}/tasks/{task_id}/bid-submissions", headers=headers[0])
+        assert result(current)["total"] == 2
+        assert current.headers["X-Bid-Contract-Version"] == "5.0"
+        assert {row["id"] for row in current.json()["items"]} == {a["id"], b["id"]}
 
 
 @pytest.mark.parametrize("conversion_fails", [False, True])

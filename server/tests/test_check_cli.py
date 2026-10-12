@@ -133,12 +133,7 @@ def check_interface(
                 "estimated_cost": {
                     "llm_tokens": 400 if combined else 0,
                     "ocr_pages": 0,
-                    "usd": 0.01 if combined else 0,
                 },
-                "estimated_charge": "0.02" if combined else "0",
-                "billing_currency": "CNY",
-                "cost_basis": "known",
-                "cost_basis_reason": "configured_price" if combined else "no_model_calls",
                 "estimate_kind": "first_pass_upper_bound",
                 "admission_blocker": None,
                 "estimated_duration_ms": None,
@@ -151,7 +146,6 @@ def check_interface(
                 "redaction_revision": 1,
                 "redaction_rule_version": "redaction-v1",
                 "redacted_counts": {},
-                "max_charge": body.max_charge,
                 "mode": body.mode,
                 "rule_version": "check-rules-v1",
                 "prompt_version": "semantic-check-v1" if combined else None,
@@ -344,8 +338,6 @@ def test_check_cli_remote_and_local_transport_snapshots_db_free(monkeypatch, tmp
             "combined",
             "--reasoning",
             "high",
-            "--max-charge",
-            "1.25",
             "--dry-run",
         ],
         "check list": ["check", "list", "--task", IDENTIFIER, "--limit", "25"],
@@ -385,7 +377,7 @@ def test_check_cli_remote_and_local_transport_snapshots_db_free(monkeypatch, tmp
                 ["--mode", mode, "--state", str(tmp_path / f"{mode}.enc"), *arguments],
                 capsys,
             )
-            assert exit_code == (5 if name == "check show" else 0)
+            assert exit_code == (5 if name == "check show" else 0), body
             actual[mode][name] = body
         CheckPreview.model_validate(actual[mode]["check run"]["data"])
         AssessmentListData.model_validate(actual[mode]["check list"]["data"])
@@ -557,7 +549,7 @@ def test_check_run_wait_returns_job_result_and_partial_exit(monkeypatch, capsys)
             "data": {"job_id": IDENTIFIER, "status": "queued", "cached": False},
             "items": [],
             "warnings": [],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 1,
         },
     )
@@ -574,8 +566,6 @@ def test_check_run_wait_returns_job_result_and_partial_exit(monkeypatch, capsys)
                     "job_id": IDENTIFIER,
                     "completion": "partial",
                     "usage_record_ids": [],
-                    "charge": "0",
-                    "billing_currency": "CNY",
                     "stop_reason": "unassessed_requirements",
                     "checked_requirements": 3,
                     "finding_count": 1,
@@ -584,7 +574,7 @@ def test_check_run_wait_returns_job_result_and_partial_exit(monkeypatch, capsys)
             },
             "items": [],
             "warnings": ["unassessed_requirements"],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 1,
         }
 
@@ -614,8 +604,6 @@ def test_check_run_wait_returns_job_result_and_partial_exit(monkeypatch, capsys)
         "job_id",
         "completion",
         "usage_record_ids",
-        "charge",
-        "billing_currency",
         "stop_reason",
         "checked_requirements",
         "finding_count",
@@ -634,7 +622,7 @@ def test_check_run_wait_rejects_invalid_job_result_as_server_error(monkeypatch, 
             "data": {"job_id": IDENTIFIER, "status": "queued", "cached": False},
             "items": [],
             "warnings": [],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 1,
         },
     )
@@ -649,7 +637,7 @@ def test_check_run_wait_rejects_invalid_job_result_as_server_error(monkeypatch, 
             },
             "items": [],
             "warnings": [],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 1,
         }
 

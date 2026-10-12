@@ -20,21 +20,17 @@ def create_router(context, settings):
     router = APIRouter(prefix="/management/resources/products")
 
     async def management_context(request: Request, ctx=Depends(context, scope="function")):
-        if getattr(request.state, "contract_version", None) != "4.0":
+        if getattr(request.state, "contract_version", None) != "5.0":
             raise not_found()
         session, actor = ctx
         session.info["management_settings"] = settings
         return session, actor
 
     def page(command, value, started):
-        return products.page_result(
-            command, value, settings.billing_currency, round((time.monotonic() - started) * 1000)
-        )
+        return products.page_result(command, value, round((time.monotonic() - started) * 1000))
 
     def detail(command, value, started):
-        return products.detail_result(
-            command, value, settings.billing_currency, round((time.monotonic() - started) * 1000)
-        )
+        return products.detail_result(command, value, round((time.monotonic() - started) * 1000))
 
     @router.post("/query", name="resource_product_browse", response_model=Result)
     async def query(body: ResourceQuery, ctx=Depends(management_context, scope="function")):

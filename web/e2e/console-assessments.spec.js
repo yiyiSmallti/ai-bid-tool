@@ -1,6 +1,6 @@
 // Failure modes are specified before implementation: false success for partial/stale
 // reports, full-report preloads, org text surviving resets, fabricated score totals,
-// preview writes, unbound paid requests, duplicate network retry, wrong-domain human
+// preview writes, unbound model requests, duplicate network retry, wrong-domain human
 // decisions, stale CAS, and replacement built from incomplete/mixed snapshots.
 import { expect, test } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
@@ -62,17 +62,29 @@ async function artifact(page, state, name) {
 }
 
 test.describe("rules check acceptance", () => {
-  test("malformed Result 4 cost cannot become a successful assessment read", async ({ page }) => {
+  test("malformed Result 5.0 cost cannot become a successful assessment read", async ({ page }) => {
     const state = await fixture(page);
-    await page.route("**/v4/tasks/*/assessment-inputs?*", route => route.fulfill({ json: {
+    const missingCount = zeroCost();
+    delete missingCount.browser_units;
+    const malformedCosts = [
+      { name: "extra-money-key", value: { ...zeroCost(), usd: 0 } },
+      { name: "missing-count", value: missingCount },
+      { name: "negative-count", value: { ...zeroCost(), calls: -1 } },
+      { name: "fractional-count", value: { ...zeroCost(), llm_tokens: 0.5 } },
+    ];
+    let malformedCost;
+    await page.route("**/tasks/*/assessment-inputs?*", route => route.fulfill({ json: {
       ok: true, command: "assessment inputs", data: {}, items: [], warnings: [],
-      cost: { ...zeroCost(), basis: null }, duration_ms: 0,
+      cost: malformedCost, duration_ms: 0,
     } }));
-    await page.goto(workspace);
-    await expect(page.getByRole("alert")).toContainText("invalid_response");
-    await expect(page.getByRole("button", { name: "提交检查", exact: true })).toHaveCount(0);
-    expect(state.writes).toBe(0);
-    await artifact(page, state, "rules-malformed-result-cost");
+    for (const malformed of malformedCosts) {
+      malformedCost = malformed.value;
+      await page.goto(workspace);
+      await expect(page.getByRole("alert")).toContainText("invalid_response");
+      await expect(page.getByRole("button", { name: "提交检查", exact: true })).toHaveCount(0);
+      expect(state.writes).toBe(0);
+      await artifact(page, state, `rules-malformed-result-cost-${malformed.name}`);
+    }
   });
 
   test("rules task entry carries the selected successful extraction to both assessment workspaces", async ({ page }) => {
@@ -97,14 +109,14 @@ test.describe("rules check acceptance", () => {
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
     await expect(page.getByText("本次检查范围", { exact: true })).toBeVisible();
-    await expect(page.getByText(/不调用模型，费用为 0/)).toBeVisible();
+    await expect(page.getByText(/不调用模型/)).toBeVisible();
     expect(state.previews).toBe(1); expect(state.writes).toBe(0); expect(state.submissions).toBe(0);
     await page.getByRole("button", { name: "提交检查", exact: true }).click();
     await expect(page.getByTestId("job-status")).toContainText(/已完成|已成功/, { timeout: 15000 });
     expect(state.submissions).toBe(1); expect(state.writes).toBe(1); expect(state.polls).toBeGreaterThanOrEqual(2);
-    const paidBody = state.requests.find((row) => row.method === "POST" && row.body?.dry_run === false).body;
-    expect(paidBody.expected_input_hash).toBe(hash); expect(paidBody.mode).toBe("rules");
-    expect(paidBody.reasoning == null).toBe(true); expect(paidBody.max_charge == null).toBe(true);
+    const modelBody = state.requests.find((row) => row.method === "POST" && row.body?.dry_run === false).body;
+    expect(modelBody.expected_input_hash).toBe(hash); expect(modelBody.mode).toBe("rules");
+    expect(modelBody.reasoning == null).toBe(true);
     await page.reload();
     await expect(page.getByRole("link", { name: /查看报告/ }).first()).toBeVisible();
     expect(state.submissions).toBe(1);
@@ -280,7 +292,7 @@ test.describe("rules check acceptance", () => {
     await page.getByRole("button", { name: "提交检查", exact: true }).click();
     await expect(page.getByTestId("job-status")).toContainText("运行中");
     await page.getByRole("button", { name: "取消作业", exact: true }).click();
-    await expect(page.getByRole("dialog", { name: "取消作业" })).toContainText("已获准发出的调用仍可能产生费用");
+    await expect(page.getByRole("dialog", { name: "取消作业" })).toContainText("已发出的调用仍可能返回结果");
     expect(state.cancelled).toBeUndefined();
     await page.getByRole("button", { name: "确认取消", exact: true }).click();
     await expect(page.getByTestId("job-status")).toContainText("已取消");
@@ -306,19 +318,20 @@ test.describe("combined check acceptance", () => {
     await artifact(page, state, "combined-partial-coverage-citations");
   });
 
-  test("combined explicit cap and consent bind the preview; date and cap changes revoke consent", async ({ page }) => {
+  test("combined explicit consent binds the preview and date changes revoke consent", async ({ page }) => {
     const state = await fixture(page, { published: false });
     await page.goto(workspace);
     await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
-    await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("1");
+
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
-    const consent = page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true });
+    const consent = page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true });
     await expect(consent).not.toBeChecked();
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toBeDisabled();
     await checkControl(consent);
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toBeEnabled();
-    await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("2");
+
+    await page.getByLabel("评估日期", { exact: true }).fill("2026-10-06");
     await expect(page.getByRole("button", { name: "提交检查", exact: true })).toHaveCount(0);
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
     await expect(consent).not.toBeChecked();
@@ -326,22 +339,22 @@ test.describe("combined check acceptance", () => {
     await page.getByRole("button", { name: "提交检查", exact: true }).click();
     await expect(page.getByTestId("job-status")).toContainText(/已完成|已成功/, { timeout: 15000 });
     const submitted = state.requests.find((row) => row.method === "POST" && row.body?.dry_run === false).body;
-    expect(submitted).toMatchObject({ mode: "combined", expected_input_hash: hash, assessment_date: "2026-10-05", max_charge: "2" });
+    expect(submitted).toMatchObject({ mode: "combined", expected_input_hash: hash, assessment_date: "2026-10-06" });
     expect(state.previews).toBe(2); expect(state.submissions).toBe(1); expect(state.writes).toBe(1);
-    await artifact(page, state, "combined-cap-consent");
+    await artifact(page, state, "combined-date-consent");
   });
 
-  for (const blocker of ["redaction_required", "insufficient_balance", "task_budget_exceeded", "task_budget_unpriced", "task_budget_currency_review_required"]) {
+  for (const blocker of ["redaction_required", "provider_unavailable", "context_limit_exceeded"]) {
     test(`combined ${blocker} remains a successful but blocked preview`, async ({ page }) => {
-      const state = await fixture(page, { blocker, unknownCost: blocker === "task_budget_unpriced" });
+      const state = await fixture(page, { blocker });
       await page.goto(workspace);
       await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
-      await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("1");
+
       await page.getByRole("button", { name: "预览检查", exact: true }).click();
       await expect(page.getByText("本次检查范围", { exact: true })).toBeVisible();
-      const text = { redaction_required: /尚未开启外发遮挡/, insufficient_balance: /余额不足/, task_budget_exceeded: /任务预算不足/, task_budget_unpriced: /未定价/, task_budget_currency_review_required: /币种/ }[blocker];
+      const text = { redaction_required: /尚未开启外发遮挡/, provider_unavailable: /服务不可用/, context_limit_exceeded: /上下文/ }[blocker];
       await expect(page.getByRole("alert").filter({ hasText: text }).first()).toBeVisible();
-      await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true }));
+      await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true }));
       await expect(page.getByRole("button", { name: "提交检查", exact: true })).toBeDisabled();
       expect(state.previews).toBe(1); expect(state.submissions).toBe(0); expect(state.writes).toBe(0);
       await artifact(page, state, `combined-blocker-${blocker}`);
@@ -352,9 +365,9 @@ test.describe("combined check acceptance", () => {
     const state = await fixture(page, { queueError: true });
     await page.goto(workspace);
     await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
-    await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("1");
+
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
-    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true }));
+    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true }));
     await page.getByRole("button", { name: "提交检查", exact: true }).click();
     await expect(page.getByRole("alert").first()).toContainText("任务已保存，等待重新调度");
     expect(state.submissions).toBe(1);
@@ -367,12 +380,12 @@ test.describe("combined check acceptance", () => {
     await page.goto(workspace);
     state.networkError = true;
     await checkControl(page.getByRole("radio", { name: "规则与语义检查", exact: true }));
-    await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("1");
+
     await page.getByRole("button", { name: "预览检查", exact: true }).click();
-    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true }));
+    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true }));
     await page.getByRole("button", { name: "提交检查", exact: true }).click();
     await expect(page.getByRole("alert").first()).toBeVisible();
-    await expect(page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true })).not.toBeChecked();
+    await expect(page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true })).not.toBeChecked();
     expect(state.submissions).toBe(3);
     await artifact(page, state, "combined-explicit-recovery");
   });
@@ -396,11 +409,11 @@ test.describe("rubric acceptance", () => {
       const state = await rubricFixture(page, { progress: strategy.progress, progressStep: 0, partial: strategy.name === "two-stage" });
       await page.goto(rubricWorkspace);
       await expect(page.getByRole("heading", { name: "评分规则", exact: true })).toBeVisible();
-      await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("1");
+
       await page.getByRole("button", { name: "预览生成评分规则", exact: true }).click();
       expect(state.writes).toBe(0); expect(state.submissions).toBe(0);
       await expect(page.getByRole("button", { name: "提交生成评分规则", exact: true })).toBeDisabled();
-      await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true }));
+      await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true }));
       await page.getByRole("button", { name: "提交生成评分规则", exact: true }).click();
       for (let index = 0; index < strategy.labels.length; index++) {
         const progress = page.getByRole("progressbar", { name: strategy.labels[index], exact: true });
@@ -662,22 +675,22 @@ test.describe("rubric acceptance", () => {
 test.describe("score acceptance", () => {
   const scoreWorkspace = `/app/org/tasks/${ids.task}/scores?job=${ids.extract}&draft=${ids.draft}&rubric=${ids.rubric}`;
   const scoreReport = `/app/org/tasks/${ids.task}/scores/${ids.score}`;
-  test("score preview submits exact confirmed rubric, draft, date, hash and positive cap", async ({ page }) => {
+  test("score preview submits exact confirmed rubric, draft, date and hash", async ({ page }) => {
     const state = await scoreFixture(page);
     await page.goto(scoreWorkspace);
     await expect(page.getByRole("heading", { name: "评分预估", exact: true })).toBeVisible();
     await page.getByLabel("评估日期", { exact: true }).fill("2026-10-05");
-    await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("1");
+
     await page.getByRole("button", { name: "预览评分", exact: true }).click();
     await expect(page.getByText("本次评分范围", { exact: true })).toBeVisible();
     expect(state.previews).toBe(1); expect(state.writes).toBe(0);
     await expect(page.getByRole("button", { name: "提交评分", exact: true })).toBeDisabled();
-    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true }));
+    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true }));
     await page.getByRole("button", { name: "提交评分", exact: true }).click();
     await expect(page.getByTestId("job-status")).toContainText(/已完成|已成功/);
     await expect(page.getByText(/部分完成；请查看已保存报告/)).toBeVisible();
     const submitted = state.requests.find(row => row.method === "POST" && row.path.endsWith("/scores") && row.body.dry_run === false);
-    expect(submitted.body).toMatchObject({ rubric_id: ids.rubric, draft_id: ids.draft, assessment_date: "2026-10-05", expected_input_hash: hash, max_charge: "1" });
+    expect(submitted.body).toMatchObject({ rubric_id: ids.rubric, draft_id: ids.draft, assessment_date: "2026-10-05", expected_input_hash: hash, });
     expect(state.submissions).toBe(1); expect(state.writes).toBe(1);
     await artifact(page, state, "score-bound-submit");
   });
@@ -731,7 +744,7 @@ test.describe("score acceptance", () => {
   test("score zero planned calls saves an explicit unavailable report and reads reasons on demand", async ({ page }) => {
     const state = await scoreFixture(page, { noEligible: true });
     await page.goto(scoreWorkspace);
-    await page.getByLabel("本次作业平台扣费上限", { exact: true }).fill("1");
+
     await page.getByRole("button", { name: "预览评分", exact: true }).click();
     await expect(page.getByText("没有可由模型评估的评分项", { exact: true })).toBeVisible();
     expect(state.writes).toBe(0);
@@ -740,7 +753,7 @@ test.describe("score acceptance", () => {
     await page.getByRole("button", { name: `核对评分项 ${uuid(800)}`, exact: true }).click();
     await expect(page.getByText("需要人工核对外部排名，模型不能评估", { exact: true })).toBeVisible();
     expect(state.requests.filter(row => row.query.entry_id === uuid(800))).toHaveLength(1);
-    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与费用上限", exact: true }));
+    await checkControl(page.getByRole("checkbox", { name: "我已核对外发范围与配置", exact: true }));
     await page.getByRole("button", { name: "生成无法评估报告", exact: true }).click();
     await expect(page.getByText(/部分完成；请查看已保存报告/)).toBeVisible();
     expect(state.submissions).toBe(1);

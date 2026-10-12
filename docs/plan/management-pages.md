@@ -50,12 +50,10 @@ The primary sources are [agent.md](../../agent.md#hard-rules-must-never-be-viola
 This contract adds page projections and the explicitly proposed interfaces below;
 it does not replace their business gates.
 
-Exclude bulk spreadsheet import, generated certificates/vendor (厂家) pages,
-electronic bidding submission, pricing strategy, public template sharing, resource
-ownership assignment, automatic task resource replacement, and new model
-capabilities. Library pages do not run drafting or grant export permission.
-Existing task screens own review, assignments, budgets, processing jobs and
-released documents. No external calls occur merely by opening a new management
+Library pages do not run drafting or grant export permission.
+Existing task screens own review, assignments, processing jobs and
+released documents.
+No external calls occur merely by opening a new management
 page, searching, loading history or editing a form.
 
 ## Code basis and design differences
@@ -67,12 +65,13 @@ page, searching, loading history or editing a form.
 | Shared revisions | [versioned.py](../../server/app/services/versioned.py) `create/update/list_revisions/select_revision/list_selections/check_placeholders` | Root pointers, immutable revisions and task pins already exist. Management adds independent root lifecycle state for all five library kinds. Existing updates can fail `affected_task_limit` above 100 associated tasks, including historical selections; the UI must not promise arbitrary fan-out |
 | Certificate originals | [certificate_files.py](../../server/app/services/certificate_files.py) `create_file/list_files/read_revision`; [certificate_file_contracts.py](../../server/app/schemas/certificate_file_contracts.py) | File replacement creates a new metadata revision plus original/parts. A metadata-only revision does not inherit the old file |
 | Templates and bindings | [templates.py](../../server/app/services/templates.py), [template_files.py](../../server/app/services/template_files.py) `validate_template`; [exports.py](../../server/app/services/exports.py) `human_access/create_binding/list_bindings/build_manifest/release/download_gate` | DOCX revisions and immutable bindings are separate. Template upload does not create a reviewed binding. Old adapter bindings remain visible with `current=false`; legacy lists are unbounded, while management routes add bounded template/binding reads |
-| Configuration | [api/providers.py](../../server/app/api/providers.py); [provider_configs.py](../../server/app/services/provider_configs.py) `require_access/set_config/list_configs/config_view/catalog_view/balance_view/submit_test/preview_test` | Only `llm_extract`, org BYOK and platform model selection exist. The design's OCR/vision/search/embedding configuration and task provider profiles are deferred. Existing `GET /providers` can query vendor balance; history includes unbounded per-revision usage aggregation |
+| Configuration | [api/providers.py](../../server/app/api/providers.py); [provider_configs.py](../../server/app/services/provider_configs.py) `require_access/set_config/list_configs/config_view/catalog_view/submit_test/preview_test` | Only `llm_extract`, org BYOK and platform model selection exist.
+The design's OCR/vision/search/embedding configuration and task provider profiles are deferred.|
 | Platform secrets | [platform_credentials.py](../../server/app/services/platform_credentials.py), [configured.py](../../server/app/providers/configured.py), [ADR 0006](../adr/0006-platform-credentials.md) | Separate platform operator console (平台运营后台), TOTP and restricted connection roles. No org-facing credential resolver or platform-key management. No env fallback |
 | Memory | [api/memory.py](../../server/app/api/memory.py), [memory/access.py](../../server/app/memory/access.py), [crud.py](../../server/app/memory/crud.py), [feedback.py](../../server/app/memory/feedback.py), [candidates.py](../../server/app/memory/candidates.py), [retrieval.py](../../server/app/memory/retrieval.py), [safety.py](../../server/app/memory/safety.py) | Org scope and keyword retrieval only; four-scope schema enums do not enable the other scopes or embeddings. Management browse adds current-text/conflict-key/tag prefix search, kind/stored status and expiry filters. Retrieval remains separate from complete library search |
 | Confidential data | [api/confidential.py](../../server/app/api/confidential.py), [confidential.py](../../server/app/services/confidential.py) `update_field/set_value/list_values/history/reveal` | Field label/archive updates mutate a metadata row with a revision counter; there is no field-metadata revision archive. Value versions are immutable and encrypted. Legacy value writes serialize under a field lock without an optimistic precondition; management writes add owner-specific field/value CAS |
 | Console | [router.js](../../web/src/router.js), [OrgProfiles.vue](../../web/src/views/OrgProfiles.vue), [OrgConfidential.vue](../../web/src/views/OrgConfidential.vue), [OrgTaskBoard.vue](../../web/src/views/OrgTaskBoard.vue), [api.js](../../web/src/api.js), [task-authority.js](../../web/src/task-authority.js) | Profiles, embedded certificates and confidential fields already have pages. Product, feature, certificate/profile and template management pages are implemented; org model settings, bounded confidential management, org memory and task feedback pages are implemented. The org path allowlist must gain exact new paths, not an unrestricted API proxy |
-| Team and cost | [task_workflow.py](../../server/app/services/task_workflow.py) `live_actor/access`; [task_authorization.py](../../server/app/services/task_authorization.py) `task_authorized`; [contracts.py](../../server/app/schemas/contracts.py) `CONTRACT_VERSION/Cost/Result`; [budget](budget.md) | Task membership/archival and Result 4.0 budgets are present. Earlier passages in memory/assessment plans saying task membership is absent, or in check plans saying budgets are not enforced, cannot describe these pages' gates |
+| Team and usage | [task_workflow.py](../../server/app/services/task_workflow.py) and [contracts.py](../../server/app/schemas/contracts.py) | Task access and lifecycle remain enforced; Result 5.0 records six resource counters. |
 
 The design says every resource change is versioned. Confidential field metadata
 and the proposed independent lifecycle state are explicit exceptions to *content*
@@ -213,7 +212,7 @@ Migration [0054](../../server/migrations/versions/0054_template_library.py) adds
 template lifecycle arm, bounded-read indexes and original-file human scope guard.
 Inactive templates reject new or replacement task pins while preserving an exact
 active-pin replay and historical selections. Direct binding links resolve their path revision UUID with the additive bounded
-`GET /v4/management/resources/templates/{id}?revision_id=UUID`; `TemplateDetailQuery`
+`GET /management/resources/templates/{id}?revision_id=UUID`; `TemplateDetailQuery`
 accepts either this UUID or the existing numeric `revision`, never both. The CLI
 `resource template show` also accepts `--revision-id`. Wrong-parent UUIDs return 404.
 Original reads require
@@ -232,9 +231,7 @@ exact revision author/time and independent keyset history/catalog pages. Optiona
 extends the original `PageQuery` proposal to apply the approved prefix-search
 browse behavior without exposing endpoints or credentials.
 
-New platform saves retain catalog revision and published sale prices alongside
-saved provider/model/reasoning identity. Older immutable revisions without price
-snapshots expose null prices; no live default supplies missing history. Migration
+Migration
 [0056](../../server/migrations/versions/0056_model_settings.py) adds read indexes
 and preserves declarative constraint rejection before provider business guards.
 Existing human-only `provider:write` and token CHECK remain authoritative; this
@@ -243,8 +240,7 @@ slice introduces no new scope or secret-history table.
 [The mechanism note](../notes/model-settings.md) owns implementation details.
 DB/API isolation, fixed-scale and mocked-browser scenarios are implemented;
 database execution, actual browser execution and integrated performance acceptance
-remain pending in the integration runtime. No real provider or paid test is used
-for implementation validation.
+remain pending in the integration runtime.
 
 ### Confidential management slice
 
@@ -280,7 +276,7 @@ queue recovers saved jobs from their exact event manifests and links their
 resulting candidates; dispatch warnings retain the successful human card decision.
 
 The additional management detail/history routes preserve existing memory show and
-history outputs. `GET /v4/tasks/{T}/memory-feedback?management=true` selects bounded
+history outputs. `GET /tasks/{T}/memory-feedback?management=true` selects bounded
 `PageData` / `MemoryFeedbackRow[]`; omitting the flag retains existing feedback
 API/CLI schemas. No new scope or token grant is added. Candidate submission and
 worker checks now enforce the existing task membership and archival boundary.
@@ -410,17 +406,16 @@ Org pages follow [provider-config.md](provider-config.md) and
 [platform-credentials.md](platform-credentials.md), not the platform credential
 UI. Limit capability to `llm_extract`; do not offer task profiles or unsupported
 OCR/vision/search/embedding switches. Display effective platform/org/unconfigured
-source, config revision, model, official reasoning levels and published sale
-prices. Current/history retain the saved nonsecret provider/model identity even
+source, config revision, model and official reasoning levels. Current/history retain the saved nonsecret provider/model identity even
 when a platform model is no longer enabled; show unavailable and retain its ID.
-Never replace that identity, price or reasoning with the enabled default. Platform
+Never replace that identity or reasoning with the enabled default. Platform
 reasoning choices expose only the catalog’s name/label, while BYOK inputs retain
 their existing editable reasoning schema. A configured key is not proof of a successful call.
 
-Use an explicit allowlist projection: no existing key, ciphertext, `key_last4`,
-fingerprint, credential ID, platform endpoint or wholesale prices. Existing
+Existing
 `ProviderConfigView` contains a suffix, so the proposed metadata projection is a
-new type, not a generic serialization of the database row. BYOK's nonsecret
+new type, not a generic serialization of the database row.
+BYOK's nonsecret
 HTTPS endpoint is visible; platform endpoint metadata is not.
 
 The only credential input is a fresh, blank password control for a one-time
@@ -441,24 +436,26 @@ repair of old jobs. Platform credentials are resolved per call under ADR 0006;
 org pages cannot read, replace, disable, test or import those secrets. Key failure
 must not fall back to another model, anonymous access or an environment key.
 
-Existing `GET /providers` may query DeepSeek balance, so these pages use the new
-metadata-only read. Vendor balance refresh and detailed monthly per-revision
-usage remain CLI/API-only initially. No decryption or vendor call is hidden in a
-new metadata endpoint. Platform catalog choices are separately paginated.
+No decryption or vendor call is hidden in a
+new metadata endpoint.
+Platform catalog choices are separately paginated.
 
-Connection test uses existing `BudgetProviderTest` (including `dry_run`) in
-[budget_contracts.py](../../server/app/schemas/budget_contracts.py), not only the
-older `ProviderTest`. Test the **saved effective** configuration using synthetic
+Connection test uses existing `ProviderTest` (including `dry_run`) in
+[preflight_contracts.py](../../server/app/schemas/preflight_contracts.py), not only the
+older `ProviderTest`.
+Test the **saved effective** configuration using synthetic
 input, show preflight and actual Result cost, and require an explicit start.
-Unsaved edits must be saved or discarded first. A test may incur vendor/platform
-charges; BYOK zero platform charge does not mean free usage. This endpoint does
+Unsaved edits must be saved or discarded first.
+This endpoint does
 not provide a binding hash for the intervening save race: show the actual tested
 config ID from its receipt and resolve that exact ID through the proposed safe
-revision-detail read. The existing receipt has no config revision field. A null
+revision-detail read.
+The existing receipt has no config revision field.
+A null
 config ID means platform default; show actual usage/job model identity when
-available, without claiming a catalog revision was pinned by the preview. Flag
-a changed selection instead of claiming the previously displayed revision was tested. A network timeout never
-automatically repeats a paid test.
+available, without claiming a catalog revision was pinned by the preview.
+Flag
+a changed selection instead of claiming the previously displayed revision was tested.
 
 ### Confidential fields
 
@@ -576,9 +573,8 @@ root remains active; check both roots in stable ID order after task locks.
 Product, feature, certificate, profile and template query, detail, history and
 lifecycle paths, binding query/detail, provider metadata/current/history/catalog
 reads, confidential query/history/CAS and memory browse/detail/history are implemented
-under `/v4`. Paths in existing tables omit `/v4` for readability; new pages request
-version 4 explicitly through `orgRequest`/`api.request(contractVersion:4)`. Existing
-unprefixed routes retain compatibility projections. Register fixed query/history
+under unversioned API paths with the Result 5.0 envelope. Older contract versions
+are rejected. Register fixed query/history
 paths before UUID routes and extend the browser allowlist by exact route pattern.
 
 ### Bounded additions
@@ -591,25 +587,25 @@ second nested envelope or a full-library metadata map. Detail objects occupy
 
 | Proposed HTTP route | Request → data/items | Service Protocol / authority |
 | --- | --- | --- |
-| `POST /v4/management/resources/{K}/query` | `ResourceQuery` → `PageData` / `ResourceRow[]` | `ManagementResourceReads.query`; kind's read scope |
-| `GET /v4/management/resources/{K}/{R}?revision=N` | `ResourceDetailQuery` → `ResourceDetailData` | `detail`; latest when revision omitted, exact historical revision otherwise; certificate detail accepts optional explicit `as_of` |
-| `GET /v4/management/resources/templates/{R}?revision_id=UUID` | `TemplateDetailQuery` → `TemplateDetailData` | Exact same-org root/revision UUID; numeric `revision` and UUID are mutually exclusive |
-| `POST /v4/management/resources/{K}/{R}/history/query` | `PageQuery` → `PageData` / `ResourceHistoryRow[]` | `history`; one root only, fetch full content by exact detail |
-| `POST /v4/management/resources/{K}/{R}/lifecycle` | `ResourceLifecycleSet` → `ResourceLifecycleData` | `ManagementResourceLifecycle.set_state`; human + kind's write scope |
-| `POST /v4/management/resources/{K}/{R}/lifecycle/history/query` | `PageQuery` → `PageData` / `ResourceLifecycleEvent[]` | `lifecycle_history`; kind's read scope |
-| `POST /v4/management/export-bindings/query` | `BindingQuery` → `PageData` / `ExportBindingView[]` | `ManagementBindingReads.query`; existing human admin/bidder gate |
-| `GET /v4/management/export-bindings/{id}?template_revision_id=UUID` | `BindingDetailQuery` → `ExportBindingView` | `detail`; wrong template parent gives 404 |
-| `GET /v4/management/providers` | No body → `ProviderSettingsData` | `ManagementProviderReads.settings`; `provider:read`, no balance or decryption |
-| `GET /v4/management/providers/revisions/{id}` | No body → `ProviderRevisionMetadata` | `revision`; exact authorized config ID, including historical/disabled catalog identity |
-| `POST /v4/management/providers/history/query` | `PageQuery` → `PageData` / `ProviderRevisionMetadata[]` | `history`; no per-row usage aggregation |
-| `POST /v4/management/providers/catalog/query` | `ProviderCatalogQuery` → `PageData` / `PlatformModelChoice[]` | `catalog`; enabled org-visible catalog fields only |
-| `POST /v4/management/memories/query` | `MemoryQuery` → `PageData` / `MemoryView[]` | `ManagementMemoryReads.query`; org scope, original ACL/safety/source redaction |
-| `GET /v4/management/memories/{id}?revision=N` | `ResourceDetailQuery` → `MemoryDetailData` | Exact revision, current revision number, nullable audit author and server action hints |
-| `POST /v4/management/memories/{id}/history/query` | `PageQuery` → `PageData` / `MemoryRevisionView[]` | Bounded descending history; deleted history requires human admin management authority |
-| `POST /v4/management/confidential-fields/query` | `ConfidentialQuery` → `PageData` / `ConfidentialFieldView[]` | `ManagementConfidential.fields`; metadata only |
-| `POST /v4/management/confidential-values/query` | `ConfidentialQuery` → `PageData` / `ConfidentialValueView[]` | `values`; authorized org or task owner context |
-| `POST /v4/management/confidential-fields/{id}/values/history/query` | `ConfidentialHistoryQuery` → `PageData` / `ConfidentialValueView[]` | `history`; never decrypt |
-| `POST /v4/management/confidential-fields/{id}/values` | `ConfidentialValueRevisionSet` → `ConfidentialValueView` | `set_value`; exact field revision/current value UUID (required null means absent), existing human/task gates |
+| `POST /management/resources/{K}/query` | `ResourceQuery` → `PageData` / `ResourceRow[]` | `ManagementResourceReads.query`; kind's read scope |
+| `GET /management/resources/{K}/{R}?revision=N` | `ResourceDetailQuery` → `ResourceDetailData` | `detail`; latest when revision omitted, exact historical revision otherwise; certificate detail accepts optional explicit `as_of` |
+| `GET /management/resources/templates/{R}?revision_id=UUID` | `TemplateDetailQuery` → `TemplateDetailData` | Exact same-org root/revision UUID; numeric `revision` and UUID are mutually exclusive |
+| `POST /management/resources/{K}/{R}/history/query` | `PageQuery` → `PageData` / `ResourceHistoryRow[]` | `history`; one root only, fetch full content by exact detail |
+| `POST /management/resources/{K}/{R}/lifecycle` | `ResourceLifecycleSet` → `ResourceLifecycleData` | `ManagementResourceLifecycle.set_state`; human + kind's write scope |
+| `POST /management/resources/{K}/{R}/lifecycle/history/query` | `PageQuery` → `PageData` / `ResourceLifecycleEvent[]` | `lifecycle_history`; kind's read scope |
+| `POST /management/export-bindings/query` | `BindingQuery` → `PageData` / `ExportBindingView[]` | `ManagementBindingReads.query`; existing human admin/bidder gate |
+| `GET /management/export-bindings/{id}?template_revision_id=UUID` | `BindingDetailQuery` → `ExportBindingView` | `detail`; wrong template parent gives 404 |
+| `GET /management/providers` | No body → `ProviderSettingsData` | No decryption, outbound requests or hidden connection test from a metadata read. |
+| `GET /management/providers/revisions/{id}` | No body → `ProviderRevisionMetadata` | `revision`; exact authorized config ID, including historical/disabled catalog identity |
+| `POST /management/providers/history/query` | `PageQuery` → `PageData` / `ProviderRevisionMetadata[]` | `history`; no per-row usage aggregation |
+| `POST /management/providers/catalog/query` | `ProviderCatalogQuery` → `PageData` / `PlatformModelChoice[]` | `catalog`; enabled org-visible catalog fields only |
+| `POST /management/memories/query` | `MemoryQuery` → `PageData` / `MemoryView[]` | `ManagementMemoryReads.query`; org scope, original ACL/safety/source redaction |
+| `GET /management/memories/{id}?revision=N` | `ResourceDetailQuery` → `MemoryDetailData` | Exact revision, current revision number, nullable audit author and server action hints |
+| `POST /management/memories/{id}/history/query` | `PageQuery` → `PageData` / `MemoryRevisionView[]` | Bounded descending history; deleted history requires human admin management authority |
+| `POST /management/confidential-fields/query` | `ConfidentialQuery` → `PageData` / `ConfidentialFieldView[]` | `ManagementConfidential.fields`; metadata only |
+| `POST /management/confidential-values/query` | `ConfidentialQuery` → `PageData` / `ConfidentialValueView[]` | `values`; authorized org or task owner context |
+| `POST /management/confidential-fields/{id}/values/history/query` | `ConfidentialHistoryQuery` → `PageData` / `ConfidentialValueView[]` | `history`; never decrypt |
+| `POST /management/confidential-fields/{id}/values` | `ConfidentialValueRevisionSet` → `ConfidentialValueView` | `set_value`; exact field revision/current value UUID (required null means absent), existing human/task gates |
 
 The module reuses `Contract(extra=forbid)`, `Cost`, `Result`, resource revision
 schemas, file views, `ExportBindingView`, provider inputs/reasoning and memory and
@@ -629,7 +625,7 @@ constructed by a client.
 | `POST/GET /tasks/{T}/{products|features|certificates|profiles|templates}` | Existing `Task*Selection` and snapshot views; task screens own writes; library pages do not load all task selections |
 | Certificate/template revision download-link/download and certificate page preview | Existing signed and authenticated binary routes in `api/resources.py`; open only selected revision/page |
 | `POST /export-template-bindings` | `ExportBindingCreate` → `ExportBindingPreview` for dry-run, `ExportBindingView` when created; existing immutable/human gates |
-| `POST /providers`, `POST /providers/test` | `ProviderConfigSet`; `BudgetProviderTest`, safe job/cost receipt; never echo newly supplied key |
+| `POST /providers`, `POST /providers/test` | `ProviderConfigSet`; `ProviderTest`, safe job/cost receipt; never echo newly supplied key |
 | `POST /memories`, `GET/PUT /memories/{id}`, `GET /memories/{id}/history`, `POST /memories/{id}/decisions`, `POST /memories/{id}/disable` | `MemoryCreate/Update/Decision/Disable`, `MemoryData` or existing paged revision history; reuse exact-revision gate |
 | `GET /tasks/{T}/memory-feedback`, `POST /tasks/{T}/memory-candidates`, `GET /jobs/{J}` | Existing paged feedback, `MemoryCandidateJobRequest`, authorized job recovery |
 | `POST /confidential-fields`, `POST /confidential-fields/{id}/revisions`, `POST /confidential-values/{id}/reveal` | `ConfidentialFieldCreate/Update`, explicit `ConfidentialReveal`; no new reveal API or broadened rights |
@@ -640,15 +636,12 @@ pages must not use them as a preload followed by browser-only slicing. A future
 bounded task-selector contract is separate; this draft does not claim all existing
 task pages now have bounded lists.
 
-## CLI and Result 4.0
+## CLI and Result 5.0
 
-[contracts.py](../../server/app/schemas/contracts.py) declares 4.0;
-[compatibility.py](../../server/app/schemas/compatibility.py) and
-[cli/main.py](../../cli/bid_cli/main.py) preserve legacy behavior. Every new command
-supports `--json`, has a `bid schema` entry and calls the same service as HTTP.
-No interactive prompt, local filesystem bypass of RLS or browser-only mutation.
-Missing required input fails immediately. Existing command names/JSON are not
-silently changed to paginated output.
+[contracts.py](../../server/app/schemas/contracts.py) and
+[cli/main.py](../../cli/bid_cli/main.py) define Result 5.0 and reject older versions.
+All new commands use the same six resource-count fields.
+
 
 | Proposed CLI command (append `--json`) | Interface mapping |
 | --- | --- |
@@ -658,7 +651,7 @@ silently changed to paginated output.
 | `bid resource <kind> lifecycle set --id R --input STATE.json` | `ResourceLifecycleSet`, human session only |
 | `bid resource <kind> lifecycle history --id R [--cursor C] [--limit N]` | Bounded lifecycle history |
 | `bid export binding browse --template-revision UUID [--cursor C] [--limit N]`, `bid export binding show --id UUID --template-revision UUID` | Bounded binding reads, original human gate |
-| `bid provider show`, `bid provider revision show --id UUID`, `bid provider history-page [--cursor C] [--limit N]`, `bid provider catalog [--q PREFIX] [--cursor C] [--limit N]` | Safe metadata reads, never implicit balance queries |
+| `bid provider show`, `bid provider revision show --id UUID`, `bid provider history-page [--cursor C] [--limit N]`, `bid provider catalog [--q PREFIX] [--cursor C] [--limit N]` | Safe metadata-only config/revision/history/catalog reads; no implicit provider requests. |
 | `bid memory browse --input QUERY.json` | `MemoryQuery`; complete management search, not relevance retrieval |
 | `bid confidential field browse --input QUERY.json`, `bid confidential browse --input QUERY.json` | Bounded definitions/masked current values |
 | `bid confidential history-page --field UUID [--task UUID] [--cursor C] [--limit N]` | Masked value history |
@@ -673,13 +666,12 @@ protected `--key-file` path for BYOK; do not introduce a key argv option or expa
 the platform contract's forbidden env fallback. Existing provider CLI compatibility
 is not rewritten by this UI draft.
 
-**CLI/API-only initially:** legacy all-row dumps, batch automation/import scripts,
-template sample generation, vendor balance and detailed usage diagnostics, memory
-retrieval inspection/used-call manifests/evaluation accept-exclude/logical delete,
-credential migration and encryption-root rotation. Platform credential management
-stays in its existing operator console/CLI, outside org management. User/project/
+Platform credential management
+stays in its existing operator console/CLI, outside org management.
+User/project/
 global memory and additional provider capabilities are unavailable, not secretly
-available through a CLI fallback. Confidential reveal remains existing API/UI only;
+available through a CLI fallback.
+Confidential reveal remains existing API/UI only;
 there is no existing reveal CLI command to advertise.
 
 A successful new read produces the shared seven-key envelope, for example an
@@ -698,26 +690,15 @@ empty product page (UUIDs are synthetic contract examples):
   },
   "items": [],
   "warnings": [],
-  "cost": {
-    "llm_tokens": 0,
-    "ocr_pages": 0,
-    "usd": 0.0,
-    "basis": "zero",
-    "charge": "0",
-    "billing_currency": "USD",
-    "task_amount": "0",
-    "unpriced_calls": 0,
-    "unresolved_calls": 0
-  },
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 12
 }
 ```
 
-Use the configured billing currency, not an unconditional USD literal. `usd` is
-vendor cost, `charge` is platform debit, and `task_amount` is task liability;
-Decimal amounts serialize as strings. Unknown estimates/prices remain null,
-with unpriced/unresolved counts; provider tests display their actual cost rather
-than a read wrapper's zero. No `contract_version` eighth top-level key.
+Unknown estimates remain explicitly uncertain,
+with unresolved counts; provider tests display their actual cost rather
+than a read wrapper's zero.
+No `contract_version` eighth top-level key.
 
 | Exit | Meaning for these commands |
 | --- | --- |
@@ -803,12 +784,12 @@ and fixed error code without request/response capture.
 | `affected_task_limit` | Preserve current library version; explain maintenance is blocked. No split update loop or frontend task enumeration |
 | File limit/format/hash/unreadable-original failure | No usable new version claimed; exact file error, old version stays available. No placeholder original or fabricated certificate |
 | Missing/legacy binding or changed static hash | Block binding completion/export handoff, refresh exact preview; never auto-acknowledge static content |
-| Provider unavailable/disabled credential/quota/budget/unpriced | Show safe blocker and actual accounted costs. No key display, alternative provider fallback or automatic paid retry |
+| Provider unavailable/disabled credential/resource limit | Show safe blocker and actual recorded resource counts.|
 | Memory safety/conflict/unsupported scope | Keep nonsecret proposal for correction when safe; no force-approve/global promotion/redaction-off workaround |
 | Candidate dispatch failure | Preserve human decision and durable job receipt; explicit existing recovery path, no duplicate proposal loops |
 | Invalid/expired proposed management cursor | `management_cursor_invalid` 400/2 or `management_cursor_expired` 409/2; reset list; foreign-object direct reads stay 404 |
 | Proposed result-size/query timeout | `management_result_too_large` 413/2 or `management_query_timeout` 503/3; narrow filters/retry reads, never silently truncate |
-| Network loss during save/test | Outcome unknown; reread version/job before another deliberate action. Never infer failure means no write or no charge |
+| Network loss during save/test | Outcome unknown; reread version/job before another deliberate action.|
 
 ## Test plan and repeatable artifacts
 
@@ -834,7 +815,7 @@ HTTP bypass of a hidden button. Resource kind substitutions cannot evade scopes.
 | All five selection guards, including feature's product | Race deactivate vs new/old-revision selection and restore; deterministic lock order; exact duplicate accepted without write; inactive insert/reactivation refused in SQL; existing confirmed material/export gates unchanged |
 | `certificate_files` and retained parts, template files | Org paths and purpose/expiry signatures; authentication still needed; mismatched revision/file refused; upload new revision and metadata-only no-file state; retained bytes/hash unchanged |
 | `export_template_bindings`, bounded binding read/create/preview | B binding IDs hidden; same-org wrong template hidden; token/technical/viewer refused; human admin static hash required; bidder read only; legacy adapter stays unusable |
-| `provider_configs`, safe config/history/catalog/test | Two-org revisions, actor changes, expected_revision race, no N+1; no decryption/balance/vendor call from metadata reads; plaintext/ciphertext/suffix absent; platform credential/table/function denial retained; failed key test never falls back |
+| `provider_configs`, safe config/history/catalog/test | Two-org revisions, actor changes and expected_revision races; bounded reads without N+1 or secret fields. Metadata reads never decrypt or call providers. Platform credential/function denial remains enforced; a failed key test never falls back. |
 | All eight memory tables named above and management search plus existing action routes | Two-org SQL and HTTP boundaries per table/route; task-inaccessible provenance redacted; own-candidate edits only; exact approval, conflict key, expiry, active-edit withdrawal, disabled edit/reapprove, tombstone history, safety/feedback ownership and worker run fence |
 | `confidential_fields`, `confidential_values`, bounded fields/current/history/CAS/reveal routes | Both org/task owners; wrong task 404; raw values absent until explicit authorized reveal; field archive gates; no-body logging; value CAS race, required-null first write and old API append semantics remain distinguishable |
 | `audit_logs`, active Membership and TaskWorkflow/TaskMember joins | No A/B event leak, removed user cannot act via old cursor, archived task blocks writes, mutation+audit atomicity, role downgrade while dialog open |
@@ -848,7 +829,7 @@ must not erase historical sources or silently reconfirm dependent cards.
 Exercise service HTTP/CLI flows end to end with fixed fake providers, then snapshot
 `--json` for each new command and successful/failing existing writes used by these
 pages. Cover exits 0/2/3/4/5, exact nine cost fields, Decimal strings, null unknowns,
-version 4 routing, legacy version rejection for new-only commands, no extra keys,
+version 5 routing, legacy version rejection for new-only commands, no extra keys,
 noninteractive missing input, secure key-file/stdin handling and no secret echoes.
 Use a canary input only in memory and assert its absence from outputs/logs/artifacts.
 
@@ -863,18 +844,10 @@ Use [product scenarios](../../web/e2e/management-pages.spec.js),
 [memory scenarios](../../web/e2e/memory-management.spec.js), following
 [console-assessments.spec.js](../../web/e2e/console-assessments.spec.js) and
 [team-workflow.spec.js](../../web/e2e/team-workflow.spec.js), using the built app and
-stateful intercepted `/v4` API calls. Fixtures are test-only; production pages
+stateful intercepted API calls. Fixtures are test-only; production pages
 must have no mock/sample/fixture fallback.
 
-Cover product, feature, certificate/profile, template, model-settings, confidential
-and memory slices and old task pins; filters/cursors/cancelled responses;
-empty/error/oversize pages; two org switch with late response; all role/task matrices;
-conflict with unsaved edits; revision/file/history distinction; inactive selection;
-binding preview and static-hash mismatch; provider key submission once and absence
-from DOM/storage/subsequent requests; explicit paid-test preflight/race/failure;
-memory exact-revision approval/active-edit withdrawal/source redaction; confidential
-CAS and explicit reveal clearing; keyboard/narrow-screen dialogs. Unknown paid-job
-outcomes must not cause automatic resubmission. UI ownership/blocker/next-action
+UI ownership/blocker/next-action
 messages must match actual response authority and state.
 
 Artifacts go under ignored `data/work/management-pages-validation/<run>/`, never
@@ -914,8 +887,8 @@ The owner approved every recommended default; implementation follows these decis
 | Ownership | Maintainer role and last editor; no new per-resource assignee table | Communicates responsibility without duplicating task ownership and assignment rules |
 | Search and pagination | Explicit new browse routes/commands, live keysets, safe prefix tokens, no total count | Bounds work without breaking current all-row JSON or implying stable cross-page snapshots |
 | Existing list compatibility | Keep legacy API/CLI commands; new pages never preload them | Avoids hidden truncation and makes bounded acceptance independently testable |
-| Provider entry and secrets | Org `llm_extract` only, safe metadata reads, blank write-only BYOK field, separate operator credentials | Preserves approved scope and prevents secret round-tripping or hidden balance calls |
-| Provider test race | Use current BudgetProviderTest; resolve exact receipt config ID through safe revision detail, label platform-default identity separately and explicitly retest if changed | Avoids pretending a nonbinding preview pins a later call; adding a revision-bound test is a separate interface decision |
+| Provider entry and secrets | Org `llm_extract` only, safe metadata reads, blank write-only BYOK field, separate operator credentials | Preserves approved scope and prevents secret round-tripping or hidden provider calls. |
+| Provider test race | Use current ProviderTest; resolve exact receipt config ID through safe revision detail, label platform-default identity separately and explicitly retest if changed | Avoids pretending a nonbinding preview pins a later call; adding a revision-bound test is a separate interface decision |
 | Memory scope and deletion | Org only; show approval/disable; keep logical deletion and evaluation review API/CLI-only | Focuses staff on actionable rules while retaining exact approval and evaluation boundaries |
 | Confidential concurrent edits | Add guarded CAS route; leave legacy append API semantics intact | Prevents a stale browser from replacing a newer value without breaking existing clients |
 | Template experience | Upload real DOCX, guided six-section binding and static-content review; no visual Word editor | Reuses validation and human gates with a manageable first UI |

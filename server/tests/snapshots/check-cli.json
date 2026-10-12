@@ -3,15 +3,12 @@
     "check decide": {
       "command": "check decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "decision": {
@@ -62,15 +59,12 @@
     "check history": {
       "command": "check history",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -100,15 +94,12 @@
     "check list": {
       "command": "check list",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -158,28 +149,20 @@
     "check run": {
       "command": "check run",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "no_model_calls",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0",
         "estimated_cost": {
           "llm_tokens": 0,
-          "ocr_pages": 0,
-          "usd": 0
+          "ocr_pages": 0
         },
         "estimated_duration_ms": null,
         "gap_requirements": 0,
@@ -197,7 +180,6 @@
         "limitations": [
           "semantic_checks_not_requested"
         ],
-        "max_charge": null,
         "mode": "rules",
         "model": null,
         "model_revision": null,
@@ -225,28 +207,20 @@
     "check run combined": {
       "command": "check run",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "configured_price",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0.02",
         "estimated_cost": {
           "llm_tokens": 400,
-          "ocr_pages": 0,
-          "usd": 0.01
+          "ocr_pages": 0
         },
         "estimated_duration_ms": null,
         "gap_requirements": 0,
@@ -262,7 +236,6 @@
           "task_id": "00000000-0000-0000-0000-000000000001"
         },
         "limitations": [],
-        "max_charge": "1.25",
         "mode": "combined",
         "model": "synthetic-model",
         "model_revision": 1,
@@ -288,15 +261,12 @@
     "check show": {
       "command": "check show",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "certificates": [],
@@ -348,15 +318,12 @@
     "check decide": {
       "command": "check decide",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "decision": {
@@ -407,15 +374,12 @@
     "check history": {
       "command": "check history",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -445,15 +409,12 @@
     "check list": {
       "command": "check list",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -503,28 +464,20 @@
     "check run": {
       "command": "check run",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "no_model_calls",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0",
         "estimated_cost": {
           "llm_tokens": 0,
-          "ocr_pages": 0,
-          "usd": 0
+          "ocr_pages": 0
         },
         "estimated_duration_ms": null,
         "gap_requirements": 0,
@@ -542,7 +495,6 @@
         "limitations": [
           "semantic_checks_not_requested"
         ],
-        "max_charge": null,
         "mode": "rules",
         "model": null,
         "model_revision": null,
@@ -570,28 +522,20 @@
     "check run combined": {
       "command": "check run",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "configured_price",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0.02",
         "estimated_cost": {
           "llm_tokens": 400,
-          "ocr_pages": 0,
-          "usd": 0.01
+          "ocr_pages": 0
         },
         "estimated_duration_ms": null,
         "gap_requirements": 0,
@@ -607,7 +551,6 @@
           "task_id": "00000000-0000-0000-0000-000000000001"
         },
         "limitations": [],
-        "max_charge": "1.25",
         "mode": "combined",
         "model": "synthetic-model",
         "model_revision": 1,
@@ -633,15 +576,12 @@
     "check show": {
       "command": "check show",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "certificates": [],

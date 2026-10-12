@@ -23,13 +23,12 @@ Failure modes enumerated before implementation:
 
 import io
 import json
-from decimal import Decimal
 from urllib.parse import urlsplit
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from app.models.entities import BalanceEntry, OrgBalance, SimulatedResource
+from app.models.entities import SimulatedResource
 from app.providers.llm import OpenAICompatibleExtractor
 from conftest import FakeQueue, credential_app
 from docx import Document
@@ -286,10 +285,7 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         )
     settings = settings_for(tmp_path, "openai", **search)
     llm = OpenAICompatibleExtractor(
-        settings,
-        httpx.MockTransport(vendor),
-        platform_model_id="sim-test",
-        sale_usd_per_mtok=(1, 1),
+        settings, httpx.MockTransport(vendor), platform_model_id="sim-test"
     )
     llm.model_revision = 1
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
@@ -302,20 +298,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         app.router.lifespan_context(app),
         httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as api,
     ):
-        for org in tenants["orgs"]:
-            async with app.state.db.transaction(org) as session:
-                session.add(OrgBalance(org_id=org, currency="USD", balance=Decimal("10")))
-                session.add(
-                    BalanceEntry(
-                        org_id=org,
-                        kind="adjust",
-                        currency="USD",
-                        amount=Decimal("10"),
-                        balance_after=Decimal("10"),
-                        actor="test",
-                        reason="Synthetic initial funds",
-                    )
-                )
         header, foreign = [
             await login(api, org, label)
             for org, label in zip(tenants["orgs"], ("a", "b"), strict=True)
@@ -338,7 +320,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         await run_document_job(api, app, header, document, "parse")
         extraction = await run_document_job(api, app, header, document, "extract")
         route = f"/tasks/{task}/product-simulations"
-
         before = len(vendor.kinds)
         preview = await api.post(
             route, headers=header, json={"extraction_job_id": extraction, "dry_run": True}
@@ -368,7 +349,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         )
         assert denied.status_code == 403
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "admin")
-
         submitted = await api.post(
             route,
             headers=header,
@@ -412,13 +392,9 @@ async def test_simulation_records_only_verbatim_marked_parameters(
             assert printer["tried"][0]["fetch"] == "http_status_denied"
             assert sorted(
                 (row["query"], row.get("search_domain_filter")) for row in PERPLEXITY_REQUESTS
-            ) == [
-                ("BadVendor 打印终端", ["bad.example"]),
-                ("SynNet 交换机", ["net.example"]),
-            ]
+            ) == [("BadVendor 打印终端", ["bad.example"]), ("SynNet 交换机", ["net.example"])]
         assert not any(url.startswith("market.example") or "invented" in url for url in FETCHED)
         assert vendor.kinds.count("propose") == 3
-
         products = (await api.get(f"/tasks/{task}/products", headers=header)).json()["items"]
         features = (await api.get(f"/tasks/{task}/features", headers=header)).json()["items"]
         assert [row["data"]["name"] for row in products] == ["【模拟】智能打印终端"]
@@ -428,8 +404,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
         assert (
             await api.get(f"/tasks/{task}/simulated-resources", headers=foreign)
         ).status_code == 404
-
-        # A human revision of the simulated product cannot clear the mark.
         product_id = printer["product_id"]
         revised = await api.post(
             f"/resources/products/{product_id}/revisions",
@@ -446,7 +420,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
             assert {str(row.feature_id) for row in marked if row.feature_id} == set(
                 printer["feature_ids"]
             )
-
         target_product = product_id
         if material in {"rebound_feature", "normal_feature", "normal_product"}:
             ordinary = await api.post(
@@ -457,7 +430,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
             assert ordinary.status_code == 200, ordinary.text
             target_product = ordinary.json()["data"]["product_id"]
             assert target_product != product_id
-
         selected_material = features[0]
         evidence = {
             "kind": "feature",
@@ -499,9 +471,7 @@ async def test_simulation_records_only_verbatim_marked_parameters(
                 assert selected_material["id"] in marks["selection_ids"]
         elif material in {"product", "normal_product"}:
             chosen = await api.post(
-                f"/tasks/{task}/products",
-                headers=header,
-                json={"product_id": target_product},
+                f"/tasks/{task}/products", headers=header, json={"product_id": target_product}
             )
             assert chosen.status_code == 200, chosen.text
             selected_material = chosen.json()["data"]
@@ -511,8 +481,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
                 "field_path": "model",
                 "quote": "SP-100",
             }
-
-        # Confirmation cannot clear either root's simulation mark.
         requirements = (
             await api.get(f"/tasks/{task}/requirements", headers=header, params={"job": extraction})
         ).json()["items"]
@@ -555,7 +523,6 @@ async def test_simulation_records_only_verbatim_marked_parameters(
             assert response.status_code == 200, response.text
             card = response.json()["data"]
         assert card["state"] == "confirmed"
-        # Complete the unrelated requirements so only the simulation gate can block.
         disposed = await api.post(
             f"/tasks/{task}/cards/dispositions",
             headers=technical_header,
@@ -587,9 +554,7 @@ async def test_simulation_records_only_verbatim_marked_parameters(
                 "mode": mode,
             }
             preview = await api.post(
-                f"/tasks/{task}/export-runs",
-                headers=header,
-                json={**body, "dry_run": True},
+                f"/tasks/{task}/export-runs", headers=header, json={**body, "dry_run": True}
             )
             blocked = simulated and mode == "final_section"
             assert preview.status_code == (400 if blocked else 200), preview.text

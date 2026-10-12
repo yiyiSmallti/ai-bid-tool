@@ -7,7 +7,7 @@ const output = resolve(process.env.E2E_OUTPUT ?? "../data/work/bid-review-run/br
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const ids = { org: uuid(1), user: uuid(2), task: uuid(3), submission: uuid(4), document: uuid(5), bid: uuid(6), grant: uuid(7), job: uuid(8), review: uuid(9) };
 const hash = "a".repeat(64), now = "2026-10-08T00:00:00Z", quote = "投标文件须逐页加盖公章。<img src=x onerror=window.__unsafe=1>";
-const zero = { llm_tokens: 0, ocr_pages: 0, usd: 0, basis: "zero", charge: "0", billing_currency: "USD", task_amount: "0", unpriced_calls: 0, unresolved_calls: 0 };
+const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: zero, duration_ms: 0 });
 const scopeHash = pages => createHash("sha256").update(JSON.stringify(pages.slice().sort((a, b) => a.page_id.localeCompare(b.page_id)).map(page => ({ page_id: page.page_id, sanitized_text_sha256: page.sanitized_text_sha256 })))).digest("hex");
 
@@ -33,7 +33,7 @@ async function fixture(page, options = {}) {
     { id: ids.bid, role: "bid", kind: "commercial_technical", media_type: "application/pdf", sha256: hash, size_bytes: 1000 },
   ] }, preparation: null, inventory: [], signature_validations: [], signing_candidates: [], signing_candidate_count: 0, signing_candidates_next_cursor: null };
   await page.route("**/*", async route => {
-    const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/v4(?=\/)/, ""), method = request.method();
+    const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     if (url.origin !== origin) { state.unexpected.push(`${method} external-origin`); return route.abort(); }
     if (path.startsWith("/app/")) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
@@ -70,7 +70,7 @@ async function fixture(page, options = {}) {
       if (body.dry_run) {
         expect(body).not.toHaveProperty("preflight_token"); expect(body).not.toHaveProperty("expected_input_hash"); state.previews++; state.previewRequest = body.request_id;
         const asOf = new Date(), expiresAt = new Date(asOf.getTime() + 900000).toISOString();
-        response = result("review run", { dry_run: true, input: { task_id: ids.task, submission_id: ids.submission, input_hash: hash }, expires_at: expiresAt, preflight_token: "synthetic-review-receipt", preflight_ttl_seconds: 900, admission_blockers: state.blockers, uncovered_codes: [], external_price_pages: false, budget: { dry_run: true, command: "review run", task_id: ids.task, input_hash: hash, as_of: asOf.toISOString(), task_budget: null, planned_calls: 1, maximum_calls: 1, estimate: zero, next_call: null, admission_blocker: null, first_pass_fits: true, full_run_guaranteed: false } });
+        response = result("review run", { dry_run: true, input: { task_id: ids.task, submission_id: ids.submission, input_hash: hash }, expires_at: expiresAt, preflight_token: "synthetic-review-receipt", preflight_ttl_seconds: 900, admission_blockers: state.blockers, uncovered_codes: [], external_price_pages: false, preflight: { dry_run: true, command: "review run", task_id: ids.task, input_hash: hash, as_of: asOf.toISOString(), planned_calls: 1, maximum_calls: 1, estimate: zero, next_call: null, admission_blocker: null, full_run_guaranteed: false } });
       } else {
         expect(body.request_id).toBe(state.previewRequest); expect(body.expected_input_hash).toBe(hash); expect(body.preflight_token).toBe("synthetic-review-receipt");
         if (state.staleSubmit) return route.fulfill({ status: 409, json: result("review run", { error: { code: "bid_input_changed" } }, [], false) });
@@ -82,7 +82,7 @@ async function fixture(page, options = {}) {
       const section = url.searchParams.get("section"); expect(["obligations", "signing_requirements"]).toContain(section); expect(url.searchParams.get("limit")).toBe("50");
       response = result("review show", { run: run(), obligations: section === "obligations" ? [{ id: uuid(40), text: quote, category: "substantive", starred: true, rejection_trigger: true, citation }] : [], signing_requirements: section === "signing_requirements" ? [{ id: uuid(41), candidate_id: null, applicability: "applies", mark_types: ["company_seal"], owner_roles: ["company"], date_required: false, location_rule: "every_page", citation, required_locations: [{ page_id: uuid(21), document_id: ids.bid, page: 1, status: "unresolved", group_id: null, reason_code: "presence_not_checked" }], reason_code: "presence_not_checked" }] : [], next_cursor: null }, [], !state.partial);
     } else { state.unexpected.push(`${method} ${path}`); return route.abort(); }
-    if (path.includes("bid-submissions") || path.includes("bid-reviews") || path.includes("/jobs/")) expect(url.pathname.startsWith("/v4/")).toBe(true);
+    if (path.includes("bid-submissions") || path.includes("bid-reviews") || path.includes("/jobs/")) expect(url.pathname.startsWith("/")).toBe(true);
     state.reads.push(`${method} ${path}`);
     return route.fulfill({ json: response });
   });
@@ -115,7 +115,7 @@ test("owner authorizes exact safe pages, previews call-free then explicitly subm
   await expect(page.getByTestId("review-preview")).toContainText("预检未创建作业或调用模型"); expect(state.submissions).toBe(0);
   await expect(page.getByRole("button", { name: "提交检验运行", exact: true })).toBeDisabled();
   await artifact(page, state, "01-authorized-preview");
-  await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
+  await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
   await expect(page.getByRole("table", { name: "招标义务与引用", exact: true })).toContainText(quote);
   await expect(page.getByRole("table", { name: "签章检查清单", exact: true })).toContainText("投标第 1 页 · 位置未解决");
   await expect(page.getByText("检验结果：部分完成 · 仅供辅助审查", { exact: true })).toBeVisible();
@@ -129,7 +129,7 @@ test("owner authorizes exact safe pages, previews call-free then explicitly subm
 test("revoking authorization clears the preview and explicit submit consent", async ({ page }) => {
   const state = await fixture(page); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`); await authorize(page);
   await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await expect(page.getByTestId("review-preview")).toBeVisible();
-  await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click();
+  await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click();
   await page.getByLabel("授权或撤销理由", { exact: true }).fill("撤销当前外发范围"); await page.getByRole("button", { name: "撤销外发授权", exact: true }).click();
   await expect(page.getByRole("table", { name: "外发授权记录", exact: true })).toContainText("已撤销"); await expect(page.getByTestId("review-preview")).toHaveCount(0);
   expect(state.revocations).toBe(1); expect(state.submissions).toBe(0); await artifact(page, state, "03-revoked-preview");
@@ -137,10 +137,10 @@ test("revoking authorization clears the preview and explicit submit consent", as
 
 test("stale submit invalidates receipt and blocked preview cannot be submitted", async ({ page }) => {
   const state = await fixture(page, { staleSubmit: true }); await page.goto(`/app/org/tasks/${ids.task}/bid-submissions/${ids.submission}`);
-  await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
+  await page.getByRole("button", { name: "预检检验运行", exact: true }).click(); await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click(); await page.getByRole("button", { name: "提交检验运行", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("输入已变化"); await expect(page.getByTestId("review-preview")).toHaveCount(0);
   state.blockers = ["outbound_authorization_required"]; await page.getByRole("button", { name: "预检检验运行", exact: true }).click();
-  await expect(page.getByTestId("review-preview")).toBeVisible(); await page.getByText("确认费用与已授权文本，提交检验运行", { exact: true }).click(); await expect(page.getByRole("button", { name: "提交检验运行", exact: true })).toBeDisabled();
+  await expect(page.getByTestId("review-preview")).toBeVisible(); await page.getByText("确认已授权文本与配置，提交检验运行", { exact: true }).click(); await expect(page.getByRole("button", { name: "提交检验运行", exact: true })).toBeDisabled();
   expect(state.submissions).toBe(0); await artifact(page, state, "04-stale-and-blocked");
 });
 

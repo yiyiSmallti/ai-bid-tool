@@ -72,7 +72,7 @@ async def test_input_jobs_history_and_citations_hide_foreign_ids(check_case, ten
     inputs = (await case["api"].get(paths[0], headers=case["header"])).json()
     data = AssessmentInputsData.model_validate(inputs["data"])
     assert data.current_draft is not None
-    assert data.task_budget.task_id == data.task_id
+    assert str(data.task_id) == task
     coverage = (
         await case["api"].get(
             f"/v4/checks/{report}?view=console&part=coverage&limit=1", headers=case["header"]

@@ -1,15 +1,14 @@
 """A01 API/worker scenarios, using only synthetic MockTransport responses.
 
 Failure matrix before implementation: parent/child slot deadlock, unreviewed
-cards included in drafts, replay duplicates paid work, unknown calls auto-resend,
+cards included in drafts, replay duplicates vendor work, unknown calls auto-resend,
 recovery resets limits, cancellation leaves children active, foreign cursors leak
-sessions, budget questions are bypassed, raw conversation leaks, schema changes
+sessions, human questions are bypassed, raw conversation leaks, schema changes
 silently execute an old plan, and the queue dispatch escapes its transaction.
 Artifacts are reproducible with --basetemp=data/work/agent-validation.
 """
 
 import json
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import httpx
@@ -43,13 +42,9 @@ SCOPES = (
 
 
 def workflow_client(tenants, tmp_path):
-    # A01 bounds vendor USD as well as platform charges. The drafting fixture's
-    # sale prices alone do not establish a known vendor-price admission bound.
     return drafting_client(
         tenants,
         tmp_path,
-        llm_input_usd_per_mtok=1,
-        llm_output_usd_per_mtok=1,
     )
 
 
@@ -60,9 +55,6 @@ def start_body(extraction, **limits):
         "requested_scopes": list(SCOPES),
         "idempotency_key": str(uuid4()),
         "limits": {
-            "max_vendor_usd": "2",
-            "max_platform_charge": "2",
-            "billing_currency": "USD",
             **limits,
         },
     }
@@ -388,45 +380,6 @@ async def test_unknown_decision_pauses_without_resending(tenants, tmp_path):
             assert uncertain and holds
         (tmp_path / "agent-unknown.json").write_text(
             json.dumps(sanitized_artifact({"session": paused, "checkpoint": checkpoint}), indent=2)
-        )
-
-
-async def test_task_budget_pause_before_first_decision_and_reference_resume(tenants, tmp_path):
-    async with workflow_client(tenants, tmp_path) as (api, app, headers, vendor, llm):
-        from test_task_budget_execution import set_limit
-
-        header = headers[0]
-        task, _, extraction, _ = await create_tender(api, app, header, tmp_path)
-        current = await api.get(f"/v4/tasks/{task}/budget", headers=header)
-        assert current.status_code == 200, current.text
-        budget = current.json()["data"]["budget"]
-        # Extraction is already settled. Exhaust the remaining task budget
-        # without lowering the cap below its existing spent/reserved liability.
-        exposure = Decimal(budget["spent"]) + Decimal(budget["reserved"])
-        exhausted = await set_limit(api, header, task, str(exposure))
-        assert Decimal(exhausted["available"]) == 0
-        before = len(vendor.bodies)
-        body = start_body(extraction)
-        started = await api.post(f"/v4/tasks/{task}/agent-sessions", headers=header, json=body)
-        assert started.status_code == 200, started.text
-        session_id = started.json()["data"]["session"]["id"]
-        paused = await advance(api, app, header, session_id)
-        assert paused["pause"]["kind"] == "budget" and len(vendor.bodies) == before
-        assert paused["pause"]["budget_ref"]["contract"] == "docs/plan/budget.md"
-        denied = await api.post(
-            f"/v4/agent-sessions/{session_id}/resume",
-            headers=header,
-            json={
-                "expected_revision": paused["session"]["revision"],
-                "pause_id": paused["pause"]["id"],
-                "idempotency_key": str(uuid4()),
-                "budget_ref": paused["pause"]["budget_ref"],
-            },
-        )
-        assert denied.status_code == 409
-        assert len(vendor.bodies) == before
-        (tmp_path / "agent-budget-pause.json").write_text(
-            json.dumps(sanitized_artifact(paused), indent=2)
         )
 
 

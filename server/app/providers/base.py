@@ -1,5 +1,4 @@
 from collections.abc import Sequence
-from decimal import Decimal
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from app.schemas.contracts import LLMResult, OCRText, ProviderUsage
@@ -29,7 +28,7 @@ class ProviderFailure(Exception):
         self.retryable = retryable
         self.refused = refused
         self.code = code
-        # Calls that completed before the failure were still billed by the vendor.
+        # Preserve usage for calls that completed before the failure.
         self.usage = usage or []
 
 
@@ -83,8 +82,6 @@ class CheckProvider(Protocol):
     test_only: bool
 
     def request_body(self, request: "CheckProviderRequest") -> dict: ...
-
-    def reservation(self, request: "CheckProviderRequest") -> Decimal: ...
 
     async def check(self, request: "CheckProviderRequest") -> "CheckProviderResult": ...
 

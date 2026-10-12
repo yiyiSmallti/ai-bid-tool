@@ -235,49 +235,46 @@ audit boundary are described in
    bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --reasoning LEVEL --dry-run --json
    ```
 
-   Omit `--reasoning` to use the catalog default. Check `selected_requirements`,
-   `skipped`, `input_manifest`, `redacted_counts`, `model_redaction_enabled`,
-   `admission_blocker` and `estimated_charge`. The preview returns identifiers
+   Omit `--reasoning` to use the catalog default.
+The preview returns identifiers
    and hashes, never material values, and does not create a job or call a vendor.
-   The labelled estimate covers a first-pass allowance; actual retries can add
-   cost. Unknown prices remain null. For `page_text_unavailable`, inspect the
+The resource estimate covers the first planned pass; retries can add calls.
+Uncertain usage remains explicit in preflight.
+For `page_text_unavailable`, inspect the
    original page manually; this command does not perform OCR.
 
-2. Submit the same scope, bound to the preview and a charge cap, and wait for the result:
-
    ```sh
-   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --reasoning LEVEL --expect-input-hash INPUT_HASH --max-charge AMOUNT --wait --json
-   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --requirement REQUIREMENT_ID_1 --requirement REQUIREMENT_ID_2 --expect-input-hash INPUT_HASH --max-charge AMOUNT --wait --json
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --reasoning LEVEL --expect-input-hash INPUT_HASH --wait --json
+   bid card generate --task TASK_ID --job EXTRACTION_JOB_ID --requirement REQUIREMENT_ID_1 --requirement REQUIREMENT_ID_2 --expect-input-hash INPUT_HASH --wait --json
    ```
 
    `--expect-input-hash` takes the preview's `input_hash`, which covers inputs,
-   model and price revision; a mismatch exits 3 with `generation_input_changed`
-   and creates no job. `--max-charge` caps the job's platform charge in the
-   billing currency: once the next call's reservation would exceed it, the job
-   stops with `stop_reason: spend_cap_reached` and keeps valid partial results
-   (exit 5). The cap does not bound a vendor bill paid with the org's own key.
-   Both flags are optional for compatibility; the org console always sends them.
+   model revision; a mismatch exits 3 with `generation_input_changed`
+   and creates no job.
+The org console always sends the preview hash.
 
    Repeat `--requirement` to limit the selected requirements; omitting it selects
    the complete extraction. The job fixes the task's current selected inputs.
    Without `--wait`, use the returned `generation_job_id` with `job status`,
    `job wait` or `job cancel`. `--timeout` controls CLI waiting, not vendor calls.
 
-3. Inspect `created_revision_ids`, `skipped`, `rejected_references`,
-   `needs_material`, `stop_reason`, `usage_record_ids` and `charge`. Exit 5 means
+3. Exit 5 means
    some candidates or references need attention; valid created drafts remain
-   available through `card list` and `card show`. Review the response against
+   available through `card list` and `card show`.
+Review the response against
    its original requirement and materials, edit it if needed, then follow the
-   human submit/confirm steps above. A model's `suggested_disposition` never
+   human submit/confirm steps above.
+A model's `suggested_disposition` never
    changes the human disposition.
 
 4. For a failed/cancelled job whose fixed inputs remain valid, resubmit with
-   `--retry`. A protected pending card must first be withdrawn; a confirmed
-   card must be reopened by the responsible reviewer. For a revision conflict,
+   `--retry`.
+A protected pending card must first be withdrawn; a confirmed
+   card must be reopened by the responsible reviewer.
+For a revision conflict,
    model/catalog change, changed redaction setting or changed material selection,
-   obtain a new preview and submit again. An unchanged successful request,
-   including a partial success, returns the existing job without billing again.
-   Use repeated `--requirement` flags to select only unresolved requirements,
+   obtain a new preview and submit again.
+Use repeated `--requirement` flags to select only unresolved requirements,
    or edit the unresolved card and replace missing materials before submitting
    a new request.
 
@@ -591,46 +588,4 @@ password in `BID_PASSWORD`:
 
 ```sh
 bid --mode remote --server https://YOUR_SERVER auth setup-password --json
-```
-
-## Recharge and billing
-
-Balances, charges and card values are in the deployment's billing currency.
-Platform-billed extraction needs a positive balance; otherwise `req extract`
-fails with `insufficient_balance` and exit 4.
-
-Operators issue and void cards and correct balances:
-
-```sh
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform card create --count 20 --face-value 100 --output NEW_CARDS.csv --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform card list --status active --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform card void --id CARD_ID --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE platform org balance --id ORG_ID --add 50 --reason REASON --json
-```
-
-1. `card create` writes the codes only to the new CSV file (mode 0600); the
-   JSON output and later listings show the last four characters. Codes cannot
-   be recovered, so keep the file safe.
-2. `card void` works only on unused cards.
-3. `org balance` takes exactly one of `--add` (negative to deduct) or `--set`,
-   plus a reason, and records a ledger entry.
-
-Org admins check the balance and redeem a card. The code comes from
-`BID_CARD_CODE` so it never appears in argv; spaces, lowercase and missing
-dashes are accepted.
-
-```sh
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE billing balance --json
-bid --mode remote --server https://YOUR_SERVER --state SESSION_FILE billing redeem --json
-```
-
-A failed redemption returns `invalid_card` whatever the reason; ten failures
-in an hour lock redemption for the org. API tokens can read the balance with
-`billing:read` but can never redeem.
-
-To find the org ID for `bid login`, list the orgs of an account; the password
-comes from `BID_PASSWORD`:
-
-```sh
-bid --mode remote --server https://YOUR_SERVER auth orgs --email YOUR_EMAIL --json
 ```

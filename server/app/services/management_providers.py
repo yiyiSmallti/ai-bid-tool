@@ -62,11 +62,9 @@ CONFIG_FIELDS = (
     "json_mode",
     "reasoning",
     "default_reasoning",
-    "input_usd_per_mtok",
-    "output_usd_per_mtok",
 )
 # Even internal SQL materialization excludes credential ciphertext/suffix and
-# catalog endpoint, credential reference and wholesale prices.
+# catalog endpoint and credential reference.
 CONFIG_COLUMNS = (
     ProviderConfig.id,
     ProviderConfig.org_id,
@@ -83,8 +81,6 @@ CATALOG_COLUMNS = (
     PlatformModel.revision,
     PlatformModel.model,
     PlatformModel.provider,
-    PlatformModel.sale_input_per_mtok,
-    PlatformModel.sale_output_per_mtok,
     PlatformModel.is_default,
     PlatformModel.reasoning,
     PlatformModel.default_reasoning,
@@ -112,8 +108,6 @@ def catalog_view(row) -> PlatformModelChoice:
         revision=row["revision"],
         model=row["model"],
         provider=row["provider"],
-        sale_input_per_mtok=row["sale_input_per_mtok"],
-        sale_output_per_mtok=row["sale_output_per_mtok"],
         default=row["is_default"],
         reasoning=safe_reasoning(row["reasoning"]),
         default_reasoning=row["default_reasoning"],
@@ -198,8 +192,6 @@ def metadata(actor, row, author) -> ProviderRevisionMetadata:
             reasoning=safe_reasoning(saved.get("reasoning", [])),
             default_reasoning=saved.get("default_reasoning"),
             catalog_revision=None if org else saved.get("catalog_revision"),
-            sale_input_per_mtok=None if org else saved.get("sale_input_per_mtok"),
-            sale_output_per_mtok=None if org else saved.get("sale_output_per_mtok"),
         )
     except (ValidationError, KeyError, TypeError):
         fail("management_integrity_error", "Provider metadata is invalid", 409, 4)
@@ -280,11 +272,10 @@ async def settings(session: AsyncSession, actor: Identity) -> ProviderSettingsDa
             else "unconfigured",
             current=current,
             default_model=default,
-            billing_currency=settings_for(session).billing_currency,
             reasoning=current.reasoning if current else default.reasoning if default else [],
             actions=actions,
         )
-        detail_result(COMMANDS["settings"], value, settings_for(session).billing_currency)
+        detail_result(COMMANDS["settings"], value)
         return value
 
 
@@ -305,7 +296,7 @@ async def revision(
         if row is None:
             raise not_found()
         value = metadata(actor, row, (await authors(session, actor, [row]))[row["id"]])
-        detail_result(COMMANDS["revision"], value, settings_for(session).billing_currency)
+        detail_result(COMMANDS["revision"], value)
         return value
 
 
@@ -353,26 +344,26 @@ def open_cursor(session, actor, body, purpose, normalized):
         fail("management_cursor_invalid", "Invalid management cursor")
 
 
-def encoded_result(command, data, items, currency, duration_ms=0):
+def encoded_result(command, data, items, duration_ms=0):
     return Result(
         ok=True,
         command=command,
         data=data.model_dump(mode="json"),
         items=[item.model_dump(mode="json") for item in items],
-        cost=Cost(billing_currency=currency),
+        cost=Cost(),
         duration_ms=duration_ms,
     )
 
 
-def detail_result(command, data, currency, duration_ms=0):
-    value = encoded_result(command, data, [], currency, duration_ms)
+def detail_result(command, data, duration_ms=0):
+    value = encoded_result(command, data, [], duration_ms)
     if result_bytes(value) > DETAIL_BYTE_LIMIT:
         too_large()
     return value
 
 
-def page_result(command, page, currency, duration_ms=0):
-    value = encoded_result(command, page.data, page.items, currency, duration_ms)
+def page_result(command, page, duration_ms=0):
+    value = encoded_result(command, page.data, page.items, duration_ms)
     if result_bytes(value) > PAGE_BYTE_LIMIT:
         too_large()
     return value
@@ -405,7 +396,6 @@ def build_page(session, actor, purpose, normalized, items, anchors, more):
                     COMMANDS[purpose],
                     data,
                     items[:retained],
-                    settings_for(session).billing_currency,
                     9223372036854775807,
                 )
             )

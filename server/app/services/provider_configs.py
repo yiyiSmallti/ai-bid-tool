@@ -11,12 +11,10 @@ from app.core.provider_secrets import ProviderSecrets
 from app.jobs.execution import JobExecution, job_cost
 from app.models.entities import Job, PlatformModel, UsageRecord, User
 from app.models.provider_configs import ProviderConfig
-from app.providers.balance import provider_balance, supports_balance
 from app.providers.configured import current_config, model_identity
-from app.providers.llm import HTTPExtractor, billable, with_reasoning
+from app.providers.llm import HTTPExtractor, with_reasoning
 from app.schemas.contracts import Extraction
 from app.schemas.provider_contracts import ProviderConfigSet, ProviderConfigView, ProviderTest
-from app.services import billing
 from app.services.auth import Identity, membership, set_actor_context
 from app.services.versioned import audit
 
@@ -35,13 +33,11 @@ async def require_access(session, actor: Identity, *, write=False):
 
 
 def catalog_view(row: PlatformModel) -> dict:
-    # Credentials, endpoint and wholesale prices are operator-only catalog metadata.
+    # Credentials and endpoint are operator-only catalog metadata.
     return {
         "id": row.id,
         "model": row.model,
         "provider": row.provider,
-        "sale_input_per_mtok": float(row.sale_input_per_mtok),
-        "sale_output_per_mtok": float(row.sale_output_per_mtok),
         "default": row.is_default,
         "reasoning": [
             {"name": level["name"], "label": level.get("label")} for level in row.reasoning
@@ -70,8 +66,6 @@ def config_view(row: ProviderConfig) -> dict:
                 "json_mode",
                 "reasoning",
                 "default_reasoning",
-                "input_usd_per_mtok",
-                "output_usd_per_mtok",
             )
         },
     ).model_dump(mode="json")
@@ -128,18 +122,14 @@ async def set_config(session, actor, body: ProviderConfigSet, settings):
         data = {
             "provider": entry.provider,
             "model": entry.model,
-            # The tenant receives neither operator endpoints nor wholesale prices.
+            # The tenant receives neither operator endpoints or credentials.
             "base_url": None,
             "json_mode": settings.llm_json_mode,
             "reasoning": entry.reasoning,
             "default_reasoning": entry.default_reasoning,
-            "input_usd_per_mtok": None,
-            "output_usd_per_mtok": None,
             # Save published terms with this immutable choice; later catalog
             # changes must not replace an old revision's displayed identity.
             "catalog_revision": entry.revision,
-            "sale_input_per_mtok": float(entry.sale_input_per_mtok),
-            "sale_output_per_mtok": float(entry.sale_output_per_mtok),
         }
     config = ProviderConfig(
         id=config_id,
@@ -176,13 +166,10 @@ async def monthly_usage(session, config_id: UUID | None = None) -> dict:
         func.count(UsageRecord.id),
         func.coalesce(func.sum(UsageRecord.input_tokens), 0),
         func.coalesce(func.sum(UsageRecord.output_tokens), 0),
-        func.sum(UsageRecord.usd),
-        func.count(UsageRecord.usd),
-        func.coalesce(func.sum(UsageRecord.charge), 0),
     ).where(UsageRecord.created_at >= start, UsageRecord.ocr_pages == 0)
     if config_id is not None:
         statement = statement.where(UsageRecord.provider_config_id == config_id)
-    count, inputs, outputs, cost, priced, charge = (await session.execute(statement)).one()
+    count, inputs, outputs = (await session.execute(statement)).one()
     return {
         "month": start.strftime("%Y-%m"),
         "timezone": "UTC",
@@ -190,28 +177,7 @@ async def monthly_usage(session, config_id: UUID | None = None) -> dict:
         "input_tokens": inputs,
         "output_tokens": outputs,
         "tokens": inputs + outputs,
-        "usd": float(cost or 0) if count == priced else None,
-        "unpriced_calls": count - priced,
-        "charge": float(charge),
     }
-
-
-async def balance_view(row, settings, transport=None):
-    if (
-        row is None
-        or row.source != "org"
-        or not supports_balance(row.data["provider"], row.data["base_url"])
-    ):
-        return {"status": "unsupported", "message": "该服务商不提供余量查询"}
-    if row.encrypted_key is None:
-        return {"status": "unavailable", "message": "暂时无法查询"}
-    try:
-        key = ProviderSecrets(settings).decrypt(row.encrypted_key, row.org_id, row.id)
-    except ServiceError as exc:
-        if exc.code != "provider_secrets_unavailable":
-            raise
-        return {"status": "unavailable", "message": "暂时无法查询"}
-    return await provider_balance(row.data["provider"], row.data["base_url"], key, transport)
 
 
 async def list_configs(session, actor, settings, *, history=False):
@@ -234,7 +200,6 @@ async def list_configs(session, actor, settings, *, history=False):
     return (
         {
             "catalog": [catalog_view(row) for row in entries],
-            "currency": settings.billing_currency,
             "effective_source": rows[0].source
             if rows
             else "platform"
@@ -251,8 +216,6 @@ async def submit_test(session, actor, body: ProviderTest, llm, settings, *, prob
     await require_access(session, actor, write=True)
     await set_actor_context(session, actor)
     llm, reasoning, warnings = with_reasoning(llm, body.reasoning)
-    if billable(llm):
-        await billing.require_funds(session, settings.billing_currency)
     job = Job(
         id=uuid4(),
         org_id=actor.org_id,
@@ -340,7 +303,7 @@ async def execute_test(execution: JobExecution, llm):
 
 
 async def preview_test(session, actor, body, llm, settings):
-    from app.services import budget_preflight
+    from app.services import preflight as preflight_service
     from app.services.drafts import digest
 
     await require_access(session, actor, write=True)
@@ -356,13 +319,12 @@ async def preview_test(session, actor, body, llm, settings):
     quotes = (
         [lambda: llm.quote(llm.extraction_request(probe))] if isinstance(llm, HTTPExtractor) else []
     )
-    data = await budget_preflight.attach(
+    data = await preflight_service.attach(
         session,
         {"dry_run": True, "reasoning": reasoning},
         command="provider test",
         task_id=None,
         input_hash=digest({"model": model_identity(llm), "reasoning": reasoning}),
-        currency=settings.billing_currency,
         settings=settings,
         quote_sources=quotes,
         planned_calls=1,

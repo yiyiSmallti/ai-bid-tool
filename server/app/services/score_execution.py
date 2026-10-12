@@ -8,13 +8,11 @@ from uuid import UUID, uuid4
 
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, literal, select, tuple_
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets, TokenSigner
 from app.jobs.execution import job_cost
-from app.models.entities import Job, OrgBalance, Task, UsageRecord, VendorCall
+from app.models.entities import Job, Task, UsageRecord
 from app.models.score import (
     ScoreItemCitation,
     ScoreReport,
@@ -39,12 +37,11 @@ from app.schemas.score_contracts import (
     ScoreJobResult,
     ScorePreview,
     ScoreReportData,
-    ScoreRequest,
     ScoreRunView,
 )
 from app.services import drafts, redaction, score_generation, score_run_inputs, score_semantic
 from app.services import response_cards as cards
-from app.services.score_run_inputs import RULE_VERSION, ScoreSnapshot
+from app.services.score_run_inputs import RULE_VERSION
 from app.services.task_authorization import task_authorized
 from app.services.versioned import audit
 
@@ -82,8 +79,8 @@ async def prepare(session, fixed, llm, requested_reasoning, settings):
         "adapter_version": ADAPTER_VERSION,
         "score_batch_chars": settings.score_batch_chars,
         "model": None,
+        "provider_options": None,
         "reasoning": None,
-        "price": None,
         "provider_source": None,
         "outbound_sha256": None,
         "redacted_counts": {},
@@ -96,8 +93,8 @@ async def prepare(session, fixed, llm, requested_reasoning, settings):
         manifest["score_batch_chars"] = llm.settings.score_batch_chars
     manifest |= {
         "model": model_identity(llm),
+        "provider_options": score_generation.provider_options(llm),
         "reasoning": reasoning,
-        "price": score_generation.prices(llm),
         "provider_source": "org" if getattr(llm, "org_owned", False) else "platform",
     }
     fields, library = await score_generation.secret_library(session, fixed.task.id, settings)
@@ -134,8 +131,6 @@ async def prepare(session, fixed, llm, requested_reasoning, settings):
         "redacted_counts": outbound["redacted_counts"],
         "confidential_hints_sha256": drafts.digest({"fields": fields}),
     }
-    if getattr(llm, "org_owned", False):
-        fixed.limitations.append("org_key_max_charge_does_not_limit_vendor_bill")
     if getattr(llm, "test_only", False):
         fixed.limitations.append("test_provider_not_real_assessment")
     fixed.input_hash = drafts.digest(manifest)
@@ -162,106 +157,42 @@ def assessment_input(manifest, input_hash):
     ).model_dump(mode="json")
 
 
-async def preview_cost(
-    session: AsyncSession,
-    fixed: ScoreSnapshot,
-    llm,
-    body: ScoreRequest,
-    settings: Settings,
-) -> dict:
-    unknown = {
-        "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": None},
-        "estimated_charge": None,
-        "cost_basis": "unknown",
-        "cost_basis_reason": "model_unavailable",
-        "admission_blocker": None,
-    }
-    if not fixed.manifest["model_redaction_enabled"]:
-        return unknown | {
-            "admission_blocker": "redaction_required",
-            "cost_basis_reason": "redaction_required",
-        }
-    if fixed.manifest.get("sensitive_report_identifier"):
-        return unknown | {
-            "admission_blocker": "sensitive_report_identifier",
-            "cost_basis_reason": "fixed_identifier_cannot_be_persisted",
-        }
+async def preview_cost(session, fixed, llm, body, settings) -> dict:
+    from app.services.preflight import estimate_quotes
+
+    blocker = (
+        "redaction_required"
+        if not fixed.manifest["model_redaction_enabled"]
+        else "sensitive_report_identifier"
+        if fixed.manifest.get("sensitive_report_identifier")
+        else None
+    )
+    if blocker:
+        return {"estimated_cost": Cost().model_dump(mode="json"), "admission_blocker": blocker}
     request = score_semantic.provider_request(fixed.secret["outbound"])
     if request is None:
+        return {"estimated_cost": Cost().model_dump(mode="json"), "admission_blocker": None}
+    if not supports_score(llm):
         return {
             "estimated_cost": Cost().model_dump(mode="json"),
-            "estimated_charge": Decimal(0),
-            "cost_basis": "known",
-            "cost_basis_reason": "no_assessable_items",
-            "admission_blocker": None,
+            "admission_blocker": "score_capability_unavailable",
         }
-    if not supports_score(llm):
-        return unknown | {"admission_blocker": "score_capability_unavailable"}
     adapter = score_provider(llm)
-    request = score_semantic.provider_request(fixed.secret["outbound"])
-    assert request is not None
     if not isinstance(adapter, HTTPScoreProvider):
-        if getattr(adapter, "test_only", False):
-            return {
-                "estimated_cost": Cost().model_dump(mode="json"),
-                "estimated_charge": Decimal(0),
-                "cost_basis": "known",
-                "cost_basis_reason": "test_provider",
-                "admission_blocker": None,
-            }
-        return unknown | {"admission_blocker": "billing_bound_unavailable"}
+        return {
+            "estimated_cost": Cost().model_dump(mode="json"),
+            "admission_blocker": None
+            if getattr(adapter, "test_only", False)
+            else "score_capability_unavailable",
+        }
     try:
         requests = adapter._groups(request)
-        bodies = [adapter.request_body(entry) for entry in requests]
-        if adapter.llm.platform_model_id is None and not adapter.llm.org_owned:
-            return unknown | {
-                "admission_blocker": "billing_price_unavailable",
-                "cost_basis_reason": "prices_unavailable",
-            }
-        bounds = [adapter.reservation(entry) for entry in requests]
+        plans = [adapter.llm.quote(adapter.request_body(entry)) for entry in requests]
     except ProviderFailure as error:
-        return unknown | {
-            "admission_blocker": error.code,
-            "cost_basis_reason": "context_limit"
-            if error.code == "score_context_limit"
-            else "prices_unavailable",
-        }
-    inputs = sum(len(json.dumps(value, ensure_ascii=False).encode()) + 4096 for value in bodies)
-    outputs = sum(adapter.llm.output_token_bound(value) for value in bodies)
-    input_price = adapter.llm.settings.llm_input_usd_per_mtok
-    output_price = adapter.llm.settings.llm_output_usd_per_mtok
-    usd = (
-        None
-        if input_price is None or output_price is None
-        else (inputs * input_price + outputs * output_price) / 1_000_000
-    )
-    first = bounds[0] if bounds else Decimal(0)
-    blocker = None
-    if first > settings.job_max_charge:
-        blocker = "job_charge_limit_exceeded"
-    elif body.max_charge is not None and first > body.max_charge:
-        blocker = "spend_cap_below_first_call"
-    if adapter.llm.platform_model_id is not None:
-        balance = await session.scalar(select(OrgBalance))
-        held = await session.scalar(
-            select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
-                VendorCall.state != "completed"
-            )
-        )
-        if balance is not None and balance.currency != settings.billing_currency:
-            blocker = "billing_currency_mismatch"
-        elif balance is None or balance.balance <= 0 or balance.balance - (held or 0) < first:
-            blocker = "insufficient_balance"
+        return {"estimated_cost": Cost().model_dump(mode="json"), "admission_blocker": error.code}
     return {
-        "estimated_cost": {"llm_tokens": inputs + outputs, "ocr_pages": 0, "usd": usd},
-        "estimated_charge": sum(bounds, Decimal(0)),
-        "cost_basis": "known",
-        "cost_basis_reason": (
-            "org_key_platform_charge_zero_vendor_cost_estimate"
-            if adapter.llm.org_owned
-            else "first_pass_token_bound"
-        ),
-        "admission_blocker": blocker,
+        "estimated_cost": estimate_quotes(plans).model_dump(mode="json"),
+        "admission_blocker": None,
     }
 
 
@@ -281,70 +212,59 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
     estimate = await preview_cost(session, fixed, llm, body, settings)
     if body.dry_run:
         model = fixed.manifest["model"]
-        data = ScorePreview.model_validate(
-            {
-                "input": assessment_input(fixed.manifest, fixed.input_hash),
-                "selected_item_ids": [entry["id"] for entry in fixed.secret["rubric"]["items"]],
-                "rubric_id": fixed.rubric.id,
-                "rubric_version": fixed.rubric.version,
-                "rubric_input_hash": fixed.rubric.input_hash,
-                "prompt_version": PROMPT_VERSION,
-                "schema_version": SCHEMA_VERSION,
-                "scoring_rule_version": RULE_VERSION,
-                "preflight_unassessable_item_ids": list(
-                    fixed.secret.get("outbound", {}).get("preflight", {})
-                ),
-                "limitations": fixed.limitations,
-                "billing_currency": settings.billing_currency,
-                "redaction_revision": fixed.manifest["model_redaction_revision"],
-                "redaction_rule_version": fixed.manifest["redaction_rule_version"],
-                "redacted_counts": fixed.manifest["redacted_counts"],
-                "max_charge": body.max_charge,
-                **(
-                    {
-                        "provider_config_id": getattr(llm, "provider_config_id", None),
-                        "provider_source": fixed.manifest["provider_source"],
-                        "platform_model_id": model.get("platform_model_id"),
-                        "model_revision": model.get("model_revision"),
-                        "model": model["model"],
-                        "reasoning": fixed.manifest["reasoning"],
-                    }
-                    if model
-                    else {}
-                ),
-                **estimate,
-            }
-        ).model_dump(mode="json")
-        from app.services import budget_preflight
+        data = {
+            "input": assessment_input(fixed.manifest, fixed.input_hash),
+            "selected_item_ids": [entry["id"] for entry in fixed.secret["rubric"]["items"]],
+            "rubric_id": fixed.rubric.id,
+            "rubric_version": fixed.rubric.version,
+            "rubric_input_hash": fixed.rubric.input_hash,
+            "prompt_version": PROMPT_VERSION,
+            "schema_version": SCHEMA_VERSION,
+            "scoring_rule_version": RULE_VERSION,
+            "preflight_unassessable_item_ids": list(
+                fixed.secret.get("outbound", {}).get("preflight", {})
+            ),
+            "limitations": fixed.limitations,
+            "redaction_revision": fixed.manifest["model_redaction_revision"],
+            "redaction_rule_version": fixed.manifest["redaction_rule_version"],
+            "redacted_counts": fixed.manifest["redacted_counts"],
+            **(
+                {
+                    "provider_config_id": getattr(llm, "provider_config_id", None),
+                    "provider_source": fixed.manifest["provider_source"],
+                    "platform_model_id": model.get("platform_model_id"),
+                    "model_revision": model.get("model_revision"),
+                    "model": model["model"],
+                    "reasoning": fixed.manifest["reasoning"],
+                }
+                if model
+                else {}
+            ),
+            **estimate,
+        }
+        from app.services import preflight as preflight_service
 
         quotes = []
-        if (
-            isinstance(llm, HTTPExtractor)
-            and estimate.get("estimated_charge") is not None
-            and estimate.get("cost_basis_reason") not in {"no_assessable_items", "test_provider"}
-        ):
+        if isinstance(llm, HTTPExtractor) and estimate.get("admission_blocker") is None:
             adapter = score_provider(llm)
             request = score_semantic.provider_request(fixed.secret["outbound"])
             if isinstance(adapter, HTTPScoreProvider) and request is not None:
                 quotes = [
                     llm.quote(adapter.request_body(entry)) for entry in adapter._groups(request)
                 ]
-        data = await budget_preflight.attach(
+        data = await preflight_service.attach(
             session,
             data,
             command="score run",
             task_id=task_id,
             input_hash=fixed.input_hash,
-            currency=settings.billing_currency,
             settings=settings,
             quotes=quotes,
             planned_calls=len(quotes)
-            if quotes
-            or estimate.get("cost_basis_reason") in {"no_assessable_items", "test_provider"}
+            if quotes or estimate.get("admission_blocker") is None
             else None,
-            max_charge=body.max_charge,
         )
-        return data, None
+        return ScorePreview.model_validate(data).model_dump(mode="json"), None
     if estimate["admission_blocker"] == "redaction_required":
         cards.fail("redaction_required", "Scoring requires redaction", 409, 4)
     if fixed.input_hash != body.expected_input_hash:
@@ -393,7 +313,6 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
                     "actor_kind": actor.actor_kind,
                     "scopes": sorted(actor.scopes),
                     "provider_source": fixed.manifest["provider_source"],
-                    "max_charge": str(body.max_charge) if body.max_charge is not None else None,
                 }
             },
         )
@@ -420,15 +339,6 @@ async def _submit_score(session, actor, task_id, body, settings, storage):
             cards.fail(estimate["admission_blocker"], "Scoring admission was refused", 409, 4)
         job.status, job.error, job.queue_id, job.attempts = "queued", None, None, 0
         job.lease_until, job.finished_at, job.run_id = None, None, None
-        if body.max_charge is not None:
-            job.result = {
-                **job.result,
-                "submission": {**job.result["submission"], "max_charge": str(body.max_charge)},
-            }
-    elif body.max_charge is not None and job.status in {"queued", "running"}:
-        cap = job.result["submission"].get("max_charge")
-        if cap is None or Decimal(cap) > body.max_charge:
-            cards.fail("score_cap_conflict", "Existing score job has a higher charge cap", 409)
     await session.flush()
     return AssessmentJobAccepted.model_validate(
         {"job_id": job.id, "status": job.status, "cached": cached}
@@ -623,11 +533,6 @@ async def publish(session, actor, job, fixed, evaluated, settings, stop_reason=N
             "job_id": job.id,
             "completion": completion,
             "usage_record_ids": [row.id for row in usage_rows],
-            "charge": sum(
-                (Decimal(str(row.charge)) for row in usage_rows if row.charge is not None),
-                Decimal(0),
-            ),
-            "billing_currency": settings.billing_currency,
             "stop_reason": stop_reason,
             **{
                 key: summary[key]

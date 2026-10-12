@@ -81,7 +81,7 @@ watch(() => [taskId.value, reportId.value], load, { immediate: true });
     <div class="stat-grid" aria-live="polite"><div class="stat"><span class="label">全部要求</span><strong>{{ summary.item_count }}</strong></div><div class="stat"><span class="label">机器发现风险（含已忽略）</span><strong>{{ summary.finding_count }}</strong></div><div class="stat"><span class="label">未评估</span><strong>{{ summary.unassessed_count }}</strong></div><div class="stat"><span class="label">证照日期</span><strong>{{ summary.certificate_count }}</strong></div></div>
     <p v-if="summary.unassessed_count > 0">部分内容未完成检查</p><p v-else-if="summary.finding_count === 0">在本次{{ summary.mode === 'rules' ? '规则' : '规则与语义' }}检查的已评估范围内未发现风险</p>
     <p v-for="group in summary.groups" :key="`${group.severity}-${group.review_domain}-${group.status}`">{{ severityLabels[group.severity] }} · {{ domainLabels[group.review_domain ?? 'unclassified'] }} · {{ stateLabels[group.status] }}：{{ group.count }}</p>
-    <el-button @click="showJob = !showJob">查看报告作业与实际费用</el-button><JobPanel assessment-mode v-if="showJob" :job-id="summary.report.job_id" :writable="false" />
+    <el-button @click="showJob = !showJob">查看报告作业与实际用量</el-button><JobPanel assessment-mode v-if="showJob" :job-id="summary.report.job_id" :writable="false" />
     <el-tabs v-model="part" aria-label="检查报告分区"><el-tab-pane label="风险条目" name="findings" /><el-tab-pane label="覆盖情况" name="coverage" /><el-tab-pane label="证照日期" name="certificates" /><el-tab-pane label="提示" name="notices" /></el-tabs>
     <div v-if="part === 'findings'" class="actions">
       <el-select v-model="severity" aria-label="风险级别" placeholder="全部级别" clearable><el-option v-for="(label, value) in severityLabels" :key="value" :value="value" :label="label" /></el-select>

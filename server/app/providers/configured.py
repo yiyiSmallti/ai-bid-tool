@@ -52,8 +52,6 @@ def org_llm(settings, config: ProviderConfig, transport=None):
             "llm_api_key": key,
             "llm_base_url": data["base_url"],
             "llm_json_mode": data["json_mode"],
-            "llm_input_usd_per_mtok": data["input_usd_per_mtok"],
-            "llm_output_usd_per_mtok": data["output_usd_per_mtok"],
             # An org's declared options must not inherit deployment-specific vendor switches.
             "llm_request_options": None,
             "llm_effort": None,

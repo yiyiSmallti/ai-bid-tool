@@ -79,7 +79,6 @@ class ScaleExtraction(FakeLLM):
                 version=self.version,
                 duration_ms=1,
                 tokens=len(items),
-                usd=0,
                 test_only=True,
             ),
         )

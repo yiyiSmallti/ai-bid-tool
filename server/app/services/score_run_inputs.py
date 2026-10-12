@@ -74,7 +74,7 @@ async def lock_inputs(session, actor, task_id, extraction_id):
 
 
 async def fixed_rows(session, actor, draft, *, require_current: bool):
-    """Read fixed revisions only; the current revision number is a currency fence.
+    """Read fixed revisions only; the current revision number is a revision fence.
 
     No current-revision pointer is dereferenced and no candidate response text is
     selected. Non-response rows load only their fixed disposition metadata.
@@ -335,7 +335,7 @@ async def snapshot(
     items, fixed_items = await fixed_rows(session, actor, draft, require_current=True)
     if any(entry["document_id"] != str(document.id) for entry in fixed_items):
         integrity()
-    # Previews and paid admissions need the full database predicate immediately.
+    # Previews and provider admissions need the full database predicate immediately.
     # Publication rechecks it in the mandatory deferred gate, including live
     # citations, so that transaction must not locate every quote twice.
     if not defer_database_validation and not await session.scalar(

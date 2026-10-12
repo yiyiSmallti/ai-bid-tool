@@ -7,18 +7,16 @@ Failure modes recorded before implementation:
 * Keys leak through views, validation, audits, vendor errors or usage model echoes.
 * Missing/wrong dedicated encryption key falls back to the storage key or platform.
 * Queued extraction/drafting uses a different revision or hits an earlier cache.
-* Org-key calls require prepaid funds, charge the platform, or evade call ceilings.
+* Org-key calls lose provider identity or evade call ceilings.
 * Selected/default platform calls skip admission, settlement or catalog fencing.
 * Quota errors retry or direct org-key users to the wrong payer.
-* Balance probes follow redirects, query non-DeepSeek hosts or trust malformed data.
-* Provider tests manufacture tender records or fail to record paid malformed replies.
+* Provider tests manufacture tender records or fail to record malformed replies.
 """
 
 import asyncio
 import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -31,7 +29,6 @@ from app.models.entities import (
     AuditLog,
     Document,
     Job,
-    OrgBalance,
     PlatformModel,
     Task,
     UsageRecord,
@@ -61,8 +58,6 @@ def org_config(**changes):
         "base_url": "https://api.deepseek.com/v1",
         "json_mode": "json_object",
         "api_key": KEY,
-        "input_usd_per_mtok": 1,
-        "output_usd_per_mtok": 2,
         "reasoning": [{"name": "low", "request_options": {"reasoning_effort": "low"}}],
         "default_reasoning": "low",
         **changes,
@@ -72,27 +67,10 @@ def org_config(**changes):
 class Vendor:
     def __init__(self):
         self.calls = []
-        self.balance_calls = 0
         self.response: httpx.Response | None = None
 
     async def __call__(self, request):
-        if request.method == "GET":
-            assert str(request.url) == "https://api.deepseek.com/user/balance"
-            self.balance_calls += 1
-            return httpx.Response(
-                200,
-                json={
-                    "is_available": True,
-                    "balance_infos": [
-                        {
-                            "currency": "USD",
-                            "total_balance": "12.34",
-                            "granted_balance": "0",
-                            "topped_up_balance": "12.34",
-                        }
-                    ],
-                },
-            )
+        assert request.method == "POST"
         body = json.loads(request.content)
         self.calls.append((body, request.headers.get("authorization")))
         return self.response or provider_reply("openai", GOOD_ITEMS)
@@ -141,10 +119,6 @@ async def catalog(app, org, **changes):
                 credential="provider_test",
                 is_default=True,
                 enabled=True,
-                vendor_input_usd_per_mtok=1,
-                vendor_output_usd_per_mtok=2,
-                sale_input_per_mtok=3,
-                sale_output_per_mtok=4,
                 reasoning=[],
                 revision=1,
                 updated_by="ops@example.test",
@@ -218,7 +192,7 @@ async def test_revision_isolation_and_database_gates(tenants, tmp_path):
         assert token.status_code in {400, 403}
 
 
-async def test_org_extraction_pins_revision_and_skips_prepaid(tenants, tmp_path, pdf_bytes):
+async def test_org_extraction_pins_revision_and_records_usage(tenants, tmp_path, pdf_bytes):
     async with configured(tenants, tmp_path) as (app, api, headers, vendor):
         first = await save(api, headers[0])
         task, document = await create_document(api, headers[0], pdf_bytes)
@@ -239,15 +213,10 @@ async def test_org_extraction_pins_revision_and_skips_prepaid(tenants, tmp_path,
                 )
             ).all()
             assert {str(row.provider_config_id) for row in usages} == {first["id"], second["id"]}
-            assert all(
-                row.charge == 0 and row.usd > 0 and row.platform_model_id is None for row in usages
-            )
             assert await session.scalar(select(func.count(VendorCall.id))) == len(vendor.calls)
-            assert await session.scalar(select(func.count(OrgBalance.org_id))) == 0
             assert (await session.get(Job, UUID(old_job))).provider_config_id == UUID(first["id"])
         listing = (await api.get("/providers", headers=headers[0])).json()
         assert listing["data"]["month_usage"]["input_tokens"] > 0
-        assert listing["items"][0]["balance"]["status"] == "supported"
         assert (await api.get(f"/jobs/{old_job}", headers=headers[1])).status_code == 404
         await asyncio.to_thread(
             Path("data/work/provider-validation").mkdir, parents=True, exist_ok=True
@@ -291,18 +260,18 @@ async def test_resolution_and_platform_admission(source, tenants, tmp_path, pdf_
             job = response.json()["data"]["job_id"]
             await app.state.processor(headers[0]["X-Org-Id"], job)
             status = (await api.get(f"/jobs/{job}", headers=headers[0])).json()["data"]
-            assert status["error"]["code"] == "provider_unavailable" and not vendor.calls
+            assert status["error"]["code"] == "provider_unavailable" and (not vendor.calls)
             return
-        assert response.status_code == 402 and not vendor.calls
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            session.add(OrgBalance(org_id=tenants["orgs"][0], currency="USD", balance=Decimal(10)))
-        _, status = await run_job(api, app, headers[0], document, "extract")
+        assert response.status_code == 200 and not vendor.calls
+        job = response.json()["data"]["job_id"]
+        await app.state.processor(headers[0]["X-Org-Id"], job)
+        status = (await api.get(f"/jobs/{job}", headers=headers[0])).json()["data"]
         assert status["status"] == "succeeded"
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             usage = await session.scalar(
                 select(UsageRecord).where(UsageRecord.platform_model_id == "paid")
             )
-            assert usage.charge > 0 and bool(usage.provider_config_id) == (source == "selected")
+            assert bool(usage.provider_config_id) == (source == "selected")
 
 
 async def test_org_drafting_uses_fixed_config(tenants, tmp_path):
@@ -330,9 +299,7 @@ async def test_org_drafting_uses_fixed_config(tenants, tmp_path):
             usages = (
                 await session.scalars(select(UsageRecord).where(UsageRecord.job_id == UUID(job)))
             ).all()
-            assert usages and all(
-                str(row.provider_config_id) == first["id"] and row.charge == 0 for row in usages
-            )
+            assert usages and all(str(row.provider_config_id) == first["id"] for row in usages)
 
 
 async def test_probe_quota_and_permissions(tenants, tmp_path, admin_engine):
@@ -343,8 +310,7 @@ async def test_probe_quota_and_permissions(tenants, tmp_path, admin_engine):
         )
         assert response.status_code == 200, response.text
         data = response.json()["data"]
-        assert data["usage"]["charge"] == 0 and data["usage"]["input_tokens"] > 0
-        assert data["balance"]["status"] == "supported"
+        assert data["usage"]["input_tokens"] > 0
         assert len(vendor.calls) == 1
         vendor.response = httpx.Response(
             402, json={"error": {"type": KEY, "message": KEY + " reset 2030-01-01 12:30"}}
@@ -354,7 +320,9 @@ async def test_probe_quota_and_permissions(tenants, tmp_path, admin_engine):
         )
         assert failed.json()["data"]["error"]["code"] == "provider_quota_exhausted"
         assert (
-            KEY not in failed.text and "vendor" in failed.text and "2030-01-01 12:30" in failed.text
+            KEY not in failed.text
+            and "vendor" in failed.text
+            and ("2030-01-01 12:30" in failed.text)
         )
         assert len(vendor.calls) == 2
         set_role(admin_engine, tenants["orgs"][0], tenants["users"][0], "viewer")
@@ -428,7 +396,6 @@ async def test_org_calls_obey_cumulative_admission_and_account_malformed_replies
         vendor.response = provider_reply("openai", [])
         _, document = await create_document(api, headers[0], pdf_bytes)
         await run_job(api, app, headers[0], document, "parse")
-        # A malformed response splits this multi-page batch; admission must stop the halves.
         vendor.response = httpx.Response(
             200,
             json={
@@ -450,11 +417,10 @@ async def test_org_calls_obey_cumulative_admission_and_account_malformed_replies
             usage = (
                 await session.scalars(select(UsageRecord).where(UsageRecord.job_id == UUID(job)))
             ).one()
-            assert usage.input_tokens == 90 and usage.output_tokens == 10 and usage.charge == 0
+            assert usage.input_tokens == 90 and usage.output_tokens == 10
             assert (
                 await session.scalar(select(VendorCall).where(VendorCall.job_id == UUID(job)))
             ).state == "completed"
-        # A fresh single-call probe reports metered usage even though its output is invalid.
         probe = (await api.post("/providers/test", headers=headers[0], json={})).json()
         assert not probe["ok"] and probe["data"]["usage"]["input_tokens"] == 90
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
@@ -499,8 +465,6 @@ async def test_catalog_changed_after_submission_is_fenced(
 ):
     async with configured(tenants, tmp_path) as (app, api, headers, vendor):
         await catalog(app, tenants["orgs"][0])
-        async with app.state.db.transaction(tenants["orgs"][0]) as session:
-            session.add(OrgBalance(org_id=tenants["orgs"][0], currency="USD", balance=Decimal(10)))
         _, document = await create_document(api, headers[0], pdf_bytes)
         await run_job(api, app, headers[0], document, "parse")
         response = await api.post(f"/documents/{document}/extract", headers=headers[0], json={})
@@ -508,10 +472,9 @@ async def test_catalog_changed_after_submission_is_fenced(
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             row = await session.get(PlatformModel, "paid")
             row.revision += 1
-            row.sale_input_per_mtok = 10
         await app.state.processor(headers[0]["X-Org-Id"], job)
         status = (await api.get(f"/jobs/{job}", headers=headers[0])).json()["data"]
-        assert status["error"]["code"] == "provider_model_changed" and not vendor.calls
+        assert status["error"]["code"] == "provider_model_changed" and (not vendor.calls)
 
 
 async def test_failed_decryption_and_key_echo_fail_closed(tenants, tmp_path, pdf_bytes, caplog):
@@ -525,7 +488,7 @@ async def test_failed_decryption_and_key_echo_fail_closed(tenants, tmp_path, pdf
         app.state.processor.settings.secrets_key = None
         await app.state.processor(headers[0]["X-Org-Id"], job)
         status = (await api.get(f"/jobs/{job}", headers=headers[0])).json()["data"]
-        assert status["error"]["code"] == "provider_secrets_unavailable" and not vendor.calls
+        assert status["error"]["code"] == "provider_secrets_unavailable" and (not vendor.calls)
         app.state.processor.settings.secrets_key = original_key
         vendor.response = provider_reply("openai", [{**GOOD_ITEMS[0], "quote": KEY}])
         response = await api.post("/providers/test", headers=headers[0], json={})
@@ -533,7 +496,7 @@ async def test_failed_decryption_and_key_echo_fail_closed(tenants, tmp_path, pdf
         assert KEY not in response.text and KEY not in caplog.text
         async with app.state.db.transaction(tenants["orgs"][0]) as session:
             usage = await session.scalar(select(UsageRecord))
-            assert usage is not None and usage.charge == 0
+            assert usage is not None
         invalid = await api.post(
             "/providers", headers=headers[0], json=org_config(api_key=KEY + "\n")
         )

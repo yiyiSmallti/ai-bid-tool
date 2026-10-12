@@ -2,7 +2,7 @@
 
 Failure scenarios fixed before implementation: old task/document/download/job routes
 leak a same-org nonmember's task; token admin inherits recovery; observer can upload;
-archived task accepts document/card/job/budget writes; org-only reads are unchanged.
+archived task accepts document/card/job writes; org-only reads are unchanged.
 The fixtures create both orgs and real parent objects so masking isn't merely a
 nonexistent-object test. Database execution is owned by the integrating session.
 """
@@ -116,8 +116,6 @@ async def test_legacy_mutation_masking(api, headers, tenants, admin_engine, pdf_
         "profiles",
         "templates",
         "evidence-sources",
-        "budget",
-        "budget/history",
         "checks",
         "scores",
         "score-rubrics",
@@ -167,16 +165,6 @@ async def test_legacy_archive_blocks_new_business_keeps_read(api, headers, pdf_b
         ),
         await api.post(
             f"/tasks/{task}/products", headers=headers[0], json={"product_id": str(uuid4())}
-        ),
-        await api.put(
-            f"/v4/tasks/{task}/budget",
-            headers=headers[0],
-            json={
-                "limit": "20",
-                "currency": "USD",
-                "expected_revision": 1,
-                "reason": "Synthetic acceptance",
-            },
         ),
     ]
     for response in writes:

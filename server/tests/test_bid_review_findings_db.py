@@ -14,7 +14,6 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from app.jobs.execution import JobExecution
 from app.models.bid_review import BidDocumentPage
 from app.models.bid_review_findings import (
     BidReviewFinding,
@@ -50,7 +49,6 @@ from test_bid_review_upload_db import preview as prepare_preview
 from test_bid_review_upload_db import submit as prepare_submit
 from test_check_combined import install_resolver
 from test_confidential_values import add_field, set_value
-from test_task_budget_execution import set_limit
 from test_team_workflow_membership import add_member, person, workflow
 
 CLAUSES = (
@@ -484,7 +482,7 @@ async def test_signature_defect_without_related_clause_does_not_invent_tender_ba
     assert all(row["code"] != "signature_validation_invalid" for row in case["findings"])
 
 
-@pytest.mark.parametrize("stop", ["budget", "ceiling"])
+@pytest.mark.parametrize("stop", ["ceiling"])
 async def test_stop_between_obligations_keeps_partial_results_and_unknown_unfinished(
     stop,
     api,
@@ -497,18 +495,6 @@ async def test_stop_between_obligations_keeps_partial_results_and_unknown_unfini
     if stop == "ceiling":
         application.state.processor.settings.job_max_vendor_calls = 2
     case = await make_case(api, headers, application, tenants, tmp_path, monkeypatch)
-    if stop == "budget":
-        original = JobExecution.admit
-        admissions = 0
-
-        async def exhausted(self, quote):
-            nonlocal admissions
-            admissions += 1
-            if admissions == 3:
-                await set_limit(api, headers[0], case["task"], "0.00028")
-            return await original(self, quote)
-
-        monkeypatch.setattr(JobExecution, "admit", exhausted)
     await execute(api, headers, application, tenants, case)
     assert len(case["vendor"].requests) == 2
     assert any(f["outcome"] == "responded" for f in case["findings"])

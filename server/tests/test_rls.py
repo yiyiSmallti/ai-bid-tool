@@ -1,6 +1,5 @@
 import json
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from uuid import uuid4
 
 import pytest
@@ -16,7 +15,7 @@ from app.models.entities import (
     UsageRecord,
     VendorCall,
 )
-from app.schemas.budget_contracts import BudgetCallQuote
+from app.schemas.preflight_contracts import CallPlan
 from app.services.auth import ROLE_SCOPES
 from sqlalchemy import select, text
 from sqlalchemy.exc import DBAPIError
@@ -48,15 +47,9 @@ def seeded(tenants, admin_engine):
     identifiers = {}
     with Session(admin_engine) as session, session.begin():
         for index, org in enumerate(tenants["orgs"]):
-            # Response seeding below sets transaction-local actor context; replace
-            # that context before the next tenant's jobs are inserted.
             session.execute(
                 text(
-                    "SELECT set_config('app.current_org',:org,true), "
-                    "set_config('app.actor_kind','session',true), "
-                    "set_config('app.actor_user_id',:user,true), "
-                    "set_config('app.actor_token_id','',true), "
-                    "set_config('app.actor_scopes',:scopes,true)"
+                    "SELECT set_config('app.current_org',:org,true), set_config('app.actor_kind','session',true), set_config('app.actor_user_id',:user,true), set_config('app.actor_token_id','',true), set_config('app.actor_scopes',:scopes,true)"
                 ),
                 {
                     "org": str(org),
@@ -99,22 +92,17 @@ def seeded(tenants, admin_engine):
                 actor_kind="session",
                 actor_scopes=sorted(ROLE_SCOPES["admin"]),
                 cache_key="e" * 64,
-                status="succeeded",
+                status="running",
+                lease_until=datetime.now(UTC) + timedelta(minutes=5),
             )
             session.add(extraction)
             session.flush()
-            quote = BudgetCallQuote(
+            quote = CallPlan(
                 capability="llm",
-                payer="org_direct",
                 provider="test",
                 model="test",
                 version="1",
-                price_revision="synthetic-v1",
                 request_sha256="a" * 64,
-                currency="USD",
-                reserved_charge=Decimal(0),
-                reserved_task_amount=Decimal(0),
-                vendor_usd_upper_bound=Decimal(0),
             )
             call = VendorCall(
                 id=uuid4(),
@@ -122,15 +110,9 @@ def seeded(tenants, admin_engine):
                 task_id=task.id,
                 job_id=extraction.id,
                 run_id=run_id,
-                budget_revision=1,
                 capability=quote.capability,
-                payer=quote.payer,
-                currency=quote.currency,
-                price_revision=quote.price_revision,
                 request_sha256=quote.request_sha256,
-                reserved_charge=quote.reserved_charge,
-                reserved_task_amount=quote.reserved_task_amount,
-                quote=quote.model_dump(mode="json"),
+                provider_identity=quote.model_dump(mode="json"),
             )
             session.add(call)
             session.flush()
@@ -157,15 +139,10 @@ def seeded(tenants, admin_engine):
                         run_id=run_id,
                         call_id=call.id,
                         capability=quote.capability,
-                        payer=quote.payer,
-                        billing_currency=quote.currency,
-                        price_revision=quote.price_revision,
-                        task_amount=Decimal(0),
                         provider="test",
                         model="test",
                         version="1",
                         duration_ms=1,
-                        usd=0,
                         test_only=True,
                     ),
                     ApiToken(
@@ -186,7 +163,9 @@ def seeded(tenants, admin_engine):
                 ]
             )
             session.flush()
-            call.state, call.charge = "completed", Decimal(0)
+            call.state = "completed"
+            extraction.status = "succeeded"
+            session.flush()
             from test_response_card_db import seed_response_rows
 
             requirement = session.scalar(select(Requirement).where(Requirement.org_id == org))

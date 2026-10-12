@@ -1,5 +1,4 @@
 from datetime import datetime
-from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -13,7 +12,6 @@ from sqlalchemy import (
     ForeignKeyConstraint,
     Index,
     Integer,
-    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -102,10 +100,6 @@ class ApiToken(Tenant, Base):
             "NOT (scopes ? 'evidence:confirm') AND NOT (scopes ? 'export') AND NOT (scopes ? 'screenshot:ingest')",
             name="token_forbidden_scopes",
         ),
-        CheckConstraint(
-            "NOT (scopes ?| ARRAY['task:budget:write','billing:alert:write'])",
-            name="token_forbidden_budget_scopes",
-        ),
         CheckConstraint("NOT (scopes ? 'provider:write')", name="token_no_provider_write"),
         CheckConstraint("NOT (scopes ? 'token:create')", name="token_forbidden_creation_scope"),
         CheckConstraint(
@@ -145,21 +139,9 @@ class Task(Tenant, Base):
     name: Mapped[str] = mapped_column(String(200))
     tender_number: Mapped[str | None] = mapped_column(String(100))
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    budget_usd: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
-    budget_limit: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
-    budget_currency: Mapped[str] = mapped_column(String(3), default="USD", server_default="USD")
-    budget_revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
-    budget_state: Mapped[str] = mapped_column(String(30), default="active", server_default="active")
     created_by: Mapped[UUID] = mapped_column()
     __table_args__ = (
         UniqueConstraint("org_id", "id"),
-        CheckConstraint("budget_limit IS NULL OR budget_limit >= 0", name="task_budget_amount"),
-        CheckConstraint(
-            "budget_currency ~ '^[A-Z]{3}$' AND budget_revision >= 1", name="task_budget_identity"
-        ),
-        CheckConstraint(
-            "budget_state IN ('active','currency_review_required')", name="task_budget_state"
-        ),
         ForeignKeyConstraint(
             ["org_id", "created_by"], ["memberships.org_id", "memberships.user_id"]
         ),
@@ -242,7 +224,6 @@ class UsageRecord(Tenant, Base):
     gateway_trace_id: Mapped[str | None] = mapped_column(String(128))
     __tablename__ = "usage_records"
     image_count: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
-    image_price_revision: Mapped[str | None] = mapped_column(String(100))
     image_input_sha256: Mapped[str | None] = mapped_column(String(64))
     task_id: Mapped[UUID | None] = mapped_column()
     provider_config_id: Mapped[UUID | None] = mapped_column()
@@ -252,22 +233,13 @@ class UsageRecord(Tenant, Base):
     duration_ms: Mapped[int] = mapped_column(Integer)
     tokens: Mapped[int] = mapped_column(Integer, default=0)
     ocr_pages: Mapped[int] = mapped_column(Integer, default=0)
-    usd: Mapped[float | None] = mapped_column(Numeric(18, 8))
     capability: Mapped[str] = mapped_column(String(20), default="llm", server_default="llm")
-    payer: Mapped[str] = mapped_column(
-        String(30), default="org_direct", server_default="org_direct"
-    )
-    task_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
-    billing_currency: Mapped[str] = mapped_column(String(3), default="USD", server_default="USD")
-    price_revision: Mapped[str] = mapped_column(
-        String(100), default="legacy_unknown", server_default="legacy_unknown"
-    )
     search_requests: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
+    browser_units: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
     test_only: Mapped[bool] = mapped_column(Boolean, default=False)
     input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, default=0)
     platform_model_id: Mapped[str | None] = mapped_column(String(40))
-    charge: Mapped[float | None] = mapped_column(Numeric(18, 8))
     job_id: Mapped[UUID | None] = mapped_column()
     run_id: Mapped[UUID | None] = mapped_column()
     call_id: Mapped[UUID | None] = mapped_column()
@@ -279,6 +251,13 @@ class UsageRecord(Tenant, Base):
         ),
         ForeignKeyConstraint(
             ["org_id", "provider_config_id"], ["provider_configs.org_id", "provider_configs.id"]
+        ),
+        CheckConstraint("image_count BETWEEN 0 AND 20"),
+        CheckConstraint(
+            "(image_count=0 AND image_input_sha256 IS NULL) OR "
+            "(image_count>0 AND image_input_sha256 IS NOT NULL "
+            "AND image_input_sha256 ~ '^[0-9a-f]{64}$')",
+            name="usage_image_manifest",
         ),
         CheckConstraint("call_id IS NULL OR (job_id IS NOT NULL AND run_id IS NOT NULL)"),
         Index("usage_records_job", "org_id", "job_id"),
@@ -297,59 +276,27 @@ class UsageRecord(Tenant, Base):
 
 
 class VendorCall(Tenant, Base):
-    """Durable admission, including unresolved requests whose reservation must survive a crash."""
+    """Durable admission, including unresolved requests whose admission must survive a crash."""
 
     __tablename__ = "vendor_calls"
     task_id: Mapped[UUID | None] = mapped_column()
     capability: Mapped[str] = mapped_column(String(20), default="llm", server_default="llm")
-    payer: Mapped[str] = mapped_column(
-        String(30), default="org_direct", server_default="org_direct"
-    )
-    budget_revision: Mapped[int | None] = mapped_column(Integer)
-    reserved_task_amount: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
-    currency: Mapped[str] = mapped_column(String(3), default="USD", server_default="USD")
-    price_revision: Mapped[str] = mapped_column(
-        String(100), default="legacy_unknown", server_default="legacy_unknown"
-    )
     request_sha256: Mapped[str] = mapped_column(String(64), default="0" * 64)
-    quote: Mapped[dict[str, Any]] = mapped_column(
+    provider_identity: Mapped[dict[str, Any]] = mapped_column(
         JSONB, default=dict, server_default=text("'{}'::jsonb")
     )
     job_id: Mapped[UUID] = mapped_column()
     run_id: Mapped[UUID] = mapped_column()
-    reserved_charge: Mapped[Decimal] = mapped_column(Numeric(18, 8))
-    charge: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
     state: Mapped[str] = mapped_column(String(20), default="pending")
     __table_args__ = (
         ForeignKeyConstraint(
-            ["org_id", "task_id"], ["tasks.org_id", "tasks.id"], name="budget_call_task_fk"
+            ["org_id", "task_id"], ["tasks.org_id", "tasks.id"], name="vendor_call_task_fk"
         ),
-        ForeignKeyConstraint(
-            ["org_id", "task_id", "budget_revision"],
-            [
-                "task_budget_revisions.org_id",
-                "task_budget_revisions.task_id",
-                "task_budget_revisions.revision",
-            ],
-            name="budget_call_revision_fk",
-            deferrable=True,
-            initially="DEFERRED",
-        ),
-        CheckConstraint("reserved_task_amount >= 0", name="budget_call_amount"),
-        CheckConstraint(
-            "(task_id IS NULL) = (budget_revision IS NULL)", name="budget_call_task_revision"
-        ),
-        Index("vendor_calls_task_budget", "org_id", "task_id", "state"),
+        Index("vendor_calls_task", "org_id", "task_id", "state"),
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "job_id", "run_id", "id"),
         ForeignKeyConstraint(["org_id", "job_id"], ["jobs.org_id", "jobs.id"]),
-        CheckConstraint("reserved_charge >= 0 AND (charge IS NULL OR charge >= 0)"),
         CheckConstraint("state IN ('pending', 'completed', 'unknown', 'not_sent')"),
-        CheckConstraint(
-            "state <> 'not_sent' OR (reserved_charge = 0 AND charge IS NULL)",
-            name="vendor_calls_not_sent_no_charge",
-        ),
-        CheckConstraint("(state = 'completed') = (charge IS NOT NULL)"),
         Index("vendor_calls_job", "org_id", "job_id"),
         Index("vendor_calls_unsettled", "org_id", "state"),
     )
@@ -410,9 +357,6 @@ def agent_origin_constraints(table: str):
 
 class Job(Tenant, Base):
     __tablename__ = "jobs"
-    vendor_cost_history_complete: Mapped[bool] = mapped_column(
-        Boolean, default=True, server_default=text("true")
-    )
     task_id: Mapped[UUID | None] = mapped_column()
     document_id: Mapped[UUID | None] = mapped_column()
     bid_submission_document_id: Mapped[UUID | None] = mapped_column()
@@ -484,12 +428,12 @@ class Job(Tenant, Base):
         ForeignKeyConstraint(
             ["org_id", "actor_user_id"],
             ["memberships.org_id", "memberships.user_id"],
-            name="budget_job_actor_user_fk",
+            name="job_actor_user_fk",
         ),
         ForeignKeyConstraint(
             ["org_id", "actor_token_id"],
             ["api_tokens.org_id", "api_tokens.id"],
-            name="budget_job_actor_token_fk",
+            name="job_actor_token_fk",
         ),
         UniqueConstraint("org_id", "id"),
         UniqueConstraint("org_id", "task_id", "document_id", "id", name="agent_job_document"),
@@ -1366,7 +1310,7 @@ class EvidenceSource(Tenant, Base):
 
 
 class PlatformModel(Base):
-    """Global catalog of platform-paid models; an approved exception to org scoping."""
+    """Global catalog of platform-managed models; an approved exception to org scoping."""
 
     __tablename__ = "platform_models"
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
@@ -1377,10 +1321,6 @@ class PlatformModel(Base):
     credential: Mapped[str] = mapped_column(String(40))
     # Reserved Clef catalog metadata; never a tenant provider response field.
     clef_settings: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    vendor_input_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
-    vendor_output_usd_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
-    sale_input_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
-    sale_output_per_mtok: Mapped[float] = mapped_column(Numeric(12, 6))
     is_default: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # Vendor's official reasoning levels for this model; empty means not levelled.
@@ -1403,103 +1343,3 @@ class PlatformAuditLog(Base):
     object_id: Mapped[str | None] = mapped_column(String(100))
     outcome: Mapped[str] = mapped_column(String(20))
     details: Mapped[dict[str, Any]] = mapped_column(JSONB)
-
-
-class OrgBalance(Base):
-    __tablename__ = "org_balances"
-    org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id"), primary_key=True)
-    currency: Mapped[str] = mapped_column(String(3))
-    balance: Mapped[Decimal] = mapped_column(Numeric(18, 8), default=0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    low_balance_threshold: Mapped[Decimal | None] = mapped_column(
-        Numeric(18, 8), default=0, server_default=text("0")
-    )
-    alert_revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
-    low_balance_active: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=text("false")
-    )
-    alert_cycle: Mapped[int] = mapped_column(Integer, default=0, server_default=text("0"))
-
-
-class TaskBudgetRevision(Tenant, Base):
-    __tablename__ = "task_budget_revisions"
-    task_id: Mapped[UUID] = mapped_column()
-    revision: Mapped[int] = mapped_column(Integer)
-    limit: Mapped[Decimal | None] = mapped_column(Numeric(18, 8))
-    currency: Mapped[str] = mapped_column(String(3))
-    state: Mapped[str] = mapped_column(String(30))
-    actor_user_id: Mapped[UUID | None] = mapped_column()
-    origin: Mapped[str] = mapped_column(String(20))
-    reason_sha256: Mapped[str | None] = mapped_column(String(64))
-    __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "task_id", "revision"),
-        ForeignKeyConstraint(["org_id", "task_id"], ["tasks.org_id", "tasks.id"]),
-        ForeignKeyConstraint(
-            ["org_id", "actor_user_id"], ["memberships.org_id", "memberships.user_id"]
-        ),
-        CheckConstraint('revision >= 1 AND ("limit" IS NULL OR "limit" >= 0)'),
-        CheckConstraint(
-            "currency ~ '^[A-Z]{3}$' AND state IN ('active','currency_review_required')"
-        ),
-        CheckConstraint("origin IN ('migration','create','human_update')"),
-        CheckConstraint(
-            "origin <> 'human_update' OR (actor_user_id IS NOT NULL AND reason_sha256 ~ '^[0-9a-f]{64}$')"
-        ),
-    )
-
-
-class OrgBalanceNotice(Tenant, Base):
-    __tablename__ = "org_balance_notices"
-    policy_revision: Mapped[int] = mapped_column(Integer)
-    cycle: Mapped[int] = mapped_column(Integer)
-    threshold: Mapped[Decimal] = mapped_column(Numeric(18, 8))
-    currency: Mapped[str] = mapped_column(String(3))
-    available_balance: Mapped[Decimal] = mapped_column(Numeric(18, 8))
-    __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "policy_revision", "cycle"),
-        ForeignKeyConstraint(["org_id"], ["org_balances.org_id"]),
-        CheckConstraint("policy_revision >= 1 AND cycle >= 1 AND threshold >= 0"),
-        CheckConstraint("currency ~ '^[A-Z]{3}$'"),
-    )
-
-
-class BalanceEntry(Tenant, Base):
-    """Append-only ledger; the sum of amounts per org equals org_balances.balance."""
-
-    __tablename__ = "balance_entries"
-    kind: Mapped[str] = mapped_column(String(10))
-    currency: Mapped[str] = mapped_column(String(3))
-    amount: Mapped[Decimal] = mapped_column(Numeric(18, 8))
-    balance_after: Mapped[Decimal] = mapped_column(Numeric(18, 8))
-    card_id: Mapped[UUID | None] = mapped_column()
-    usage_record_id: Mapped[UUID | None] = mapped_column()
-    actor: Mapped[str] = mapped_column(String(254))
-    reason: Mapped[str | None] = mapped_column(String(500))
-    __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        ForeignKeyConstraint(
-            ["org_id", "usage_record_id"], ["usage_records.org_id", "usage_records.id"]
-        ),
-    )
-
-
-class PlatformCard(Base):
-    """Global recharge card; only the code hash and last four characters are stored."""
-
-    __tablename__ = "platform_cards"
-    id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    code_hash: Mapped[str] = mapped_column(String(64), unique=True)
-    last4: Mapped[str] = mapped_column(String(4))
-    face_value: Mapped[float] = mapped_column(Numeric(18, 8))
-    currency: Mapped[str] = mapped_column(String(3))
-    batch_id: Mapped[UUID] = mapped_column()
-    note: Mapped[str | None] = mapped_column(String(200))
-    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    status: Mapped[str] = mapped_column(String(10), default="active")
-    created_by: Mapped[str] = mapped_column(String(254))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    redeemed_org_id: Mapped[UUID | None] = mapped_column()
-    redeemed_by: Mapped[UUID | None] = mapped_column()
-    redeemed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

@@ -1,7 +1,7 @@
 """Approved console assessment contract, implemented by the runtime schemas.
 
 The runtime module is the single home for field definitions and validators.
-TaskBudgetView and Result 4.0 provide enforced-budget and cost semantics.
+Result 5.0 records resource counts without monetary fields.
 """
 
 from app.schemas.console_assessments import (

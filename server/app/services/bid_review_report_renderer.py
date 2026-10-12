@@ -318,7 +318,6 @@ def render_report(snapshot):
                             "输入 / 输出 token",
                             f"{usage['input_tokens']} / {usage['output_tokens']}",
                         ),
-                        ("供应商成本 USD", usage["usd"]),
                     ],
                 )
             elif kind == "cost":
@@ -326,14 +325,13 @@ def render_report(snapshot):
                 fields_table(
                     document,
                     [
-                        ("费用统计", "审查运行实际用量；本地报告生成不调用模型"),
+                        ("用量统计", "审查运行实际用量；本地报告生成不调用模型"),
                         ("模型 token", cost["llm_tokens"]),
-                        ("供应商成本 USD", cost["usd"]),
-                        ("计费币种", cost["billing_currency"]),
-                        ("平台收费", cost["charge"]),
-                        ("任务计入费用", cost["task_amount"]),
-                        ("未定价调用", cost["unpriced_calls"]),
-                        ("未解决调用 / 预留", cost["unresolved_calls"]),
+                        ("已完成调用", cost["calls"]),
+                        ("OCR 页数", cost["ocr_pages"]),
+                        ("搜索请求", cost["search_requests"]),
+                        ("浏览器用量", cost["browser_units"]),
+                        ("未解决调用", cost["unresolved_calls"]),
                     ],
                 )
             else:

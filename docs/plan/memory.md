@@ -57,7 +57,7 @@ Pagination defaults to 50, maximum 100, ordered stably by `(created_at,id)`. Cur
 
 | Basis | Integration point or explicit difference |
 | --- | --- |
-| `Identity`, `authenticate`, `membership`, `SCOPES`, `ROLE_SCOPES` in [auth.py](../../server/app/services/auth.py), and `context` in [api/main.py](../../server/app/api/main.py) | Authentication/roles/scopes actually live in services, not a hypothetical core scope module. Reuse session/token/Membership intersection; memory role boundaries are in [permissions](#permissions-roles-and-provider-billing) |
+| `Identity`, `authenticate`, `membership`, `SCOPES`, `ROLE_SCOPES` in [auth.py](../../server/app/services/auth.py), and `context` in [api/main.py](../../server/app/api/main.py) | Authentication/roles/scopes actually live in services, not a hypothetical core scope module. Reuse session/token/Membership intersection; memory role boundaries are in [permissions](#permissions-roles-and-provider-usage) |
 | `Database.transaction` in [core/db.py](../../server/app/core/db.py); [isolation notes](../notes/tenant-isolation.md) | Transaction-level `app.current_org`, `set_actor_context`; runtime roles cannot own tables or have BYPASSRLS |
 | `Task`, `Job`, `UsageRecord`, `VendorCall` in [entities.py](../../server/app/models/entities.py) | Task has no membership/archival. Job task/document nulls are provider_test-only exceptions; no fake files for taskless Embedding |
 | `update_card`, `card_action`, `append_revision` in [response_cards.py](../../server/app/services/response_cards.py) | Human edit/reject and immutable revisions share a transaction; `CardUpdate` has no reason, so edits cannot be described as existing learning instructions |
@@ -98,11 +98,15 @@ Migration dependencies: tables/composite keys → RLS/minimal grants/immutable a
 
 ### pgvector and later indexing
 
-The proposed separate `memory_embeddings` table avoids in-place backfill of append-only memory revisions. It also requires `org_id NOT NULL`/FORCE RLS, with id, memory_revision_id, scope/user_id/task_id, `embedding vector NULL`, provider/model/version/model_revision/price_revision/dimensions/metric, provider_config_id, text_sha256, job/run/usage ID, created_at. Public `MemoryEmbeddingView` excludes vectors. Use `(org_id,memory_revision_id) → memory_revisions` and scope/owner consistency gates; ProviderConfig/Usage/Job references use org composite FKs. Uniqueness binds org, memory revision, model configuration revision, and model version.
+The proposed separate `memory_embeddings` table avoids in-place backfill of append-only memory revisions.
+Public `MemoryEmbeddingView` excludes vectors.
+Use `(org_id,memory_revision_id) → memory_revisions` and scope/owner consistency gates; ProviderConfig/Usage/Job references use org composite FKs.
+Uniqueness binds org, memory revision, model configuration revision, and model version.
 
-The first migration may retain this **empty table/nullable vector column**, without Provider calls, vector indexes, or zero-vector placeholders. Non-null vectors require complete metadata, finite nonzero values, and `vector_dims(embedding)=dimensions`; only completed, settled matching jobs publish. Nulls never participate in distances. Actual dimensions, indexable dimension limits, model, and price are confirmed through P03 before matching indexes/partitions. Different model versions/dimensions never mix in ranking. Invalid old vectors remain for traceability; new models write new records, never overwrite old revision vectors. Extension installation is determined by implementation migration preflight, never assumed.
+The first migration may retain this **empty table/nullable vector column**, without Provider calls, vector indexes, or zero-vector placeholders. Non-null vectors require complete metadata, finite nonzero values, and `vector_dims(embedding)=dimensions`; only completed, settled matching jobs publish. Nulls never participate in distances. Actual dimensions, indexable dimension limits, model, and capability are confirmed through P03 before matching indexes/partitions. Different model versions/dimensions never mix in ranking. Invalid old vectors remain for traceability; new models write new records, never overwrite old revision vectors. Extension installation is determined by implementation migration preflight, never assumed.
 
-Later enable task-bound `memory_index`/`memory_query` jobs before taskless org bulk indexing. The latter requires explicit Job/Usage task/document constraint extensions and capability in [provider configuration](../notes/provider-config.md); never reuse provider_test or fabricate Document. All new jobs retain leases/billing.
+Later enable task-bound `memory_index`/`memory_query` jobs before taskless org bulk indexing.
+The latter requires explicit Job/Usage task/document constraint extensions and capability in [provider configuration](../notes/provider-config.md); never reuse provider_test or fabricate Document.
 
 ## Retrieval and precedence
 
@@ -123,7 +127,9 @@ Vector queries also constrain org_id, scope, owner, active/expiry, and embedding
 
 After target requirement/material checks, `card_generation.snapshot` builds retrieval requests from current-batch requirements/restricted tags; initial scopes=[org]. `MemoryPromptContext` is a separate `memory_rules`/`memory_preferences` input to `LLMProvider.draft` and `providers/drafting.request_body`. `MemoryAwareLLMProvider.draft(..., memory=...)` defines the exact new optional keyword argument and reuses `DraftingOutput`; empty context leaves other consumers unchanged. Business read/write/selection lives in reserved `server/app/memory/`; vendor/Embedding adapters only in providers. Memory never enters material ref dictionaries or citeable EvidenceInput. `usable_as_evidence=false` is a protocol field; server unknown-ref rejection remains the final boundary.
 
-`snapshot` expands both text-free public manifests and encrypted secrets, pinning scope/owner, retrieval/priority versions, scope epochs, query hash, ordered selected memory IDs/revisions/hashes, expiry, exclusion summaries, and context hash. Secrets save the sanitized text actually sent. Complete input size enters `estimate`, `groups`, and `HTTPExtractor.reservation`, with no under-reservation after adding memory. Dry-run retrieves/estimates identically but creates no records/audits/usage/external calls.
+`snapshot` expands both text-free public manifests and encrypted secrets, pinning scope/owner, retrieval/priority versions, scope epochs, query hash, ordered selected memory IDs/revisions/hashes, expiry, exclusion summaries, and context hash.
+Secrets save the sanitized text actually sent.
+Dry-run retrieves/estimates identically but creates no records/audits/usage/external calls.
 
 Retrieved does not mean actually used by the model. Every actual HTTP batch writes `memory_call_inputs` under its generated call_id in the same transaction as `JobExecution.admit`, linking vendor_calls, job/run, requirement IDs, retrieval/memory revisions, sent/prompt hashes. Empty memory still records an empty list. Retries/split batches get distinct call_id; one whole-job manifest is insufficient. Model claims cannot alter server records. Settlement atomically adds usage ID; cancellation/refusal/invalid output/unknown usage retain admitted records. These records mean “sent in context,” never proof of internal causal use. Admitted calls that crash before dispatch remain unknown, never falsely completed.
 
@@ -140,7 +146,10 @@ Existing `CardGenerationRun` manifests add retrieval/call refs. Each generated c
 | Memory changed for unconfirmed model drafts | Show `memory_input_stale`, block confirmation of old drafts; explicitly edit/regenerate before review |
 | Memory changed after human card confirmation | Retain exact human decisions/traces with `memory_changed_after_review`, without automatic rewrites/revocation; humans may reopen. Existing evidence/citation/material invalidation gates remain independent |
 
-Identical effective input/order/versions reuse original paid jobs; cache hits create no new vendor usage/calls and return original lineage. New epochs do not implicitly redraft protected confirmed/pending cards. `drafts.assemble` still copies confirmed content only; `show_draft/current_draft_inputs` aggregate notices/lineage without turning valid human confirmation into gaps. Unreviewed model-draft gates must extend both Python confirmation and DB confirmation predicates, not just cache. `generate` checks prompt/redaction/schema/memory-policy versions together; new parsers never silently consume old snapshots.
+New epochs do not implicitly redraft protected confirmed/pending cards.
+`drafts.assemble` still copies confirmed content only; `show_draft/current_draft_inputs` aggregate notices/lineage without turning valid human confirmation into gaps.
+Unreviewed model-draft gates must extend both Python confirmation and DB confirmation predicates, not just cache.
+`generate` checks prompt/redaction/schema/memory-policy versions together; new parsers never silently consume old snapshots.
 
 ## Automatic candidates, samples, and jobs
 
@@ -158,7 +167,7 @@ First-slice `feedback-copy-v1` is a deterministic `MemoryCandidateProvider`:
 
 Sample labels record actual human confirm/reject/edit, not factual correctness. Keep both revisions, source, and sanitization hash, default unreviewed; admin accept/exclude review events store hashes/IDs only. Samples stay org-local, never automatically approving memory or entering public evaluations/vendor training. “Human-derived” describes candidate provenance, not human approval of generalized rules.
 
-## Permissions, roles, and Provider billing
+## Permissions, roles, and Provider usage
 
 | New scope | Human roles/resource conditions | API token / agent |
 | --- | --- | --- |
@@ -175,11 +184,15 @@ No new evidence:confirm/export authority; [tokens.create_token](../../server/app
 
 `MemoryRetrievalProvider` is a PG read/write boundary, not a vendor SDK. Initially `MemoryCandidateProvider` is local deterministic conversion with usages=[], never zero-cost UsageRecords. Future approved semantic candidates require providers adapters and `ProviderUsage`, never bypassing job admission.
 
-`EmbeddingProvider.embed(EmbeddingRequest) → EmbeddingOutput` and `reservation → Decimal` are defined in the runtime contract. Inputs explicitly carry org/scope/job/run, model configuration revision, bounded text batches; output contains dimensions/model identity/vectors/per-call ProviderUsage. Services check result count/dimensions/nonzero finite values/text order; returned scopes cannot alter boundaries. Unconfigured production implementations fail explicitly, never random/zero vectors.
+Inputs explicitly carry org/scope/job/run, model configuration revision, bounded text batches; output contains dimensions/model identity/vectors/per-call ProviderUsage.
+Services check result count/dimensions/nonzero finite values/text order; returned scopes cannot alter boundaries.
+Unconfigured production implementations fail explicitly, never random/zero vectors.
 
-All external calls (existing drafting, later Embedding/semantic candidates) use `accounted_call` in [calls.py](../../server/app/providers/calls.py) and `JobExecution.activate/admit/complete/unknown` in [execution.py](../../server/app/jobs/execution.py). Reserve using actual capability prices/input bounds before requests. Embedding has no output-token limit, so the LLM reservation formula in [llm.py](../../server/app/providers/llm.py) cannot be reused unchanged. Call/parse failures, refusals, and cancellation remain immediately metered; unknown usage retains reservations, and retries cannot clear historical charges.
+All external calls (existing drafting, later Embedding/semantic candidates) use `accounted_call` in [calls.py](../../server/app/providers/calls.py) and `JobExecution.activate/admit/complete/unknown` in [execution.py](../../server/app/jobs/execution.py).
+Check capability and input bounds before requests.
 
-`UsageRecord` saves provider/model/version, duration_ms, tokens/input_tokens/output_tokens, usd, provider_config_id, platform_model_id, charge, job/run/call. Platform calls use `require_funds` preflight and `charge_usage` settlement in [billing.py](../../server/app/services/billing.py). Admission locks balance and subtracts all outstanding reservations; usage/ledger/call-state settlement is atomic/idempotent. Org-owned keys have charge=0 but retain usage/call ceilings. Result.cost.usd is vendor cost, never platform-currency charge. Details live in [prepaid billing](../notes/prepaid-billing.md). Vector queries require committed jobs/accounting contexts, never bare vendor calls in synchronous retrieve routes. Asynchronous CLI/API behavior awaits vector-enablement approval, preserving initial synchronous keyword semantics.
+Vector queries require committed jobs/accounting contexts, never bare vendor calls in synchronous retrieve routes.
+Asynchronous CLI/API behavior awaits vector-enablement approval, preserving initial synchronous keyword semantics.
 
 ## CLI JSON and errors
 
@@ -204,7 +217,8 @@ All commands support `--json`, without interaction, using existing login/token o
 | `bid memory samples review --id UUID --input FILE` | MemoryEvalReview / MemoryEvalData / [] |
 | `bid job status/wait/cancel` | Existing job contracts plus authorized memory-kind views, without submission leaks |
 
-Future user/project lists require `--user UUID`/`--task UUID`; disabled scopes fail explicitly. New registered commands only add schema entries without incompatible changes to old JSON. Candidate-job dry-run returns job_id=null/counts with no writes/billing; submission returns durable job IDs, and only `--wait` reflects final completion.
+Future user/project lists require `--user UUID`/`--task UUID`; disabled scopes fail explicitly.
+New registered commands only add schema entries without incompatible changes to old JSON.
 
 Seven-key empty-retrieval example (hashes are synthetic illustrations, not execution records):
 
@@ -231,7 +245,7 @@ Seven-key empty-retrieval example (hashes are synthetic illustrations, not execu
   },
   "items": [],
   "warnings": [],
-  "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 3
 }
 ```
@@ -240,8 +254,8 @@ Seven-key empty-retrieval example (hashes are synthetic illustrations, not execu
 | --- | --- | --- |
 | 0 | 200/201/202; valid CRUD, no hits, normal skip/duplicate, successful submission | `ok=true`; claim produced results only after completed waits |
 | 2 | 400/422 invalid input/sensitive-value rejection; 409 expected_revision/conflict_key conflict or archived | `ok=false`, no partial revision/candidate; correct input before resubmitting |
-| 3 | 503 temporary DB/dispatch unavailability, retryable Provider fault | Retain committed durable jobs/outbox/charges; explicit retry, no repeated human decisions |
-| 4 | 401/403/404; disabled scope, embedding_unconfigured, input changes, content refusal, budget block, metering failure | Explicit codes, reject new calls/publication, retain incurred usage |
+| 3 | 503 temporary DB/dispatch unavailability, retryable Provider fault | Retain committed durable jobs/outbox and usage; explicit retry cannot repeat human decisions. |
+| 4 | 401/403/404; disabled scope, embedding_unconfigured, input changes, content refusal, resource-limit block, metering failure | Explicit codes, reject new calls/publication, retain incurred usage |
 | 5 | HTTP 200 terminal completion=partial, failed event subsets or inherited card-generation partial results | `ok=false`; success/failure IDs, stop_reason, warnings, cumulative cost; never false complete success |
 
 `data=MemoryErrorData` matches existing `api/main.error_response`: `{"error":{"code":"…","message":"…","exit_code":4}}`. Never echo inputs, queries, candidate text, keys, or raw vendor text. Timeout/unknown usage is not zero cost; cancellation/takeover cannot publish old-attempt results.
@@ -257,8 +271,9 @@ These are implementation acceptance requirements, not claims of unexecuted Postg
 1. Orgs A/B: test SELECT/INSERT/UPDATE/DELETE for every listed table and `memory_embeddings`, missing context, fake composite FKs, cross-owner/task/card binding, epoch/vector side channels. Immutable tables deny UPDATE/DELETE even within one org. Every HTTP endpoint, including list/cursor/history/used/job status/wait/cancel/feedback/eval/preview, tests A→B returning 404/no B rows, beyond the main memory table. Later global read-only publication separately tests no org write/source ingress.
 2. Human gates: human admin org-memory approval grants no technical/commercial evidence-confirmation authority. Tokens requesting evidence:confirm/export/memory approval-management fail; token/agent/worker cannot forge active/confirmed_by, through API/direct SQL. candidate/disabled/expired/deleted never reach prompts; memory refs never become Evidence. Concurrent approve/update/disable/conflict-key approvals/optimistic locks are atomic. Cross-org same-user, others' preferences, project nonmembership/archival become mandatory gates when enabled; initial disabled layers are rejected.
 3. Real local flow without vectors: create→approve→exact/Chinese keyword/tag→fake drafting→reject/edit→one system candidate/sample→human approval influences next draft. Test reject/edit/confirm provenance, model_job_id inheritance, no-op edits, sensitive-only/overlong feedback, duplicate dispatch, enqueue interruption, partial/cancel/retry/lease takeover, without real vendors.
-4. Retrieval/cache: synthetic rules establish ordering, two precedence classes, lower-layer shadowing, same-level conflicts, complete-item budgets. Cover zero-hit additions, unselected-top_k changes, expiry/fallback candidates, ownership-change attempts, scope/model changes, cache reuse/concurrent disable. Inject changes before admission/in-flight/before publication, record exact call manifests, prevent old-worker publication and charge sent usage once. Confirmed cards receive notices only; existing evidence invalidation still blocks.
-5. Provider/billing: fake Embedding checks org+scope constraints before distance/limit, rejects count/dimension/NaN/zero-vector/model mismatches, and no implicit unconfigured fallback. Added drafting-memory characters enter cost bounds; insufficient balance, billed-invalid output, unknown usage, duplicate settlement, and concurrent workers preserve prepaid rules.
+4. Retrieval/cache: synthetic rules establish ordering, two precedence classes, lower-layer shadowing, same-level conflicts, complete-item budgets.
+Cover zero-hit additions, unselected-top_k changes, expiry/fallback candidates, ownership-change attempts, scope/model changes, cache reuse/concurrent disable.
+Confirmed cards receive notices only; existing evidence invalidation still blocks.
 6. CLI/API: seven-key snapshots for each new command covering success/empty/invalid/404/409/503/partial and exits 0/2/3/4/5. Local/remote match without interaction, schema matches. Cover wait/status/cancel access and cumulative costs. Human-action dispatch recovery is a separate end-to-end scenario.
 7. Artifacts/evaluation: reproducible synthetic JSON reports in `data/work/memory-validation/`, with sample versions, commands, result hashes, associated IDs/assertions, without credentials or docs writes. `MemoryEvalCase` pins relevant/forbidden IDs, expected order/errors. Report recall@k, MRR, priority/isolation violations, human candidate adoption, sensitive-content rejection, incorrect cache hits, cost/duration. Isolation/human-gate violations must be 0; recall targets await baseline. Real Embedding/LLM calls only explicitly in evals. Public synthetic samples may be versioned; org feedback is never automatically outbound and real materials require separate consent.
 
@@ -277,7 +292,7 @@ Approved recommended defaults follow; later capabilities still require enablemen
 | Confirmed responses | Retain exact human decisions/lineage with notices; unreviewed model drafts require edit/regeneration; evidence gates remain |
 | User preferences/shared cards | Later default private-output use only; resolve job/card/manifest ACL first |
 | Default expiry/deletion | Explicit expires_at allowed, no default TTL; logical deletion retains history/audit |
-| Embedding | No initial configuration/calls/vector indexes; interface retained, separately enabled after P03 model/dimensions/price/residency choices |
+| Embedding | No initial configuration/calls/vector indexes; interface retained, separately enabled after P03 model/dimensions/capability/residency choices |
 | Automatic evaluation samples | Org-local/unreviewed by default; acceptance permits org-local evaluation only, never implied sharing |
 
 The first slice does not create the optional empty `memory_embeddings` table; migrations therefore neither install nor assume pgvector. Before future vector columns, verify extension installation under [index preflight requirements](#pgvector-and-later-indexing).

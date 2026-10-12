@@ -1,6 +1,5 @@
 """Platform operator routes; no org context and no access to org business data."""
 
-from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -16,7 +15,6 @@ from app.core.db import Database
 from app.core.errors import ServiceError
 from app.core.password_attempts import PasswordAttempts
 from app.core.security import TokenSigner
-from app.schemas.budget_contracts import BudgetPlatformModelTest
 from app.schemas.contracts import Result
 from app.schemas.operator_enrollment import (
     EnrollmentComplete,
@@ -33,10 +31,9 @@ from app.schemas.org_signup import (
 from app.schemas.platform_contracts import (
     OrgLookup,
     PasswordSetup,
-    PlatformBalanceAdjust,
-    PlatformCardCreate,
     PlatformLogin,
     PlatformModelSet,
+    PlatformModelTest,
     PlatformOrgActive,
     PlatformOrgCreate,
 )
@@ -203,7 +200,7 @@ def create_router(
         async with db.transaction() as session:
             return result(
                 "platform model list",
-                {"currency": settings.billing_currency},
+                {},
                 await platform.list_models(session, PlatformCredentialResolver(settings)),
             )
 
@@ -223,7 +220,7 @@ def create_router(
     @router.post(
         "/platform/models/{model_id}/test", name="platform_model_test", response_model=Result
     )
-    async def model_test(model_id: str, body: BudgetPlatformModelTest, actor=Depends(operator)):
+    async def model_test(model_id: str, body: PlatformModelTest, actor=Depends(operator)):
         data = await platform.test_model(
             db, settings, actor, model_id, transport, body=body, processor=processor
         )
@@ -231,41 +228,8 @@ def create_router(
             ok=data.get("passed", True),
             command="platform model test",
             data=data,
-            cost=data.get("budget_preflight", {}).get("estimate", data.get("cost", {})),
+            cost=data.get("preflight", {}).get("estimate", data.get("cost", {})),
         )
-
-    @router.post(
-        "/platform/orgs/{org_id}/balance", name="platform_org_balance", response_model=Result
-    )
-    async def org_balance(org_id: UUID, body: PlatformBalanceAdjust, actor=Depends(operator)):
-        async with db.transaction() as session:
-            data = await platform.adjust_balance(
-                session, actor, org_id, body, settings.billing_currency
-            )
-        return result("platform org balance", data)
-
-    @router.post("/platform/cards", name="platform_card_create", response_model=Result)
-    async def card_create(body: PlatformCardCreate, actor=Depends(operator)):
-        async with db.transaction() as session:
-            data = await platform.create_cards(session, actor, body, settings.billing_currency)
-        return result("platform card create", data)
-
-    @router.get("/platform/cards", name="platform_card_list", response_model=Result)
-    async def card_list(
-        batch_id: UUID | None = None,
-        status: Literal["active", "redeemed", "void"] | None = None,
-        limit: int = Query(default=200, ge=1, le=1000),
-        actor=Depends(operator),
-    ):
-        async with db.transaction() as session:
-            items = await platform.list_cards(session, batch_id, status, limit)
-        return result("platform card list", {"currency": settings.billing_currency}, items)
-
-    @router.post("/platform/cards/{card_id}/void", name="platform_card_void", response_model=Result)
-    async def card_void(card_id: UUID, actor=Depends(operator)):
-        async with db.transaction() as session:
-            data = await platform.void_card(session, actor, card_id)
-        return result("platform card void", data)
 
     @router.get("/platform/usage", name="platform_usage", response_model=Result)
     async def usage(
@@ -275,7 +239,7 @@ def create_router(
     ):
         async with db.transaction() as session:
             data, items = await platform.usage(session, start, end)
-        return result("platform usage", {**data, "currency": settings.billing_currency}, items)
+        return result("platform usage", data, items)
 
     @router.get("/platform/audit", name="platform_audit", response_model=Result)
     async def audit(limit: int = Query(default=100, ge=1, le=500), actor=Depends(operator)):

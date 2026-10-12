@@ -371,7 +371,7 @@ def test_cosign_schema_discovery(capsys):
 
     cli.main(["schema", "--json"])
     schema = json.loads(capsys.readouterr().out)["data"]
-    assert schema["version"] == "4.0"
+    assert schema["version"] == "5.0"
     commands = schema["commands"]
     for name, input_model, output_model in (
         ("task review-rule show", None, schemas.TaskRuleData),

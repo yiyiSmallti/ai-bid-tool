@@ -71,7 +71,7 @@ onBeforeUnmount(() => { sequence++; controller?.abort(); rows.value = []; previe
     <el-button type="primary" plain :loading="busy" :disabled="rows.length < 2 || rows.length > 20" @click="inspect">预览上传限制</el-button>
     <div v-if="preview" class="preview section" role="status">
       <h4>上传预览</h4><p>最多 {{ preview.limits.files }} 份 · 每份 {{ mib(preview.limits.file_bytes) }} · 合计 {{ mib(preview.limits.submission_bytes) }}</p>
-      <p>预览未保存文件。本次上传与后续本地准备费用为 0；上传后不能替换原件，修改文件需创建新的提交。</p>
+      <p>预览未保存文件。本次上传与后续本地准备不调用模型；上传后不能替换原件，修改文件需创建新的提交。</p>
       <el-checkbox v-model="consent" :disabled="busy">确认文件角色与材料类型，上传此固定版本</el-checkbox>
       <div class="actions section"><el-button type="primary" :loading="busy" :disabled="!consent" @click="upload">上传固定版本</el-button></div>
     </div>

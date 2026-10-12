@@ -15,7 +15,7 @@ type Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
 type NonBlank = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20000)
 ]
-type Money = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=8)]
+type ScoreValue = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=8)]
 type CheckCLIResult = Result
 type RiskLevel = Literal["disqualification_risk", "deduction_risk", "info"]
 type RuleCode = Literal[
@@ -38,7 +38,6 @@ class AssessmentRequest(Contract):
     dry_run: bool = False
     retry: bool = False
     expected_input_hash: Sha256 | None = None
-    max_charge: Annotated[Decimal, Field(gt=0, max_digits=18, decimal_places=8)] | None = None
 
     @model_validator(mode="after")
     def submission_binds_preview(self) -> Self:
@@ -66,10 +65,6 @@ class AssessmentPreview[InputT: Contract](Contract):
     input: InputT
     selected_item_ids: list[UUID]
     estimated_cost: Cost
-    estimated_charge: Money | None
-    billing_currency: str = Field(min_length=3, max_length=3)
-    cost_basis: Literal["known", "unknown"]
-    cost_basis_reason: NonBlank
     estimate_kind: Literal["first_pass_upper_bound"] = "first_pass_upper_bound"
     admission_blocker: str | None = None
     estimated_duration_ms: int | None = Field(default=None, ge=0)
@@ -82,7 +77,6 @@ class AssessmentPreview[InputT: Contract](Contract):
     redaction_revision: int = Field(ge=1)
     redaction_rule_version: NonBlank
     redacted_counts: dict[str, int]
-    max_charge: Money | None = None
 
     @model_validator(mode="after")
     def coherent_preview(self) -> Self:
@@ -90,8 +84,6 @@ class AssessmentPreview[InputT: Contract](Contract):
             raise ValueError("selected_item_ids must be unique")
         if any(value < 0 for value in self.redacted_counts.values()):
             raise ValueError("redaction counts cannot be negative")
-        if self.cost_basis == "unknown" and self.estimated_charge is not None:
-            raise ValueError("unknown price cannot produce an estimated charge")
         return self
 
 
@@ -106,8 +98,6 @@ class AssessmentJobResult(Contract):
     job_id: UUID
     completion: Literal["complete", "partial"]
     usage_record_ids: list[UUID]
-    charge: Money | None
-    billing_currency: str = Field(min_length=3, max_length=3)
     stop_reason: str | None = None
 
 
@@ -178,8 +168,8 @@ class CheckRequest(AssessmentRequest):
 
     @model_validator(mode="after")
     def rules_have_no_model_options(self) -> Self:
-        if self.mode == "rules" and (self.reasoning is not None or self.max_charge is not None):
-            raise ValueError("rules mode cannot accept model reasoning or a charge cap")
+        if self.mode == "rules" and self.reasoning is not None:
+            raise ValueError("rules mode cannot accept model reasoning")
         return self
 
 

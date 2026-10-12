@@ -2,9 +2,8 @@
 
 ## Problem
 
-The platform operator provisions and disables orgs, maintains the paid model
-catalog, and reviews usage and charges across orgs. None of that may expose an
-org's business data, and nothing in the application may be able to grant
+The console provisions orgs, manages the model catalog and reviews attributed
+resource usage. It must not expose an org's business data, and nothing in the application may be able to grant
 itself operator rights or read other orgs through ordinary queries.
 
 ## Usage
@@ -74,11 +73,7 @@ performs PBKDF2 or appends another failure. Cancelled HTTP requests retain
 their admission until their authentication task finishes and commits; shutdown
 drains those tasks before disposing of the database and executor.
 
-Migration `0010` adds `orgs.active`, the global `platform_models` and
-`platform_audit_logs` tables, usage columns for input and output tokens,
-`platform_model_id` and `charge`, and the role `bid_platform_fn` that owns
-`platform_org_summaries`, `platform_usage_summary`, `platform_create_org` and
-`platform_set_org_active`. `membership()` in
+`membership()` in
 [auth.py](../../server/app/services/auth.py) rejects a disabled org, so login,
 sessions and tokens of that org fail at once with `org_inactive`.
 
@@ -89,14 +84,16 @@ invalidates it. The token sits in the URL fragment, which browsers do not send
 to the server or in a `Referer`. Migration `0011` grants `bid_app` the
 column update this needs.
 
-Catalog adapters use the key in `BID_PLATFORM_CREDENTIAL_<NAME>`. Tenant selection,
+The `NOLOGIN` role `bid_platform_fn` has no `BYPASSRLS`; its fixed summary
+functions read only orgs, memberships and usage_records across orgs. They never
+return org business content. Catalog adapters use the key in `BID_PLATFORM_CREDENTIAL_<NAME>`.
+Tenant selection,
 fallback order and queued-job identity are defined in
-[provider-config.md](provider-config.md#resolution-and-cache). Platform usage stores
-vendor cost in `usd` and the sale-price amount, in
-`BID_BILLING_CURRENCY`, in `charge`; the charge is deducted from the prepaid
-balance described in [prepaid-billing.md](prepaid-billing.md). Legacy environment-adapter
-usage counts as `unbilled`. A default whose credential is missing fails extraction
-with `provider_unavailable` instead of falling back. Catalog models may list
+[provider-config.md](provider-config.md#resolution-and-cache).
+Usage summaries expose only attributed resource counts.
+A default whose credential is missing fails extraction
+with `provider_unavailable` instead of falling back.
+Catalog models may list
 the vendor's official reasoning levels; see
 [reasoning-levels.md](reasoning-levels.md).
 
@@ -114,8 +111,8 @@ strict Content-Security-Policy and `Referrer-Policy: no-referrer`.
 - Catalog models cannot be deleted, only disabled, so usage keeps its reference.
 - Catalog edits can stop queued jobs whose fixed model identity no longer matches;
   a fresh submission uses the new catalog revision.
-- The model test button makes a real vendor call inside a database
-  transaction and is billed by the vendor; it records cost in the audit log only.
+- The model test button makes an explicitly authorized synthetic provider call
+  and reports its durable job and resource usage.
 - The limits above also affect ordinary org users. Accounts recover when fewer
   than five failures remain in the rolling window; locked requests do not
   extend it. Users behind one NAT or proxy share the source budget. Configure

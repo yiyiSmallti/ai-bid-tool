@@ -131,7 +131,7 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
         </div>
       </el-card>
       <el-card v-if="writable && selected" class="section" shadow="never">
-        <template #header><div class="section-title"><h3>要求抽取</h3><span class="hint">先预检确认档位与费用，再开始抽取；预检不创建作业、不调用模型</span></div></template>
+        <template #header><div class="section-title"><h3>要求抽取</h3><span class="hint">先预检确认档位与范围，再开始抽取；预检不创建作业、不调用模型</span></div></template>
         <el-form label-position="top" class="extract-row" @submit.prevent="run('extract', true)">
           <el-form-item v-if="reasoningLevels.length" label="官方推理档位" class="level">
             <el-select v-model="reasoning" :disabled="busy" placeholder="服务端默认" @change="preview = null">
@@ -143,16 +143,16 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
         </el-form>
         <p v-if="preview && !preview.reasoning_levels.length" class="hint">此模型未提供可选推理档位</p>
         <div v-if="preview" class="preview-box">
-          <span>预检结果：{{ preview.parsed ? "可抽取" : "文档尚未解析" }} · 档位 {{ display(preview.reasoning) }} · {{ preview.estimated_cost_usd == null ? "费用暂不可估" : `${preview.estimated_cost_usd} USD` }}</span>
+          <span>预检结果：{{ preview.parsed ? "可抽取" : "文档尚未解析" }} · 档位 {{ display(preview.reasoning) }}</span>
           <span v-for="warning in warnings" :key="warning" class="hint">{{ warningText(warning) }}</span>
         </div>
         <div class="actions action-bar">
-          <el-button type="primary" :disabled="busy || !preview || currentDocument?.status !== 'parsed'" @click="run('extract')">开始抽取（可能产生费用）</el-button>
+          <el-button type="primary" :disabled="busy || !preview || currentDocument?.status !== 'parsed'" @click="run('extract')">开始抽取</el-button>
           <el-dropdown trigger="click" :disabled="busy || !preview || currentDocument?.status !== 'parsed'" @command="run('extract', false, true)">
             <el-button :icon="MoreFilled" :disabled="busy || !preview || currentDocument?.status !== 'parsed'">更多</el-button>
-            <template #dropdown><el-dropdown-menu><el-dropdown-item command="retry">显式重试抽取（可能产生费用）</el-dropdown-item></el-dropdown-menu></template>
+            <template #dropdown><el-dropdown-menu><el-dropdown-item command="retry">显式重试抽取</el-dropdown-item></el-dropdown-menu></template>
           </el-dropdown>
-          <span class="hint">模型、单价、时长未返回时均为未知；预检不锁定费用。</span>
+          <span class="hint">模型与时长未返回时均为未知；提交前会核对配置与输入。</span>
         </div>
       </el-card>
     <el-card class="section" shadow="never" body-class="flush">
@@ -206,7 +206,6 @@ onMounted(async () => { await load(); loadExports(); if (writable.value && selec
         <dl class="kv">
           <dt>招标编号</dt><dd>{{ display(task.tender_number) }}</dd>
           <dt>截止时间</dt><dd>{{ task.deadline ? formatTime(task.deadline) : "未知" }}</dd>
-          <dt>预算记录</dt><dd>{{ display(task.budget_usd) }} USD</dd>
           <dt>外发遮挡</dt><dd>{{ task.model_redaction_enabled === false ? "已关闭" : "已开启" }}</dd>
         </dl>
       </el-card>

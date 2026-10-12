@@ -2,15 +2,12 @@
   "local: protected": {
     "command": "review submission show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "inventory": [],
@@ -134,15 +131,12 @@
   "local: restricted": {
     "command": "review submission show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "inventory": [],
@@ -253,15 +247,12 @@
   "remote: protected": {
     "command": "review submission show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "inventory": [],
@@ -385,15 +376,12 @@
   "remote: restricted": {
     "command": "review submission show",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "inventory": [],

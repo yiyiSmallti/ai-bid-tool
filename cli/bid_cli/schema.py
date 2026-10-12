@@ -27,13 +27,6 @@ from app.schemas.annotation_contracts import (
     AnnotationReleaseRetry,
 )
 from app.schemas.attachment_contracts import PageData as AttachmentPageData
-from app.schemas.budget_contracts import (
-    BudgetPlatformModelTest,
-    BudgetProviderTest,
-    BudgetTaskCreate,
-    LowBalancePolicySet,
-    TaskBudgetSet,
-)
 from app.schemas.certificate_contracts import (
     CertificateCreate,
     CertificateUpdate,
@@ -80,7 +73,6 @@ from app.schemas.console_assessments import (
 )
 from app.schemas.contracts import (
     JobAction,
-    LegacyResult,
     Login,
     Result,
     TaskCreate,
@@ -128,13 +120,11 @@ from app.schemas.org_signup import (
     OrgApplicationView,
 )
 from app.schemas.platform_contracts import (
-    CardRedeem,
     OrgLookup,
     PasswordSetup,
-    PlatformBalanceAdjust,
-    PlatformCardCreate,
     PlatformLogin,
     PlatformModelSet,
+    PlatformModelTest,
     PlatformOrgActive,
     PlatformOrgCreate,
 )
@@ -442,12 +432,6 @@ COMMANDS = {
     "platform audit": None,
     "auth setup-password": PasswordSetup,
     "auth orgs": OrgLookup,
-    "platform org balance": PlatformBalanceAdjust,
-    "platform card create": PlatformCardCreate,
-    "platform card list": None,
-    "platform card void": None,
-    "billing balance": None,
-    "billing redeem": CardRedeem,
     "schema": None,
     "screenshot prepare": ScreenshotPrepareInput,
     "screenshot add": ScreenshotIngest,
@@ -786,16 +770,10 @@ CONSOLE_VARIANTS.update(
 )
 COMMANDS.update(
     {
-        "task create": BudgetTaskCreate,
-        "provider test": BudgetProviderTest,
-        "platform model test": BudgetPlatformModelTest,
+        "task create": TaskCreate,
+        "provider test": ProviderTest,
+        "platform model test": PlatformModelTest,
         "product simulate": ProductSimulationInput,
-        "task budget show": None,
-        "task budget set": TaskBudgetSet,
-        "task budget history": None,
-        "billing alert show": None,
-        "billing alert set": LowBalancePolicySet,
-        "billing notices": None,
     }
 )
 COMMANDS.update(COMMAND_INPUTS)
@@ -828,7 +806,9 @@ COMMANDS["evidence stamp"] = AnnotationInput
 COMMANDS["evidence annotation release retry"] = AnnotationReleaseRetry
 
 
-def command_schema(app=None, version: str = "4.0") -> dict:
+def command_schema(app=None, version: str = "5.0") -> dict:
+    if version != "5.0":
+        raise ValueError("Only contract 5.0 is supported")
     parameters = {}
     if app is not None:
         import click
@@ -874,20 +854,8 @@ def command_schema(app=None, version: str = "4.0") -> dict:
             }
             for param in root.params
         ]
-    from app.schemas.budget_contracts import (
-        BudgetHistoryData,
-        BudgetPlatformModelTest,
-        BudgetProviderTest,
-        BudgetTaskCreate,
-        LowBalanceNoticesData,
-        LowBalancePolicyData,
-        LowBalancePolicySet,
-        TaskBudgetData,
-        TaskBudgetSet,
-    )
-    from app.schemas.compatibility import NEW_COMMANDS
 
-    commands = dict(LEGACY_COMMANDS if version == "3.0" else COMMANDS)
+    commands = dict(COMMANDS)
     outputs = dict(OUTPUTS)
     outputs.update(
         {
@@ -895,7 +863,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
             "platform org application reject": TypeAdapter(OrgApplicationDecision),
         }
     )
-    if version == "4.0":
+    if version == "5.0":
         from app.schemas.management_pages import PageData as ManagementPageData
 
         outputs.update(
@@ -932,69 +900,15 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         commands.update(
             {
                 "product simulate": ProductSimulationInput,
-                "task create": BudgetTaskCreate,
-                "provider test": BudgetProviderTest,
-                "platform model test": BudgetPlatformModelTest,
-                "task budget show": None,
-                "task budget set": TaskBudgetSet,
-                "task budget history": None,
-                "billing alert show": None,
-                "billing alert set": LowBalancePolicySet,
-                "billing notices": None,
+                "task create": TaskCreate,
+                "provider test": ProviderTest,
+                "platform model test": PlatformModelTest,
             }
         )
-        outputs.update(
-            {
-                "task budget show": TypeAdapter(TaskBudgetData),
-                "task budget set": TypeAdapter(TaskBudgetData),
-                "task budget history": TypeAdapter(BudgetHistoryData),
-                "billing alert show": TypeAdapter(LowBalancePolicyData),
-                "billing alert set": TypeAdapter(LowBalancePolicyData),
-                "billing notices": TypeAdapter(LowBalanceNoticesData),
-            }
-        )
-    else:
-        commands = {
-            name: model
-            for name, model in commands.items()
-            if name not in NEW_COMMANDS and name not in AGENT_INPUTS
-        }
-        commands = {
-            name: model for name, model in commands.items() if not name.startswith("assessment ")
-        }
-        legacy_options = {"budget", "budget_currency", "test_org", "contract_version"}
-        console_options = {
-            "view",
-            "part",
-            "extraction_job",
-            "severity",
-            "domain",
-            "status",
-            "requirement",
-            "entry",
-            "section",
-            "group",
-            "state",
-            "section_key",
-            "outcome",
-        }
-        for name, items in parameters.items():
-            parameters[name] = [
-                item
-                for item in items
-                if item["name"] not in legacy_options
-                and not (name in CONSOLE_VARIANTS and item["name"] in console_options)
-                and not (name == "task progress" and item["name"] == "job")
-                and not (
-                    name in {"check show", "score show", "score rubric show"}
-                    and item["name"] in {"cursor", "limit"}
-                )
-                and not (name == "provider test" and item["name"] == "dry_run")
-                and not (name == "platform model test" and item["name"] == "dry_run")
-            ]
+        outputs.update({})
     schema = {
         "version": version,
-        "result": (LegacyResult if version == "3.0" else Result).model_json_schema(),
+        "result": Result.model_json_schema(),
         "commands": {
             name: {
                 "input": TypeAdapter(model).json_schema() if model else None,
@@ -1002,13 +916,13 @@ def command_schema(app=None, version: str = "4.0") -> dict:
                 **({"output": outputs[name].json_schema()} if name in outputs else {}),
                 **(
                     {"invocation_input": INVOCATION_INPUTS[name].model_json_schema()}
-                    if version == "4.0" and name in INVOCATION_INPUTS
+                    if version == "5.0" and name in INVOCATION_INPUTS
                     else {}
                 ),
                 **({"items": AGENT_ITEMS[name].model_json_schema()} if name in AGENT_ITEMS else {}),
                 **(
                     {"variants": CONSOLE_VARIANTS[name]}
-                    if version == "4.0" and name in CONSOLE_VARIANTS
+                    if version == "5.0" and name in CONSOLE_VARIANTS
                     else {}
                 ),
                 **(
@@ -1072,7 +986,7 @@ def command_schema(app=None, version: str = "4.0") -> dict:
     ).items():
         if name in schema["commands"]:
             schema["commands"][name]["items"] = model.model_json_schema()
-    if version == "4.0":
+    if version == "5.0":
         from app.schemas.bid_review import BidPreparePreview, BidSubmissionView, BidUploadPreview
 
         for name, model in REVIEW_DATA.items():
@@ -1115,14 +1029,10 @@ def command_schema(app=None, version: str = "4.0") -> dict:
         schema["commands"]["evidence stamp"]["http_submit_input"] = (
             AnnotationSubmit.model_json_schema()
         )
-    if version == "4.0":
-        from app.schemas.budget_contracts import (
-            BudgetPreflightData,
-            LowBalanceNoticeView,
-            TaskBudgetRevisionView,
-        )
+    if version == "5.0":
+        from app.schemas.preflight_contracts import PreflightData
 
-        costed = {
+        planned = {
             "tender parse",
             "req extract",
             "card generate",
@@ -1141,42 +1051,10 @@ def command_schema(app=None, version: str = "4.0") -> dict:
             "sandbox capture",
             "export prepare",
         }
-        preflight_schema = BudgetPreflightData.model_json_schema()
+        preflight_schema = PreflightData.model_json_schema()
         schema["$defs"] = preflight_schema.pop("$defs", {})
-        schema["$defs"]["BudgetPreflightData"] = preflight_schema
-        for name in costed:
+        schema["$defs"]["PreflightData"] = preflight_schema
+        for name in planned:
             if name in schema["commands"]:
-                schema["commands"][name]["budget_preflight"] = {
-                    "$ref": "#/$defs/BudgetPreflightData"
-                }
-        schema["commands"]["task budget history"]["items"] = (
-            TaskBudgetRevisionView.model_json_schema()
-        )
-        schema["commands"]["billing notices"]["items"] = LowBalanceNoticeView.model_json_schema()
-    if version == "3.0":
-        from app.schemas.contracts import LegacyCost
-
-        schema["result"]["title"] = "Result"
-        legacy_cost = LegacyCost.model_json_schema()
-        legacy_cost["title"] = "Cost"
-        schema["result"]["$defs"] = {"Cost": legacy_cost}
-        schema["result"]["properties"]["cost"]["$ref"] = "#/$defs/Cost"
-
-        def legacy_schema(value):
-            if isinstance(value, dict):
-                if "properties" in value:
-                    value["properties"].pop("agent_provenance", None)
-                    value["properties"].pop("requirement_review", None)
-                if "$defs" in value:
-                    value["$defs"].pop("AgentProvenance", None)
-                    value["$defs"].pop("RubricRequirementReadiness", None)
-                if "$defs" in value and "Cost" in value["$defs"]:
-                    value["$defs"]["Cost"] = legacy_cost
-                for child in value.values():
-                    legacy_schema(child)
-            elif isinstance(value, list):
-                for child in value:
-                    legacy_schema(child)
-
-        legacy_schema(schema)
+                schema["commands"][name]["preflight"] = {"$ref": "#/$defs/PreflightData"}
     return schema

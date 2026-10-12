@@ -9,7 +9,7 @@ import json
 from typing import TYPE_CHECKING, Annotated, Literal, Protocol
 from uuid import UUID
 
-from app.schemas.budget_contracts import BudgetPreflightData
+from app.schemas.preflight_contracts import PreflightData
 from app.schemas.contracts import CONTRACT_VERSION, Contract, Cost, Result
 from app.schemas.evidence_source_contracts import EvidenceSourceArchive
 from app.schemas.requirement_confirmation import ReviewState
@@ -338,31 +338,26 @@ class AnnotationPreflight(Contract):
     input_hash: Sha256
     manifest: AnnotationInputManifest
     predicted_output: AnnotationCanvas | None
-    budget_preflight: BudgetPreflightData
+    preflight: PreflightData
     blocker_codes: list[AnnotationBlocker] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def read_only_zero_cost(self):
-        budget = self.budget_preflight
+        preflight = self.preflight
         if self.input_hash != self.manifest.canonical_sha256():
             raise ValueError("input hash must bind the exact normalized server manifest")
-        if budget.input_hash != self.input_hash or budget.task_id != self.manifest.task_id:
-            raise ValueError("budget preflight must bind the same normalized input")
-        if budget.command != "evidence stamp" or budget.planned_calls != 0:
-            raise ValueError("annotation preflight plans no billable provider calls")
+        if preflight.input_hash != self.input_hash or preflight.task_id != self.manifest.task_id:
+            raise ValueError("preflight preflight must bind the same normalized input")
+        if preflight.command != "evidence stamp" or preflight.planned_calls != 0:
+            raise ValueError("annotation preflight plans no provider calls")
         if (
-            budget.next_call is not None
-            or budget.estimate.charge != 0
-            or budget.estimate.task_amount != 0
-            or budget.estimate.basis not in {"zero", "cache_hit"}
-            or budget.estimate.llm_tokens != 0
-            or budget.estimate.ocr_pages != 0
-            or budget.estimate.usd != 0
-            or budget.estimate.unpriced_calls != 0
-            or budget.estimate.unresolved_calls != 0
-            or budget.admission_blocker is not None
+            preflight.next_call is not None
+            or preflight.estimate.llm_tokens != 0
+            or preflight.estimate.ocr_pages != 0
+            or preflight.estimate.unresolved_calls != 0
+            or preflight.admission_blocker is not None
         ):
-            raise ValueError("local annotation has zero provider liability")
+            raise ValueError("local annotation has zero provider usage")
         if not self.blocker_codes and self.predicted_output is None:
             raise ValueError("an admitted preflight requires a bounded canvas prediction")
         return self

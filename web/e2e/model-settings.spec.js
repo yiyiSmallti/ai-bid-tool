@@ -1,6 +1,6 @@
 // Failure scenarios specified before implementation: secret hydration/echo/storage;
 // wrong-org metadata; role loss; concurrent saves; disabled saved model identity;
-// implicit charged repeats; preflight/save races; stale reads and page retention.
+// implicit repeated calls; preflight/save races; stale reads and page retention.
 import { test, expect } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
@@ -19,13 +19,13 @@ const staticDir = process.env.E2E_STATIC_DIR ? resolve(process.env.E2E_STATIC_DI
 if (staticDir && (!inside(root, staticDir) || !existsSync(staticDir) || !inside(realpathSync(root), realpathSync(staticDir)))) throw new Error("E2E_STATIC_DIR escapes worktree");
 const O = "00000000-0000-0000-0000-000000000002", B = "00000000-0000-0000-0000-000000000099", U = "00000000-0000-0000-0000-000000000003", J = "00000000-0000-0000-0000-000000000007", date = "2026-10-06T00:00:00Z";
 const rid = (n) => `00000000-0000-0000-0000-${String(100 + n).padStart(12, "0")}`;
-const zero = { llm_tokens: 0, ocr_pages: 0, usd: 0, basis: "zero", charge: "0", billing_currency: "USD", task_amount: "0", unpriced_calls: 0, unresolved_calls: 0 };
-const actual = { ...zero, llm_tokens: 32, usd: 4e-4, basis: "actual", charge: "0.0004" };
+const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
+const actual = { ...zero, calls: 1, llm_tokens: 32 };
 const result = (command, data = {}, items = [], ok = true, cost = zero) => ({ ok, command, data, items, warnings: [], cost, duration_ms: 0 });
 const secret = "synthetic-one-time-management-key";
-const choice = (id = "catalog-a") => ({ id, revision: 1, provider: "openai", model: `model-${id}`, sale_input_per_mtok: 1, sale_output_per_mtok: 2, default: id === "catalog-a", reasoning: [{ name: "high", label: "高" }], default_reasoning: "high" });
+const choice = (id = "catalog-a") => ({ id, revision: 1, provider: "openai", model: `model-${id}`, default: id === "catalog-a", reasoning: [{ name: "high", label: "高" }], default_reasoning: "high" });
 function metadata(n = 1, platform = false) {
-  return { id: rid(n), org_id: O, revision: n, configuration: { capability: "llm_extract", source: platform ? "platform" : "org", platform_model_id: platform ? "disabled-model" : null, provider: platform ? null : "openai", model: platform ? null : `byok-model-${n}`, base_url: platform ? null : "https://byok.example/v1", json_mode: "json_schema", reasoning: [], default_reasoning: null, input_usd_per_mtok: null, output_usd_per_mtok: null, expected_revision: null }, provider: "openai", model: platform ? "saved-disabled-model" : `byok-model-${n}`, catalog_state: platform ? "unavailable" : "not_applicable", credential_state: platform ? "platform_managed" : "configured", updated_by: U, updated_at: date, revised_at: date, revised_by: U, reasoning: [], default_reasoning: null, catalog_revision: platform ? 7 : null, sale_input_per_mtok: platform ? 4 : null, sale_output_per_mtok: platform ? 8 : null };
+  return { id: rid(n), org_id: O, revision: n, configuration: { capability: "llm_extract", source: platform ? "platform" : "org", platform_model_id: platform ? "disabled-model" : null, provider: platform ? null : "openai", model: platform ? null : `byok-model-${n}`, base_url: platform ? null : "https://byok.example/v1", json_mode: "json_schema", reasoning: [], default_reasoning: null, expected_revision: null }, provider: "openai", model: platform ? "saved-disabled-model" : `byok-model-${n}`, catalog_state: platform ? "unavailable" : "not_applicable", credential_state: platform ? "platform_managed" : "configured", updated_by: U, updated_at: date, revised_at: date, revised_by: U, reasoning: [], default_reasoning: null, catalog_revision: platform ? 7 : null, };
 }
 const records = [], health = new WeakMap();
 test.use({ trace: "off", video: "off", screenshot: "off" });
@@ -53,7 +53,7 @@ test.afterEach(async ({ page }, info) => {
   if (info.status === "passed" && !h.console && !h.runtime && !overlay) await page.screenshot({ path: join(output, `${info.title.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.png`), fullPage: true });
   records.push({ scenario: info.title, status: info.status, console_errors: h.console, runtime_errors: h.runtime, framework_overlay: overlay, measurements: info.annotations.filter((item) => item.type === "measurement").map((item) => JSON.parse(item.description)) });
   const index = staticDir ? join(staticDir, "index.html") : join(root, "web/dist/index.html");
-  writeFileSync(join(output, "result.json"), JSON.stringify({ mode: "mocked_api", fixture_version: "model-settings-v1", schema_version: "4.0", browser: "chromium", browser_version: page.context().browser()?.version() ?? null, build_sha256: existsSync(index) ? createHash("sha256").update(readFileSync(index)).digest("hex") : null, reproduction: "E2E_BASE_URL=<local-api> E2E_OUTPUT=../data/work/management-pages-validation node_modules/.bin/playwright test e2e/model-settings.spec.js", scenarios: records, expected_scenarios: 28, complete: records.length === 28, passed: records.length === 28 && records.every((r) => r.status === "passed" && !r.console_errors && !r.runtime_errors && !r.framework_overlay) }, null, 2));
+  writeFileSync(join(output, "result.json"), JSON.stringify({ mode: "mocked_api", fixture_version: "model-settings-v1", schema_version: "5.0", browser: "chromium", browser_version: page.context().browser()?.version() ?? null, build_sha256: existsSync(index) ? createHash("sha256").update(readFileSync(index)).digest("hex") : null, reproduction: "E2E_BASE_URL=<local-api> E2E_OUTPUT=../data/work/management-pages-validation node_modules/.bin/playwright test e2e/model-settings.spec.js", scenarios: records, expected_scenarios: 28, complete: records.length === 28, passed: records.length === 28 && records.every((r) => r.status === "passed" && !r.console_errors && !r.runtime_errors && !r.framework_overlay) }, null, 2));
   expect(h.console).toBe(0);
   expect(h.runtime).toBe(0);
   expect(overlay).toBe(0);
@@ -64,7 +64,7 @@ async function fixture(page, options = {}) {
   const pageData = (items, next = null) => ({ org_id: O, as_of: date, returned: items.length, next_cursor: next, has_more: next !== null });
   const current = () => state.initial ? null : metadata(state.head, state.disabled);
   await page.route((url) => !url.pathname.startsWith("/app/"), async (route) => {
-    const req = route.request(), path = new URL(req.url()).pathname.replace(/^\/v4(?=\/)/, "");
+    const req = route.request(), path = new URL(req.url()).pathname;
     requests.push({ path, method: req.method(), body: req.postData() ?? "" });
     const counted = path.startsWith("/management/providers") || path === "/org/current";
     if (counted) {
@@ -81,7 +81,7 @@ async function fixture(page, options = {}) {
         const value = current();
         if (state.foreign && value) value.org_id = B;
         if (state.leak && value) value.key_last4 = "leaked-suffix";
-        return send("provider show", { org_id: O, capability: "llm_extract", effective_source: value ? value.configuration.source : state.noDefault ? "unconfigured" : "platform", current: value, default_model: value || state.noDefault ? null : choice(), billing_currency: "USD", reasoning: value?.reasoning ?? (state.noDefault ? [] : choice().reasoning), actions: [{ action: "configure", allowed: state.role === "admin" && !state.token, reason: state.token ? "human_required" : state.role === "admin" ? null : "role_required" }, { action: "test", allowed: state.role === "admin" && !state.token && !state.disabled && !state.noDefault, reason: state.token ? "human_required" : state.role !== "admin" ? "role_required" : state.disabled || state.noDefault ? "provider_unavailable" : null }], connection_status: "not_checked" });
+        return send("provider show", { org_id: O, capability: "llm_extract", effective_source: value ? value.configuration.source : state.noDefault ? "unconfigured" : "platform", current: value, default_model: value || state.noDefault ? null : choice(), reasoning: value?.reasoning ?? (state.noDefault ? [] : choice().reasoning), actions: [{ action: "configure", allowed: state.role === "admin" && !state.token, reason: state.token ? "human_required" : state.role === "admin" ? null : "role_required" }, { action: "test", allowed: state.role === "admin" && !state.token && !state.disabled && !state.noDefault, reason: state.token ? "human_required" : state.role !== "admin" ? "role_required" : state.disabled || state.noDefault ? "provider_unavailable" : null }], connection_status: "not_checked" });
       }
       if (path === "/management/providers/history/query") {
         const body = req.postDataJSON();
@@ -120,12 +120,12 @@ async function fixture(page, options = {}) {
         const body = req.postDataJSON();
         tests.push(body);
         if (!body.dry_run && state.timeout) return route.abort("timedout");
-        if (body.dry_run) return send("provider test", { dry_run: true, budget_preflight: { estimate: zero, admission_blocker: null } }, [], { ...zero, basis: "first_pass_upper_bound" });
+        if (body.dry_run) return send("provider test", { dry_run: true, preflight: { estimate: zero, admission_blocker: null } }, [], { ...zero, });
         const id = state.nullTest ? null : rid(state.race ? state.head + 1 : state.head);
         if (state.failedTest) return route.fulfill({ status: 503, json: result("provider test", { job_id: J, status: "failed", provider_config_id: id, usage: { model: "actually-tested-model", provider: "openai" }, error: { code: "provider_unavailable", message: secret, exit_code: 4 } }, [], false, actual) });
         return send("provider test", { job_id: J, status: "succeeded", provider_config_id: id, reasoning: null, usage: { model: "actually-tested-model", provider: "openai" }, result: {} }, [], actual);
       }
-      if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
+      if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
       throw new Error(`Unexpected models request ${req.method()} ${path}`);
     } finally {
       if (counted) reads.active--;
@@ -153,7 +153,7 @@ async function privateState(page, text = secret) {
   expect(value.storage.includes(text)).toBe(false);
   expect(value.databases).toEqual([]);
 }
-test("metadata opening has no vendor balance read and history bounded", async ({ page }) => {
+test("metadata opening has no vendor request and history bounded", async ({ page }) => {
   const f = await fixture(page);
   await open(page);
   // Element Plus renders header/body tables inside one named region.
@@ -240,12 +240,12 @@ test("prefix catalog search uses body and separate bounded query", async ({ page
   await page.waitForTimeout(350);
   expect(f.queries.filter((item) => item.kind === "catalog" && item.body.q === "missing-prefix")).toHaveLength(1);
 });
-test("unavailable saved identity prices and history never use default replacement", async ({ page }) => {
+test("unavailable saved identity and history never use default replacement", async ({ page }) => {
   const f = await fixture(page, { disabled: true });
   await open(page);
   await expect(page.getByText(/saved-disabled-model/).first()).toBeVisible();
   await expect(page.getByText(/disabled-model · 不可用/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "预检测试费用", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "预检测试范围", exact: true })).toBeDisabled();
   await page.getByRole("button", { name: "查看修订 1", exact: true }).click();
   await expect(page.getByRole("region", { name: "精确历史修订" })).toContainText("saved-disabled-model");
   expect(f.requests.filter((req) => req.path.includes("/revisions/"))).toHaveLength(1);
@@ -270,7 +270,7 @@ for (const role of ["bidder", "technical", "viewer"]) {
     await open(page);
     await expect(page).toHaveURL(/\/app\/org\/settings\/models$/);
     await expect(page.getByRole("button", { name: "修改模型配置", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "预检测试费用", exact: true })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "预检测试范围", exact: true })).toBeDisabled();
     expect(f.requests.some(request => request.path === "/tasks")).toBe(false);
   });
 }
@@ -302,7 +302,7 @@ test("test explicit preflight then start shows actual identity and consumes pref
   const f = await fixture(page, { race: true });
   await open(page);
   await expect(page.getByRole("button", { name: "明确开始连接测试", exact: true })).toBeDisabled();
-  await page.getByRole("button", { name: "预检测试费用", exact: true }).click();
+  await page.getByRole("button", { name: "预检测试范围", exact: true }).click();
   await expect.poll(() => f.tests.length).toBe(1);
   expect(f.tests[0].dry_run).toBe(true);
   await page.getByRole("button", { name: "明确开始连接测试", exact: true }).click();
@@ -312,13 +312,13 @@ test("test explicit preflight then start shows actual identity and consumes pref
   expect(f.tests).toHaveLength(2);
   expect(f.requests.some((req) => req.path === `/management/providers/revisions/${rid(2)}`)).toBe(true);
 });
-test("paid timeout never automatically repeats test", async ({ page }) => {
+test("model timeout never automatically repeats test", async ({ page }) => {
   const f = await fixture(page, { timeout: true });
   await open(page);
-  await page.getByRole("button", { name: "预检测试费用", exact: true }).click();
+  await page.getByRole("button", { name: "预检测试范围", exact: true }).click();
   await expect(page.getByRole("button", { name: "明确开始连接测试", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "明确开始连接测试", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("可能已发生费用");
+  await expect(page.getByRole("alert")).toContainText("可能已发出调用");
   await expect(page.getByRole("button", { name: "明确开始连接测试", exact: true })).toBeDisabled();
   await page.waitForTimeout(100);
   expect(f.tests.filter((body) => !body.dry_run)).toHaveLength(1);
@@ -389,24 +389,24 @@ test("many bounded history pages release old page objects", async ({ page }, inf
   expect(measured.retained_arrays).toBeLessThanOrEqual(1);
   info.annotations.push({ type: "measurement", description: JSON.stringify(measured) });
 });
-test("platform default paid receipt reports actual model and no pinned catalog revision", async ({ page }) => {
+test("platform default model receipt reports actual model and no pinned catalog revision", async ({ page }) => {
   const f = await fixture(page, { initial: true, nullTest: true });
   await open(page);
-  await page.getByRole("button", { name: "预检测试费用", exact: true }).click();
+  await page.getByRole("button", { name: "预检测试范围", exact: true }).click();
   await expect(page.getByRole("button", { name: "明确开始连接测试", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "明确开始连接测试", exact: true }).click();
   await expect(page.getByText(/实际测试模型与页面显示的默认模型不同/)).toBeVisible();
   await expect(page.getByText(/回执未固定目录修订/).first()).toBeVisible();
   expect(f.requests.some((req) => req.path.includes("/revisions/"))).toBe(false);
 });
-test("failed paid test retains safe actual cost receipt without vendor error echo", async ({ page }) => {
+test("failed model test retains safe actual resource receipt without vendor error echo", async ({ page }) => {
   const f = await fixture(page, { failedTest: true });
   await open(page);
-  await page.getByRole("button", { name: "预检测试费用", exact: true }).click();
+  await page.getByRole("button", { name: "预检测试范围", exact: true }).click();
   await expect(page.getByRole("button", { name: "明确开始连接测试", exact: true })).toBeEnabled();
   await page.getByRole("button", { name: "明确开始连接测试", exact: true }).click();
   await expect(page.getByText(/实际测试状态：failed/)).toBeVisible();
-  await expect(page.getByText(/实际费用：平台/)).toBeVisible();
+  await expect(page.getByText("实际用量：调用 1 次 · 32 tokens · 未确定调用 0", { exact: true })).toBeVisible();
   expect((await page.locator("body").innerText()).includes(secret)).toBe(false);
   expect(f.tests.filter((body) => !body.dry_run)).toHaveLength(1);
 });
@@ -438,7 +438,7 @@ test("unsaved edit blocks preflight and authority rejection clears fresh key", a
   const f = await fixture(page, { denied: true });
   await open(page);
   await edit(page);
-  await expect(page.getByRole("button", { name: "预检测试费用", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "预检测试范围", exact: true })).toBeDisabled();
   await page.getByLabel("新 API 密钥", { exact: true }).fill(secret);
   await page.getByRole("button", { name: "保存模型配置", exact: true }).click();
   await expect(page.getByLabel("新 API 密钥", { exact: true })).toHaveCount(0);
@@ -494,7 +494,7 @@ test("narrow screen keyboard edits and saves with blank reused credential", asyn
   expect(navigation.content).toBeGreaterThan(navigation.container);
   expect(navigation.right).toBeLessThanOrEqual(navigation.viewport + 1);
   // The last entry remains keyboard reachable; only its own container scrolls.
-  await nav.getByRole("link", { name: "余额与充值", exact: true }).focus();
+  await nav.getByRole("link", { name: "保密字段", exact: true }).focus();
   await expect.poll(() => nav.evaluate(node => node.scrollLeft)).toBeGreaterThan(0);
   const width = await page.evaluate(() => ({ document: document.documentElement.scrollWidth, viewport: innerWidth }));
   expect(width.document).toBeLessThanOrEqual(width.viewport + 1);
@@ -503,7 +503,7 @@ test("admin-role read token remains human-only for configuration and tests", asy
   const f = await fixture(page, { token: true });
   await open(page);
   await expect(page.getByRole("button", { name: "修改模型配置", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "预检测试费用", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "预检测试范围", exact: true })).toBeDisabled();
   expect(f.writes.length).toBe(0);
   expect(f.tests).toHaveLength(0);
 });

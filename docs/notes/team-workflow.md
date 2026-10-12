@@ -203,17 +203,19 @@ remain readable under current grants; existing downloads retain their freshness
 checks. Uploads, edits, new jobs, new preview conversion, release and membership
 changes require an active task. Explicit unarchive is the lifecycle exception.
 Already-dispatched usage continues to settle through `JobExecution`; archival
-does not erase liabilities. Local evidence-page rendering checks write authority
+does not erase historical usage. Local evidence-page rendering checks write authority
 before preparation without retaining a task lock, then locks and refreshes the
 workflow/member and selected source again before publication. Ownership recovery
 resolves the old member's availability before changing its stored role, preventing
 an autoflush of a half-prepared recovery.
 
-Board reads use a short repeatable-read snapshot, explicit extraction binding,
-current card eligibility and shared task-budget projections. Encrypted cursors
+Encrypted cursors
 bind org/task, actor visibility, filters, access epoch, event watermark and UTC
-assessment date. Rows use stable requirement UUID order. Scope, page, time and
-serialized-response limits fail explicitly rather than truncate counts. Clock
+assessment date.
+Rows use stable requirement UUID order.
+Scope, page, time and
+serialized-response limits fail explicitly rather than truncate counts.
+Clock
 validity refreshes within thirty seconds even without a mutation event.
 Citation validity is computed in source groups and reused for each card within
 the snapshot; UUID ordering does not cause source normalization cache thrashing.
@@ -247,12 +249,15 @@ complete current rounds at consumption; a stored confirmed state, old Evidence
 flags or historical signatures alone do not authorize reuse. Archived tasks permit
 review-history reads but no policy, round or signature mutations.
 
-An active stored task-member row cannot revive a disabled org member. Ownership
-recovery is an explicit admin operation. Reconnection never resubmits paid work.
+An active stored task-member row cannot revive a disabled org member.
+Ownership
+recovery is an explicit admin operation.
 A board badge is advisory; draft/export services recheck the authoritative inputs
-and human gates. Shared org-memory content keeps its org policy; source references are projected
+and human gates.
+Shared org-memory content keeps its org policy; source references are projected
 with `provenance_redacted: true` when their task is inaccessible, preserving the
-immutable stored chain. Shared library mutations do not disclose affected task IDs and
+immutable stored chain.
+Shared library mutations do not disclose affected task IDs and
 must fail above the approved fan-out bound rather than lose invalidations.
 
 ## Code

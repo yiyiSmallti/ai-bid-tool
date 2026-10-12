@@ -24,7 +24,6 @@ const preview = ref(null);
 const warnings = ref([]);
 const error = ref("");
 const redactionOverride = ref(null);
-const capInput = ref("");
 const authorized = ref(false);
 const running = ref(false);
 const runJobId = ref("");
@@ -60,34 +59,9 @@ const redactionLabels = {
   bank_account: "银行账号",
 };
 
-const blockerLabels = {
-  insufficient_balance: "单位余额不足",
-  job_charge_limit_exceeded: "估算首批扣款超过单作业上限",
-  spend_cap_below_first_call: "填写的扣款上限低于首个调用的预留金额",
-};
+const blockerLabels = { provider_unavailable: "模型服务不可用", context_limit_exceeded: "输入超过模型上下文上限" };
 
-const capValue = computed(() => {
-  const text = capInput.value.trim();
-  if (!/^\d+(\.\d{1,8})?$/.test(text)) return null;
-  return Number(text) > 0 ? text : null;
-});
-const canRunPaid = computed(
-  () =>
-    !!preview.value &&
-    !previewIsStale.value &&
-    !preview.value.admission_blocker &&
-    (preview.value.selected_requirements?.length ?? 0) > 0 &&
-    capValue.value != null &&
-    authorized.value &&
-    canOperate.value &&
-    !running.value,
-);
 
-function defaultCap(estimate) {
-  // Rounded up to whole cents so the default never sits below the first-pass estimate.
-  const value = Number(estimate ?? 0);
-  return (Math.max(0.01, Math.ceil(value * 100) / 100)).toFixed(2);
-}
 
 function invalidatePreview() {
   preview.value = null;
@@ -182,7 +156,6 @@ async function runPreview() {
     }
     preview.value = result.data;
     warnings.value = result.warnings ?? [];
-    capInput.value = defaultCap(result.data.estimated_charge);
   } catch (exc) {
     error.value = errorText(exc);
   } finally {
@@ -190,15 +163,14 @@ async function runPreview() {
   }
 }
 
-async function runPaid() {
-  if (!canRunPaid.value) return;
+async function runGeneration() {
+  if (!canRun.value) return;
   error.value = "";
   running.value = true;
   try {
     const body = {
       extraction_job_id: extractionJobId.value,
       expected_input_hash: preview.value.input_hash,
-      max_charge: capValue.value,
     };
     if (props.requirementIds != null) body.requirement_ids = [...props.requirementIds];
     if (reasoning.value) body.reasoning = reasoning.value;
@@ -208,7 +180,7 @@ async function runPaid() {
   } catch (exc) {
     if (exc.code === "generation_input_changed") {
       invalidatePreview();
-      error.value = "预检后输入、模型或价格已变化，本次未提交也未扣费，请重新预检。";
+      error.value = "预检后输入或模型已变化，本次未提交，请重新预检。";
     } else {
       error.value = errorText(exc);
     }
@@ -297,7 +269,7 @@ defineExpose({ invalidate: invalidatePreview });
           <el-option v-for="level in levels" :key="level.name" :value="level.name" :label="`${level.label || level.name}${level.default ? '（默认）' : ''}`" />
         </el-select>
       </el-form-item>
-      <el-button type="primary" native-type="submit" :loading="previewing" :disabled="loadingLevels || !canOperate || !extractionSucceeded || !explicitIdsValid">预检外发范围与费用</el-button>
+      <el-button type="primary" native-type="submit" :loading="previewing" :disabled="loadingLevels || !canOperate || !extractionSucceeded || !explicitIdsValid">预检外发范围与配置</el-button>
     </el-form>
 
     <p v-if="!canOperate" class="notice">当前角色只能查看起草信息，不能预检或运行模型起草。</p>
@@ -316,13 +288,10 @@ defineExpose({ invalidate: invalidatePreview });
         <div class="stat"><span class="label">目标 / 跳过</span><strong>{{ preview.selected_requirements?.length ?? 0 }} / {{ skippedEntries.length }}</strong></div>
         <div class="stat"><span class="label">模型</span><strong>{{ display(preview.model) }}</strong><small class="hint">目录 {{ display(preview.platform_model_id) }} · 修订 {{ display(preview.model_revision) }}</small></div>
         <div class="stat"><span class="label">推理档位</span><strong>{{ display(preview.reasoning) }}</strong></div>
-        <div class="stat"><span class="label">估算 tokens</span><strong>{{ display(preview.estimated_cost?.llm_tokens) }}</strong></div>
-        <div class="stat"><span class="label">服务商 USD 估算</span><strong>{{ preview.estimated_cost?.usd == null ? "费用暂不可估" : `${preview.estimated_cost.usd} USD` }}</strong></div>
-        <div class="stat"><span class="label">平台扣款估算</span><strong>{{ preview.estimated_charge == null ? "费用暂不可估" : `${preview.estimated_charge} ${preview.billing_currency}` }}</strong></div>
+        <div class="stat"><span class="label">估算 tokens</span><strong>{{ display(preview.preflight?.estimate?.llm_tokens) }}</strong></div>
       </div>
 
       <dl class="details-list">
-        <div><dt>估算口径</dt><dd>{{ display(preview.cost_basis) }} · {{ display(preview.cost_basis_reason) }}</dd></div>
         <div><dt>估算类型</dt><dd>{{ display(preview.estimate_kind) }}</dd></div>
         <div><dt>预计时长</dt><dd>{{ preview.estimated_duration_ms == null ? "未知" : `${preview.estimated_duration_ms} ms` }}</dd></div>
         <div><dt>输入引用</dt><dd>{{ preview.input_refs?.length ? preview.input_refs.join("、") : "无材料引用" }}</dd></div>
@@ -347,21 +316,16 @@ defineExpose({ invalidate: invalidatePreview });
       </ul>
       <el-alert v-if="preview.admission_blocker" :title="blockerLabels[preview.admission_blocker] ?? preview.admission_blocker" type="error" show-icon :closable="false" role="alert" />
 
-      <div class="paid-gate">
-        <el-form label-position="top" @submit.prevent="runPaid">
-          <el-form-item :label="`本次平台扣款上限（${preview.billing_currency}）`">
-            <el-input v-model="capInput" inputmode="decimal" maxlength="20" :disabled="previewIsStale" class="cap" />
-          </el-form-item>
-          <p v-if="capInput && capValue == null" class="error">请输入大于 0、最多 8 位小数的金额。</p>
+      <div class="run-gate">
+        <el-form label-position="top" @submit.prevent="runGeneration">
           <label class="check authorize">
             <input v-model="authorized" type="checkbox" :disabled="previewIsStale || !!preview.admission_blocker" />
             我已核对上方外发范围与遮挡结果，授权按本次预检运行
           </label>
-          <el-button type="primary" native-type="submit" :loading="running" :disabled="!canRunPaid">确认并付费运行</el-button>
+          <el-button type="primary" native-type="submit" :loading="running" :disabled="!canRun">确认并运行</el-button>
         </el-form>
         <p class="hint">
-          服务端会核对本次预检的输入标识（含输入、模型与价格修订），不一致则拒绝且不扣费。累计扣款达到上限即停止后续调用，已完成部分保存为部分结果。
-          上限只约束平台扣费；单位自带密钥时，厂商账单不受此上限约束。授权运行不会确认任何响应或材料。
+          服务端会核对本次预检的输入标识与模型配置，不一致则拒绝。达到调用次数限制后停止后续调用，保留已完成部分。授权运行不会确认任何响应或材料。
         </p>
       </div>
     </div>
@@ -389,10 +353,9 @@ h3, h4 { margin: 0 0 4px; }
 .details-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
 .compact-list { align-items: center; margin: 12px 0; }
 .warning-list { color: #865b00; padding-left: 20px; }
-.paid-gate { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 14px; }
-.paid-gate .cap { max-width: 240px; }
-.paid-gate .authorize { display: flex; margin: 4px 0 12px; }
-.paid-gate p { margin-bottom: 0; }
+.run-gate { background: var(--surface-muted); border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-top: 14px; }
+.run-gate .authorize { display: flex; margin: 4px 0 12px; }
+.run-gate p { margin-bottom: 0; }
 @media (max-width: 720px) {
   .redaction-row { align-items: stretch; flex-direction: column; }
   .details-list > div { grid-template-columns: 1fr; gap: 2px; }

@@ -34,20 +34,18 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [memory.md](notes/memory.md): human approval of org memory (记忆), keyword retrieval, per-call traceability, cache invalidation and feedback candidates.
 - [requirement-confirmation.md](notes/requirement-confirmation.md): independently reviewed requirements, verified manual recovery, source-bound acceptance and stale-output gates.
 - [response-cards.md](notes/response-cards.md): human response cards (响应卡), evidence confirmation, atomic disposition and three-table drafts (初稿).
-- [console-assessments.md](notes/console-assessments.md): bounded check/score console reads, human review, budget preflight and complete rubric replacement.
+- [console-assessments.md](notes/console-assessments.md): bounded check/score console reads, human review, resource preflight and complete rubric replacement.
 - [check.md](notes/check.md): deterministic risk checks on confirmed drafts, certificate (证书) dates, citations and human false-positive decisions.
-- [task-budgets.md](notes/task-budgets.md): task liability, atomic reservations, human changes and low-balance notices.
 - [score.md](notes/score.md): two-stage scoring-rubric generation, fixed inputs, human classification, coverage decisions, per-item confirmation and immutable history.
 - [model-drafting-redaction.md](notes/model-drafting-redaction.md): model-drafting input snapshots, outbound redaction (遮挡) and dual-text citation validation.
 - [confidential-values.md](notes/confidential-values.md): confidential fields (保密字段), outbound placeholder substitution and filling values at export.
 - [background-jobs.md](notes/background-jobs.md): job states, cancellation and retries.
 - [pdf-parsing.md](notes/pdf-parsing.md): PDF rasterization budgets, mixed-page OCR, verifiable text merging and parsing warnings.
-- [llm-providers.md](notes/llm-providers.md): model calls, batching, errors and billing for extraction and response (响应) drafting.
+- [llm-providers.md](notes/llm-providers.md): model calls, batching, errors and usage for extraction and response (响应) drafting.
 - [docx-citations.md](notes/docx-citations.md): Word citations by section, paragraph and table cell.
 - [reasoning-levels.md](notes/reasoning-levels.md): official reasoning levels and extraction history.
-- [platform-console.md](notes/platform-console.md): platform operator console (平台运营后台), TOTP, org activation/deactivation and model-catalog billing.
+- [platform-console.md](notes/platform-console.md): platform operator console (平台运营后台), TOTP, org activation/deactivation and model catalog.
 - [operator-enrollment.md](notes/operator-enrollment.md): private enrollment links, password confirmation, encrypted authenticator factors and device recovery.
-- [prepaid-billing.md](notes/prepaid-billing.md): prepaid balance (预付余额), recharge cards (充值卡密), charges and admission blocks.
 - [versioned-resources.md](notes/versioned-resources.md): product revisions and task (任务) snapshots.
 - [model-settings.md](notes/model-settings.md): metadata-only org model settings, immutable identity and explicit connection tests.
 - [management-pages.md](notes/management-pages.md): bounded product library reads, independent lifecycle and explicit revision pinning.
@@ -57,10 +55,10 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [versioned-templates.md](notes/versioned-templates.md): private DOCX templates.
 - [versioned-certificate-files.md](notes/versioned-certificate-files.md): original certificate PDFs.
 - [unconfirmed-evidence-sources.md](notes/unconfirmed-evidence-sources.md): unconfirmed PDF-page sources.
-- [provider-config.md](notes/provider-config.md): org model revisions, separate key encryption, model resolution, call billing and provider balance.
+- [provider-config.md](notes/provider-config.md): org model revisions, separate key encryption, model resolution, call usage.
 - [human-section-exports.md](notes/human-section-exports.md): human export of Word response sections, fixed manifests, candidate and release gates, evidence-page attachments and signed downloads.
 - [team-workflow.md](notes/team-workflow.md): task membership, archival, bounded board snapshots, durable progress and reviewed authorization cutover.
-- [org-console.md](notes/org-console.md): org task recovery, parsing and extraction, human response-card review, drafting cost previews and the draft-gap (缺口) console.
+- [org-console.md](notes/org-console.md): org task recovery, parsing and extraction, human response-card review, drafting resource previews and the draft-gap (缺口) console.
 - [product-simulation.md](notes/product-simulation.md): simulated proposals (模拟拟投), product selection by procurement item, official-page search and capture, verbatim parameter extraction and simulated-material markings.
 - [page-previews.md](notes/page-previews.md): online page previews of original tender documents (招标文件), original certificates and exports, and export conversion.
 - [sandbox-execution.md](notes/sandbox-execution.md): isolated execution, job authorization, artifact provenance, cleanup and downloads.
@@ -68,22 +66,21 @@ Notes use the structure required by [the agent workflow](../agent.md#workflow).
 - [bid-review.md](notes/bid-review.md): independent immutable tender/bid upload, human preparation admission and protected local page inventories.
 - [attachment-archives.md](notes/attachment-archives.md): immutable PDF review, exact declaration/task pins, page privacy and retained-object reconciliation.
 - [annotation.md](notes/annotation.md): source-bound cloud certificate-page candidates, exact-approval confirmed releases, and explicit human attachment.
-- [screenshot-evidence.md](notes/screenshot-evidence.md): screenshot pixel redaction and privacy clearance, vendor web/PDF capture and archival, vendor-source search, response-card image evidence, prototype (原型) delivery decisions, analysis admission and billing, and invalidation/recomputation.
+- [screenshot-evidence.md](notes/screenshot-evidence.md): screenshot pixel redaction and privacy clearance, vendor web/PDF capture and archival, vendor-source search, response-card image evidence, prototype (原型) delivery decisions, analysis admission and usage, and invalidation/recomputation.
 - [Organization self-service application](notes/org-signup.md): public admission, platform review and expiry.
 - [Organization member management](notes/org-members.md): invitations, revision CAS, administrator continuity and reversible revocation.
 
 ## Decision records
 
 - [0001 Cross-org access for the platform operator console](adr/0001-platform-console-access.md) (adr)
-- [0002 Prepaid balance and recharge cards](adr/0002-prepaid-billing.md) (adr)
 - [0003 Structural citations for Word tender documents](adr/0003-word-structural-citations.md) (adr)
 - [0004 Official reasoning levels and independent extraction history](adr/0004-extractions-per-reasoning-level.md) (adr)
 - [0005 Response cards separating model proposals from human confirmation (人工确认)](adr/0005-human-confirmed-responses.md) (adr)
 - [0006 Platform-managed service credentials](adr/0006-platform-credentials.md) (adr)
-- [0007 Task liability and prepaid reservations](adr/0007-task-budget-reservations.md) (adr)
 
 - [0008 Organization self-service applications](adr/0008-org-signup.md) (adr)
 - [0009 Browser enrollment of platform operators](adr/0009-operator-enrollment.md) (adr)
+- [0011 Remove billing, prices and task budgets](adr/0011-remove-billing.md) (adr)
 
 ## Plans and records
 
@@ -97,12 +94,11 @@ Implementation and acceptance status is maintained on each plan page; the
 - [Screenshot and evidence-image contract](plan/screenshots.md) (plan): screenshots, vendor-material capture, redaction, model prototypes and response evidence.
 - [Sandbox contract](plan/sandbox.md) (plan): isolated execution for untrusted generated content and built-in agents; isolation, proxy and lifecycle acceptance.
 - [Org console contract](plan/org-console.md) (plan): web tender, extraction and response-card review workflows.
-- [Drafting preview-binding contract](plan/drafting-binding.md) (plan): binding paid drafting to a preview hash and a user spending ceiling.
+- [Drafting preview-binding contract](plan/drafting-binding.md) (plan): binding model drafting to a preview hash.
 - [Draft checking contract](plan/check.md) (plan): deterministic rules and semantic checks.
 - [Scoring contract](plan/score.md) (plan): rubric normalization and human confirmation, scoring of confirmed DraftRuns and reports.
 - [Memory contract](plan/memory.md) (plan): the first org-scope slice and boundaries for later scopes.
 - [Confidential-field contract](plan/confidential-values.md) (plan): registered confidential values and export-time substitution.
 - [Platform credential contract](plan/platform-credentials.md) (plan): credential management, resolution, cutover and acceptance.
 - [Built-in agent contract](plan/agent.md) (plan): command orchestration, human pauses, recovery and shared provenance.
-- [Budget contract](plan/budget.md) (plan): task budgets and cost preflight.
 - [Changelog](changelog.md) (changelog): shipped scope.

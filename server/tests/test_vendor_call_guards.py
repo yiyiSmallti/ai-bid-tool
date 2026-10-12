@@ -1,27 +1,22 @@
-"""API + processor regression scenarios; all vendor traffic uses MockTransport.
+"""API and processor regression scenarios with fake vendor transport.
 
-Failure modes (defined before the tests): admission omitted from halves/gap-fill/retries;
-concurrent jobs reuse a balance; retries reset ceilings; missing prices admit free calls;
-cancellation or output parsing drops completed usage; ambiguous accounting commits charge
-again; stale attempts renew a lease or keep calling; new attempt totals lose old charges;
-reservations/usage cross an org boundary; unknown vendor outcomes release funds prematurely.
-Output-limit aliases must fail before admission, and the largest transmitted limit must
-be reserved. Pool timeouts, permanent/exhausted DB errors and missing accounting parents
-must stop queued batches even if marking the outcome unknown also fails; sent calls settle.
+Admission must precede every call; retries preserve ceilings; cancellation and
+parse failures retain completed usage; ambiguous writes stay idempotent; stale
+attempts cannot publish or dispatch; unknown outcomes block duplicate effects;
+calls and usage remain tenant scoped. No external vendor is contacted.
 """
 
 import asyncio
 import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from uuid import UUID, uuid4
 
 import httpx
 import pymupdf
 import pytest
 from app.jobs.execution import JobExecution
-from app.models.entities import BalanceEntry, Job, OrgBalance, Requirement, UsageRecord, VendorCall
+from app.models.entities import Job, Requirement, UsageRecord, VendorCall
 from app.providers.base import ProviderFailure
 from app.providers.llm import AnthropicExtractor, OpenAICompatibleExtractor
 from conftest import FakeQueue, credential_app
@@ -44,33 +39,16 @@ def pdf_lines(count=8, parameter=False):
 
 
 @asynccontextmanager
-async def environment(
-    tenants, tmp_path, handler, *, balance="10", provider="anthropic", **settings
-):
+async def environment(tenants, tmp_path, handler, *, provider="anthropic", **settings):
     config = settings_for(tmp_path, provider, **({"llm_concurrency": 1} | settings))
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
     llm = adapter(
         config,
         httpx.MockTransport(handler),
         platform_model_id="guard-test",
-        sale_usd_per_mtok=(1, 1),
     )
     app = await credential_app(config, llm=llm, queue=FakeQueue())
-    org = tenants["orgs"][0]
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
-        async with app.state.db.transaction(org) as session:
-            session.add(OrgBalance(org_id=org, currency="USD", balance=Decimal(balance)))
-            session.add(
-                BalanceEntry(
-                    org_id=org,
-                    kind="adjust",
-                    currency="USD",
-                    amount=Decimal(balance),
-                    balance_after=Decimal(balance),
-                    actor="test",
-                    reason="Synthetic initial funds",
-                )
-            )
         yield app, api, header
 
 
@@ -97,17 +75,13 @@ async def ledger(app, org, job):
                 await session.scalars(select(UsageRecord).where(UsageRecord.job_id == UUID(job)))
             ).all()
         )
-        entries = list(
-            (await session.scalars(select(BalanceEntry).where(BalanceEntry.kind == "usage"))).all()
-        )
-        balance = await session.scalar(select(OrgBalance.balance))
         saved = await session.scalar(
             select(func.count()).select_from(Requirement).where(Requirement.job_id == UUID(job))
         )
-        return calls, usages, entries, balance, saved
+        return calls, usages, saved
 
 
-def evidence(tmp_path, case, calls, usages, balance, job_status):
+def evidence(tmp_path, case, calls, usages, job_status):
     # Reproducible, synthetic-only evidence; pytest --basetemp preserves it outside docs/.
     (tmp_path / f"{case}.json").write_text(
         json.dumps(
@@ -118,15 +92,10 @@ def evidence(tmp_path, case, calls, usages, balance, job_status):
                         "id": str(c.id),
                         "run_id": str(c.run_id),
                         "state": c.state,
-                        "reserved_charge": str(c.reserved_charge),
                     }
                     for c in calls
                 ],
-                "usage": [
-                    {"call_id": str(u.call_id), "tokens": u.tokens, "charge": str(u.charge)}
-                    for u in usages
-                ],
-                "balance": str(balance),
+                "usage": [{"call_id": str(u.call_id), "tokens": u.tokens} for u in usages],
                 "job": job_status,
             },
             indent=2,
@@ -138,10 +107,9 @@ def evidence(tmp_path, case, calls, usages, balance, job_status):
     "ceiling,settings",
     [
         ("job_call_limit_exceeded", {"job_max_vendor_calls": 5, "job_vendor_calls_per_batch": 1}),
-        ("job_charge_limit_exceeded", {"job_max_charge": "0.07"}),
     ],
 )
-async def test_runaway_truncation_stops_and_retry_cannot_reset_budget(
+async def test_runaway_truncation_stops_and_retry_cannot_reset_ceiling(
     tenants, tmp_path, ceiling, settings
 ):
     requests = []
@@ -156,14 +124,13 @@ async def test_runaway_truncation_stops_and_retry_cannot_reset_budget(
         document, job = await prepare(app, api, header, pdf_lines(128))
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
         assert result["status"] == "failed" and result["error"]["code"] == ceiling
         assert 0 < len(requests) <= 5
         if ceiling == "job_call_limit_exceeded":
             assert len(requests) == 5
-        assert len(calls) == len(usages) == len(entries) == len(requests)
+        assert len(calls) == len(usages) == len(requests)
         assert saved == 0 and all(c.state == "completed" for c in calls)
-        assert balance == Decimal("10") - sum(Decimal(u.charge) for u in usages)
         assert result["result"]["cost"]["llm_tokens"] == sum(u.tokens for u in usages)
         before = len(requests)
         retried = await api.post(
@@ -173,7 +140,7 @@ async def test_runaway_truncation_stops_and_retry_cannot_reset_budget(
         await app.state.processor(header["X-Org-Id"], job)
         assert len(requests) == before
         assert (await status(api, header, job))["result"]["cost"] == result["result"]["cost"]
-        evidence(tmp_path, ceiling, calls, usages, balance, result)
+        evidence(tmp_path, ceiling, calls, usages, result)
 
 
 @pytest.mark.parametrize("phase", ["gap_fill", "retry"])
@@ -206,44 +173,11 @@ async def test_gap_fill_and_transient_retries_need_new_admission(
         _, job = await prepare(app, api, header, pdf_lines(parameter=True))
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
         assert result["error"]["code"] == "job_call_limit_exceeded"
-        assert len(requests) == len(calls) == len(usages) == len(entries) == cap
-        assert balance == Decimal("10") - Decimal("0.0015") * cap
+        assert len(requests) == len(calls) == len(usages) == cap
         assert saved == 0
-        evidence(tmp_path, phase, calls, usages, balance, result)
-
-
-async def test_concurrent_jobs_share_reservations_without_overdraft(tenants, tmp_path):
-    entered, release = asyncio.Event(), asyncio.Event()
-    requests = []
-
-    async def vendor(request):
-        requests.append(request)
-        entered.set()
-        await release.wait()
-        return anthropic_reply([])
-
-    async with environment(tenants, tmp_path, vendor, balance="0.06") as (app, api, header):
-        _, first = await prepare(app, api, header)
-        _, second = await prepare(app, api, header)
-        running = asyncio.create_task(app.state.processor(header["X-Org-Id"], first))
-        try:
-            await asyncio.wait_for(entered.wait(), 5)
-            await app.state.processor(header["X-Org-Id"], second)
-            assert (await status(api, header, second))["error"]["code"] == "insufficient_balance"
-            assert len(requests) == 1
-            calls, usages, _, balance, _ = await ledger(app, header["X-Org-Id"], first)
-            assert usages == [] and sum(c.reserved_charge for c in calls) <= balance
-        finally:
-            release.set()
-            await running
-        result = await status(api, header, first)
-        calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], first)
-        assert result["status"] == "succeeded"
-        assert len(usages) == len(entries) == 1
-        assert balance == Decimal("0.0585")
-        evidence(tmp_path, "concurrent", calls, usages, balance, result)
+        evidence(tmp_path, phase, calls, usages, result)
 
 
 @pytest.mark.parametrize("cancel_worker", [False, True])
@@ -266,8 +200,8 @@ async def test_cancel_mid_extraction_keeps_every_completed_call_once(
         try:
             await asyncio.wait_for(entered.wait(), 5)
             # The first call must be committed while extraction is still running.
-            _, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job)
-            assert len(usages) == len(entries) == 1 and balance == Decimal("9.9985")
+            _, usages, _ = await ledger(app, header["X-Org-Id"], job)
+            assert len(usages) == 1
             if cancel_worker:
                 running.cancel()
                 await asyncio.sleep(0)
@@ -282,18 +216,18 @@ async def test_cancel_mid_extraction_keeps_every_completed_call_once(
             else:
                 await running
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
         # A stopped worker leaves its lease to expire; API cancellation is terminal.
         assert result["status"] == ("running" if cancel_worker else "cancelled")
-        assert len(requests) == len(usages) == len(entries) == 2
+        assert len(requests) == len(usages) == 2
         assert len({u.call_id for u in usages}) == 2
-        assert balance == Decimal("9.997") and saved == 0
+        assert saved == 0
         assert result["result"]["cost"]["llm_tokens"] == 3000
-        evidence(tmp_path, "cancel", calls, usages, balance, result)
+        evidence(tmp_path, "cancel", calls, usages, result)
 
 
 @pytest.mark.parametrize("fault", ["before_commit", "after_commit"])
-async def test_ambiguous_accounting_commit_retries_without_double_charge(
+async def test_ambiguous_accounting_commit_retries_without_duplicate_usage(
     tenants, tmp_path, monkeypatch, fault
 ):
     original = JobExecution._complete_once
@@ -301,6 +235,13 @@ async def test_ambiguous_accounting_commit_retries_without_double_charge(
 
     async def uncertain(self, call_id, usage):
         writes.append(call_id)
+        if fault == "before_commit" and len(writes) == 1:
+            raise OperationalError(
+                None,
+                None,
+                ConnectionError("synthetic interrupted write"),
+                connection_invalidated=True,
+            )
         exceeded = await original(self, call_id, usage)
         if fault == "after_commit" and len(writes) == 1:
             raise OperationalError(
@@ -312,25 +253,6 @@ async def test_ambiguous_accounting_commit_retries_without_double_charge(
         return exceeded
 
     monkeypatch.setattr(JobExecution, "_complete_once", uncertain)
-    if fault == "before_commit":
-        from app.services import billing
-
-        charge = billing.charge_usage
-        failed = False
-
-        async def interrupted_charge(*args):
-            nonlocal failed
-            await charge(*args)
-            if not failed:
-                failed = True
-                raise OperationalError(
-                    None,
-                    None,
-                    ConnectionError("synthetic transaction interrupted"),
-                    connection_invalidated=True,
-                )
-
-        monkeypatch.setattr(billing, "charge_usage", interrupted_charge)
     async with environment(tenants, tmp_path, lambda request: anthropic_reply([])) as (
         app,
         api,
@@ -339,13 +261,12 @@ async def test_ambiguous_accounting_commit_retries_without_double_charge(
         _, job = await prepare(app, api, header)
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, _ = await ledger(app, header["X-Org-Id"], job)
         assert result["status"] == "succeeded"
         assert len(writes) == 2 and writes[0] == writes[1]
-        assert len(calls) == len(usages) == len(entries) == 1
-        assert balance == Decimal("9.9985")
+        assert len(calls) == len(usages) == 1
         assert result["result"]["cost"]["llm_tokens"] == 1500
-        evidence(tmp_path, "accounting_retry", calls, usages, balance, result)
+        evidence(tmp_path, "accounting_retry", calls, usages, result)
 
 
 async def test_lease_is_renewed_during_a_long_vendor_call(tenants, tmp_path):
@@ -420,7 +341,8 @@ async def test_retry_takeover_fences_old_attempt_but_keeps_late_usage(tenants, t
             )
             assert retried.json()["data"]["status"] == "queued"
             await app.state.processor(header["X-Org-Id"], job)
-            assert (await status(api, header, job))["status"] == "succeeded"
+            assert (await status(api, header, job))["error"]["code"] == "unresolved_call"
+            assert len(requests) == 1
             old_execution = JobExecution(
                 app.state.processor.settings, app.state.db, tenants["orgs"][0], UUID(job), old_run
             )
@@ -429,33 +351,58 @@ async def test_retry_takeover_fences_old_attempt_but_keeps_late_usage(tenants, t
         finally:
             release.set()
             await old
+        # The old request settles after fencing. Only then may a new attempt dispatch.
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
+        assert len(usages) == 1 and saved == 0
+        assert usages[0].run_id == old_run
+        retried = await api.post(
+            f"/documents/{document}/extract", headers=header, json={"retry": True}
+        )
+        assert retried.status_code == 200
+        await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
         assert result["status"] == "succeeded" and len(requests) == 2
-        assert len(usages) == len(entries) == 2 and len({u.run_id for u in usages}) == 2
-        assert balance == Decimal("9.997") and saved == 1
+        assert len(usages) == 2 and len({u.run_id for u in usages}) == 2
+        assert saved == 1
         assert result["result"]["cost"]["llm_tokens"] == 3000
-        evidence(tmp_path, "takeover", calls, usages, balance, result)
+        evidence(tmp_path, "takeover", calls, usages, result)
 
 
-async def test_unknown_outcome_keeps_its_reservation_across_retry(tenants, tmp_path):
+async def test_unknown_inference_outcomes_retain_call_history_across_bounded_retries(
+    tenants, tmp_path, monkeypatch
+):
+    monkeypatch.setattr(AnthropicExtractor, "retry_delays", (0, 0))
     requests = []
 
     def vendor(request):
         requests.append(request)
         raise httpx.ReadTimeout("synthetic unknown vendor outcome")
 
-    async with environment(tenants, tmp_path, vendor, balance="0.06") as (app, api, header):
+    async with environment(tenants, tmp_path, vendor) as (app, api, header):
         _, job = await prepare(app, api, header)
-        with pytest.raises(ProviderFailure):
-            await app.state.processor(header["X-Org-Id"], job)
+        for attempt in range(1, 3):
+            with pytest.raises(ProviderFailure) as failure:
+                await app.state.processor(header["X-Org-Id"], job)
+            assert failure.value.retryable
+            queued = await status(api, header, job)
+            assert queued["status"] == "queued" and queued["attempts"] == attempt
+            assert len(requests) == attempt * 3
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
-        assert result["error"]["code"] == "insufficient_balance"
-        assert len(requests) == len(calls) == 1 and calls[0].state == "unknown"
-        assert usages == entries == [] and balance == Decimal("0.06") and saved == 0
-        evidence(tmp_path, "unknown_outcome", calls, usages, balance, result)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
+        assert result["status"] == "failed" and result["attempts"] == 3
+        assert result["error"]["exit_code"] == 3
+        assert len(requests) == len(calls) == 9
+        assert all(call.state == "unknown" for call in calls)
+        assert len({call.run_id for call in calls}) == 3
+        assert result["result"]["cost"]["unresolved_calls"] == 9
+        assert result["result"]["cost"]["calls"] == 0
+        assert usages == [] and saved == 0
+        # A terminal job cannot dispatch another request through queue redelivery.
+        await app.state.processor(header["X-Org-Id"], job)
+        assert len(requests) == 9
+        evidence(tmp_path, "unknown_outcome", calls, usages, result)
 
 
 async def test_new_call_ledger_and_usage_remain_tenant_isolated(tenants, tmp_path):
@@ -466,7 +413,7 @@ async def test_new_call_ledger_and_usage_remain_tenant_isolated(tenants, tmp_pat
     ):
         _, job = await prepare(app, api, header)
         await app.state.processor(header["X-Org-Id"], job)
-        calls, usages, _, _, _ = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, _ = await ledger(app, header["X-Org-Id"], job)
         [call] = calls
         async with app.state.db.transaction(tenants["orgs"][1]) as session:
             assert list((await session.scalars(select(VendorCall))).all()) == []
@@ -489,15 +436,9 @@ async def test_new_call_ledger_and_usage_remain_tenant_isolated(tenants, tmp_pat
                         job_id=UUID(job),
                         run_id=call.run_id,
                         task_id=call.task_id,
-                        budget_revision=call.budget_revision,
                         capability=call.capability,
-                        payer=call.payer,
-                        currency=call.currency,
-                        price_revision=call.price_revision,
                         request_sha256=call.request_sha256,
-                        reserved_charge=call.reserved_charge,
-                        reserved_task_amount=call.reserved_task_amount,
-                        quote=call.quote,
+                        provider_identity=call.provider_identity,
                     )
                 )
         with pytest.raises(DBAPIError):
@@ -509,15 +450,9 @@ async def test_new_call_ledger_and_usage_remain_tenant_isolated(tenants, tmp_pat
                         job_id=UUID(job),
                         run_id=call.run_id,
                         task_id=call.task_id,
-                        budget_revision=call.budget_revision,
                         capability=call.capability,
-                        payer=call.payer,
-                        currency=call.currency,
-                        price_revision=call.price_revision,
                         request_sha256=call.request_sha256,
-                        reserved_charge=call.reserved_charge,
-                        reserved_task_amount=call.reserved_task_amount,
-                        quote=call.quote,
+                        provider_identity=call.provider_identity,
                     )
                 )
         assert usages[0].call_id == call.id
@@ -541,22 +476,18 @@ async def test_refusal_is_accounted_before_output_validation(tenants, tmp_path, 
         _, job = await prepare(app, api, header)
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        _, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job)
+        _, usages, _ = await ledger(app, header["X-Org-Id"], job)
         assert result["error"]["code"] == "provider_refused"
-        assert len(usages) == len(entries) == 1 and balance == Decimal("9.9985")
+        assert len(usages) == 1
 
 
 @pytest.mark.parametrize(
     "case,code",
     [
-        ("price", "billing_price_unavailable"),
         ("usage", "invalid_provider_usage"),
-        ("bound", "call_charge_bound_exceeded"),
     ],
 )
-async def test_unknown_price_usage_and_vendor_bound_violation_fail_explicitly(
-    tenants, tmp_path, case, code
-):
+async def test_missing_usage_fails_explicitly(tenants, tmp_path, case, code):
     requests = []
 
     def vendor(request):
@@ -564,28 +495,18 @@ async def test_unknown_price_usage_and_vendor_bound_violation_fail_explicitly(
         payload = anthropic_reply([], stop="max_tokens").json()
         if case == "usage":
             del payload["usage"]
-        if case == "bound":
-            payload["usage"]["output_tokens"] = 1_000_000
         return httpx.Response(200, json=payload)
 
     async with environment(tenants, tmp_path, vendor) as (app, api, header):
-        if case == "price":
-            app.state.processor.llm.sale = None
         _, job = await prepare(app, api, header)
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
         assert result["error"]["code"] == code and saved == 0
-        assert len(requests) == (0 if case == "price" else 1)
-        if case == "bound":
-            assert len(usages) == len(entries) == 1
-            assert usages[0].tokens == 1_001_200 and balance == Decimal("8.9988")
-            assert calls[0].state == "completed"
-        else:
-            assert usages == entries == [] and balance == Decimal("10")
-        if case == "usage":
-            assert calls[0].state == "unknown" and calls[0].reserved_charge > 0
-        evidence(tmp_path, case, calls, usages, balance, result)
+        assert len(requests) == 1
+        assert usages == []
+        assert calls[0].state == "unknown"
+        evidence(tmp_path, case, calls, usages, result)
 
 
 async def test_call_ceiling_grows_with_the_planned_first_pass(tenants, tmp_path):
@@ -644,16 +565,16 @@ async def test_conflicting_output_limits_never_reach_extraction_vendor(
         _, job = await prepare(app, api, header)
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
         assert result["status"] == "failed"
         assert result["error"]["code"] == "invalid_provider_options"
-        assert requests == calls == usages == entries == []
-        assert saved == 0 and balance == Decimal("10")
-        evidence(tmp_path, "conflicting_limits", calls, usages, balance, result)
+        assert requests == calls == usages == []
+        assert saved == 0
+        evidence(tmp_path, "conflicting_limits", calls, usages, result)
 
 
 @pytest.mark.parametrize("provider", ["anthropic", "openai"])
-async def test_reservation_uses_largest_transmitted_output_limit(
+async def test_plan_retains_largest_transmitted_output_limit(
     tenants, tmp_path, monkeypatch, provider
 ):
     # Inject at the post boundary to exercise the accounting defence separately
@@ -689,14 +610,13 @@ async def test_reservation_uses_largest_transmitted_output_limit(
         _, job = await prepare(app, api, header)
         await app.state.processor(header["X-Org-Id"], job)
         result = await status(api, header, job)
-        calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, _ = await ledger(app, header["X-Org-Id"], job)
         assert result["status"] == "succeeded", result
-        assert len(calls) == len(usages) == len(entries) == len(bodies) == 1
-        assert calls[0].reserved_charge >= Decimal("0.032")
-        assert calls[0].reserved_charge >= usages[0].charge
+        assert len(calls) == len(usages) == len(bodies) == 1
+        assert calls[0].provider_identity["output_tokens_upper_bound"] == 32000
+        assert calls[0].provider_identity["output_tokens_upper_bound"] >= usages[0].output_tokens
         assert bodies[0]["max_completion_tokens"] == 1 and bodies[0]["max_tokens"] == 32000
-        assert balance == Decimal("9.9668")
-        evidence(tmp_path, "largest_limit", calls, usages, balance, result)
+        evidence(tmp_path, "largest_limit", calls, usages, result)
 
 
 @pytest.mark.parametrize("unknown_fails", [False, True])
@@ -773,22 +693,22 @@ async def test_settlement_failure_stops_waiting_batches_and_drains_sent_calls(
         _, job = await prepare(app, api, header, content)
         await asyncio.wait_for(app.state.processor(header["X-Org-Id"], job), 15)
         result = await status(api, header, job)
-        calls, usages, entries, balance, saved = await ledger(app, header["X-Org-Id"], job)
+        calls, usages, saved = await ledger(app, header["X-Org-Id"], job)
         assert result["status"] == "failed" and result["error"]["code"] == "usage_accounting_failed"
         assert stopped == ["usage_accounting_failed"]
         assert len(bodies) == len(calls) == 2  # three further first-pass batches never sent
         assert writes.count(first_call) == (3 if fault == "exhausted" else 1)
-        assert len(usages) == len(entries) == 1 and usages[0].call_id != first_call
+        assert len(usages) == 1 and usages[0].call_id != first_call
         assert {call.state for call in calls} == {
             "completed",
             "pending" if unknown_fails else "unknown",
         }
-        assert balance == Decimal("9.9985") and saved == 0
+        assert saved == 0
         assert result["result"]["cost"]["llm_tokens"] == 1500
-        evidence(tmp_path, "settlement_stop", calls, usages, balance, result)
+        evidence(tmp_path, "settlement_stop", calls, usages, result)
 
 
-async def test_proven_unsent_credential_failure_releases_hold_without_delete_or_call_count(
+async def test_proven_unsent_credential_failure_retains_admission_without_call_count(
     tenants,
     tmp_path,
 ):
@@ -843,13 +763,11 @@ async def test_proven_unsent_credential_failure_releases_hold_without_delete_or_
                     "https://api.anthropic.com/v1/messages",
                     {},
                     {"max_tokens": 1024},
-                    reserved_charge=llm.reservation({"max_tokens": 1024}),
                 )
             assert caught.value.code == "provider_unavailable"
-            calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job_id)
+            calls, usages, _ = await ledger(app, header["X-Org-Id"], job_id)
             assert len(calls) == 1 and calls[0].state == "not_sent"
-            assert calls[0].reserved_charge == 0 and calls[0].charge is None
-            assert not requests and not usages and not entries and balance == Decimal("10")
+            assert not requests and not usages
             # Repeating the cleanup is idempotent; a later valid call still fits ceiling=1.
             await execution.not_sent(calls[0].id)
             resolver.unavailable = False
@@ -858,17 +776,14 @@ async def test_proven_unsent_credential_failure_releases_hold_without_delete_or_
                 "https://api.anthropic.com/v1/messages",
                 {},
                 {"max_tokens": 1024},
-                reserved_charge=llm.reservation({"max_tokens": 1024}),
             )
-        calls, usages, entries, balance, _ = await ledger(app, header["X-Org-Id"], job_id)
-        assert len(requests) == len(usages) == len(entries) == 1
+        calls, usages, _ = await ledger(app, header["X-Org-Id"], job_id)
+        assert len(requests) == len(usages) == 1
         assert sorted(call.state for call in calls) == ["completed", "not_sent"]
-        assert balance == Decimal("10") - Decimal(usages[0].charge)
         evidence(
             tmp_path,
             "unsent-credential-release",
             calls,
             usages,
-            balance,
             await status(api, header, job_id),
         )

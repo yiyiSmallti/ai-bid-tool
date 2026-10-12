@@ -59,7 +59,7 @@ profile/contract attachment source enablement remains deferred. The
 | `build_evidence`, `update_card`, `confirmation_inputs`, `card_action` in [response_cards.py](../../server/app/services/response_cards.py); `sign`, `projections`, `manifest_fields` in [task_cosign.py](../../server/app/services/task_cosign.py) | Image-region Evidence, immutable card revisions, domain review and team slice 3 complete co-sign rounds already exist. B05 adds no independent material approval authority. |
 | `require_confirmed`, `fields`, `preparation`, `current_preparation` in [requirement_consumption.py](../../server/app/services/requirement_consumption.py); [B02 contract](requirement-confirmation.md) | Requirement confirmation is independent of evidence confirmation. Material preparation can precede it; evidence acceptance, confirmed release and consumption must recheck it. |
 | `evidence_dependency`, `assemble` in [drafts.py](../../server/app/services/drafts.py); `build_manifest`, `fresh_manifest`, `release`, `download_gate` in [exports.py](../../server/app/services/exports.py); `export_complete_gate` in [0024_export_images.py](../../server/migrations/versions/0024_export_images.py) | Consumers bind canonical Evidence rendition/hash. Confirmed release images need an additional export dependency and DB gate; substituting a PNG silently violates current bindings. |
-| `CONTRACT_VERSION`, `Result`, `Cost` in [contracts.py](../../server/app/schemas/contracts.py); `attach` in [budget_preflight.py](../../server/app/services/budget_preflight.py) | Task-budget work is present: use Result 4.0 and its full cost object, not older plan examples. |
+| `CONTRACT_VERSION`, `Result`, `Cost` in [contracts.py](../../server/app/schemas/contracts.py); `attach` in [preflight.py](../../server/app/services/preflight.py) | Reuse the strict seven-key Result 5.0 and six-field resource contract; dry-run uses shared read-only preflight. |
 
 [build_screenshot_renderer.sh](../../scripts/build_screenshot_renderer.sh) and
 [CI](../../.github/workflows/check.yml) already build the renderer. The
@@ -105,11 +105,14 @@ require a complete reversible chain instead of unbounded ancestry reads.
 
 1. **Select and preview.** Read-only preflight checks source/card access, exact card
    revision and extraction/requirement binding, hashes, coordinates, renderer identity
-   and expanded output limits. It returns normalized plan/mapping, predicted canvas,
-   provenance, input hash, warnings and budget preflight. The console loads one source
-   image and previews crop/boxes/footer layout. This overlay is a proposal; only the
-   later server PNG is a reviewable material. Input changes invalidate the preview.
-   Preflight creates no job, object, material, review, reservation or audit row.
+   and expanded output limits.
+It returns normalized plan/mapping, predicted canvas,
+   provenance, input hash, warnings and resource preflight.
+The console loads one source
+   image and previews crop/boxes/footer layout.
+This overlay is a proposal; only the
+   later server PNG is a reviewable material.
+Input changes invalidate the preview.
 2. **Submit the exact preview.** A human sends input hash, request ID and reviewed
    source PNG hash. Revalidate under task/card locks, persist the immutable request and
    enqueue `annotation_render` atomically. Return a job receipt, not a completed image.
@@ -265,11 +268,11 @@ hashes the fixed ordered footer key/value pairs and renderer identity, never a n
 operation timestamp or arbitrary serialized request. Verify these hashes in the service and both protocol
 boundaries; Pydantic shape validation alone does not establish storage or review trust.
 
-## Jobs, budget and publication
+## Jobs, usage and publication
 
 Add `annotation_render` and `annotation_release` Job kinds to the existing `Processor`,
 Procrastinate `bid.process` and `JobExecution` patterns. Register kinds in DB constraints,
-dispatch, `JOB_SCOPES`, status/cancel access, task-event visibility and budget command
+dispatch, `JOB_SCOPES`, status/cancel access, task-event visibility and resource usage command
 mapping. Use the real extraction job's `document_id`, including a valid B02 manual scope:
 this is the tender document (招标文件) behind the card, not its certificate. Never invent
 a Document, use `provider_test`, or loosen `Job.job_document_binding` for annotation.
@@ -308,14 +311,9 @@ Storage keys are internal; public contracts expose IDs/descriptors/authorized li
 
 ### Cost and execution limits
 
-Rust is server-local compute: **zero vendor requests/cost, zero platform charge and
-zero task liability**, including previews, retries and release rendering. Call
-`budget_preflight.attach(quotes=[], planned_calls=0)` with configured billing currency.
-Estimate basis is `zero` or a valid `cache_hit`, `next_call=null`. Exhausted/unpriced
-task budgets or zero prepaid balance do not block zero-charge work; preserve budget
-uncertainty for display, without a paid admission blocker. Reserve no funds and create
-no fictitious `UsageRecord`/`VendorCall`. CPU/memory/storage limits remain operational
-constraints. Paid OCR/vision would require a separate approved admission contract.
+Estimate basis is `zero` or a valid `cache_hit`, `next_call=null`.
+CPU/memory/storage limits remain operational
+constraints.
 
 Reuse absolute trusted binary validation, minimal environment, no shell, bounded pipes,
 20-second per-process timeout and terminate → one-second grace → kill/reap from
@@ -398,7 +396,7 @@ The migration preserves this ordering:
 
 ## HTTP, CLI and JSON contract
 
-Use the existing authenticated org transaction dependency and the Result 4.0 `/v4`
+Use the existing authenticated org transaction dependency and the Result 5.0 unversioned API
 HTTP prefix for metadata requests. The paths below are relative to that prefix;
 signed binary handlers also retain their authenticated unversioned links. All path/body IDs must
 resolve to one authorized task. No caller-provided org, actor, confirmer, storage key,
@@ -433,7 +431,7 @@ Release lists are separate; show never embeds unbounded review history. All obje
 paths return identical 404 for missing/inaccessible IDs, including inaccessible
 same-org tasks; denied actions on visible objects use 403, absent authentication 401.
 
-Result 4.0 has exactly `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`.
+Result 5.0 has exactly `ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`.
 Illustrative successful admission (no PNG claimed yet):
 
 ```json
@@ -450,25 +448,18 @@ Illustrative successful admission (no PNG claimed yet):
   },
   "items": [],
   "warnings": [],
-  "cost": {
-    "llm_tokens": 0,
-    "ocr_pages": 0,
-    "usd": 0.0,
-    "basis": "zero",
-    "charge": "0",
-    "billing_currency": "USD",
-    "task_amount": "0",
-    "unpriced_calls": 0,
-    "unresolved_calls": 0
-  },
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 18
 }
 ```
 
-Currency comes from configuration, not a USD constant. Dry-run includes existing
-`BudgetPreflightData`; completed job cost comes from `job_cost(..., currency)` with
-`basis=actual` and zero amounts. Reads/admission make zero calls. Duration is measured.
-No image/base64, storage key, local path, secret or source-text dump in JSON. Only a
+Dry-run includes existing
+`PreflightData`; completed job usage comes from `job_cost(...)` with the six
+resource counts in the Result 5.0 contract.
+Reads/admission make zero calls.
+Duration is measured.
+No image/base64, storage key, local path, secret or source-text dump in JSON.
+Only a
 succeeded job with a verified material proves publication, not `ok=true` on admission.
 
 | Exit | HTTP/error examples and meaning |
@@ -587,10 +578,12 @@ isolation, publication and browser path.
 | Roles and gates | Owner/contributor vs reviewer/observer, admin without domain, bidder commercial, technical technical, inactive/removed member, token/agent/worker. API and DB reject human-only scopes including evidence:confirm/export. Partial co-sign, same signer twice, stale round/policy/B02, wrong Evidence/hash/warnings/reopen fail; worker cannot confirm. |
 | Real renderer flow | Synthetic pages/archive → API/CLI → real Rust → storage/job → card review → release → draft/export. Artifact includes source/plan/profile hashes, candidate/release PNGs, unchanged original, expected pixels and reversible mapping. Repeat fixed inputs for deterministic bytes and profile changes for cache separation. |
 | Pixel/process limits | No crop/crop/20 boxes, overlap/edge/small boxes, rotation, Chinese source pixels, cropped/redacted parents, bounds/21 boxes/bools/floats/labels, min width/footer overflow, 8192/20M/40MiB/decoded/metadata limits, malformed PNG/receipts. Timeout/cancel/pipe bounds/no-network/CPU-RSS and reap assertions. |
-| Jobs/budget/publication | Transactional enqueue/crash recovery, request replay/conflict, changing input/withdrawal/authority during render, lease takeover, retries/cancel/orphans. Zero quotes/reservations/usage/vendor calls and exact Result 4.0 cost with exhausted budgets. One verified binding per published object. |
+| Jobs/usage/publication | Transactional enqueue/crash recovery, request replay/conflict, changing input/withdrawal/authority during render, lease takeover, retries/cancel/orphans.
+One verified binding per published object. |
 | Draft/export | Unconfirmed material never reaches rows/files. Complete B02/domain/co-sign admits canonical Evidence; B05 image export additionally requires release. Evidence hash unchanged. Pin replacement/B02 reopen/card relink/signer loss/tampering block consumption; non-B05/prototype paths unchanged. |
-| CLI/schema | Snapshot every new command and dry-run/queued/succeeded/duplicate/retry/cancel/error/empty/paged result; seven keys, Decimal strings, configured currency and exit 0/2/3/4. No false partial image. Client never runs Rust or downloads image for processing. |
-| Browser end to end | Follow [requirement-confirmation.spec.js](../../web/e2e/requirement-confirmation.spec.js) Playwright mocked-API pattern: exact routes/bodies, bounded reads, preview/explicit use/review, role/B02/co-sign blockers, cancellation/failure/retry, conflicts, release stale/wait, org-switch races and keyboard use. Reject unexpected/paid requests. Retain screenshots, trace and JSON with seed, request counts and replay command. |
+| CLI/schema | Snapshot every new command and dry-run/queued/succeeded/duplicate/retry/cancel/error/empty/paged result; seven keys, resource counts and exit 0/2/3/4. No false partial image. Client never runs Rust or downloads image for processing. |
+| Browser end to end | Follow [requirement-confirmation.spec.js](../../web/e2e/requirement-confirmation.spec.js) Playwright mocked-API pattern: exact routes/bodies, bounded reads, preview/explicit use/review, role/B02/co-sign blockers, cancellation/failure/retry, conflicts, release stale/wait, org-switch races and keyboard use.
+Retain screenshots, trace and JSON with seed, request counts and replay command. |
 | Events/board | Correct owner/blocker/next action on publish/review/release/invalidate; no success event after rollback; replay/reset/revocation observes task/org boundaries and frame caps. Board state never authorizes consumption. |
 
 Retain artifacts under ignored `data/work/annotation-acceptance/`: PNGs, hash manifest,
@@ -628,7 +621,7 @@ The owner approved every recommended default; implementation follows these decis
 | Creation role | Human-only evidence:annotate, task owner/contributor; existing professional confirmation | Source/privacy/material choices remain attributable team actions. |
 | Pixel semantics | Existing fixed font, 2px boxes, no labels/rescale, versioned profiles | Reuses bounded renderer while keeping deterministic provenance. |
 | Source change | Invalidate on task pin/source/review change, not library edit alone | Preserves task snapshots and requires explicit reconfirmation when inputs change. |
-| Cost | Zero vendor/platform/task charge, budget preview retained | Server compute does not need a fictitious model allowance. |
+| Cost | Local rendering makes zero provider calls. Retain resource preflight and measured duration. | Server compute does not need a fictitious model allowance. |
 | Runtime | 20s process/60s attempt, cancel poll ≤1s, ≤3 attempts, initial 1 CPU/512MiB | Bounded recovery consistent with screenshot patterns; test the envelope at maximum input. |
 | Batching/history | Single page/card, ≤20 boxes; new plan creates new material | Keeps conflicts and next review action clear before adding batch complexity. |
 | Stale release access | Metadata history readable under live ACL; normal CONFIRMED PNG preview denied | Retains audit history without silently reusing obsolete approvals. |

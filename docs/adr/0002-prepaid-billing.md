@@ -4,7 +4,9 @@ kind: adr
 
 # 0002 Prepaid balances (预付余额) and recharge cards
 
-Date: 2026-10-01. Status: accepted.
+Date: 2026-10-01. Status: superseded by 0011.
+
+Superseded by [ADR 0011](0011-remove-billing.md).
 
 ## Context
 
@@ -19,7 +21,7 @@ Calls to platform-default models accrue receivables at the selling price and nee
 - `BID_BILLING_CURRENCY` defines the currency for selling prices, receivables, balances, and card face values. Cost prices remain the provider's USD prices. The service refuses to start if existing balances use a different currency from configuration.
 - Redemption is a financial operation: only org administrators may redeem; API tokens can never receive `billing:redeem`.
 
-The no-reservation decision above records the original settlement contract. Current per-call reservation and admission behavior is maintained in [Prepaid billing](../notes/prepaid-billing.md#admission-and-the-spending-bound).
+The no-reservation decision above records the original settlement contract. Current per-call reservation and admission behavior is maintained in Prepaid billing.
 
 ## Tradeoffs
 

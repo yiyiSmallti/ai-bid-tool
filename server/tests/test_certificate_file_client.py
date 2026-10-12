@@ -13,7 +13,7 @@ from bid_cli.main import main
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 
 
-@pytest.fixture(params=("3.0", "4.0"))
+@pytest.fixture(params=("5.0",))
 def contract_version(request):
     """Version metadata endpoints while preserving signed raw download paths."""
     return request.param
@@ -33,7 +33,7 @@ def download_client(
     redirect=False,
     wrong_scope=False,
     transport_error=None,
-    contract_version="3.0",
+    contract_version="5.0",
 ):
     client = Client(
         "remote",
@@ -41,7 +41,7 @@ def download_client(
         SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
-    prefix = "/v4" if contract_version == "4.0" else ""
+    prefix = "/v4" if contract_version == "5.0" else ""
     path = f"/resources/certificates/revisions/{IDENTIFIER}/file/download"
     descriptor = {
         "name": "synthetic.pdf",

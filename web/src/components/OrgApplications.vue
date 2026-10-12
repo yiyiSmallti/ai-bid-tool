@@ -95,7 +95,7 @@ onMounted(() => load());
             <el-alert title="该邮箱已有账号。请核实申请人拥有该账号，开通后该账号将成为新单位管理员，已有密码不会改变。" type="warning" :closable="false" show-icon role="note" class="section" />
             <el-checkbox v-model="attach" :disabled="busy" name="attach-existing-user">挂到已有账号（已核实申请人拥有该账号）</el-checkbox>
           </template>
-          <p v-else class="hint">申请人使用提交的邮箱和密码登录。单位初始余额为零。</p>
+          <p v-else class="hint">申请人使用提交的邮箱和密码登录。</p>
         </template>
         <el-form-item v-else label="拒绝原因（仅内部记录）" required><el-input v-model="reason" name="application-reason" type="textarea" maxlength="500" :autosize="{ minRows: 3, maxRows: 6 }" :disabled="busy" /></el-form-item>
         <el-alert v-if="decisionError" :title="decisionError" type="error" :closable="false" role="alert" class="section" />

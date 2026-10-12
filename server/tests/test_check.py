@@ -30,7 +30,6 @@ import os
 import threading
 from contextlib import asynccontextmanager, redirect_stdout
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -528,27 +527,26 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     provider_calls = case["provider"].calls
     preview = await preview_check(case)
     after = await row_counts(case["app"], tenants["orgs"][0])
-
     assert after == before
     assert len(case["app"].state.queue.calls) == queue_calls
     assert case["provider"].calls == provider_calls
     assert preview["mode"] == "rules"
-    assert preview["estimated_cost"] == {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0}
-    assert Decimal(preview["estimated_charge"]) == 0
-    assert preview["cost_basis_reason"] == "no_model_calls"
+    assert preview["estimated_cost"] == {
+        "calls": 0,
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "search_requests": 0,
+        "browser_units": 0,
+        "unresolved_calls": 0,
+    }
     assert preview["provider_config_id"] is preview["model"] is preview["reasoning"] is None
     assert preview["gap_requirements"] == 3
     assert len(preview["selected_item_ids"]) == len(case["requirements"]) == 5
     assert "semantic_not_checked" in preview["limitations"]
     assert "unmapped_certificate_dates" in preview["limitations"]
     assert CANDIDATE_MARKER not in json.dumps(preview, ensure_ascii=False)
-
     invalid_requests = [
-        {
-            "draft_id": case["draft"]["id"],
-            "assessment_date": ASSESSMENT_DATE,
-            "mode": "rules",
-        },
+        {"draft_id": case["draft"]["id"], "assessment_date": ASSESSMENT_DATE, "mode": "rules"},
         {
             "draft_id": case["draft"]["id"],
             "assessment_date": ASSESSMENT_DATE,
@@ -566,14 +564,11 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     ]
     for invalid_body in invalid_requests:
         invalid = await case["api"].post(
-            f"/tasks/{case['task']}/checks",
-            headers=case["header"],
-            json=invalid_body,
+            f"/tasks/{case['task']}/checks", headers=case["header"], json=invalid_body
         )
         assert invalid.status_code == 422, invalid.text
         assert invalid.json()["data"]["error"]["code"] == "invalid_input"
         assert invalid.json()["data"]["error"]["exit_code"] == 2
-
     changed = await case["api"].post(
         f"/tasks/{case['task']}/checks",
         headers=case["header"],
@@ -587,7 +582,6 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert changed.status_code == 409, changed.text
     assert changed.json()["data"]["error"]["code"] == "check_input_changed"
     assert await row_counts(case["app"], tenants["orgs"][0]) == before
-
     submitted = await submit_check(case, preview)
     assert submitted.status_code == 200, submitted.text
     receipt = submitted.json()["data"]
@@ -596,11 +590,17 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert status["status"] == "succeeded", status
     result = status["result"]
     assert terminal["ok"] is False
-    assert terminal["cost"] == {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0}
+    assert terminal["cost"] == {
+        "calls": 0,
+        "llm_tokens": 0,
+        "ocr_pages": 0,
+        "search_requests": 0,
+        "browser_units": 0,
+        "unresolved_calls": 0,
+    }
     assert result["completion"] == "partial"
     assert result["unassessed_requirements"] == 1
     assert result["usage_record_ids"] == []
-    assert Decimal(result["charge"]) == 0
     assert CANDIDATE_MARKER not in json.dumps(terminal, ensure_ascii=False)
     assert case["provider"].calls == provider_calls
     queue_after_publish = len(case["app"].state.queue.calls)
@@ -610,7 +610,6 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert cached["cached"] is True and cached["job_id"] == receipt["job_id"]
     assert cached["status"] == "succeeded"
     assert len(case["app"].state.queue.calls) == queue_after_publish
-
     shown = await case["api"].get(f"/checks/{result['report_id']}", headers=case["header"])
     assert shown.status_code == 200, shown.text
     payload = shown.json()
@@ -642,13 +641,8 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
         f"/tasks/{case['task']}/checks", headers=case["header"], params={"limit": 1}
     )
     assert listed.status_code == 200, listed.text
-    assert listed.json()["data"] == {
-        "task_id": case["task"],
-        "total": 1,
-        "next_cursor": None,
-    }
+    assert listed.json()["data"] == {"task_id": case["task"], "total": 1, "next_cursor": None}
     assert [row["id"] for row in listed.json()["items"]] == [result["report_id"]]
-
     by_code: dict[str, list[dict]] = {}
     for finding in payload["items"]:
         by_code.setdefault(finding["code"], []).append(finding)
@@ -693,7 +687,6 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert {
         citation.get("field") for citation in negative_citations if citation["kind"] == "draft"
     } == {"deviation_note"}
-
     certificates = {row["task_certificate_id"]: row for row in payload["data"]["certificates"]}
     boundary = certificates[case["boundary_certificate"]["id"]]
     unknown = certificates[case["unknown_certificate"]["id"]]
@@ -710,7 +703,6 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert expired["requirement_ids"] == [case["requirements"][1]["id"]]
     assert future["date_status"] == "not_yet_valid"
     assert future["requirement_ids"] == [case["requirements"][1]["id"]]
-
     serialized = json.dumps(payload, ensure_ascii=False)
     assert CANDIDATE_MARKER not in serialized
     async with case["app"].state.db.transaction(tenants["orgs"][0]) as session:
@@ -745,7 +737,6 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     assert case["header"]["Authorization"] not in artifact_text
     assert case["header"]["Authorization"].removeprefix("Bearer ") not in artifact_text
     assert case["task"] in artifact_text and result["report_id"] in artifact_text
-
     cli_settings = Settings(data_dir=tmp_path)
     monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
     monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
@@ -774,18 +765,15 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
         assert run_code == 0, run_body
         assert run_body["data"]["input"]["input_hash"] == preview["input"]["input_hash"]
         list_code, list_body = await asyncio.to_thread(
-            invoke_live_cli,
-            [*common, "check", "list", "--task", case["task"]],
+            invoke_live_cli, [*common, "check", "list", "--task", case["task"]]
         )
         assert list_code == 0, list_body
         assert [row["id"] for row in list_body["items"]] == [result["report_id"]]
         show_code, show_body = await asyncio.to_thread(
-            invoke_live_cli,
-            [*common, "check", "show", "--id", result["report_id"]],
+            invoke_live_cli, [*common, "check", "show", "--id", result["report_id"]]
         )
         assert show_code == 5, show_body
         assert show_body["data"]["report"]["completion"] == "partial"
-
     cli_finding = next(
         row
         for row in payload["items"]
@@ -829,7 +817,6 @@ async def test_rules_report_dry_run_hash_findings_certificates_and_pdf_artifact(
     )
     assert remote_history_code == 0, remote_history
     assert [row["revision"] for row in remote_history["items"]] == [2]
-
     local = ["--mode", "local", "--state", str(tmp_path / "check-local.enc")]
     reopen_code, reopen_body = await asyncio.to_thread(
         invoke_live_cli,

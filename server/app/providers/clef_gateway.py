@@ -30,14 +30,11 @@ def parse_gateway(payload: dict, config: ClefPlatformConfig) -> ClefGatewayCheck
             result["retries"] is not False
             and (type(result["retries"]) is not int or result["retries"] != 0)
         )
-        or result.get("workers_ai_billing_mode", "unified") != "unified"
     ):
         raise ValueError("Unsafe gateway settings")
     limit, interval = result.get("rate_limiting_limit"), result.get("rate_limiting_interval")
     if type(limit) is not int or type(interval) is not int or limit <= 0 or interval <= 0:
         raise ValueError("Missing gateway rate limit")
-    # The fixed workers-ai AI Gateway route uses platform unified billing. The
-    # metadata endpoint does not supply a billing-mode field on every API version.
     return ClefGatewayCheck(
         gateway_id=config.gateway_id,
         authentication=True,
@@ -47,7 +44,6 @@ def parse_gateway(payload: dict, config: ClefPlatformConfig) -> ClefGatewayCheck
         gateway_retries=False,
         rate_limit_requests=limit,
         rate_limit_seconds=interval,
-        workers_ai_billing_mode="unified",
         checked_at=datetime.now(UTC),
     )
 

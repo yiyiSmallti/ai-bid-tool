@@ -2,7 +2,7 @@
 
 Failure modes specified before implementation: output spoofs usage or arbitrary
 commands, extra arguments escape the closed union, input exceeds 128 KiB, an
-unaccounted call reaches HTTP, malformed output loses billing, or an uncertain
+unaccounted call reaches HTTP, malformed output loses usage, or an uncertain
 request is automatically sent again. No real vendor traffic is used.
 """
 
@@ -32,8 +32,6 @@ def settings_for(tmp_path, provider):
         llm_model="synthetic-model",
         llm_api_key="synthetic-test-key-not-real",
         llm_base_url="https://agent.example.test/v1",
-        llm_input_usd_per_mtok=1,
-        llm_output_usd_per_mtok=1,
     )
 
 
@@ -130,7 +128,7 @@ async def test_decision_uses_closed_wire_and_trusted_metering(tmp_path):
             },
             "input_refs": [],
         },
-        {"kind": "complete", "summary": "Done", "output_refs": [], "usage": {"usd": 0}},
+        {"kind": "complete", "summary": "Done", "output_refs": [], "usage": {}},
     ],
 )
 async def test_invalid_decision_settles_before_rejection(tmp_path, action):

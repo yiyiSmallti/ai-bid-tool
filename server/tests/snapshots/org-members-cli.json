@@ -2,15 +2,12 @@
   "local:add": {
     "command": "org member add",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "expires_in": 86400,
@@ -35,15 +32,12 @@
   "local:add:existing": {
     "command": "org member add",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "expires_in": null,
@@ -68,15 +62,12 @@
   "local:error:forbidden": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -93,15 +84,12 @@
   "local:error:invalid_input": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -118,15 +106,12 @@
   "local:error:invalid_session": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -143,15 +128,12 @@
   "local:error:last_admin_required": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -168,15 +150,12 @@
   "local:error:member_exists": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -193,15 +172,12 @@
   "local:error:not_found": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -218,15 +194,12 @@
   "local:error:password_already_set": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -243,15 +216,12 @@
   "local:error:revision_conflict": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -268,15 +238,12 @@
   "local:error:unavailable": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -293,15 +260,12 @@
   "local:invite": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "expires_in": 86400,
@@ -326,15 +290,12 @@
   "local:list": {
     "command": "org member list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {},
     "duration_ms": 0,
@@ -357,15 +318,12 @@
   "local:list:empty": {
     "command": "org member list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {},
     "duration_ms": 0,
@@ -376,15 +334,12 @@
   "local:list:restricted": {
     "command": "org member list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {},
     "duration_ms": 0,
@@ -402,15 +357,12 @@
   "local:role": {
     "command": "org member role",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "active": true,
@@ -431,15 +383,12 @@
   "local:set-active:false": {
     "command": "org member set-active",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "active": false,
@@ -460,15 +409,12 @@
   "local:set-active:true": {
     "command": "org member set-active",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "active": true,
@@ -489,15 +435,12 @@
   "remote:add": {
     "command": "org member add",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "expires_in": 86400,
@@ -522,15 +465,12 @@
   "remote:add:existing": {
     "command": "org member add",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "expires_in": null,
@@ -555,15 +495,12 @@
   "remote:error:forbidden": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -580,15 +517,12 @@
   "remote:error:invalid_input": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -605,15 +539,12 @@
   "remote:error:invalid_session": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -630,15 +561,12 @@
   "remote:error:last_admin_required": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -655,15 +583,12 @@
   "remote:error:member_exists": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -680,15 +605,12 @@
   "remote:error:not_found": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -705,15 +627,12 @@
   "remote:error:password_already_set": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -730,15 +649,12 @@
   "remote:error:revision_conflict": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -755,15 +671,12 @@
   "remote:error:unavailable": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "error": {
@@ -780,15 +693,12 @@
   "remote:invite": {
     "command": "org member invite",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "expires_in": 86400,
@@ -813,15 +723,12 @@
   "remote:list": {
     "command": "org member list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {},
     "duration_ms": 0,
@@ -844,15 +751,12 @@
   "remote:list:empty": {
     "command": "org member list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {},
     "duration_ms": 0,
@@ -863,15 +767,12 @@
   "remote:list:restricted": {
     "command": "org member list",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {},
     "duration_ms": 0,
@@ -889,15 +790,12 @@
   "remote:role": {
     "command": "org member role",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "active": true,
@@ -918,15 +816,12 @@
   "remote:set-active:false": {
     "command": "org member set-active",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "active": false,
@@ -947,15 +842,12 @@
   "remote:set-active:true": {
     "command": "org member set-active",
     "cost": {
-      "basis": "zero",
-      "billing_currency": "USD",
-      "charge": "0",
+      "browser_units": 0,
+      "calls": 0,
       "llm_tokens": 0,
       "ocr_pages": 0,
-      "task_amount": "0",
-      "unpriced_calls": 0,
-      "unresolved_calls": 0,
-      "usd": 0.0
+      "search_requests": 0,
+      "unresolved_calls": 0
     },
     "data": {
       "active": true,

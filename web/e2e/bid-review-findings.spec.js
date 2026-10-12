@@ -7,7 +7,7 @@ const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 const ids = { org: uuid(1), user: uuid(2), task: uuid(3), submission: uuid(4), tender: uuid(5), bid: uuid(6), review: uuid(7), job: uuid(8) };
 const hash = "a".repeat(64), now = "2026-10-08T00:00:00Z";
 const unsafe = "合成引用 <img src=x onerror=window.__unsafe=1>", cleared = "[投标单位] 已声明响应合成要求。";
-const zero = { llm_tokens: 0, ocr_pages: 0, usd: 0, basis: "zero", charge: "0", billing_currency: "USD", task_amount: "0", unpriced_calls: 0, unresolved_calls: 0 };
+const zero = { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result = (command, data, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: zero, duration_ms: 0 });
 
 async function fixture(page, options = {}) {
@@ -25,7 +25,7 @@ async function fixture(page, options = {}) {
   page.on("pageerror", error => state.errors.push(error.message));
   await page.addInitScript(org => sessionStorage.setItem("bid.org.session", JSON.stringify({ session: "synthetic-session", orgId: org, orgName: "合成单位", email: "review@example.test" })), ids.org);
   await page.route("**/*", async route => {
-    const request = route.request(), url = new URL(request.url()), path = url.pathname.replace(/^\/v4(?=\/)/, ""), method = request.method();
+    const request = route.request(), url = new URL(request.url()), path = url.pathname, method = request.method();
     if (url.origin !== origin) { state.unexpected.push(`${method} external-origin`); return route.abort(); }
     if (path.startsWith("/app/")) {
       const file = path.startsWith("/app/assets/") ? join(directory, "assets", basename(path)) : join(directory, "index.html");
@@ -44,14 +44,14 @@ async function fixture(page, options = {}) {
     else if (path === `/tasks/${ids.task}/bid-reviews` && method === "GET") response = result("review list", { task_id: ids.task, next_cursor: null }, [run()]);
     else if (path === `/bid-reviews/${ids.review}` && method === "GET") { expect(["obligations", "signing_requirements"]).toContain(url.searchParams.get("section")); response = result("review show", { run: run(), obligations: [], signing_requirements: [], next_cursor: null }, [], false); }
     else if (path === `/bid-reviews/${ids.review}/findings` && method === "GET") {
-      expect(url.pathname.startsWith("/v4/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
+      expect(url.pathname.startsWith("/")).toBe(true); expect(url.searchParams.get("limit")).toBe("50");
       if (state.stale && ["technical", "viewer"].includes(state.role)) return route.fulfill({ status: 409, json: result("review findings", { error: { code: "bid_review_input_changed" } }, [], false) });
       let rows = state.rows.filter(row => ["severity", "state", "outcome"].every(key => !url.searchParams.get(key) || row[key] === url.searchParams.get(key)));
       const isNext = url.searchParams.get("cursor") === "synthetic-next";
       if (state.paged && !isNext) rows = rows.slice(0, 1); else if (state.paged) rows = rows.slice(1);
       response = result("review findings", metadata(state.paged && !isNext ? "synthetic-next" : null), rows.map(project));
     } else if (path.startsWith(`/bid-reviews/${ids.review}/findings/`)) {
-      expect(url.pathname.startsWith("/v4/")).toBe(true);
+      expect(url.pathname.startsWith("/")).toBe(true);
       const parts = path.split("/"), row = state.rows.find(item => item.id === parts[4]), section = parts[5];
       if (!row || !["classification", "decisions"].includes(section)) { state.unexpected.push(`${method} ${path}`); return route.abort(); }
       if (method === "GET") {

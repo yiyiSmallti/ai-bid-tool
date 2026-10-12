@@ -16,9 +16,6 @@ CONFIG = {
     "account_id": "a" * 32,
     "gateway_id": "presence",
     "enabled": True,
-    "price_revision": 1,
-    "fixed_sale_price": "0.01",
-    "currency": "USD",
     "workers_credential_id": "00000000-0000-4000-8000-000000000001",
     "gateway_credential_id": "00000000-0000-4000-8000-000000000002",
     "platform_model_id": "bid-review-clef",
@@ -35,9 +32,6 @@ INPUT = {
         "account_id",
         "gateway_id",
         "enabled",
-        "price_revision",
-        "fixed_sale_price",
-        "currency",
         "workers_credential_id",
         "gateway_credential_id",
     )
@@ -51,7 +45,6 @@ CHECK = {
     "gateway_retries": False,
     "rate_limit_requests": 200,
     "rate_limit_seconds": 60,
-    "workers_ai_billing_mode": "unified",
     "checked_at": "2026-10-08T00:00:00Z",
 }
 
@@ -139,7 +132,7 @@ def test_schema_exposes_platform_clef_contract(capsys):
     for action in ("show", "set", "check"):
         assert commands["platform clef " + action]["cli_parameters"]
         assert commands["platform clef " + action]["output"]
-    assert "fixed_sale_price" in commands["platform clef set"]["input"]["properties"]
+    assert "workers_credential_id" in commands["platform clef set"]["input"]["properties"]
 
 
 def test_missing_revision_and_secret_fields_rejected_before_transport(interface, tmp_path, capsys):

@@ -16,7 +16,7 @@ def create_router(context, settings):
     router = APIRouter(prefix="/management/providers")
 
     async def management_context(request: Request, ctx=Depends(context, scope="function")):
-        if getattr(request.state, "contract_version", None) != "4.0":
+        if getattr(request.state, "contract_version", None) != "5.0":
             raise not_found()
         session, actor = ctx
         session.info["management_settings"] = settings
@@ -30,27 +30,21 @@ def create_router(context, settings):
         started = time.monotonic()
         session, actor = ctx
         value = await service.settings(session, actor)
-        return service.detail_result(
-            service.COMMANDS["settings"], value, settings.billing_currency, elapsed(started)
-        )
+        return service.detail_result(service.COMMANDS["settings"], value, elapsed(started))
 
     @router.get("/revisions/{config_id}", name="provider_revision_show", response_model=Result)
     async def revision(config_id: UUID, ctx=Depends(management_context, scope="function")):
         started = time.monotonic()
         session, actor = ctx
         value = await service.revision(session, actor, config_id)
-        return service.detail_result(
-            service.COMMANDS["revision"], value, settings.billing_currency, elapsed(started)
-        )
+        return service.detail_result(service.COMMANDS["revision"], value, elapsed(started))
 
     @router.post("/history/query", name="provider_history_page", response_model=Result)
     async def history(body: PageQuery, ctx=Depends(management_context, scope="function")):
         started = time.monotonic()
         session, actor = ctx
         value = await service.history(session, actor, body)
-        return service.page_result(
-            service.COMMANDS["history"], value, settings.billing_currency, elapsed(started)
-        )
+        return service.page_result(service.COMMANDS["history"], value, elapsed(started))
 
     @router.post("/catalog/query", name="provider_catalog", response_model=Result)
     async def catalog(
@@ -59,8 +53,6 @@ def create_router(context, settings):
         started = time.monotonic()
         session, actor = ctx
         value = await service.catalog(session, actor, body)
-        return service.page_result(
-            service.COMMANDS["catalog"], value, settings.billing_currency, elapsed(started)
-        )
+        return service.page_result(service.COMMANDS["catalog"], value, elapsed(started))
 
     return router

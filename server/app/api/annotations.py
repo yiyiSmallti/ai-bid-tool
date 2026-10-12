@@ -55,7 +55,7 @@ def create_router(context, storage, queue, settings, tokens, processor):
     router = APIRouter()
 
     def result(command, data=None, items=None, started=None):
-        cost = Cost(billing_currency=settings.billing_currency, basis="zero")
+        cost = Cost()
         return Result(
             ok=True,
             command=command,

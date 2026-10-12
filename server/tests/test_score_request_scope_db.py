@@ -180,7 +180,6 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
     assert llm.settings.llm_batch_chars == 8000
     assert llm.settings.score_batch_chars == 64000
     before = await counts(case)
-    # Planned-call accounting is part of the Result 4.0 preview, so read it from /v4.
     response = await case["api"].post(
         f"/v4/tasks/{case['task']}/scores/preview",
         headers=case["header"],
@@ -193,10 +192,8 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
     )
     assert response.status_code == 200, response.text
     preview = response.json()["data"]
-    # Result 4.0 adds the shared budget preflight to the score preview fields.
-    ScorePreview.model_validate({k: v for k, v in preview.items() if k != "budget_preflight"})
+    ScorePreview.model_validate(preview)
     assert preview["admission_blocker"] is None
-    assert preview["cost_basis"] == "known"
     assert len(preview["selected_item_ids"]) == 86
     assert preview["preflight_unassessable_item_ids"] == []
     assert await counts(case) == before and case["score_vendor"].requests == []
@@ -210,20 +207,15 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
     assert Decimal(result["estimated_total"]) == 430
     requests = case["score_vendor"].requests
     assert len(requests) > 1
-    assert preview["budget_preflight"]["planned_calls"] == len(requests)
+    assert preview["preflight"]["planned_calls"] == len(requests)
     assert len(result["usage_record_ids"]) == len(requests)
     adapter = HTTPScoreProvider(llm)
     bodies = [
         adapter.request_body(ScoreProviderRequest.model_validate(payload)) for payload in requests
     ]
-    input_bound = sum(len(json.dumps(body, ensure_ascii=False).encode()) + 4096 for body in bodies)
+    input_bound = sum(len(llm.serialized_request(body)) + 4096 for body in bodies)
     output_bound = sum(llm.output_token_bound(body) for body in bodies)
     assert preview["estimated_cost"]["llm_tokens"] == input_bound + output_bound
-    expected_usd = (
-        input_bound * llm.settings.llm_input_usd_per_mtok
-        + output_bound * llm.settings.llm_output_usd_per_mtok
-    ) / 1_000_000
-    assert Decimal(str(preview["estimated_cost"]["usd"])) == Decimal(str(expected_usd))
     assert any(
         len(ScoreProviderRequest.model_validate(payload).model_dump_json()) > 8000
         for payload in requests
@@ -272,9 +264,11 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
             assert len(item["draft_refs"]) == 32
             assert {sent[ref] for ref in item["draft_refs"]} == support_texts
             scoped_pages[item["rubric_item_id"]] = sorted(
-                row.source["page"]
-                for prefix, row in contexts.items()
-                if f"{prefix}.context" in item["context_only_refs"] and row.kind != "row"
+                (
+                    row.source["page"]
+                    for prefix, row in contexts.items()
+                    if f"{prefix}.context" in item["context_only_refs"] and row.kind != "row"
+                )
             )
             assert len(scoped_pages[item["rubric_item_id"]]) == len(allowed_requirements)
             union.update(expected)
@@ -315,10 +309,6 @@ async def test_large_draft_score_preview_run_scopes_context_and_preserves_report
             ).all()
         )
         assert len(usage) == len(requests)
-        assert all(row.usd is not None for row in usage)
-        assert Decimal(str(preview["estimated_cost"]["usd"])) >= sum(
-            Decimal(str(row.usd)) for row in usage
-        )
     with pytest.raises(DBAPIError):
         async with case["app"].state.db.transaction(org) as session:
             await session.execute(

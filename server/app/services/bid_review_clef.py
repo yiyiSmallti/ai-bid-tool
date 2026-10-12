@@ -1,12 +1,11 @@
 """Presence-only visual stage; every required occurrence stays human work."""
 
 import asyncio
-from decimal import Decimal
 
 from app.providers.base import ProviderFailure
 from app.providers.clef import MODEL, VERSION, HTTPClefProvider
-from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.clef import ClefNoulQuestion, ClefQuestion, ClefRedactedImage, ClefTriageRequest
+from app.schemas.preflight_contracts import CallPlan
 from app.services import bid_review as bids
 
 UNVALIDATED_CASES = [
@@ -26,15 +25,13 @@ QUESTIONS: list[ClefQuestion] = [
 ]
 
 
-def preview_quote(image, config) -> BudgetCallQuote:
-    return BudgetCallQuote(
+def preview_quote(image, config) -> CallPlan:
+    return CallPlan(
         capability="vision",
-        payer="org_platform",
         provider="cloudflare",
         model=MODEL,
         version=VERSION,
         platform_model_id=config.platform_model_id,
-        price_revision=str(config.price_revision),
         request_sha256=bids.digest(
             {
                 "image": image["sha256"],
@@ -42,12 +39,7 @@ def preview_quote(image, config) -> BudgetCallQuote:
                 "questions": [q.model_dump(mode="json") for q in QUESTIONS],
             }
         ),
-        currency=config.currency,
-        reserved_charge=config.fixed_sale_price,
-        reserved_task_amount=config.fixed_sale_price,
-        vendor_usd_upper_bound=None,
         image_count=1,
-        image_price_revision=str(config.price_revision),
     )
 
 
@@ -119,11 +111,8 @@ async def triage(execution, fixed, signing, storage):
     coverage = {
         "clef": "disabled" if not clef["enabled"] else "unavailable",
         "clef_calls": 0,
-        "clef_cost": "0",
         "clef_completed_calls": 0,
         "clef_unresolved_calls": 0,
-        "clef_reserved_amount": "0",
-        "clef_currency": clef.get("currency", execution.settings.billing_currency),
         "clef_unvalidated_cases": UNVALIDATED_CASES,
         "clef_triage_only": True,
         "clef_human_confirmation_required": True,
@@ -189,7 +178,6 @@ async def triage(execution, fixed, signing, storage):
                 "job_attempt_stopped",
                 "job_heartbeat_failed",
                 "usage_accounting_failed",
-                "call_charge_bound_exceeded",
             }:
                 raise
             reported.extend(error.usage)
@@ -242,15 +230,8 @@ async def triage(execution, fixed, signing, storage):
     coverage.update(
         clef="triaged" if len(assessed) == len(required) and not errors else "partial",
         clef_calls=len(calls),
-        clef_cost=str(
-            sum(
-                (call.charge or Decimal(0) for call in calls if call.state == "completed"),
-                Decimal(0),
-            )
-        ),
         clef_completed_calls=sum(call.state == "completed" for call in calls),
         clef_unresolved_calls=len(unresolved),
-        clef_reserved_amount=str(sum((call.reserved_charge for call in unresolved), Decimal(0))),
         clef_assessed_page_ids=assessed,
         clef_required_pages=len(required),
     )

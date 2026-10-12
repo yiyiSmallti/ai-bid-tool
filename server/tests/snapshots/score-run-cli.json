@@ -3,15 +3,12 @@
     "score list": {
       "command": "score list",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -74,34 +71,24 @@
     "score run": {
       "command": "score run",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "configured_price",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0.04",
         "estimated_cost": {
-          "basis": "zero",
-          "billing_currency": "USD",
-          "charge": "0",
+          "browser_units": 0,
+          "calls": 1,
           "llm_tokens": 900,
           "ocr_pages": 0,
-          "task_amount": "0",
-          "unpriced_calls": 0,
-          "unresolved_calls": 0,
-          "usd": 0.02
+          "search_requests": 0,
+          "unresolved_calls": 0
         },
         "estimated_duration_ms": null,
         "input": {
@@ -118,10 +105,49 @@
         "limitations": [
           "advisory_only"
         ],
-        "max_charge": "1.25",
         "model": "synthetic-model",
         "model_revision": 1,
         "platform_model_id": "synthetic-score",
+        "preflight": {
+          "admission_blocker": null,
+          "as_of": "2026-10-05T00:00:00Z",
+          "cached_job_id": null,
+          "cached_result_cost": null,
+          "command": "score run",
+          "dry_run": true,
+          "duration_basis": "unknown",
+          "estimate": {
+            "browser_units": 0,
+            "calls": 1,
+            "llm_tokens": 900,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "unresolved_calls": 0
+          },
+          "estimated_duration_ms": null,
+          "full_run_guaranteed": false,
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "maximum_calls": 64,
+          "next_call": {
+            "browser_units": 0,
+            "capability": "llm",
+            "image_count": 0,
+            "image_input_sha256": null,
+            "input_tokens_upper_bound": 400,
+            "model": "synthetic-model",
+            "ocr_pages_upper_bound": 0,
+            "output_tokens_upper_bound": 500,
+            "platform_model_id": "synthetic-score",
+            "provider": "synthetic",
+            "provider_config_id": null,
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "search_requests": 0,
+            "version": "synthetic-v1"
+          },
+          "planned_calls": 1,
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "uncertainty": []
+        },
         "preflight_unassessable_item_ids": [],
         "prompt_version": "score-prompt-v1",
         "provider_config_id": null,
@@ -147,15 +173,12 @@
     "score show": {
       "command": "score show",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "items": [
@@ -269,15 +292,12 @@
     "score list": {
       "command": "score list",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "next_cursor": null,
@@ -340,34 +360,24 @@
     "score run": {
       "command": "score run",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "admission_blocker": null,
-        "billing_currency": "CNY",
-        "cost_basis": "known",
-        "cost_basis_reason": "configured_price",
         "dry_run": true,
         "estimate_kind": "first_pass_upper_bound",
-        "estimated_charge": "0.04",
         "estimated_cost": {
-          "basis": "zero",
-          "billing_currency": "USD",
-          "charge": "0",
+          "browser_units": 0,
+          "calls": 1,
           "llm_tokens": 900,
           "ocr_pages": 0,
-          "task_amount": "0",
-          "unpriced_calls": 0,
-          "unresolved_calls": 0,
-          "usd": 0.02
+          "search_requests": 0,
+          "unresolved_calls": 0
         },
         "estimated_duration_ms": null,
         "input": {
@@ -384,10 +394,49 @@
         "limitations": [
           "advisory_only"
         ],
-        "max_charge": "1.25",
         "model": "synthetic-model",
         "model_revision": 1,
         "platform_model_id": "synthetic-score",
+        "preflight": {
+          "admission_blocker": null,
+          "as_of": "2026-10-05T00:00:00Z",
+          "cached_job_id": null,
+          "cached_result_cost": null,
+          "command": "score run",
+          "dry_run": true,
+          "duration_basis": "unknown",
+          "estimate": {
+            "browser_units": 0,
+            "calls": 1,
+            "llm_tokens": 900,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "unresolved_calls": 0
+          },
+          "estimated_duration_ms": null,
+          "full_run_guaranteed": false,
+          "input_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "maximum_calls": 64,
+          "next_call": {
+            "browser_units": 0,
+            "capability": "llm",
+            "image_count": 0,
+            "image_input_sha256": null,
+            "input_tokens_upper_bound": 400,
+            "model": "synthetic-model",
+            "ocr_pages_upper_bound": 0,
+            "output_tokens_upper_bound": 500,
+            "platform_model_id": "synthetic-score",
+            "provider": "synthetic",
+            "provider_config_id": null,
+            "request_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "search_requests": 0,
+            "version": "synthetic-v1"
+          },
+          "planned_calls": 1,
+          "task_id": "00000000-0000-0000-0000-000000000002",
+          "uncertainty": []
+        },
         "preflight_unassessable_item_ids": [],
         "prompt_version": "score-prompt-v1",
         "provider_config_id": null,
@@ -413,15 +462,12 @@
     "score show": {
       "command": "score show",
       "cost": {
-        "basis": "zero",
-        "billing_currency": "USD",
-        "charge": "0",
+        "browser_units": 0,
+        "calls": 0,
         "llm_tokens": 0,
         "ocr_pages": 0,
-        "task_amount": "0",
-        "unpriced_calls": 0,
-        "unresolved_calls": 0,
-        "usd": 0.0
+        "search_requests": 0,
+        "unresolved_calls": 0
       },
       "data": {
         "items": [

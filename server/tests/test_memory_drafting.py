@@ -57,8 +57,6 @@ def test_memory_is_separate_from_evidence_and_included_in_budget(tmp_path):
             database_url="postgresql+psycopg://unused@127.0.0.1/unused",
             encryption_key=Fernet.generate_key().decode(),
             token_key=Fernet.generate_key().decode(),
-            llm_input_usd_per_mtok=1,
-            llm_output_usd_per_mtok=1,
         )
     )
     requirements = [{"requirement_id": str(uuid4()), "quote": "one"} for _ in range(2)]
@@ -70,7 +68,10 @@ def test_memory_is_separate_from_evidence_and_included_in_budget(tmp_path):
     assert payload["memory_usable_as_evidence"] is False
     assert len(groups(requirements, [], 1200)) == 1
     assert len(groups(requirements, [], 1200, memory=memory)) == 2
-    assert llm.reservation(body) >= llm.reservation(request_body(llm, requirements, []))
+    assert (
+        llm.quote(body).input_tokens_upper_bound
+        >= llm.quote(request_body(llm, requirements, [])).input_tokens_upper_bound
+    )
 
 
 async def test_candidate_approval_invalidates_empty_cache_and_records_calls(tenants, tmp_path):

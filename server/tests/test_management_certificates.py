@@ -295,7 +295,7 @@ async def test_complete_http_body_bound_and_literal_unicode_prefix(api, headers)
     assert boundary.status_code == 200
     assert (
         await api.post(BASE.replace("/v4", "") + "/query", headers=headers[0], json={})
-    ).status_code == 404
+    ).status_code == 200
 
 
 async def test_maximum_unicode_search_keeps_a_bounded_usable_cursor(api, headers):

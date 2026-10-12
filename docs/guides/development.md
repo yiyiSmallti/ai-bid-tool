@@ -119,16 +119,15 @@ scheme: choose **Authorize**, paste the session or token value without the
 1. Configure a platform operator and the dedicated credential connections using
    [Manage platform credentials](#manage-platform-credentials).
 2. Create an active `catalog_llm` credential, then select it in the platform Models
-   page. The provider and canonical endpoint must match. Set vendor and sale prices,
-   model name, reasoning options and the default model in that catalog entry.
+   page. The provider and canonical endpoint must match. Set model name, reasoning
+   options and the default model in that catalog entry.
 3. Tenant jobs use their pinned BYOK revision or the platform catalog. They do not
    use standalone deployment settings as a fallback. A missing or disabled credential
    prevents the next request; replacing its key does not change model/cache identity.
 4. For standalone evaluation, create a separate active `standalone_llm` credential.
-   Set non-secret `BID_LLM_PROVIDER`, `BID_LLM_MODEL`, `BID_LLM_BASE_URL` and pricing
-   settings to match that credential. The evaluator requires the reader database URL
-   and secrets root. No anonymous or env-key mode is supported.
-5. An explicit public-tender evaluation makes paid vendor requests:
+   Set nonsecret provider/model/endpoint options to match. The evaluator requires
+   the reader database URL and secrets root. No anonymous or env-key mode is supported.
+5. Run an explicit public-tender evaluation:
 
    ```sh
    uv run python evals/extract_tender.py --file PUBLIC_TENDER.docx --output data/work/extract-result.json
@@ -196,9 +195,9 @@ Batching and model options are defined by
    Perplexity requires the active `vendor_search` credential. It never falls back to
    SearXNG. Re-submit old search jobs that lack the pinned service credential identity.
 
-Metadata testing does not prove model authorization or available balance. Official
+Metadata tests do not prove model authorization. Official
 OpenAI/Anthropic model-list probes are bounded; Perplexity and custom endpoints return
-`unsupported`. No probe generates content or performs a paid search.
+`unsupported`.
 
 To rotate the encryption root, first distribute the new key as a readable previous key
 on all replicas, then switch it to current while retaining the old key in
@@ -226,11 +225,10 @@ while serving requests; retain the table/audits and repair forward.
    room for the system prompt, JSON schema, vendor framing and output. Characters
    are not tokens; the default is a bounded long-context starting point, not a
    guarantee that every model accepts it. The precise scope and indivisible-item
-   rule are in the [score Provider contract](../plan/score.md#providers-jobs-and-prepaid-billing).
+   rule are in the [score Provider contract](../plan/score.md#providers-jobs-and-usage).
 3. Preview `bid score run --task UUID --draft UUID --rubric UUID --as-of YYYY-MM-DD
-   --dry-run` after changing the setting. `score_context_limit` with
-   `cost_basis_reason=context_limit` means one complete item, including all confirmed
-   bid-side candidates, still exceeds the configured limit. Inspect the fixed input
+   --dry-run` after changing the setting.
+Inspect the fixed input
    and adjust the setting within the model's capacity before previewing and submitting
    again; retries do not remove evidence or truncate text.
 
@@ -239,34 +237,22 @@ while serving requests; retain the table/audits and repair forward.
 1. Set these values consistently on the API and all workers before starting
    model jobs:
 
-   | Setting | Default | Meaning |
-   | --- | --- | --- |
-   | `BID_JOB_MAX_CHARGE` | `10` | Positive platform charge ceiling for one job, in `BID_BILLING_CURRENCY`, across all attempts |
-   | `BID_JOB_MAX_VENDOR_CALLS` | `64` | Minimum vendor-request ceiling per job, including retries and unresolved requests |
-   | `BID_JOB_VENDOR_CALLS_PER_BATCH` | `4` | Requests allowed per first-pass batch; the per-job ceiling is the larger of this times the batches and `BID_JOB_MAX_VENDOR_CALLS`, so large documents can finish while runaway halving still stops |
-   | `BID_JOB_LEASE_SECONDS` | `900` | Lease duration in seconds; at least 3 |
-   | `BID_JOB_HEARTBEAT_SECONDS` | `30` | Positive renewal interval; at most one third of the lease duration |
-
 2. Apply [0016_vendor_call_guards.py](../../server/migrations/versions/0016_vendor_call_guards.py)
-   with the migration owner before running the new workers. Quiesce old
+   with the migration owner before running the new workers.
+Quiesce old
    workers during rollout: an older binary does not participate in admission.
-   Do not mix guarded and unguarded workers when relying on the spending bound.
-3. Ensure configured endpoint prices and token limits satisfy the
-   [reservation contract](../notes/prepaid-billing.md#admission-and-the-spending-bound).
-   A positive balance can still be insufficient for a whole request's reserved
-   bound. Set ceilings to the intended workload; retrying the same job keeps
-   its previous call count, charges and unresolved reservations.
 4. Run the API/processor guard scenarios against the disposable PostgreSQL
    runtime from [Run the checks](#run-the-checks):
 
    ```sh
-   uv run pytest -q server/tests/test_vendor_call_guards.py server/tests/test_llm_providers.py server/tests/test_billing.py server/tests/test_job_boundaries.py --basetemp=/private/tmp/bid-call-guards --junitxml=artifacts/vendor-call-guards.xml
+   uv run pytest -q server/tests/test_vendor_call_guards.py server/tests/test_llm_providers.py server/tests/test_job_boundaries.py --basetemp=/private/tmp/bid-call-guards --junitxml=artifacts/vendor-call-guards.xml
    ```
 
-   Vendors use `httpx.MockTransport`. The guard scenarios write synthetic
+   Vendors use `httpx.MockTransport`.
+The guard scenarios write synthetic
    accounting snapshots beneath `--basetemp`; JUnit records passes, failures
-   and skips. A missing or sandbox-inaccessible PostgreSQL instance does not
-   validate reservations, row locks, migrations or tenant isolation. Keep
+   and skips.
+Keep
    evidence outside `docs/`.
 
 ## Run the platform console
@@ -315,11 +301,6 @@ enrollment for that email. Remove the override and restart before returning to
 browser enrollment. Enrollment-token binding, key rotation and failure semantics
 are defined by [Operator enrollment](../notes/operator-enrollment.md).
 
-Set `BID_BILLING_CURRENCY` (an ISO 4217 code, default `USD`) before any org has
-a balance; catalog sale prices, charges, balances and card values all use it,
-and startup refuses balances stored in another currency. Org admins use
-`http://127.0.0.1:8000/app/org/login` to see their balance and redeem cards.
-
 If sign-in or org lookup returns `too_many_attempts` (HTTP 429), stop retrying
 and wait for `Retry-After` before retrying; switching pages or orgs does not
 reset the account's limit. For `auth_busy` (HTTP 503), wait for `Retry-After`
@@ -338,10 +319,6 @@ directory:
 ```sh
 cd web && E2E_BASE_URL=http://127.0.0.1:8000 E2E_EMAIL=OPERATOR_EMAIL E2E_PASSWORD=OPERATOR_PASSWORD E2E_TOTP_SECRET=SECRET E2E_OUTPUT=/tmp/console-e2e npx playwright test
 ```
-
-The check expects an org named 计费演示单位 with platform-billed usage in the
-current month and creates an org, a model named `e2e-model` and recharge cards (充值卡密),
-so run it against a disposable database.
 
 ## Check an export in Word
 

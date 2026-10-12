@@ -1,4 +1,4 @@
-"""Platform console routes end to end: access boundaries, provisioning, catalog and billing.
+"""Platform console routes end to end: access boundaries, provisioning, catalog and usage.
 
 Output-limit failure mode: a reasoning level can bypass the adapter limit using an alias
 or nested vendor configuration; both new and revised catalog entries must reject it.
@@ -26,10 +26,6 @@ MODEL = {
     "model": "claude-opus-5-5",
     "base_url": None,
     "credential": "main",
-    "vendor_input_usd_per_mtok": 4.0,
-    "vendor_output_usd_per_mtok": 20.0,
-    "sale_input_per_mtok": 6.0,
-    "sale_output_per_mtok": 30.0,
     "default": True,
     "enabled": True,
 }
@@ -46,14 +42,6 @@ ROUTES = [
     ),
     ("GET", "/platform/usage", None),
     ("GET", "/platform/audit", None),
-    (
-        "POST",
-        "/platform/orgs/00000000-0000-0000-0000-000000000001/balance",
-        {"mode": "add", "amount": 1, "reason": "x"},
-    ),
-    ("POST", "/platform/cards", {"count": 1, "face_value": 10}),
-    ("GET", "/platform/cards", None),
-    ("POST", "/platform/cards/00000000-0000-0000-0000-000000000001/void", None),
 ]
 
 
@@ -140,8 +128,6 @@ async def test_provisioned_admin_sets_password_and_signs_in(console, tenants):
         "created_at",
         "member_count",
         "admin_emails",
-        "currency",
-        "balance",
     }
     assert {o["name"]: o["admin_emails"] for o in orgs}["New org"] == ["boss@example.test"]
     audit = (await console.get("/platform/audit", headers=console.ops)).json()["items"]
@@ -197,7 +183,7 @@ async def test_model_catalog_revisions_and_single_default(console, monkeypatch):
     updated = await console.post(
         "/platform/models",
         headers=console.ops,
-        json={**MODEL, "sale_input_per_mtok": 7.0, "expected_revision": 1},
+        json={**MODEL, "expected_revision": 1},
     )
     assert updated.json()["data"]["revision"] == 2
     invalid = await console.post(
@@ -260,43 +246,34 @@ async def test_catalog_rejects_reserved_output_limits(console, provider, options
     )
 
 
-async def test_default_platform_model_drives_extraction_and_charges(console, tenants, pdf_bytes):
+async def test_default_platform_model_drives_extraction_and_records_usage(
+    console, tenants, pdf_bytes
+):
     assert (
         await console.post("/platform/models", headers=console.ops, json=MODEL)
     ).status_code == 200
     console.vendor.responses.append(anthropic_reply(GOOD_ITEMS))
     org = tenants["orgs"][0]
-    async with console.app.state.db.transaction() as session:
-        await session.execute(
-            text("SELECT * FROM platform_adjust_balance(:o, 'add', 10, 'seed', 'ops', 'USD')"),
-            {"o": org},
-        )
     header = await org_header(console, org, "a@example.test")
     assert (await console.get("/health")).json()["data"]["real_llm_configured"] is True
     _, document = await create_document(console, header, pdf_bytes)
     await run_job(console, console.app, header, document, "parse")
     _, status = await run_job(console, console.app, header, document, "extract")
     assert status["status"] == "succeeded", status
-
     [request] = console.vendor.requests
     assert request.headers["x-api-key"] == "synthetic-platform-key"
     async with console.app.state.db.transaction(org) as session:
         [record] = (
             await session.scalars(select(UsageRecord).where(UsageRecord.provider == "anthropic"))
         ).all()
-    # 1200 input and 300 output tokens at vendor 4/20 and sale 6/30 per million.
     assert (record.input_tokens, record.output_tokens, record.platform_model_id) == (
         1200,
         300,
         "opus-standard",
     )
-    assert float(record.usd) == pytest.approx(0.0108)
-    assert float(record.charge) == pytest.approx(0.0162)
-
     summary = (await console.get("/platform/usage", headers=console.ops)).json()
-    [row] = [item for item in summary["items"] if item["billing"] == "platform"]
-    assert row["org_name"] == "Synthetic tenant A" and row["charge"] == pytest.approx(0.0162)
-    assert summary["data"]["totals"]["charge"] == pytest.approx(0.0162)
+    [row] = [item for item in summary["items"] if item["source"] == "platform"]
+    assert row["org_name"] == "Synthetic tenant A"
 
 
 async def test_missing_platform_credential_fails_extraction_explicitly(
@@ -331,20 +308,13 @@ async def test_model_test_button_reports_success_and_failure(console, admin_engi
             json={"name": "Internal model probe", "admin_email": OPERATOR},
         )
     ).json()["data"]["org_id"]
-    funded = await console.post(
-        f"/platform/orgs/{organization}/balance",
-        headers=console.ops,
-        json={"mode": "add", "amount": 100, "reason": "Synthetic probe allowance"},
-    )
-    assert funded.status_code == 200
     probe = {"test_org_id": organization}
-
     passed = (
         await console.post(
             "/v4/platform/models/opus-standard/test", headers=console.ops, json=probe
         )
     ).json()["data"]
-    assert passed["passed"] is True and passed["usage"]["charge"] == pytest.approx(0.0162)
+    assert passed["passed"] is True
     failed = (
         await console.post(
             "/v4/platform/models/opus-standard/test", headers=console.ops, json=probe
@@ -360,7 +330,6 @@ async def test_model_test_button_reports_success_and_failure(console, admin_engi
         records = database.scalars(select(UsageRecord).where(UsageRecord.task_id.is_(None))).all()
         assert len(records) == 1 and str(records[0].org_id) == organization
         assert records[0].job_id is not None and records[0].call_id is not None
-
     assert (
         await console.post("/v4/platform/models/missing/test", headers=console.ops, json=probe)
     ).status_code == 404
@@ -373,8 +342,6 @@ async def test_platform_model_dry_run_without_org_is_read_only(console, admin_en
         "usage_records",
         "vendor_calls",
         "platform_audit_logs",
-        "balance_entries",
-        "org_balance_notices",
     )
 
     def snapshot():
@@ -391,14 +358,14 @@ async def test_platform_model_dry_run_without_org_is_read_only(console, admin_en
     )
     assert response.status_code == 200, response.text
     body = response.json()
-    assert response.headers["X-Bid-Contract-Version"] == "4.0"
-    preflight = body["data"]["budget_preflight"]
-    assert preflight["task_id"] is None and preflight["task_budget"] is None
+    assert response.headers["X-Bid-Contract-Version"] == "5.0"
+    preflight = body["data"]["preflight"]
+    assert preflight["task_id"] is None
     assert (
         preflight["planned_calls"] == 1
         and preflight["next_call"]["platform_model_id"] == MODEL["id"]
     )
-    assert preflight["full_run_guaranteed"] is False and preflight["first_pass_fits"] is None
+    assert preflight["full_run_guaranteed"] is False
     assert body["cost"] == preflight["estimate"]
     assert snapshot() == before and console.vendor.requests == []
 
@@ -432,133 +399,3 @@ async def test_audit_lists_operator_sign_in(console):
 
 
 CODE_PATTERN = re.compile(r"^[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){3}$")
-
-
-async def test_cards_are_shown_once_and_redeem_through_the_org_flow(console, tenants, admin_engine):
-    created = await console.post(
-        "/platform/cards",
-        headers=console.ops,
-        json={"count": 3, "face_value": 25, "note": "Synthetic batch"},
-    )
-    assert created.status_code == 200, created.text
-    data = created.json()["data"]
-    codes = [card["code"] for card in data["cards"]]
-    assert data["currency"] == "USD" and len(set(codes)) == 3
-    assert all(CODE_PATTERN.match(code) for code in codes)
-    with Session(admin_engine) as session:
-        stored = json.dumps(
-            [list(map(str, r)) for r in session.execute(text("SELECT * FROM platform_cards")).all()]
-        )
-        audit = json.dumps(
-            [str(r) for r in session.execute(text("SELECT details FROM platform_audit_logs")).all()]
-        )
-    assert not any(code in stored or code in audit for code in codes)
-
-    listed = (
-        await console.get(f"/platform/cards?batch_id={data['batch_id']}", headers=console.ops)
-    ).json()
-    assert listed["data"]["currency"] == "USD"
-    assert {card["last4"] for card in listed["items"]} == {code[-4:] for code in codes}
-    assert all("code" not in card and "code_hash" not in card for card in listed["items"])
-
-    header = await org_header(console, tenants["orgs"][0], "a@example.test")
-    redeemed = await console.post("/billing/redeem", headers=header, json={"code": codes[0]})
-    assert redeemed.status_code == 200 and redeemed.json()["data"]["balance"] == 25.0
-    voided = await console.post(
-        f"/platform/cards/{data['cards'][1]['id']}/void", headers=console.ops
-    )
-    assert voided.json()["data"]["status"] == "void"
-    refused = await console.post("/billing/redeem", headers=header, json={"code": codes[1]})
-    assert refused.json()["data"]["error"]["code"] == "invalid_card"
-    again = await console.post(
-        f"/platform/cards/{data['cards'][0]['id']}/void", headers=console.ops
-    )
-    assert again.status_code == 409
-    missing = await console.post(
-        "/platform/cards/00000000-0000-0000-0000-000000000009/void", headers=console.ops
-    )
-    assert missing.status_code == 404
-
-    states = {
-        c["id"]: c["status"]
-        for c in (await console.get("/platform/cards", headers=console.ops)).json()["items"]
-    }
-    assert sorted(states.values()) == ["active", "redeemed", "void"]
-    actions = [
-        e["action"]
-        for e in (await console.get("/platform/audit", headers=console.ops)).json()["items"]
-    ]
-    assert {"platform.card.create", "platform.card.void", "billing.redeem"} <= set(actions)
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {"count": 0, "face_value": 10},
-        {"count": 501, "face_value": 10},
-        {"count": 1, "face_value": 0},
-        {"count": 1, "face_value": 10, "expires_at": "2020-01-01T00:00:00+00:00"},
-        {"count": 1, "face_value": 10, "expires_at": "2099-01-01T00:00:00"},
-    ],
-)
-async def test_card_issuance_validates_input(console, body):
-    assert (
-        await console.post("/platform/cards", headers=console.ops, json=body)
-    ).status_code == 422
-
-
-async def test_balance_adjustments(console, tenants, admin_engine):
-    org = tenants["orgs"][0]
-    path = f"/platform/orgs/{org}/balance"
-    added = await console.post(
-        path, headers=console.ops, json={"mode": "add", "amount": 40, "reason": "Opening credit"}
-    )
-    assert added.json()["data"] == {
-        "org_id": str(org),
-        "mode": "add",
-        "delta": 40.0,
-        "balance": 40.0,
-        "currency": "USD",
-    }
-    lowered = await console.post(
-        path, headers=console.ops, json={"mode": "set", "amount": 15.5, "reason": "Correction"}
-    )
-    assert lowered.json()["data"]["delta"] == -24.5
-    orgs = {
-        o["id"]: o
-        for o in (await console.get("/platform/orgs", headers=console.ops)).json()["items"]
-    }
-    assert (orgs[str(org)]["balance"], orgs[str(org)]["currency"]) == (15.5, "USD")
-    header = await org_header(console, org, "a@example.test")
-    ledger = (await console.get("/billing", headers=header)).json()["items"]
-    assert [(e["kind"], e["amount"], e["reason"]) for e in ledger] == [
-        ("adjust", -24.5, "Correction"),
-        ("adjust", 40.0, "Opening credit"),
-    ]
-    for body in (
-        {"mode": "add", "amount": 1, "reason": "  "},
-        {"mode": "set", "amount": -1, "reason": "x"},
-        {"mode": "double", "amount": 1, "reason": "x"},
-    ):
-        assert (await console.post(path, headers=console.ops, json=body)).status_code == 422
-    missing = await console.post(
-        "/platform/orgs/00000000-0000-0000-0000-000000000009/balance",
-        headers=console.ops,
-        json={"mode": "add", "amount": 1, "reason": "x"},
-    )
-    assert missing.status_code == 404
-    other = tenants["orgs"][1]
-    with Session(admin_engine) as session, session.begin():
-        session.execute(
-            text("INSERT INTO org_balances (org_id, currency, balance) VALUES (:o, 'CNY', 1)"),
-            {"o": other},
-        )
-    mismatch = await console.post(
-        f"/platform/orgs/{other}/balance",
-        headers=console.ops,
-        json={"mode": "add", "amount": 1, "reason": "x"},
-    )
-    assert (
-        mismatch.status_code == 409
-        and mismatch.json()["data"]["error"]["code"] == "currency_mismatch"
-    )

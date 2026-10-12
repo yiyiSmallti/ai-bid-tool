@@ -182,16 +182,17 @@ def test_binding_management_invalid_legacy_and_schema(monkeypatch, capsys):
         )
     for command in ("browse", "show"):
         result = invoke(capsys, ["--contract-version", "3.0", "export", "binding", command], 2)
-        assert result["data"]["error"]["message"] == "This command requires contract 4.0"
+        assert result["data"]["error"]["message"] == "Only contract 5.0 is supported"
     assert calls == []
     entries = invoke(capsys, ["schema"])["data"]["commands"]
     for command in ("browse", "show"):
         assert entries["export binding " + command]["input"]
         assert entries["export binding " + command]["output"]
     assert entries["export binding browse"]["items"]
-    cli.main(["--contract-version", "3.0", "schema", "--json"])
-    legacy = json.loads(capsys.readouterr().out)["data"]["commands"]
-    assert "export binding list" in legacy and "export binding browse" not in legacy
+    with pytest.raises(SystemExit) as error:
+        cli.main(["--contract-version", "3.0", "schema", "--json"])
+    assert error.value.code == 2
+    assert json.loads(capsys.readouterr().out)["data"]["error"]["code"] == "invalid_input"
 
 
 @pytest.mark.parametrize(

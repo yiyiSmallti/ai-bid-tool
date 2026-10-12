@@ -14,7 +14,7 @@ from pathlib import Path
 
 import httpx
 import pytest
-from app.schemas.contracts import Cost, LegacyCost, Result
+from app.schemas.contracts import Cost, Result
 from bid_cli import main as cli
 from bid_cli.client import Client
 
@@ -83,7 +83,7 @@ def invoke(capsys, flags, exit_code=0):
     assert SECRET not in output.out + output.err
     body = json.loads(output.out)
     assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-    cost_model = LegacyCost if "3.0" in flags else Cost
+    cost_model = Cost
     assert body["cost"] == cost_model().model_dump(mode="json")
     body["duration_ms"] = 0
     return body
@@ -278,7 +278,7 @@ def test_management_confidential_invalid_and_legacy_no_request(monkeypatch, caps
         invoke(capsys, flags, 2)
     for command in COMMANDS:
         body = invoke(capsys, ["--contract-version", "3.0", *command.split()], 2)
-        assert body["data"]["error"]["message"] == "This command requires contract 4.0"
+        assert body["data"]["error"]["message"] == "Only contract 5.0 is supported"
     assert calls == []
 
 
@@ -317,8 +317,8 @@ def test_management_confidential_schema_and_legacy_list(monkeypatch, capsys):
     write = commands[COMMANDS[3]]["input"]
     assert "value" in write["required"] and "expected_value_id" in write["required"]
     assert "confidential reveal" not in commands
-    legacy = invoke(capsys, ["--contract-version", "3.0", "schema"])["data"]["commands"]
-    assert all(command not in legacy for command in COMMANDS)
+    rejected = invoke(capsys, ["--contract-version", "3.0", "schema"], 2)
+    assert rejected["data"]["error"]["code"] == "invalid_input"
     calls = []
 
     def call(method, path, **kwargs):

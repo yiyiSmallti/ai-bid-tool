@@ -4,15 +4,13 @@ import json
 import re
 import unicodedata
 from collections import Counter
-from decimal import ROUND_HALF_UP, Decimal
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.core.security import Secrets
-from app.models.entities import OrgBalance, UsageRecord, VendorCall
+from app.models.entities import UsageRecord, VendorCall
 from app.providers import llm as llm_providers
-from app.providers.base import ProviderFailure
 from app.providers.checking import (
     CHECK_ADAPTER_VERSION as ADAPTER_VERSION,
 )
@@ -31,6 +29,7 @@ from app.providers.checking import (
 from app.providers.configured import model_identity
 from app.providers.llm import with_reasoning
 from app.schemas.check_contracts import OutboundContext
+from app.schemas.contracts import Cost
 from app.services import confidential, drafts, redaction
 from app.services.check_inputs import CheckSnapshot
 from app.services.extraction import (
@@ -42,23 +41,13 @@ from app.services.response_cards import fail
 
 # Only these admission stops permit retaining already completed deterministic coverage.
 PARTIAL_STOPS = {
-    "task_budget_exceeded",
-    "task_budget_unpriced",
-    "task_budget_currency_review_required",
-    "insufficient_balance",
-    "spend_cap_reached",
-    "job_charge_limit_exceeded",
     "job_call_limit_exceeded",
 }
 HARD_STOPS = {
     "job_attempt_stopped",
     "job_heartbeat_failed",
     "usage_accounting_failed",
-    "call_charge_bound_exceeded",
     "invalid_provider_usage",
-    "billing_currency_mismatch",
-    "billing_price_unavailable",
-    "billing_bound_unavailable",
     "check_usage_integrity",
     "check_input_changed",
     "redaction_required",
@@ -73,18 +62,9 @@ async def resolve(session, settings, job=None):
     return await llm_providers.resolve_llm(session, settings, job=job)
 
 
-def prices(llm) -> dict:
+def provider_options(llm, *, rubric: bool = False) -> dict:
     configured = getattr(llm, "settings", None)
     return {
-        "sale": [str(value) for value in llm.sale]
-        if getattr(llm, "sale", None) is not None
-        else None,
-        "vendor_input": str(configured.llm_input_usd_per_mtok)
-        if configured and configured.llm_input_usd_per_mtok is not None
-        else None,
-        "vendor_output": str(configured.llm_output_usd_per_mtok)
-        if configured and configured.llm_output_usd_per_mtok is not None
-        else None,
         "org_owned": bool(getattr(llm, "org_owned", False)),
         "request_options_sha256": drafts.digest(configured.request_options())
         if configured
@@ -93,6 +73,16 @@ def prices(llm) -> dict:
         "output_tokens": configured.llm_max_output_tokens if configured else None,
         "json_mode": configured.llm_json_mode if configured else None,
         "effort": configured.llm_effort if configured else None,
+        **(
+            {
+                "rubric_max_request_bytes": configured.rubric_max_request_bytes
+                if configured
+                else None,
+                "concurrency": configured.llm_concurrency if configured else None,
+            }
+            if rubric
+            else {}
+        ),
     }
 
 
@@ -253,8 +243,8 @@ async def prepare(session, fixed: CheckSnapshot, llm, requested_reasoning, setti
             "schema_version": SCHEMA_VERSION,
             "adapter_version": ADAPTER_VERSION,
             "model": None,
+            "provider_options": None,
             "reasoning": None,
-            "price": None,
             "provider_source": None,
             "outbound_sha256": None,
             "redacted_counts": {},
@@ -271,14 +261,12 @@ async def prepare(session, fixed: CheckSnapshot, llm, requested_reasoning, setti
         "schema_version": SCHEMA_VERSION,
         "adapter_version": ADAPTER_VERSION,
         "model": model_identity(llm),
+        "provider_options": provider_options(llm),
         "reasoning": reasoning,
-        "price": prices(llm),
         "provider_source": "org" if getattr(llm, "org_owned", False) else "platform",
     }
     fixed.limitations = [value for value in fixed.limitations if value != "semantic_not_checked"]
     fixed.limitations += warnings
-    if getattr(llm, "org_owned", False):
-        fixed.limitations.append("org_owned_key_max_charge_does_not_bound_vendor_bill")
     fields, library = await secret_library(session, fixed.draft.task_id, settings)
     outbound = build_outbound(fixed.secret, fields, library)
     fixed.secret["outbound"] = outbound
@@ -290,77 +278,26 @@ async def prepare(session, fixed: CheckSnapshot, llm, requested_reasoning, setti
 
 
 async def preview(session, fixed, llm, body, settings) -> dict:
-    summary = {
-        "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": None},
-        "estimated_charge": None,
-        "cost_basis": "unknown",
-        "cost_basis_reason": "model_unavailable",
-        "admission_blocker": None,
-    }
+    from app.services.preflight import estimate_quotes
+
     if not fixed.manifest["model_redaction_enabled"]:
-        return summary | {
+        return {
+            "estimated_cost": Cost().model_dump(mode="json"),
             "admission_blocker": "redaction_required",
-            "cost_basis_reason": "redaction_required",
         }
     if not fixed.secret["outbound"]["requirements"]:
-        return {
-            "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
-            "estimated_charge": Decimal(0),
-            "cost_basis": "known",
-            "cost_basis_reason": "no_model_calls",
-            "admission_blocker": None,
-        }
+        return {"estimated_cost": Cost().model_dump(mode="json"), "admission_blocker": None}
     if not supports_check(llm):
-        return summary | {"admission_blocker": "check_capability_unavailable"}
+        return {
+            "estimated_cost": Cost().model_dump(mode="json"),
+            "admission_blocker": "check_capability_unavailable",
+        }
     adapter = check_provider(llm)
     requests = requests_for(fixed.secret["outbound"], llm)
-    bodies = [adapter.request_body(request) for request in requests]
-    try:
-        if llm.platform_model_id is None and not llm.org_owned:
-            return summary | {
-                "admission_blocker": "billing_price_unavailable",
-                "cost_basis_reason": "prices_unavailable",
-            }
-        bounds = [adapter.reservation(request) for request in requests]
-    except ProviderFailure as error:
-        return summary | {
-            "admission_blocker": error.code,
-            "cost_basis_reason": "prices_unavailable",
-        }
-    inputs = sum(len(json.dumps(value, ensure_ascii=False).encode()) + 4096 for value in bodies)
-    outputs = sum(llm.output_token_bound(value) for value in bodies)
-    input_price, output_price = (
-        llm.settings.llm_input_usd_per_mtok,
-        llm.settings.llm_output_usd_per_mtok,
-    )
-    usd = (
-        None
-        if input_price is None or output_price is None
-        else (inputs * input_price + outputs * output_price) / 1_000_000
-    )
-    first = bounds[0] if bounds else Decimal(0)
-    blocker = None
-    if first > settings.job_max_charge:
-        blocker = "job_charge_limit_exceeded"
-    elif body.max_charge is not None and first > body.max_charge:
-        blocker = "spend_cap_below_first_call"
-    if llm.platform_model_id is not None:
-        balance = await session.scalar(select(OrgBalance))
-        held = await session.scalar(
-            select(func.coalesce(func.sum(VendorCall.reserved_charge), 0)).where(
-                VendorCall.state != "completed"
-            )
-        )
-        if balance is not None and balance.currency != settings.billing_currency:
-            blocker = "billing_currency_mismatch"
-        elif balance is None or balance.balance <= 0 or balance.balance - (held or 0) < first:
-            blocker = "insufficient_balance"
+    plans = [llm.quote(adapter.request_body(request)) for request in requests]
     return {
-        "estimated_cost": {"llm_tokens": inputs + outputs, "ocr_pages": 0, "usd": usd},
-        "estimated_charge": sum(bounds, Decimal(0)),
-        "cost_basis": "known",
-        "cost_basis_reason": "first_pass_token_bound",
-        "admission_blocker": blocker,
+        "estimated_cost": estimate_quotes(plans).model_dump(mode="json"),
+        "admission_blocker": None,
     }
 
 
@@ -549,7 +486,7 @@ def accept_batch(
 
 
 async def usage_integrity(session, job, run_id: UUID, reported_usages) -> None:
-    """Provider usage corroborates accounting; it never becomes another settlement."""
+    """Provider usage corroborates accounting; it never becomes another usage record."""
     calls = list(
         (
             await session.scalars(
@@ -568,17 +505,10 @@ async def usage_integrity(session, job, run_id: UUID, reported_usages) -> None:
     )
     completed = {call.id: call for call in calls if call.state == "completed"}
     if len(completed) != len(usages) or {usage.call_id for usage in usages} != set(completed):
-        fail("check_usage_integrity", "Check usage does not match settled calls", 500, 4)
+        fail("check_usage_integrity", "Check usage does not match completed calls", 500, 4)
     for usage in usages:
-        if (
-            usage.org_id != job.org_id
-            or usage.task_id != job.task_id
-            or usage.call_id != usage.id
-            or usage.charge is None
-            or Decimal(str(usage.charge)).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP)
-            != completed[usage.call_id].charge
-        ):
-            fail("check_usage_integrity", "Check usage settlement identity is invalid", 500, 4)
+        if usage.org_id != job.org_id or usage.task_id != job.task_id or usage.call_id != usage.id:
+            fail("check_usage_integrity", "Check usage call identity is invalid", 500, 4)
 
     # Multiset comparison avoids guessing call IDs from provider return order.
     def signature(usage):
@@ -591,7 +521,6 @@ async def usage_integrity(session, job, run_id: UUID, reported_usages) -> None:
             usage.output_tokens,
             usage.provider_config_id,
             usage.platform_model_id,
-            Decimal(str(usage.charge or 0)).quantize(Decimal("0.00000001"), rounding=ROUND_HALF_UP),
         )
 
     available = Counter(signature(usage) for usage in usages)

@@ -16,9 +16,8 @@ from app.core.db import Database
 from app.core.errors import ServiceError
 from app.models.entities import Chunk, Job
 from app.providers.configured import model_identity
-from app.providers.llm import billable, reasoning_choices, with_reasoning
+from app.providers.llm import reasoning_choices, with_reasoning
 from app.schemas.contracts import JobAction
-from app.services import billing
 from app.services.auth import Identity, set_actor_context
 from app.services.documents import require_document
 from app.services.extraction import EXTRACTION_VERSION, PROMPT_VERSION
@@ -70,7 +69,7 @@ async def submit(
     if body.dry_run:
         from app.core.pdf_process import PDFOperation
         from app.providers.llm import batches
-        from app.services import budget_preflight
+        from app.services import preflight as preflight_service
         from app.services.parsing import pdf_page_result
 
         cached = await session.scalar(select(Job).where(Job.cache_key == cache_key))
@@ -81,14 +80,13 @@ async def submit(
             "dry_run": True,
             "document_id": str(document_id),
             "parsed": count is not None,
-            "estimated_cost_usd": None,
         }
         warnings = list(level_warnings)
         if kind == "extract":
             data |= {"reasoning": level, "reasoning_levels": reasoning_choices(model)}
             if document.status != "parsed":
                 # Recovery previews are available while parsing is queued. No
-                # extraction request or honest price exists until chunks do.
+                # extraction request or reliable work-size estimate exists until chunks do.
                 data["input_blocker"] = "not_parsed"
                 warnings.append("Parse the document before requesting an extraction estimate.")
             else:
@@ -145,26 +143,22 @@ async def submit(
                             quotes.append(ocr.quote(image, number))
                 planned_calls = len(quotes)
                 data["candidate_ocr_pages"] = planned_calls
-        data = await budget_preflight.attach(
+        data = await preflight_service.attach(
             session,
             data,
             command="tender parse" if kind == "parse" else "req extract",
             task_id=document.task_id,
             input_hash=cache_key,
-            currency=settings.billing_currency,
             settings=settings,
             quotes=quotes,
             quote_sources=quote_sources,
             planned_calls=planned_calls,
             cached_job=cached,
         )
-        data["estimated_cost_usd"] = data["budget_preflight"]["estimate"]["usd"]
         return data, warnings
     if kind == "extract" and document.status != "parsed":
         raise ServiceError("not_parsed", "Parse the document before extraction", 400, 2)
-    # A missing credential fails as provider_unavailable, not as a balance problem.
-    if kind == "extract" and billable(model):
-        await billing.require_funds(session, settings.billing_currency)
+    # Missing credentials prevent provider dispatch.
     await set_actor_context(session, identity)
     identifier = await session.scalar(
         insert(Job)

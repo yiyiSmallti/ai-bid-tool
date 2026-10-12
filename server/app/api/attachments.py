@@ -24,7 +24,7 @@ def create_router(context, settings, storage, crypto, queue=None):
 
         if getattr(
             request.state, "contract_version", None
-        ) != "4.0" and not request.url.path.endswith(("/download", "/preview")):
+        ) != "5.0" and not request.url.path.endswith(("/download", "/preview")):
             raise not_found()
         session, actor = ctx
         session.info["attachment_settings"] = settings
@@ -33,7 +33,6 @@ def create_router(context, settings, storage, crypto, queue=None):
 
     def output(command, data=None, items=None):
         value = result(command, data, items, service.WARNINGS)
-        value["cost"]["billing_currency"] = settings.billing_currency
         if len(json.dumps(value, ensure_ascii=True).encode()) > c.LIST_JSON_LIMIT:
             raise ServiceError(
                 "attachment_response_limit", "Response exceeds metadata limit", 413, 2
@@ -101,7 +100,7 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def browse_route(request: Request, ctx=Depends(configured)):
         from app.core.errors import not_found
 
-        if getattr(request.state, "contract_version", None) != "4.0":
+        if getattr(request.state, "contract_version", None) != "5.0":
             raise not_found()
         query = await body(request, c.AttachmentBrowseQuery)
         return output(

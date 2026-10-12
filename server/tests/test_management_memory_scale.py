@@ -132,7 +132,7 @@ async def test_fixed_scale_memory_reads_and_write_paths(
     receipt = {
         "mode": "real_api",
         "scenario": "u01-memory-fixed-scale-v1",
-        "schema": "4.0",
+        "schema": "5.0",
         "status": "running",
         "fixture": {
             "orgs": 2,

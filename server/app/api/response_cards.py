@@ -121,8 +121,6 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     ):
         session, actor = ctx
         data, job = await drafts.submit_draft(session, actor, task_id, body, storage)
-        if body.dry_run and request.state.contract_version == "3.0":
-            data["gap_reasons"] = session.info["draft_legacy_gap_reasons"]
         warnings = await cards.scope_warnings(session, body.extraction_job_id)
         if job is not None and job.status == "queued" and job.queue_id is None:
             await session.commit()

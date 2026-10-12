@@ -1,7 +1,6 @@
 """Public A01 agent management, orchestration and provider contracts."""
 
 from datetime import datetime
-from decimal import Decimal
 from typing import Annotated, Literal, Protocol
 from uuid import UUID
 
@@ -13,7 +12,6 @@ from app.schemas.contracts import Contract, Cost, ProviderUsage, Result
 from app.schemas.response_card_contracts import CardGenerateRequest, DraftRequest
 
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
-Money = Annotated[Decimal, Field(ge=0, max_digits=18, decimal_places=8)]
 AgentScope = Literal[
     "task:read",
     "job:read",
@@ -42,16 +40,11 @@ class AgentLimits(Contract):
     max_active_seconds: int = Field(default=900, strict=True, ge=30, le=3600)
     max_lifetime_seconds: int = Field(default=86400, strict=True, ge=60, le=86400)
     max_vendor_calls: int = Field(default=32, strict=True, ge=1, le=64)
-    max_vendor_usd: Money
-    max_platform_charge: Money
-    billing_currency: str = Field(pattern=r"^[A-Z]{3}$")
 
     @model_validator(mode="after")
     def ordered_deadlines(self):
         if self.max_active_seconds > self.max_lifetime_seconds:
             raise ValueError("active duration exceeds session lifetime")
-        if self.max_vendor_usd == 0:
-            raise ValueError("a positive vendor cost bound is required")
         return self
 
 
@@ -70,19 +63,10 @@ class AgentMessageRequest(Contract):
     idempotency_key: UUID
 
 
-class BudgetDependencyRef(Contract):
-    """Opaque references owned by contract-budget; they never authorize expenditure."""
-
-    contract: Literal["docs/plan/budget.md"] = "docs/plan/budget.md"
-    question_ref: str = Field(min_length=1, max_length=200)
-    revision_ref: str = Field(min_length=1, max_length=200)
-
-
 class AgentResumeRequest(Contract):
     expected_revision: int = Field(strict=True, ge=1)
     pause_id: UUID
     idempotency_key: UUID
-    budget_ref: BudgetDependencyRef | None = None
 
 
 class AgentCancelRequest(Contract):
@@ -228,12 +212,9 @@ class AgentPrincipalView(Contract):
 
 class AgentCostView(Contract):
     cost: Cost
-    platform_charge: Money
-    reserved_platform_charge: Money
-    reserved_vendor_usd: Money | None
-    billing_currency: str = Field(pattern=r"^[A-Z]{3}$")
-    unpriced_calls: int = Field(strict=True, ge=0)
-    unresolved_calls: int = Field(strict=True, ge=0)
+    calls: int = Field(strict=True, ge=0)
+    pending_calls: int = Field(strict=True, ge=0)
+    unknown_calls: int = Field(strict=True, ge=0)
 
 
 class AgentSessionView(Contract):
@@ -303,22 +284,15 @@ class AgentPauseView(Contract):
     org_id: UUID
     session_id: UUID
     step_id: UUID | None = None
-    kind: Literal["budget", "human_action", "authority", "recovery"]
+    kind: Literal["human_action", "authority", "recovery"]
     status: Literal["pending", "resolved", "cancelled", "expired"]
     question: str = Field(min_length=1, max_length=2000)
     action: Literal["review_cards", "export", "confidential_reveal", "clarify"] | None = None
     resource_ids: list[UUID] = Field(default_factory=list, max_length=100)
-    budget_ref: BudgetDependencyRef | None = None
     input_sha256: Sha256
     resolved_by: UUID | None = None
     created_at: AwareDatetime
     resolved_at: AwareDatetime | None = None
-
-    @model_validator(mode="after")
-    def budget_reference_matches_kind(self):
-        if (self.kind == "budget") != (self.budget_ref is not None):
-            raise ValueError("only budget pauses carry a contract-budget reference")
-        return self
 
 
 class AgentJobLinkView(Contract):

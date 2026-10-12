@@ -5,7 +5,7 @@ import { basename, extname, join, resolve } from "node:path";
 const id=n=>`00000000-0000-4000-8000-${String(n).padStart(12,"0")}`;
 export const ids={org:id(1),task:id(2),user:id(3),card:id(4),extract:id(5),requirement:id(6),source:id(7),annotation:id(8),job:id(9),asset:id(10),rendition:id(11),document:id(12),releaseJob:id(13),release:id(14)};
 const png=Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aD1sAAAAASUVORK5CYII=","base64"),hash=createHash("sha256").update(png).digest("hex"),now="2026-10-06T12:00:00Z";
-const cost={llm_tokens:0,ocr_pages:0,usd:0,basis:"zero",charge:"0",billing_currency:"CNY",task_amount:"0",unpriced_calls:0,unresolved_calls:0};
+const cost={ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result=(command,data={},items=[],ok=true)=>({ok,command,data,items,warnings:[],cost,duration_ms:0});
 export async function annotationFixture(page,options={}){
   if(!process.env.E2E_STATIC_DIR)throw new Error("E2E_STATIC_DIR required; fixture starts no services");
@@ -17,7 +17,7 @@ export async function annotationFixture(page,options={}){
   const candidate=()=>({id:ids.annotation,...boundary,job_id:ids.job,input_hash:hash,manifest:{org_id:ids.org,task_id:ids.task,target:target??{extraction_job_id:ids.extract,card_id:ids.card,expected_card_revision:1,source:{kind:"certificate_page",evidence_source_id:ids.source},plan:{crop:null,boxes:[]}}},asset_id:ids.asset,rendition_id:ids.rendition,rendering:{image:{sha256:hash,size_bytes:png.length,width_px:1024,height_px:(target?.plan.crop.height??100)+40},canvas:{width_px:1024,height_px:(target?.plan.crop.height??100)+40,mapping:{crop:target?.plan.crop??{x:0,y:0,width:100,height:100},content_offset_x:Math.floor((1024-(target?.plan.crop.width??100))/2),content_offset_y:0,content_width:target?.plan.crop.width??100,content_height:target?.plan.crop.height??100,footer_height:40}}},created_at:now,status:"unconfirmed_material",confirmed_by:null,eligible_for_draft_export:false});
   await page.addInitScript(value=>sessionStorage.setItem("bid.org.session",JSON.stringify({orgId:value.org,session:"synthetic-session"})),ids);
   await page.route("**/*",async route=>{
-    const req=route.request(),url=new URL(req.url()),path=url.pathname.replace(/^\/v4(?=\/)/,""),method=req.method();
+    const req=route.request(),url=new URL(req.url()),path=url.pathname,method=req.method();
     if(url.origin!==new URL(process.env.E2E_BASE_URL??"http://127.0.0.1:8000").origin){state.unexpected.push("external-origin");return route.abort();}
     if(path.startsWith("/app/")){const file=path.startsWith("/app/assets/")?join(directory,"assets",basename(path)):join(directory,"index.html");return route.fulfill({contentType:{".html":"text/html",".js":"text/javascript",".css":"text/css"}[extname(file)]??"application/octet-stream",body:readFileSync(file)});}
     const body=req.postData()?req.postDataJSON():null;
@@ -25,7 +25,7 @@ export async function annotationFixture(page,options={}){
     let response;
     try{
       expect(req.headers()["x-org-id"]).toBe(ids.org);
-      if(/\/annotations|\/annotation-releases/.test(path))expect(url.pathname.startsWith("/v4/")).toBe(true);
+      if(/\/annotations|\/annotation-releases/.test(path))expect(url.pathname.startsWith("/")).toBe(true);
       if(method==="GET"&&path==="/org/current")response=result("org current",{org_id:ids.org,user_id:ids.user,role:options.role??"technical"});
       else if(path===`/tasks/${ids.task}/workflow`)response=result("task workflow",{workflow:{...boundary,owner_user_id:ids.user,state:"active",revision:1,access_epoch:1,last_event_cursor:"opaque-seed"}});
       else if(path===`/tasks/${ids.task}/members`)response=result("task member list",{...boundary,next_cursor:null},[{...boundary,user_id:ids.user,role:options.taskRole??"contributor",active:true,review_domains:["technical"]}]);

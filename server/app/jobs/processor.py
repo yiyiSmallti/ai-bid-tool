@@ -106,7 +106,7 @@ class Processor:
             if current.kind == "card_generate":
                 from app.memory.retrieval import recover_unsettled_calls
 
-                # The job row is locked; preserve old reservations and lineage
+                # The job row is locked; preserve unresolved call outcomes and lineage
                 # before issuing a new run ID after a retry or expired lease.
                 await recover_unsettled_calls(session, current)
             current.status = "running"
@@ -115,7 +115,7 @@ class Processor:
             current.run_id = run_id
             current.result = {
                 **current.result,
-                "cost": await job_cost(session, job_id, self.settings.billing_currency),
+                "cost": await job_cost(session, job_id),
             }
             current.lease_until = datetime.now(UTC) + timedelta(
                 seconds=self.settings.job_lease_seconds
@@ -509,7 +509,7 @@ class Processor:
                                 "remaining": uncovered_parameters(chunks, requirements.items)[1],
                             },
                         }
-                    result["cost"] = await job_cost(session, job_id, self.settings.billing_currency)
+                    result["cost"] = await job_cost(session, job_id)
                     current.status, current.result, current.error = "succeeded", result, None
                     current.finished_at = datetime.now(UTC)
                     if kind == "extract":
@@ -570,7 +570,7 @@ class Processor:
                     current.error = error
                     current.result = {
                         **current.result,
-                        "cost": await job_cost(session, job_id, self.settings.billing_currency),
+                        "cost": await job_cost(session, job_id),
                     }
                     if rejected:
                         current.result = {**current.result, "rejected": rejected}

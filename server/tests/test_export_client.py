@@ -24,7 +24,7 @@ IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
 SHA = "a" * 64
 
 
-@pytest.fixture(params=("3.0", "4.0"))
+@pytest.fixture(params=("5.0",))
 def contract_version(request):
     """Version metadata endpoints while preserving signed raw download paths."""
     return request.param
@@ -77,7 +77,7 @@ def download_client(
     transport_error=None,
     on_download=None,
     download_error=None,
-    contract_version="3.0",
+    contract_version="5.0",
 ):
     client = Client(
         "remote",
@@ -85,7 +85,7 @@ def download_client(
         SyntheticState(tmp_path / "unused.enc"),
         contract_version=contract_version,
     )
-    prefix = "/v4" if contract_version == "4.0" else ""
+    prefix = "/v4" if contract_version == "5.0" else ""
     path = f"/exports/{IDENTIFIER}/download"
     view = export_view(content, mode=mode, validity=validity, org_id=org_id)
     calls = []
@@ -468,7 +468,7 @@ def test_cli_preserves_blocked_dry_run_preview_from_http_400(monkeypatch, tmp_pa
         "issues": [issue],
         "estimated_output_bytes": None,
         "estimated_duration_ms": None,
-        "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+        "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0},
         "error": {
             "code": "export_blocked",
             "message": "Export preview contains blocking issues",

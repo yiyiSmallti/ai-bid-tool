@@ -6,6 +6,7 @@ The transport boundary is injected; the real Typer command and Result emitter ru
 """
 
 import json
+import os
 from pathlib import Path
 from uuid import UUID
 
@@ -21,7 +22,7 @@ START = {
     "extraction_job_id": SECOND,
     "message": "Generate proposals, pause for human review, then assemble the draft.",
     "requested_scopes": ["task:read", "job:read", "card:read", "card:generate", "draft:run"],
-    "limits": {"max_vendor_usd": "2", "max_platform_charge": "2", "billing_currency": "USD"},
+    "limits": {},
     "idempotency_key": KEY,
 }
 INPUTS = {
@@ -81,7 +82,7 @@ def test_agent_command_snapshots_without_database(monkeypatch, tmp_path, capsys,
         ["--mode", mode, "--state", str(tmp_path / "state.enc"), *arguments(action, tmp_path)],
         capsys,
     )
-    assert code == 0
+    assert code == 0, body
     Result.model_validate(body)
     assert len(calls) == 1 and calls[0][:2] == ROUTES[action]
     if action in {"list", "messages", "steps"}:
@@ -91,7 +92,11 @@ def test_agent_command_snapshots_without_database(monkeypatch, tmp_path, capsys,
             if name != "limits":
                 assert calls[0][2]["json"][name] == value
     body["duration_ms"] = 0
-    snapshot = json.loads((Path(__file__).parent / "snapshots" / "agent-cli.json").read_text())
+    snapshot_path = Path(__file__).parent / "snapshots" / "agent-cli.json"
+    snapshot = json.loads(snapshot_path.read_text())
+    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
+        snapshot[action] = body
+        snapshot_path.write_text(json.dumps(snapshot, indent=2) + "\n")
     assert body == snapshot[action]
 
 
@@ -200,4 +205,5 @@ def test_agent_commands_require_current_contract(monkeypatch, tmp_path, capsys, 
         cli, "call", lambda *a, **k: pytest.fail("Legacy agent request reached server")
     )
     assert invoke(["--contract-version", "3.0", *arguments(action, tmp_path)], capsys)[0] == 2
-    assert not any(name.startswith("agent ") for name in command_schema(cli.app, "3.0")["commands"])
+    with pytest.raises(ValueError, match="Only contract 5.0"):
+        command_schema(cli.app, "3.0")

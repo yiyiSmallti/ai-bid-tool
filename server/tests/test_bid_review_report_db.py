@@ -130,7 +130,7 @@ async def test_snapshot_word_pipeline_decisions_pagination_and_later_drift(
     storage_before = sorted(str(path) for path in application.state.storage.root.rglob("*"))
     calls_before = len(case["vendor"].requests)
     body, receipt = await render_preview(api, bidder, case)
-    assert receipt["budget"]["planned_calls"] == 0
+    assert receipt["preflight"]["planned_calls"] == 0
     assert await counts(application, tenants["orgs"][0]) == before_counts
     assert sorted(str(path) for path in application.state.storage.root.rglob("*")) == storage_before
     accepted = data(await render_submit(api, bidder, case, body, receipt))
@@ -221,7 +221,12 @@ async def test_report_projections_scopes_cross_org_and_live_download_authority(
     word = next(a for a in job["result"]["artifacts"] if a["format"] == "docx")
     link_path = f"/v4/bid-review-artifacts/{word['id']}/download-link"
     link = data(await api.get(link_path, headers=headers[0]))
-    assert (await api.get(link_path.removeprefix("/v4"), headers=headers[0])).status_code == 404
+    for prefix in ("", "/v4", "/v5"):
+        current = await api.get(prefix + link_path.removeprefix("/v4"), headers=headers[0])
+        current_link = data(current)
+        assert current.headers["X-Bid-Contract-Version"] == "5.0"
+        assert current_link["artifact"] == link["artifact"]
+        assert current_link["expires_in"] == link["expires_in"]
     for scope in ("bid-review:report:render", "bid-review:report:download"):
         refused = await api.post(
             "/v4/tokens",

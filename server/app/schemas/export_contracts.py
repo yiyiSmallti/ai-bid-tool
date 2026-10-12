@@ -272,11 +272,7 @@ class ExportPreview(Contract):
             raise ValueError("negative_count cannot exceed table rows")
         if self.ready == any(issue.severity == "block" for issue in self.issues):
             raise ValueError("ready must be false exactly when a blocking issue exists")
-        if (
-            self.estimated_cost.llm_tokens != 0
-            or self.estimated_cost.ocr_pages != 0
-            or self.estimated_cost.usd != 0
-        ):
+        if self.estimated_cost.llm_tokens != 0 or self.estimated_cost.ocr_pages != 0:
             raise ValueError("export does not incur model or OCR cost")
         _unique([issue.issue_id for issue in self.issues], "issues")
         return self

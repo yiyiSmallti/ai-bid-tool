@@ -49,11 +49,12 @@ publication check them again. Changed memory blocks confirmation of an unreviewe
 a previously confirmed human decision remains valid with a warning. Evidence eligibility checks
 remain independent.
 
-[Drafting](../../server/app/providers/drafting.py) sends separate rule and preference blocks and
-includes their size in batching and reservations. Memory cannot become a material reference.
+Memory cannot become a material reference.
 `JobExecution.admit` stores the per-request manifest in the same transaction as `VendorCall`.
 Settlement attaches the matching usage record atomically, even after cancellation or revoked
-membership. Retries and split batches each have their own call ID. Card and draft views retain
+membership.
+Retries and split batches each have their own call ID.
+Card and draft views retain
 only authorized IDs and hashes; encrypted prompts are not returned.
 
 [Feedback](../../server/app/memory/feedback.py) captures adjacent human card revisions before an
@@ -70,9 +71,11 @@ Feedback, queries and sent snapshots use organization/record-bound encrypted env
 hashes and identifiers only. Pattern detection has limits, which is why candidates require review.
 
 User, project and global scopes remain unavailable until their ownership and publication boundaries
-are implemented. A scope is never silently mapped to the organization. The optional embedding table
+are implemented.
+A scope is never silently mapped to the organization.
+The optional embedding table
 is absent; any later vector migration must check that pgvector is installed before declaring a vector
-column. A model or dimension choice requires the provider and billing contract first.
+column.
 
 Migration rollback retains historical tables. Reverting application code must not delete the audit
 trail. PostgreSQL acceptance tests use two organizations and synthetic transports; their reproducible

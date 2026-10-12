@@ -2,8 +2,8 @@
 
 Failure inventory: preparing an unconfirmed requirement implies acceptance;
 response confirmation or comply-only bypasses the source gate; an all-gap draft
-includes candidate response text; reopening leaves old draft rows usable; legacy
-board enums expose new values or count pending requirements as response-complete;
+includes candidate response text; reopening leaves old draft rows usable; default
+board counts pending requirements as response-complete or aliases drop review fields;
 opt-in progress silently chooses an extraction; foreign org projections leak data;
 a whole-rubric decision accepts an outstanding fixed scoring requirement.
 
@@ -54,11 +54,19 @@ def artifact(name, **values):
 
 def zero_cost(result):
     cost = result["cost"]
-    assert cost["basis"] == "zero"
-    assert cost["charge"] == cost["task_amount"] == "0"
-    assert cost["llm_tokens"] == cost["ocr_pages"] == 0
-    assert cost["unpriced_calls"] == cost["unresolved_calls"] == 0
-    assert cost["usd"] == 0
+    assert all(value == 0 for value in cost.values())
+
+
+VOLATILE_KEYS = {"as_of", "refresh_by", "event_cursor", "last_event_cursor"}
+
+
+def stable(value):
+    """Drop per-request timestamps and signed cursors before comparing aliases."""
+    if isinstance(value, dict):
+        return {key: stable(item) for key, item in value.items() if key not in VOLATILE_KEYS}
+    if isinstance(value, list):
+        return [stable(item) for item in value]
+    return value
 
 
 async def review(api, headers, requirement_id):
@@ -242,7 +250,9 @@ async def test_unconfirmed_draft_gap_and_reopen_retire_accepted_rows(
         )
 
 
-async def test_requirement_board_optin_progress_legacy_and_org_isolation(tenants, tmp_path):
+async def test_requirement_board_optin_progress_contract_aliases_and_org_isolation(
+    tenants, tmp_path
+):
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         task, _, extraction, requirements = await create_tender(
             api, app, headers[0], tmp_path, suffix="board", confirmed=False
@@ -285,38 +295,51 @@ async def test_requirement_board_optin_progress_legacy_and_org_isolation(tenants
             f"/v4/tasks/{task}/progress", headers=headers[0], params={"view": "requirement-review"}
         )
         assert missing.status_code in {400, 422}, missing.text
-        legacy = await api.get(f"/tasks/{task}/board", headers=headers[0], params=params)
-        assert legacy.status_code == 200, legacy.text
-        BoardData.model_validate(legacy.json()["data"])
-        assert "scope" not in legacy.json()["data"] and "buckets" not in legacy.json()["data"]
-        for row in legacy.json()["items"]:
-            BoardRow.model_validate(row)
-            assert row["bucket"] == "gap"
-            assert "requirement" not in row
-            assert all(action["code"] == "view" for action in row["next_actions"])
-        # The compatibility contract preserves closed enums while explicitly
-        # warning legacy readers to open the requirement-review workspace.
-        assert "requirement_review_pending:open_requirement_review" in legacy.json()["warnings"]
-        for part in ("board", "progress"):
-            foreign = await api.get(
-                f"/v4/tasks/{task}/{part}",
-                headers=headers[1],
-                params={**params, "view": "requirement-review"},
+        aliases = {}
+        for prefix in ("", "/v4", "/v5"):
+            current_default = await api.get(
+                f"{prefix}/tasks/{task}/board", headers=headers[0], params=params
             )
-            assert foreign.status_code == 404, foreign.text
-            assert task not in foreign.text and extraction not in foreign.text
-            forbidden_legacy = await api.get(
-                f"/tasks/{task}/{part}",
-                headers=headers[0],
-                params={**params, "view": "requirement-review"},
+            assert current_default.status_code == 200, current_default.text
+            assert current_default.headers["X-Bid-Contract-Version"] == "5.0"
+            current_board = BoardData.model_validate(current_default.json()["data"])
+            assert stable(current_board.model_dump()) == stable(
+                BoardData.model_validate(default.json()["data"]).model_dump()
             )
-            assert forbidden_legacy.status_code == 404, forbidden_legacy.text
+            assert current_default.json()["items"] == default.json()["items"]
+            assert (
+                "requirement_review_pending:open_requirement_review"
+                in current_default.json()["warnings"]
+            )
+            for part, schema, expected in (
+                ("board", RequirementBoardData, optin),
+                ("progress", RequirementProgressData, progress),
+            ):
+                foreign = await api.get(
+                    f"{prefix}/tasks/{task}/{part}",
+                    headers=headers[1],
+                    params={**params, "view": "requirement-review"},
+                )
+                assert foreign.status_code == 404, foreign.text
+                assert task not in foreign.text and extraction not in foreign.text
+                current = await api.get(
+                    f"{prefix}/tasks/{task}/{part}",
+                    headers=headers[0],
+                    params={**params, "view": "requirement-review"},
+                )
+                assert current.status_code == 200, current.text
+                assert current.headers["X-Bid-Contract-Version"] == "5.0"
+                assert stable(schema.model_validate(current.json()["data"]).model_dump()) == stable(
+                    schema.model_validate(expected.json()["data"]).model_dump()
+                )
+                assert current.json()["items"] == expected.json()["items"]
+                aliases[f"{prefix or 'unversioned'}/{part}"] = current.json()
         artifact(
             "board",
             default=default.json(),
             optin=optin.json(),
             progress=progress.json(),
-            legacy=legacy.json(),
+            aliases=aliases,
         )
 
 

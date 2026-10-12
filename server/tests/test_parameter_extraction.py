@@ -85,9 +85,7 @@ async def test_word_parameter_gaps_are_filled_and_each_call_is_recorded(
         vendor_reply(provider, [item("t1r1c1", p) for p in first]),
         vendor_reply(provider, [item("t1r1c1", p) for p in missing]),
     )
-    settings = settings_for(
-        tmp_path, provider, llm_input_usd_per_mtok=4, llm_output_usd_per_mtok=20
-    )
+    settings = settings_for(tmp_path, provider)
     adapter = AnthropicExtractor if provider == "anthropic" else OpenAICompatibleExtractor
     app = await credential_app(
         settings, llm=adapter(settings, vendor.transport()), queue=FakeQueue()
@@ -95,21 +93,13 @@ async def test_word_parameter_gaps_are_filled_and_each_call_is_recorded(
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
         status, rows = await extract_document(api, app, header, parameter_word())
         usages = await usage_rows(app, tenants)
-
     assert status["status"] == "succeeded", status
-    assert status["result"]["gap_fill"] == {
-        "segments": 4,
-        "calls": 1,
-        "added": 4,
-        "remaining": 0,
-    }
+    assert status["result"]["gap_fill"] == {"segments": 4, "calls": 1, "added": 4, "remaining": 0}
     assert status["result"]["created"] == 6
     assert {r["source"]["quote"] for r in rows} == set(PARAMETERS)
     assert all(r["source"]["location"]["block_id"] == "t1r1c1" for r in rows)
     assert len(usages) == 2 and all(u.tokens == 1500 for u in usages)
     assert status["result"]["cost"]["llm_tokens"] == 3000
-    assert status["result"]["cost"]["usd"] == pytest.approx(0.0216)
-    assert float(sum(u.usd for u in usages)) == pytest.approx(0.0216)
     assert len(vendor.requests) == 2
     gap = user_content(vendor.requests[1])
     assert '<block id="t1r1c1">' in gap

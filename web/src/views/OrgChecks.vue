@@ -1,25 +1,25 @@
 <script setup>
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { useRoute } from "vue-router";
-import AssessmentBudget from "../components/AssessmentBudget.vue";
+import AssessmentPreflight from "../components/AssessmentPreflight.vue";
 import JobPanel from "../components/JobPanel.vue";
-import { assessmentError, enc, queryPath, stateLabels, suggestedCap, usePreviewInvalidation } from "../assessments.js";
+import { assessmentError, enc, queryPath, stateLabels, usePreviewInvalidation } from "../assessments.js";
 import { formatTime, jobStatuses, orgRequest } from "../org.js";
 const route = useRoute();
 const taskId = computed(() => String(route.params.taskId)), extractionId = computed(() => String(route.query.job ?? ""));
 const task = ref(null), inputs = ref(null), histories = ref([]), historyMeta = ref(null), jobs = ref([]), jobsMeta = ref(null), activeJob = ref("");
 const loading = ref(false), busy = ref(false), error = ref(""), preview = ref(null), cached = ref(false), queueRequest = ref(null);
-const draftId = ref(""), mode = ref("rules"), assessmentDate = ref(new Date().toLocaleDateString("en-CA")), reasoning = ref(""), cap = ref(""), consent = ref(false), retry = ref(false);
+const draftId = ref(""), mode = ref("rules"), assessmentDate = ref(new Date().toLocaleDateString("en-CA")), reasoning = ref(""), consent = ref(false), retry = ref(false);
 let sequence = 0, previewSerial = 0, previewKey = "";
 const canRun = computed(() => inputs.value?.actions?.some(a => a.action === "check_run" && a.allowed));
-const blocker = computed(() => preview.value?.budget_preflight?.admission_blocker ?? preview.value?.admission_blocker);
+const blocker = computed(() => preview.value?.preflight?.admission_blocker ?? preview.value?.admission_blocker);
 const modelRun = computed(() => mode.value === "combined");
 const draftChoices = computed(() => [...new Map([inputs.value?.current_draft, inputs.value?.latest_draft].filter(Boolean).map(d => [d.draft_id, d])).values()]);
-const body = (dry = true) => ({ draft_id: draftId.value, assessment_date: assessmentDate.value, mode: mode.value, dry_run: dry, ...(modelRun.value && reasoning.value ? { reasoning: reasoning.value } : {}), ...(modelRun.value && cap.value ? { max_charge: cap.value } : {}), ...(!dry ? { expected_input_hash: preview.value?.input.input_hash, retry: retry.value } : {}) });
-const selectionKey = () => JSON.stringify([taskId.value, extractionId.value, draftId.value, mode.value, assessmentDate.value, reasoning.value, cap.value]);
+const body = (dry = true) => ({ draft_id: draftId.value, assessment_date: assessmentDate.value, mode: mode.value, dry_run: dry, ...(modelRun.value && reasoning.value ? { reasoning: reasoning.value } : {}), ...(!dry ? { expected_input_hash: preview.value?.input.input_hash, retry: retry.value } : {}) });
+const selectionKey = () => JSON.stringify([taskId.value, extractionId.value, draftId.value, mode.value, assessmentDate.value, reasoning.value]);
 function invalidate() { previewSerial++; preview.value = null; consent.value = false; previewKey = ""; queueRequest.value = null; }
 usePreviewInvalidation(invalidate, taskId);
-watch([draftId, mode, assessmentDate, reasoning, cap], invalidate, { flush: "sync" });
+watch([draftId, mode, assessmentDate, reasoning], invalidate, { flush: "sync" });
 async function history(cursor = null) {
   const current = sequence;
   const result = await orgRequest("GET", queryPath(`/tasks/${enc(taskId.value)}/checks`, { view: "console", extraction_job_id: extractionId.value, limit: 50, cursor }));
@@ -60,19 +60,14 @@ async function preflight() {
   try {
     let result = await orgRequest("POST", `/tasks/${enc(taskId.value)}/checks`, body());
     if (key !== selectionKey() || attempt !== previewSerial) return;
-    if (modelRun.value && !cap.value && result.data.estimated_charge != null) {
-      cap.value = suggestedCap(result.data.estimated_charge); key = selectionKey(); attempt = previewSerial;
-      result = await orgRequest("POST", `/tasks/${enc(taskId.value)}/checks`, body());
-      if (key !== selectionKey() || attempt !== previewSerial) return;
-    }
     const data = result.data, input = data.input;
-    if (input?.task_id !== taskId.value || input.org_id !== inputs.value.org_id || input.extraction_job_id !== extractionId.value || input.document_id !== inputs.value.document_id || input.draft_id !== draftId.value || input.assessment_date !== assessmentDate.value || data.mode !== mode.value || !/^[a-f0-9]{64}$/.test(input.input_hash) || data.budget_preflight?.input_hash !== input.input_hash) throw { code: 'check_input_changed' };
+    if (input?.task_id !== taskId.value || input.org_id !== inputs.value.org_id || input.extraction_job_id !== extractionId.value || input.document_id !== inputs.value.document_id || input.draft_id !== draftId.value || input.assessment_date !== assessmentDate.value || data.mode !== mode.value || !/^[a-f0-9]{64}$/.test(input.input_hash) || data.preflight?.input_hash !== input.input_hash) throw { code: 'check_input_changed' };
     preview.value = data; previewKey = key;
   } catch (exc) { if (exc.name !== "AbortError") error.value = assessmentError(exc); }
   finally { busy.value = false; }
 }
 async function submit(recover = false) {
-  if (busy.value || !canRun.value || (!recover && (!preview.value || previewKey !== selectionKey() || blocker.value || (modelRun.value && (!consent.value || !(Number(cap.value) > 0)))))) return;
+  if (busy.value || !canRun.value || (!recover && (!preview.value || previewKey !== selectionKey() || blocker.value || (modelRun.value && (!consent.value))))) return;
   const request = recover ? queueRequest.value : body(false); if (!request) return;
   const generation = sequence;
   busy.value = true; error.value = "";
@@ -109,17 +104,17 @@ onBeforeUnmount(() => { clear(); window.removeEventListener("bid:org-reset", cle
         <el-form-item label="评估日期"><el-input v-model="assessmentDate" type="date" aria-label="评估日期" /></el-form-item>
         <el-form-item label="检查方式"><el-radio-group v-model="mode" aria-label="检查方式"><el-radio value="rules">规则检查</el-radio><el-radio value="combined">规则与语义检查</el-radio></el-radio-group></el-form-item>
         <p class="hint">规则检查核对覆盖、证照日期与偏离；规则与语义检查还会评估已确认响应的语义，不代表完整法律或投标审核。</p>
-        <template v-if="modelRun"><el-form-item label="推理档位（留空使用默认）"><el-input v-model="reasoning" aria-label="推理档位" /></el-form-item><el-form-item label="本次作业平台扣费上限"><el-input v-model="cap" inputmode="decimal" aria-label="本次作业平台扣费上限" /></el-form-item></template>
+        <template v-if="modelRun"><el-form-item label="推理档位（留空使用默认）"><el-input v-model="reasoning" aria-label="推理档位" /></el-form-item></template>
         <el-button native-type="submit" :loading="busy" :disabled="!canRun || !draftId || selected?.validity !== 'current'" type="primary" plain>预览检查</el-button>
         <span v-if="!canRun">当前角色只读或尚未满足运行条件</span>
       </el-form>
-      <AssessmentBudget :preview="preview" :budget="inputs.task_budget" :rules="!modelRun" />
+      <AssessmentPreflight :preview="preview" :rules="!modelRun" />
       <section v-if="preview" aria-label="本次检查范围">
         <h3>本次检查范围</h3><p>初稿 {{ preview.input.draft_id }} · 评估日期 {{ preview.input.assessment_date }} · 选中 {{ preview.selected_item_ids.length }} 条 · 规则适用 {{ preview.rules_applicable }} 条 · 语义检查 {{ preview.semantic_items }} 条 · 缺口 {{ preview.gap_requirements }} 条</p>
         <p v-for="item in preview.limitations" :key="item" class="hint">{{ item }}</p>
-        <el-checkbox v-if="modelRun" v-model="consent">我已核对外发范围与费用上限</el-checkbox>
+        <el-checkbox v-if="modelRun" v-model="consent">我已核对外发范围与配置</el-checkbox>
         <p><el-checkbox v-model="retry">显式重试已失败或取消的作业</el-checkbox></p>
-        <el-button type="primary" :loading="busy" :disabled="!!blocker || (modelRun && (!consent || !(Number(cap) > 0)))" @click="submit()">提交检查</el-button>
+        <el-button type="primary" :loading="busy" :disabled="!!blocker || (modelRun && (!consent))" @click="submit()">提交检查</el-button>
       </section>
     </el-card>
   </template>

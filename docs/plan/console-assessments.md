@@ -9,9 +9,10 @@ Status: **Approved, implemented.** Covers the console gaps in
 
 The approved [Pydantic contract](console-assessments/console_assessments_contracts.py)
 defines read projections and service interfaces and imports existing write,
-Provider and Result contracts. All recommended defaults were approved for implementation.
-The merged [task budget contract](budget.md) owns enforcement and Result 4.0 costs;
-the separate rubric Provider algorithm remains outside this delivery. Product terminology follows the [glossary](../glossary.md). Mechanism and code links are
+Provider and Result contracts.
+All recommended defaults were approved for implementation.
+Product terminology follows the [glossary](../glossary.md).
+Mechanism and code links are
 in the [console assessment note](../notes/console-assessments.md).
 
 ## Goal, boundary and first vertical slice
@@ -24,11 +25,10 @@ remains scoped to one explicitly selected successful extraction of tender docume
 complete bid (标书), exported Word file or arbitrary URL.
 
 The scope is preview, explicit submission, background-job (后台作业) recovery, reports,
-human finding decisions, and scoring-criteria (评分标准) review. Reports remain advisory;
+human finding decisions, and scoring-criteria (评分标准) review.
+Reports remain advisory;
 they neither certify compliance nor satisfy human confirmation (人工确认) or export gates.
-No new risk-card state machine, assignment system, notification service, automatic fixes,
-manual score override, comparison with competitors, task membership, SSE, paid-call
-orchestration, or new model dependency is included. Existing domain ownership is the
+Existing domain ownership is the
 responsibility mechanism; there is no persisted named assignee to present as an owner.
 
 The first vertical slice is **rules check**: task/draft entry → read-only preflight →
@@ -55,7 +55,7 @@ are fully specified here, not represented by inactive production placeholders.
 | [authentication](../../server/app/services/auth.py) `Identity`, `SCOPES`, `ROLE_SCOPES`; [response cards](../../server/app/services/response_cards.py) `access` | Revalidate active membership, token status and role/scope intersection on each operation; browser capability hints do not authorize writes. |
 | [org console reads](../../server/app/api/org_console.py) `task_get`, `task_job_list`; [job service](../../server/app/services/jobs.py) `status`, `cancel` | Task metadata and single-job reads are reused. Task-job discovery additionally accepts `check`, `score_rubric` and `score` while preserving the parse projection. |
 | [router](../../web/src/router.js), [API adapter](../../web/src/api.js) `checkedPath`, `parseResult`, [org helpers](../../web/src/org.js), [JobPanel](../../web/src/components/JobPanel.vue) | Reuse org identity checks, Chinese labels, precise same-origin paths and polling. Assessment paths and partial-result cases must be added explicitly to the adapter during implementation. |
-| [runtime contracts](../../server/app/schemas/contracts.py) `CONTRACT_VERSION`, `Cost`, `Result` | The code uses Result **4.0**, including cost basis, platform charge, billing currency, task amount and unresolved/unpriced call counts. Console reads and preflight use these runtime types. |
+| [runtime contracts](../../server/app/schemas/contracts.py) `CONTRACT_VERSION`, `Cost`, `Result` |Console reads and preflight use these runtime types. |
 | [design](../design.md#dashboard-and-agent-design) | Its pending/fixed/ignored risk cards and SSE are not current check behavior. Actual findings have open/dismissed states plus decision history, and jobs are polled. There is no “mark fixed” operation. |
 | [checking plan](check.md), [checking notes](../notes/check.md), [scoring plan](score.md), [scoring notes](../notes/score.md) | Check decision-history reads currently do not attach stale warnings, despite the check plan's wording; obtain current report validity separately. Rules coverage serializes `semantic_outcome:null` and `semantic_citations:[]`, not absent fields. Score schema permits `range_only`, but `aggregate` currently emits `estimated` or `unavailable`. |
 
@@ -109,62 +109,53 @@ chooses “规则检查” or “规则与语义检查”. Describe rules as det
 deviation checks; combined additionally assesses confirmed responses semantically.
 Neither button claims a complete legal or submission review.
 
-All three previews are zero-write: no Job, report, audit (审计), UsageRecord, VendorCall,
-reservation or balance mutation, and no Provider call. Input locking and read-time
-verification may still occur. A successful preflight with `admission_blocker` remains
-HTTP success/`ok=true`; it is not permission to submit. Invalid or stale inputs can
-instead return a service error before a preview exists. In that state show unavailable
+Input locking and read-time
+verification may still occur.
+A successful preflight with `admission_blocker` remains
+HTTP success/`ok=true`; it is not permission to submit.
+Invalid or stale inputs can
+instead return a service error before a preview exists.
+In that state show unavailable
 cost, not a fabricated zero-cost preview.
 
-The preview panel contains these server-derived values and plain-language explanations:
+The preview panel contains server-derived values and plain-language explanations:
 
 | Field | Chinese presentation and behavior |
 | --- | --- |
 | Input scope/counts, current draft and rubric version | “本次检查范围” / “本次评分范围”; gap (缺口) and comply-only (须遵守) counts remain visible. The UI never derives completeness from the visible page. |
-| `estimated_cost` | “预计服务用量成本（美元）”; unknown `usd` is “暂无法估算”. Rules mode is “不调用模型，费用为 0”; no-model-call combined cases retain their explicit reason. |
-| `estimated_charge`, `billing_currency`, `cost_basis_reason` | “预计平台扣费上限（首轮）”; show actual currency, known/unknown basis, and that retries/actual usage can differ. It is not a final invoice. |
-| `max_charge` | “本次作业平台扣费上限”; for model runs require explicit confirmation of a positive cap, initially rounded upward from the estimate where known. Do not send a cap or reasoning for rules mode. An org-owned key's zero platform charge is not free vendor usage, and this cap does not bound its vendor bill. |
-| Enforced task budget | “任务预算（实际执行）”; use `TaskBudgetView` limit, currency, spent, reserved and available from the API. Null limit means “未设置”; null available means unknown. Read `budget_preflight` for admission blockers and first-pass estimates; never derive remaining budget from `cost.usd` or platform charges. |
-| Provider/model/revision, reasoning, redaction (遮挡) revision/counts | “使用的模型”, “外发内容已遮挡”; keep values from the actual preview. Do not send originals or render private prompt manifests. |
-| `admission_blocker`, limitations, nullable duration | Persistent Chinese blocker with the next owner/action. Unknown time is “耗时暂无法估算”; no countdown prediction. |
+| `preflight.planned_calls`, `preflight.estimate` | “预计调用次数” and resource counts under [ADR 0011](../adr/0011-remove-billing.md). Rules mode is “不调用模型”; retries and splits can add calls. |
+| Provider/model/revision, reasoning, redaction (遮挡) revision/counts | “使用的模型”, “外发内容已遮挡”; use the actual preview. Do not send originals or render private prompt manifests. |
+| `preflight.admission_blocker`, limitations, nullable duration | Persistent Chinese blocker with the next owner/action. Unknown time is “耗时暂无法估算”; no countdown prediction. |
 
-Task budgets are enforced by the merged budget service and Result 4.0. Previews expose
-`budget_preflight`, including the current `TaskBudgetView`, next-call admission blocker,
-first-pass estimate and uncertainty. Display those server values without predicting
-admission from a browser balance calculation. Newly added assessment reads and console
-CLI variants require contract version 4.0; legacy no-option commands retain their
-existing behavior. This does not claim that org monthly caps are enforced.
-The existing `/billing` page is for authorized admins, so other users see “请联系管理员
-补充余额”, not a forbidden balance page or an invented balance figure.
-
-Map `redaction_required` to “尚未开启外发遮挡，请由管理员或投标专员处理后重新预览”;
-stale draft/hash errors to “初稿内容已变化，请重新组表并预览”; insufficient balance to
-“余额不足，暂不能提交”; unknown price/capability/context limits to the corresponding
-model-configuration or input action. Preserve unrecognized codes with a safe Chinese
-fallback; never hide them by changing mode automatically.
+Previews expose read-only `data.preflight`: planned calls, resource estimates,
+configuration blockers and uncertainty. Assessment reads and console CLI commands
+use contract 5.0 and reject older versions. Preserve unrecognized codes with a
+safe Chinese fallback; never hide them by changing mode automatically.
 
 After a valid preview, require a separate submit action and, for model runs, an
-unchecked “我已核对外发范围与费用上限” control. Submit its `expected_input_hash`, exact
-scope/mode/date/reasoning and cap. Any input/settings/cap change clears consent and
-requires a fresh preview. Recheck on submission; `*_input_changed` discards consent,
-keeps nonsecret user inputs, and offers “重新预览”. Disable repeat clicks while in flight.
-Do not automatically repeat paid requests after network errors. A `queue_unavailable`
-response contains a durable job ID: show “任务已保存，等待重新调度”; an explicit recovery
-action may resend that exact request under existing idempotency rules.
+unchecked “我已核对外发范围” control. Submit its `expected_input_hash`, exact
+scope/mode/date/reasoning. Any input/settings change clears consent and requires
+a fresh preview. Recheck on submission; `*_input_changed` discards consent,
+keeps nonsecret user inputs, and offers “重新预览”. Disable repeat clicks while
+in flight. A `queue_unavailable` response contains a durable job ID: show
+“任务已保存，等待重新调度”; an explicit recovery action may resend that exact request
+under existing idempotency rules.
 
-Read-only report wrappers' default `cost=0` are the cost of that read, not historical
-model expense. Show actual job cost and charge from job status/result where authorized;
-no cost is inferred from report `usage_record_ids`.
+Read-only report wrappers' zero resource counts describe that read. Historical
+model usage belongs to the report's recorded generation operation.
 
 ## Jobs and planned two-stage rubric generation
 
 Reuse [JobPanel.vue](../../web/src/components/JobPanel.vue): poll about every two seconds,
 back off transient failures up to its existing limit and honor `Retry-After`, pause in
-hidden tabs, stop on terminal states, and release listeners on unmount. Polling errors
-do not submit or cancel a job. Show “排队中”, “处理中”, “已完成”, “部分完成”, “处理失败”
-or “已取消” with attempts, safe reason and next action. Job success, report completeness,
-and report freshness are separate indicators. Cancellation is explicit and explains
-that already admitted calls may still incur charges. A failed/cancelled job may offer
+hidden tabs, stop on terminal states, and release listeners on unmount.
+Polling errors
+do not submit or cancel a job.
+Show “排队中”, “处理中”, “已完成”, “部分完成”, “处理失败”
+or “已取消” with attempts, safe reason and next action.
+Job success, report completeness,
+and report freshness are separate indicators.
+A failed/cancelled job may offer
 the existing explicit retry after revalidation; it cannot take over an active lease.
 
 Assessment job discovery must include queued/running/failed/cancelled jobs with no
@@ -190,7 +181,7 @@ prompts, raw stage output or vendor call bodies.
 
 The existing [rubric adapter](../../server/app/providers/rubric.py) and
 `score_generation.accept_batches` require one complete batch. Changing those interfaces,
-batch validation, cache/price estimates, cancellation, partial publication and the
+batch validation, cache/resource estimates, cancellation, partial publication and the
 fixed-section fence belongs to a later Provider contract. This draft only reserves a
 safe progress projection. Old workers omit it; no backfill or simulated progress.
 
@@ -329,11 +320,11 @@ invalidate downstream score previews/reports.
 
 Require a current draft and a confirmed rubric for the same task/extraction/document.
 Show selected rubric version and “已核对评分规则” separately from current draft status.
-Unconfirmed rubric links to the exact checklist, not a generic error toast. Score
-preview displays selected item counts, `preflight_unassessable_item_ids`, reasons and
-limitations before paid consent. No assessable items may legitimately yield a zero-call
+Unconfirmed rubric links to the exact checklist, not a generic error toast.
+No assessable items may legitimately yield a zero-call
 report with unavailable scores; offer that explicitly, never label it a successful
-zero-point estimate. The known IDs alone are not sufficient to calculate why an item
+zero-point estimate.
+The known IDs alone are not sufficient to calculate why an item
 is unassessable; read its rubric mode/anchor state or show the actual reported reason.
 
 Report rows show the scoring item, confirmed range, `estimated_score` when assessed,
@@ -421,7 +412,7 @@ reads and opt-in variants used by this console:
 
 | Proposed route/variant | Purpose and contract |
 | --- | --- |
-| `GET /tasks/{T}/assessment-inputs?job=E` | `AssessmentInputsData`: explicit extraction, latest/current draft IDs and validity, enforced task budget, redaction state, run/generate capabilities. Avoid fetching every draft's response body just to start. |
+| `GET /tasks/{T}/assessment-inputs?job=E` |Avoid fetching every draft's response body just to start. |
 | Extend `GET /tasks/{T}/jobs?kind=check\|score_rubric\|score&extraction_job_id=E&cursor=&limit=` | `AssessmentJobPageData` / `AssessmentJobView[]`; recover unfinished jobs after refresh. Each row uses the kind's existing access checks; safe result ID/error/progress only. Existing parse projection remains unchanged. |
 | `GET /tasks/{T}/checks\|score-rubrics\|scores?view=console&extraction_job_id=E&cursor=&limit=` | `AssessmentHistoryQuery` → existing `AssessmentListData` / the corresponding compact summary items; these are three existing collection routes, not a literal combined path. Default full-mode results remain unchanged. |
 | `GET /checks/{C}?view=console&part=summary` | `CheckSummaryData` / `[]`, no coverage/citation arrays |
@@ -510,15 +501,15 @@ the CLI inside the browser.
 
 | Command group | Required parameters / JSON structure |
 | --- | --- |
-| `bid check run` | `--task T --draft D --as-of YYYY-MM-DD --mode rules\|combined`; `--dry-run` returns CheckPreview, otherwise `--expected-input-hash H` is required; optional supported `--reasoning`, model-only `--max-charge`, `--retry`, `--wait`; accepted/waited data is AssessmentJobAccepted/CheckJobResult |
+| `bid check run` | `--task T --draft D --as-of YYYY-MM-DD --mode rules\|model\|combined; preview via `--dry-run`, submit via `--expected-input-hash H`; optional reasoning/retry/wait |
 | `bid check list/show/decide/history` | list: `--task`; show: `--report`; decide/history: report/finding; decision carries expected revision/hash/action/reason through existing flags; list/history support cursor/limit |
-| `bid score rubric generate` | `--task T --extraction-job E`, preview via `--dry-run`, submit via `--expected-input-hash H`, optional reasoning/cap/retry/wait; RubricPreview/RubricJobAccepted/RubricGenerateResult |
+| `bid score rubric generate` | `--task T --extraction-job E`, preview via `--dry-run`, submit via `--expected-input-hash H`, optional reasoning/retry/wait; RubricPreview/RubricJobAccepted/RubricGenerateResult |
 | `bid score rubric list/show/history` | task plus rubric where needed; list/history cursor/limit; shared rubric views/history |
 | `bid score rubric classify` | task/rubric, exactly one `--section` or `--item`, `--input FILE` → RubricClassifyRequest |
 | `bid score rubric section decide/item decide/coverage decide/decide` | task/rubric and section/item/requirement where applicable, `--input FILE`; corresponding shared decision request |
 | `bid score rubric revise` | task/rubric plus `--input FILE`; full RubricReviseRequest, at most 512 KiB file |
-| `bid score run/list/show` | run: task/draft/rubric/as-of, dry-run or expected hash, optional reasoning/cap/retry/wait; ScorePreview/ScoreJobAccepted/ScoreJobResult; list/show share existing report structures |
-| `bid job status/wait/cancel` | Existing job operations; terminal cost/warnings/charge and failure code preserved |
+| `bid score run/list/show` | run: task/draft/rubric/as-of, dry-run or expected hash, optional reasoning/retry/wait; ScorePreview/ScoreJobAccepted/ScoreJobResult; list/show share existing report structures |
+| `bid job status/wait/cancel` | Existing job operations preserve terminal resource counts, warnings and safe failure codes. |
 
 Proposed additive read access keeps CLI/HTTP discoverability aligned without a new
 write workflow: `bid assessment inputs --task T --extraction-job E`,
@@ -547,16 +538,19 @@ The wire envelope remains exactly:
   },
   "items": [],
   "warnings": [],
-  "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0, "basis": "zero", "charge": "0", "billing_currency": "USD", "task_amount": "0", "unpriced_calls": 0, "unresolved_calls": 0},
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 0
 }
 ```
 
-This is an illustrative empty read, not production fixture data. Runtime Cost.usd is
-`float | null`; assessment Money fields use Decimal strings in JSON. A blocked preview
-retains `ok=true` with its admission blocker. An unavailable score read uses `ok=false`
-and retains valid data, e.g. `total_status:"unavailable", estimated_total:null`; never
-replace that response with an error-only toast. `ProjectionPage` is an internal typed
+This is an illustrative empty read, not production fixture data.
+A blocked preview
+retains `ok=true` with its admission blocker.
+An unavailable score read uses `ok=false`
+and retains valid data, e.g.
+`total_status:"unavailable", estimated_total:null`; never
+replace that response with an error-only toast.
+`ProjectionPage` is an internal typed
 pair mapped to `Result.data/items`, not a second public envelope.
 
 | Exit | Required behavior |
@@ -577,10 +571,10 @@ nor a visible report is proof that all work completed.
 Reuse `CheckProvider` from [providers/base.py](../../server/app/providers/base.py),
 `RubricProvider` and `ScoreProvider` from
 [score_contracts.py](../../server/app/schemas/score_contracts.py); the companion module
-re-exports them without adapters. Submission stays in `submit_check`, `submit_rubric`
-and `submit_score`. The new read protocol never calls these Providers. Model calls,
-billing, fixed inputs and job publication remain owned by the existing services;
-there is no console-only model call or second scoring implementation.
+re-exports them without adapters.
+Submission stays in `submit_check`, `submit_rubric`
+and `submit_score`.
+The new read protocol never calls these Providers.
 
 ## Permissions, org isolation and audit
 
@@ -646,18 +640,19 @@ dependency permission changes; show “记录不存在或无权查看” without
 | `check_stale_draft`, `score_stale_draft`, `*_input_changed` | Clear preview consent, explain changed input, link to assembly/rubric review, then preview again |
 | `score_rubric_unconfirmed`, `rubric_incomplete`, `unclassified` | Show exact outstanding checklist and responsible role; do not silently switch rubric |
 | `revision_conflict`, `rubric_superseded`, `invalid_transition` | Refresh authoritative revision, retain unsaved reason/form, show comparison; require a new explicit action |
-| Redaction/capability/price/balance/context blockers | Disable submission and name the person/action needed; do not lower cap, disable redaction or change mode automatically |
-| `queue_unavailable`, transport timeout | Retain known job ID; recover reads before a deliberate retry, without duplicate paid writes |
+| `queue_unavailable`, transport timeout | Retain the durable job ID and original request identity; show status/recovery without automatic resubmission |
 | Citation mismatch, input integrity, missing material | Do not display an unchecked quote as verified; retain safe error and correction link |
 | Partial job/invalid model output/unassessable score | Show usable saved rows and explicit missing work/stop reason; no zero filling or inferred overall total |
 | Unknown error or malformed envelope | Safe Chinese error with code and explicit reload; no blanket success fallback |
 
 Use semantic headings, table captions/column headers, labeled form controls and native
-buttons. Every severity/state has text and an icon, not color alone. Provide skip-main,
+buttons.
+Every severity/state has text and an icon, not color alone.
+Provide skip-main,
 visible focus, keyboard-operable filter/page/detail navigation and a focusable scrolling
-region for wide tables. Dialogs trap focus, associate reasons/errors with the input,
-focus the first invalid field and return focus to the invoking control. No single-key
-shortcut performs a paid submit, confirm, dismiss or reopen.
+region for wide tables.
+Dialogs trap focus, associate reasons/errors with the input,
+focus the first invalid field and return focus to the invoking control.
 
 Report filters and summary updates use restrained polite live regions; blocking errors
 use alerts. Polling never steals focus. Only real bounded progress exposes aria-valuenow;
@@ -716,26 +711,24 @@ publication fencing must preserve the current score-total behavior.
 Snapshot seven-key Result and registered `bid schema` output for every existing command
 used above and every new read command/variant: preview allowed/blocked, accepted,
 cached, complete/partial/stale, unavailable total, empty and multipage read, complete
-replacement, wrong-role human decision and each exit 0/2/3/4/5. Keep old no-option show
-snapshots unchanged. Verify Decimal-string charge/ranges versus numeric/null Cost.usd,
-and explicit service error exit codes rather than treating all 409 as retryable.
+replacement, wrong-role human decision and each exit 0/2/3/4/5.
+Keep old no-option show
+snapshots unchanged.
 
 ### Playwright with a mocked API
 
 Use `web/e2e/console-assessments.spec.js` using the static-built-app interception
 pattern in [platform-credentials.spec.js](../../web/e2e/platform-credentials.spec.js):
 `E2E_STATIC_DIR` serves built assets through page.route; synthetic org sessions and
-stateful route handlers supply exact typed Result envelopes. Abort unexpected requests
+stateful route handlers supply exact typed Result envelopes.
+Abort unexpected requests
 and all external origins; no running API/PostgreSQL or model credentials are needed.
-Use numeric `cost.usd:0`, matching the runtime schema (the reference spec's string zero
-is not a new contract). Assert request method/path/body, revisions, hashes and mutation
+Assert request method/path/body, revisions, hashes and mutation
 counts as well as visible output.
 
 1. Entry from a task/draft, missing extraction/draft, explicit current selection, no
    reports and filtered-empty states; viewer can read but cannot submit.
-2. Rules preview writes zero times; submit once, cached receipt, polling and refresh
-   discovery; combined blocker/redaction/balance/unknown estimate/cap consent paths.
-   Editing scope/date/mode/cap resets consent; queue and network errors never auto-repeat.
+2. Editing scope/date/mode/cap resets consent; queue and network errors never auto-repeat.
 3. Findings grouped by severity/domain with whole-report counts; PDF and Word context,
    draft revision text, no-risk coverage citations, unknown certificate date, missing
    evidence and card deep links. Assert source text is inert HTML and window continuation
@@ -797,18 +790,18 @@ runtime authorization, RLS, query performance or UI delivery.
 | Bounded reads | Opt-in console variants plus only input/citation/job discovery reads | Keeps existing CLI JSON compatible and avoids full reports on page mount. |
 | Page limits and pathological single rows | 50 default/100 maximum, 2 MiB encoded Result; fail explicitly on an oversized single row | Provides measurable limits without truncating verified text. If representative data exceeds it, amend to compact row metadata and separately paged narratives before large-data release. |
 | Full replacement editing | Complete same-snapshot form, 512 KiB serialized save limit, recover stored proposal separately | Matches current atomic replacement and CLI limit; visible page edits cannot erase other-domain content. |
-| Budget compatibility | Enforced task budget, runtime TaskBudgetView and Result 4.0 Cost; display real budget_preflight and admission blockers | The task-budget work is merged into the implementation base; no legacy unenforced projection remains. |
+| Usage contract | Result 5.0; read-only resource preflight and durable job usage | [ADR 0011](../adr/0011-remove-billing.md) owns the decision. |
 | Progress transport | Existing polling, optional observed StageProgress; no SSE prerequisite | Works with current single-pass and later fixed-section two-stage workers without invented percentages. |
 | Unknown/unavailable scores | Preserve backend null/state/reason; no frontend totals | Partial or unsupported calculations cannot become a misleading total. |
 | Human batches and automatic repair | Individual review actions only; explicit whole-set confirmation after server checks | Makes responsibility and reason visible and avoids a second bulk-decision contract. |
-| UI acceptance | Static built Vue with stateful mocked API plus separate two-org API/DB gate suite | Repeatable browser behavior without paid services; mocks do not establish RLS or authorization. |
+| UI acceptance | Static built Vue with stateful mocked API plus separate two-org API/DB gate suite | Repeatable browser behavior without real provider calls; mocks cannot establish PostgreSQL RLS or server authorization. |
 
 ## Implementation acceptance note
 
 The four slices are implemented in the approved order without a migration or Provider
-algorithm change. The companion module re-exports the runtime schemas so the approved
-transport contract has one definition. Enforced budgets use the runtime task-budget
-view and Result 4.0 rather than the earlier recorded-budget draft.
+algorithm change.
+The companion module re-exports the runtime schemas so the approved
+transport contract has one definition.
 
 The built-app Playwright suite uses stateful mocked API responses, real versioned
 request paths and synthetic fixtures. Browser startup was blocked by the execution

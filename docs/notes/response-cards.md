@@ -76,12 +76,13 @@ until publication; job status never exposes submission state. Publication append
 an immutable `CardGenerationRun` with the same encrypted snapshot and public
 ID/hash manifest, satisfying the database's running-attempt insertion gate.
 
-The cache includes the input hash and expected revisions. An untouched model
-revision maps back to its generating run's expected revision for cache lookup,
-so repeating the same request reuses its paid result. A manual edit, new input,
+The cache includes the input hash and expected revisions.
+A manual edit, new input,
 reasoning level, catalog revision, prompt/schema/adapter version or redaction
-setting changes the key. Retries keep the original encrypted input and cumulative
-call budget. Changed configuration fails explicitly before sending new text.
+setting changes the key.
+Retries keep the original encrypted input and cumulative
+call budget.
+Changed configuration fails explicitly before sending new text.
 
 The worker fixes `origin=model`, `actor_kind=worker`, `model_job_id` and `state=draft`.
 It never sets a human disposition or confirmer. Under the task lock it checks each
@@ -102,14 +103,16 @@ Obligations the bidder performs itself, such as delivery, warranty and service
 terms, are drafted as commitments at the tender's own values.
 
 Valid responses from completed batches may be published after a later provider
-or budget failure, with `completion=partial`, `stop_reason`, usage IDs and exit 5.
-Without a completed batch the job fails without cards. Lease loss, cancellation,
-heartbeat failure or accounting failure publishes no proposals. Protected skips
+or resource-limit failure, with `completion=partial`, `stop_reason`, usage IDs and exit 5.
+Without a completed batch the job fails without cards.
+Lease loss, cancellation,
+heartbeat failure or accounting failure publishes no proposals.
+Protected skips
 alone do not cause partial completion; invalid references, missing proposals,
-revision conflicts and `needs_material` do. A successful partial job is terminal;
+revision conflicts and `needs_material` do.
+A successful partial job is terminal;
 repeat requests return it, while editing the unresolved card or changing inputs
-creates a new submission. Cost and admission behavior is defined in
-[prepaid-billing.md](prepaid-billing.md#admission-and-the-spending-bound).
+creates a new submission.
 
 Every supplied field/page is a conservative dependency of the model's response,
 even if not cited. Submission, classification and review actions retain

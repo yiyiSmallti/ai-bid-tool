@@ -76,7 +76,7 @@ def test_memory_json_snapshot(monkeypatch, action, method, path):
             "data": {},
             "items": [],
             "warnings": [],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 0,
         }
 
@@ -197,7 +197,7 @@ def test_memory_input_commands_snapshot(
             "data": {},
             "items": [],
             "warnings": [],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 0,
         }
 
@@ -251,7 +251,7 @@ def test_memory_job_status_exit_snapshot(monkeypatch, capsys, status, exit_code)
             },
             "items": [],
             "warnings": [],
-            "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+            "cost": {"llm_tokens": 0, "ocr_pages": 0},
             "duration_ms": 0,
         }
 

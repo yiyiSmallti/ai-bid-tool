@@ -21,7 +21,7 @@ from app.services import requirement_confirmation as service
 
 def create_router(context, settings):
     async def v4_only(request: Request):
-        if getattr(request.state, "contract_version", "3.0") != "4.0":
+        if getattr(request.state, "contract_version", "3.0") != "5.0":
             raise ServiceError("not_found", "Not found", 404, 4)
 
     router = APIRouter(dependencies=[Depends(v4_only)])
@@ -32,7 +32,7 @@ def create_router(context, settings):
             command=command,
             data=data or {},
             items=items or [],
-            cost=Cost(billing_currency=settings.billing_currency),
+            cost=Cost(),
         )
         if len(value.model_dump_json().encode()) > 512 * 1024:
             raise ServiceError("legacy_item_too_large", "Review response exceeds 512 KiB", 422, 2)

@@ -191,7 +191,7 @@ async def draft(
         timeout=httpx.Timeout(llm.settings.llm_timeout_seconds, connect=10),
         follow_redirects=False,
     ) as client:
-        # Each call is admitted against the job's call ceiling and charge cap before it
+        # Each call is admitted against the job's call ceiling before it
         # is sent, so concurrent batches cannot exceed either limit.
         results = await asyncio.gather(
             *(worker(client, index, batch) for index, batch in enumerate(batches)),

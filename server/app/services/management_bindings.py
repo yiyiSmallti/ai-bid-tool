@@ -92,7 +92,6 @@ async def detail(
         detail_result(
             COMMANDS["detail"],
             value,
-            management.settings_for(session).billing_currency,
             9223372036854775807,
         )
         return value

@@ -222,21 +222,6 @@ def console_interface(requests, *, error_exit=None):
                 "current_draft": None,
                 "redaction_enabled": True,
                 "redaction_revision": 1,
-                "task_budget": {
-                    "org_id": IDENTIFIER,
-                    "task_id": IDENTIFIER,
-                    "revision": 1,
-                    "limit": None,
-                    "currency": "CNY",
-                    "state": "active",
-                    "spent": "0",
-                    "reserved": "0",
-                    "available": None,
-                    "unpriced_calls": 0,
-                    "unresolved_calls": 0,
-                    "history_complete": True,
-                    "as_of": "2026-10-04T00:00:00Z",
-                },
                 "actions": [],
             }
         elif path.endswith("/assessment-citation"):
@@ -415,7 +400,9 @@ def test_check_console_cli_local_remote_snapshots(monkeypatch, tmp_path, capsys)
             code, body = invoke(
                 ["--mode", mode, "--state", str(tmp_path / f"{mode}.enc"), *arguments], capsys
             )
-            assert code == (5 if name.startswith("check ") and name != "check list console" else 0)
+            assert code == (
+                5 if name.startswith("check ") and name != "check list console" else 0
+            ), body
             actual[mode][name] = body
     assert requests[: len(commands)] == requests[len(commands) :]
     assert requests[0] == {
@@ -610,13 +597,8 @@ def test_console_variants_require_v4_and_are_absent_from_legacy_schema(monkeypat
         code, body = invoke(["--contract-version", "3.0", *arguments], capsys)
         assert code == 2 and body["data"]["error"]["code"] == "invalid_input"
     assert requests == []
-    commands = command_schema(cli.app, "3.0")["commands"]
-    assert not any(name.startswith("assessment ") for name in commands)
-    assert "variants" not in commands["check show"]
-    assert not any(
-        parameter["name"] in {"view", "extraction_job"}
-        for parameter in commands["check list"]["cli_parameters"]
-    )
+    with pytest.raises(ValueError, match="Only contract 5.0"):
+        command_schema(cli.app, "3.0")
 
 
 def test_rubric_console_cli_local_remote_snapshots(monkeypatch, tmp_path, capsys):

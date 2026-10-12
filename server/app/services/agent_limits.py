@@ -1,8 +1,7 @@
-"""A01 safety ceilings over the existing call ledger, never a second task budget."""
+"""A01 safety ceilings over the existing call ledger, with no monetary admission."""
 
 import math
 from datetime import datetime, timedelta
-from decimal import Decimal
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +12,8 @@ from app.models.agent import AgentJobLink, AgentPrincipal, AgentSession
 from app.models.entities import Job, Task, UsageRecord, VendorCall
 from app.providers.base import ProviderFailure
 from app.schemas.agent_contracts import AgentCostView, AgentLimits
-from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.contracts import Cost
+from app.schemas.preflight_contracts import CallPlan
 from app.services.auth import Identity, agent_identity
 from app.services.redaction import RULE_VERSION
 
@@ -24,8 +23,6 @@ HARD_STOPS = {
     "agent_call_limit",
     "agent_time_limit",
     "agent_lifetime_limit",
-    "agent_vendor_cost_limit",
-    "agent_platform_cost_limit",
 }
 
 
@@ -75,40 +72,23 @@ async def cost_view(session: AsyncSession, row: AgentSession) -> AgentCostView:
     """Each UsageRecord belongs to exactly one owned job; cached results add zero."""
     usages, calls = await ledger(session, row)
     pending = [call for call in calls if call.state in {"pending", "unknown"}]
-    vendor_known = all(usage.usd is not None for usage in usages)
-    holds = [BudgetCallQuote.model_validate(call.quote).vendor_usd_upper_bound for call in pending]
-    charge = sum((Decimal(str(usage.charge or 0)) for usage in usages), Decimal(0))
-    currency = AgentLimits.model_validate(row.limits).billing_currency
-    unpriced = sum(usage.usd is None for usage in usages) + sum(value is None for value in holds)
-    task_known = all(usage.task_amount is not None for usage in usages)
-    vendor = sum((Decimal(str(usage.usd or 0)) for usage in usages), Decimal(0))
     return AgentCostView(
         cost=Cost(
+            calls=len(usages),
             llm_tokens=sum(usage.tokens for usage in usages),
             ocr_pages=sum(usage.ocr_pages for usage in usages),
-            usd=float(vendor) if vendor_known else None,
-            basis="actual",
-            charge=charge,
-            billing_currency=currency,
-            task_amount=sum((usage.task_amount or Decimal(0) for usage in usages), Decimal(0))
-            if task_known
-            else None,
-            unpriced_calls=unpriced,
+            search_requests=sum(usage.search_requests for usage in usages),
+            browser_units=sum(usage.browser_units for usage in usages),
             unresolved_calls=len(pending),
         ),
-        platform_charge=charge,
-        reserved_platform_charge=sum((call.reserved_charge for call in pending), Decimal(0)),
-        reserved_vendor_usd=sum((value or Decimal(0) for value in holds), Decimal(0))
-        if all(value is not None for value in holds)
-        else None,
-        billing_currency=currency,
-        unpriced_calls=unpriced,
-        unresolved_calls=len(pending),
+        calls=len(calls),
+        pending_calls=sum(call.state == "pending" for call in calls),
+        unknown_calls=sum(call.state == "unknown" for call in calls),
     )
 
 
 async def locked_session(session: AsyncSession, session_id) -> AgentSession:
-    """The task lock serializes session calls before the existing balance lock."""
+    """The task lock serializes session calls with the job lease."""
     task_id = await session.scalar(
         select(AgentSession.task_id).where(AgentSession.id == session_id)
     )
@@ -127,7 +107,7 @@ async def enforce(
     session: AsyncSession,
     row: AgentSession,
     settings: Settings,
-    quote: BudgetCallQuote | None = None,
+    quote: CallPlan | None = None,
 ) -> Identity:
     """Check authority and session ceilings while Task is locked by the caller."""
     now = await session.scalar(select(func.clock_timestamp()))
@@ -158,8 +138,6 @@ async def enforce(
         or row.model_snapshot.get("redaction_rule_version") != RULE_VERSION
     ):
         raise ProviderFailure("Agent outbound masking changed", code="agent_inputs_changed")
-    if limits.billing_currency != settings.billing_currency:
-        raise ProviderFailure("Agent billing currency changed", code="billing_currency_mismatch")
     from app.services.confidential import task_entries
 
     values = sorted(
@@ -174,18 +152,6 @@ async def enforce(
         raise ProviderFailure(
             "Verify unresolved vendor requests first", code="agent_request_uncertain"
         )
-    vendor = sum((Decimal(str(usage.usd or 0)) for usage in usages), Decimal(0))
-    charge = sum((Decimal(str(usage.charge or 0)) for usage in usages), Decimal(0))
-    pending = [call for call in calls if call.state == "pending"]
-    pending_quotes = [BudgetCallQuote.model_validate(call.quote) for call in pending]
-    if any(usage.usd is None for usage in usages) or any(
-        fixed.vendor_usd_upper_bound is None for fixed in pending_quotes
-    ):
-        raise ProviderFailure("Agent vendor exposure cannot be bounded", code="agent_unpriced")
-    vendor += sum(
-        (fixed.vendor_usd_upper_bound or Decimal(0) for fixed in pending_quotes), Decimal(0)
-    )
-    charge += sum((call.reserved_charge for call in pending), Decimal(0))
     if quote is not None:
         model = row.model_snapshot["model"]
         if (
@@ -194,23 +160,10 @@ async def enforce(
             or quote.version != model["adapter_version"]
             or str(quote.provider_config_id or "") != str(model.get("provider_config_id") or "")
             or quote.platform_model_id != model.get("platform_model_id")
-            or quote.price_revision != f"{quote.version}:price:{model.get('model_revision') or 0}"
         ):
-            raise ProviderFailure(
-                "Pinned agent model or pricing changed", code="agent_model_changed"
-            )
-        if quote.vendor_usd_upper_bound is None or quote.unknown_reason:
-            raise ProviderFailure("Agent calls require a known price bound", code="agent_unpriced")
+            raise ProviderFailure("Pinned agent model changed", code="agent_model_changed")
         if len(calls) >= limits.max_vendor_calls:
             raise ProviderFailure("Agent call ceiling exhausted", code="agent_call_limit")
-        vendor += quote.vendor_usd_upper_bound
-        charge += quote.reserved_charge
-    if vendor > limits.max_vendor_usd:
-        raise ProviderFailure("Agent vendor cost ceiling exhausted", code="agent_vendor_cost_limit")
-    if charge > limits.max_platform_charge:
-        raise ProviderFailure(
-            "Agent platform cost ceiling exhausted", code="agent_platform_cost_limit"
-        )
     if row.steps_used > limits.max_steps:
         raise ProviderFailure("Agent step ceiling exhausted", code="agent_step_limit")
     return actor

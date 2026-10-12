@@ -186,7 +186,7 @@ async def test_citation_query_converts_numeric_window_fields(assessment_interfac
         "/tasks/00000000-0000-0000-0000-000000000001/score-rubrics/00000000-0000-0000-0000-000000000001/decisions?view=console",
     ],
 )
-async def test_new_assessment_reads_require_v4_before_authentication(path, monkeypatch):
+async def test_assessment_reads_reject_missing_parameters_before_database(path, monkeypatch):
     from app.api.main import create_app
     from app.core.config import Settings
     from cryptography.fernet import Fernet
@@ -200,16 +200,17 @@ async def test_new_assessment_reads_require_v4_before_authentication(path, monke
     app = create_app(settings)
 
     def never_connect(*args, **kwargs):
-        raise AssertionError("Version gate must precede any database access")
+        raise AssertionError("Missing request parameters must precede any database access")
 
     monkeypatch.setattr(app.state.db, "transaction", never_connect)
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
         response = await client.get(path)
-        assert response.status_code == 404, response.text
-        assert response.json()["data"]["error"]["code"] == "not_found"
-        assert response.headers["X-Bid-Contract-Version"] == "3.0"
+        expected = 405 if "/decisions?" in path else 422
+        assert response.status_code == expected, response.text
+        assert response.json()["ok"] is False
+        assert response.headers["X-Bid-Contract-Version"] == "5.0"
 
 
 async def test_rubric_section_context_accepts_indexed_sources_only(assessment_interface):

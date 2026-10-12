@@ -258,17 +258,9 @@ async def submit_draft(
             for kind in ("row", "comply_only", "gap")
         }
         reasons = {}
-        legacy_reasons = {}
-        legacy_codes = {
-            "requirement_unconfirmed": "unconfirmed",
-            "requirement_invalidated": "needs_reconfirmation",
-        }
         for item in items:
-            for reason in {legacy_codes.get(code, code) for code in item.get("gap_reasons", [])}:
-                legacy_reasons[reason] = legacy_reasons.get(reason, 0) + 1
             for reason in item.get("gap_reasons", []):
                 reasons[reason] = reasons.get(reason, 0) + 1
-        session.info["draft_legacy_gap_reasons"] = legacy_reasons
         data = DraftPreview.model_validate(
             {
                 "task_id": task_id,
@@ -285,17 +277,14 @@ async def submit_draft(
                 "estimated_cost": Cost(),
             }
         ).model_dump(mode="json")
-        from app.services import budget_preflight
+        from app.services import preflight as preflight_service
 
-        return await budget_preflight.attach(
+        return await preflight_service.attach(
             session,
             data,
             command="draft",
             task_id=task_id,
             input_hash=input_hash,
-            currency=session.info["memory_settings"].billing_currency
-            if session.info.get("memory_settings")
-            else "USD",
             planned_calls=0,
         ), None
     cache_key = digest({"kind": "draft", "input_hash": input_hash})

@@ -602,13 +602,13 @@ async def archive(session, actor, task_id, body, settings, *, restore=False):
             .where(Job.task_id == task_id, Job.status.in_(["queued", "running"]))
             .limit(1)
         )
-        liability = await session.scalar(
+        unresolved_calls = await session.scalar(
             select(VendorCall.id)
             .join(Job, (Job.org_id == VendorCall.org_id) & (Job.id == VendorCall.job_id))
             .where(Job.task_id == task_id, VendorCall.state.in_(["pending", "unknown"]))
             .limit(1)
         )
-        if busy or liability:
+        if busy or unresolved_calls:
             fail("task_busy", "Finish or reconcile outstanding task work before archiving")
     before_state = workflow.state
     workflow.last_reason_ciphertext = Secrets.for_data(settings).encrypt(body.reason)

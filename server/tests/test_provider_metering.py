@@ -1,7 +1,6 @@
 """Offline request-to-admission scenarios for every currently metered capability."""
 
 import hashlib
-from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -54,36 +53,19 @@ def adapter(**options):
             encryption_key=Fernet.generate_key().decode(),
             token_key=Fernet.generate_key().decode(),
             llm_model="synthetic",
-            llm_input_usd_per_mtok=1,
-            llm_output_usd_per_mtok=2,
             **options,
         ),
         org_owned=True,
     )
 
 
-def test_exact_serialization_quote_and_decimal_ceiling():
+def test_exact_serialization_plan_and_token_bounds():
     provider = adapter()
     body = {"model": "synthetic", "max_tokens": 3, "messages": [{"content": "中文"}]}
     quote = provider.quote(body)
     wire = provider.serialized_request(body)
     assert quote.request_sha256 == hashlib.sha256(wire).hexdigest()
     assert quote.input_tokens_upper_bound == len(wire) + 4096
-    assert quote.reserved_task_amount == Decimal(len(wire) + 4096 + 6) / 1_000_000
-    assert quote.payer == "org_direct"
-    assert quote.reserved_charge == 0
-
-
-def test_unknown_direct_price_and_currency_are_explicit():
-    body = {"max_tokens": 4}
-    provider = adapter()
-    provider.settings.llm_input_usd_per_mtok = None
-    assert provider.quote(body).unknown_reason == "missing_price"
-    provider = adapter(billing_currency="CNY")
-    quote = provider.quote(body)
-    assert quote.unknown_reason == "currency_conversion_required"
-    assert quote.reserved_task_amount is None
-    assert quote.vendor_usd_upper_bound is not None
 
 
 async def test_no_accounting_rejects_before_dispatch():
@@ -101,7 +83,7 @@ async def test_no_accounting_rejects_before_dispatch():
 
 
 @pytest.mark.parametrize("reported_model", ["synthetic", "synthetic-fallback"])
-async def test_llm_admits_exact_sent_bytes_and_fixed_settlement(accounting, reported_model):
+async def test_llm_admits_exact_sent_bytes_and_records_fixed_usage(accounting, reported_model):
     provider = adapter()
     body = {"model": "synthetic", "max_tokens": 4, "messages": [{"content": "test"}]}
 
@@ -118,9 +100,6 @@ async def test_llm_admits_exact_sent_bytes_and_fixed_settlement(accounting, repo
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
         _, usage = await provider.post(client, "https://synthetic.test/v1", {}, body)
-    assert usage.payer == "org_direct"
-    assert usage.task_amount == Decimal("0.00000700")
-    assert usage.price_revision == accounting.quotes[-1].price_revision
     assert accounting.quotes[-1].model == "synthetic"
     assert usage.model == reported_model
     assert len(accounting.usages) == 1
@@ -134,13 +113,11 @@ async def test_search_each_dispatch_settles_even_invalid_response(accounting):
     with pytest.raises(ProviderFailure):
         await provider.search("synthetic query")
     assert len(accounting.quotes) == len(accounting.usages) == 1
-    assert accounting.quotes[0].payer == "platform_absorbed"
     assert accounting.usages[0].search_requests == 1
-    assert accounting.usages[0].task_amount == 0
     assert not accounting.unknowns
 
 
-async def test_local_ocr_failure_is_zero_liability_accounted(accounting, monkeypatch):
+async def test_local_ocr_failure_still_records_usage(accounting, monkeypatch):
     import app.providers.local_ocr as local_ocr
 
     def fail(image):
@@ -152,11 +129,9 @@ async def test_local_ocr_failure_is_zero_liability_accounted(accounting, monkeyp
         with pytest.raises(ProviderFailure):
             await provider.recognize(b"image", page)
     assert len(accounting.quotes) == len(accounting.usages) == 2
-    assert all(quote.payer == "local_free" for quote in accounting.quotes)
-    assert all(usage.ocr_pages == 1 and usage.task_amount == 0 for usage in accounting.usages)
 
 
-async def test_browser_execution_uses_zero_quote_and_settles_failure(accounting, monkeypatch):
+async def test_browser_execution_uses_call_plan_and_settles_failure(accounting, monkeypatch):
     import hashlib
     from types import SimpleNamespace
     from uuid import uuid4
@@ -170,7 +145,6 @@ async def test_browser_execution_uses_zero_quote_and_settles_failure(accounting,
         raise SandboxFailure("synthetic_failure")
 
     monkeypatch.setattr(provider, "_execute_unaccounted", fail)
-    # A real descriptor carries UUID IDs, which the quote must encode like the run frame.
     descriptor = RunDescriptor(
         org_id=uuid4(),
         job_id=uuid4(),
@@ -182,5 +156,3 @@ async def test_browser_execution_uses_zero_quote_and_settles_failure(accounting,
         await provider._execute(descriptor, b"synthetic html", None)
     assert len(accounting.quotes) == len(accounting.usages) == 1
     assert accounting.quotes[0].capability == "browser"
-    assert accounting.usages[0].payer == "local_free"
-    assert accounting.usages[0].task_amount == 0

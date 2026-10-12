@@ -100,19 +100,13 @@ proposal for human review. These checks do not verify its semantic claims.
 
 ### Cost and reporting
 
-Dry-run reports a conservative first-pass token allowance and a charge/cost bound
-where configured prices are available. It labels the estimate
-`first_pass_upper_bound`; halving and retries can cost more. Missing prices remain
-null with `cost_basis=unknown` and a reason. Insufficient available balance for
-the first call is reported as `admission_blocker=insufficient_balance`; a first
-call beyond the job charge ceiling reports `job_charge_limit_exceeded`. These
-are read-only checks, and every real call still requires live reservation.
+It labels the estimate
+`first_pass_upper_bound`; halving and retries can add calls.
 Duration is unknown until execution.
-Estimation and admission use the same output-token bound. Both adapters build
+Estimation and admission use the same output-token bound.
+Both adapters build
 draft requests through the [reserved output-limit contract](llm-providers.md#how-it-works),
 so environment or legacy reasoning options cannot inject a competing limit.
-Actual request cost, settlement and unresolved reservations follow
-[prepaid-billing.md](prepaid-billing.md).
 
 Usage, audit, job results and errors contain no sent text or raw model output.
 Only validated response content is stored in authorized card revisions. Invalid

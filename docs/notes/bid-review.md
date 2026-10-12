@@ -30,7 +30,7 @@ to compare public CA fingerprints and manage the local trust store.
 Prepare submission requires the exact preview hash and signed receipt. Retrying a
 failed or cancelled job requires a fresh request ID, a current preview and explicit
 `retry`; replaying that retry request returns the existing job. All responses use
-Result 4.0, and these commands have no legacy Result 3.0 route.
+Result 5.0, and these commands have no legacy Result 3.0 route.
 
 The prepared submission also offers a cleared-text review and a separate review-run
 preflight. A human admin or bidder who owns the task reviews the actual sanitized
@@ -60,13 +60,15 @@ and upload-name hashes; replay rechecks authorization and returns the same recei
 Original bytes use the existing encrypted storage provider, and names use encrypted
 org/row-bound database values.
 
-Preparation preflight reads only immutable metadata and current authority/budget.
-It makes no conversion, OCR or model call and writes no Job, object, usage, audit or
-reservation. The signed 15-minute receipt binds actor, org, task, submission and
-input hash. The input includes file order/hashes, parser/render identities and
-processing limits. Submission checks that receipt and atomically enqueues the
-existing Job/Procrastinate path. Local parsing and rendering have zero cost and
-create no invented UsageRecord; terminal accounting uses the shared budget result.
+Preparation preflight reads only immutable metadata and current authority/resource limits.
+The signed 15-minute receipt binds actor, org, task, submission and
+input hash.
+The input includes file order/hashes, parser/render identities and
+processing limits.
+Submission checks that receipt and atomically enqueues the
+existing Job/Procrastinate path.
+Local parsing and rendering have zero cost and
+create no invented UsageRecord; terminal accounting uses the shared resource-usage result.
 
 The [local preparation worker](../../server/app/jobs/bid_review_prepare.py) reads
 and verifies exact encrypted originals, uses the disposable
@@ -160,7 +162,7 @@ text, maintain name lists or create/revoke grants. A token with explicit
 task authority. Its review and job projections contain safe metadata only.
 
 [Review preflight and admission](../../server/app/services/bid_review_run.py) use a
-write-free actor-bound receipt and exact-request budget quotes. Missing preparation,
+write-free actor-bound receipt and exact-request resource estimates. Missing preparation,
 human authorization or provider configuration appear as admission blockers without
 external discovery. Submission verifies the receipt and live bindings, deduplicates
 request identity and enqueues the existing durable worker. Before every model
@@ -180,12 +182,13 @@ Every-page and seam groups expand against the full prepared bid inventory; each
 required occurrence remains unresolved because mark presence is not checked.
 
 The job's `bid_submission_document_id` binds the real uploaded tender row through
-an org/task foreign key. It does not create an ordinary tender `Document` or open
-legacy parsing/download routes. [Migration 0063](../../server/migrations/versions/0063_bid_review_privacy.py)
+an org/task foreign key.
+It does not create an ordinary tender `Document` or open
+legacy parsing/download routes.
+[Migration 0063](../../server/migrations/versions/0063_bid_review_privacy.py)
 owns local privacy snapshots and exact grants; [migration 0064](../../server/migrations/versions/0064_bid_review_run.py)
 owns review inputs, normalized tender-page/signing-location links and atomic
-publication. Both retain immutable tenant rows with forced RLS; rollback disables
-admission and repairs forward without removing encrypted history or charges.
+publication.
 
 Each call contains one whole authorized tender page. A page above the configured
 context bound blocks submission instead of being truncated. The request plan
@@ -196,15 +199,16 @@ at least four percent as uncertain; both are excluded, as are keyword matches.
 Human-reviewed text does not authorize image disclosure. Local identity lists are
 bounded to 1,000 values; oversized local input or response items fail explicitly.
 
-Calls reuse `JobExecution` admission and the shared task/prepaid accounting ledger.
 Refusal, malformed/truncated output and completed calls after cancellation retain
-actual usage; uncertain outcomes retain their holds. Budget or provider stops may
-retain a partial report with explicit unfinished coverage. Changed input, cancelled
-or lost attempts and accounting-bound violations fence publication. Report bodies
+actual usage; uncertain outcomes retain their holds.
+Call-limit or provider stops may
+retain a partial report with explicit unfinished coverage.
+Changed input, cancelled
+or lost attempts and accounting-bound violations fence publication.
+Report bodies
 are encrypted; bounded protected sections serve cited obligations and signing
 requirements to authorized humans, while token projections disclose only IDs,
-counts and fixed coverage codes. The
-[budget mechanism](task-budgets.md#how-it-works) owns settlement and exposure rules.
+counts and fixed coverage codes.
 
 ### Bid compliance and human decisions
 
@@ -219,7 +223,7 @@ The same admission fence and accounting ledger apply before every call.
 Preflight quotes the known extraction requests and declares that compliance call
 counts and costs depend on extracted obligations. It bounds the dependent envelope
 with the run's LLM ceiling; a possible later stop is not evidence of incomplete
-execution. Actual budget/provider/call stops preserve completed results and list
+execution. Actual resource/provider/call stops preserve completed results and list
 unfinished obligations as unknown. Cancelled, lost or changed attempts publish
 nothing. Findings are grouped per obligation before checking the approved bounds;
 an overflowing group and the following groups remain explicitly uncovered.
@@ -267,7 +271,7 @@ referencing the event, without changing machine evidence, outcome, severity or s
 and `--outcome` filter them. `bid review decide` and `bid review classify` use
 `--id REVIEW --finding FINDING --input REQUEST.json`. `bid review history` uses the
 same IDs, optional `--classification`, and the shared `--cursor`/`--limit` pagination.
-All support Result 4.0 `--json`; input shapes are in the
+All support Result 5.0 `--json`; input shapes are in the
 [finding schemas](../../server/app/schemas/bid_review_findings.py).
 
 Protected admin/bidder readers can read original saved excerpts. Other human
@@ -325,7 +329,7 @@ confirmation or ordinary bid-export capability.
 preview. Submission uses the same input with `--expected-input-hash` and
 `--preflight-token`. `bid review report download --artifact UUID --output PATH
 --json` saves only a verified DOCX through the shared private temporary-file,
-no-redirect and atomic no-overwrite download path. JSON contracts remain Result 4.0.
+no-redirect and atomic no-overwrite download path. JSON contracts remain Result 5.0.
 
 ### Presence-only Clef triage
 
@@ -368,16 +372,14 @@ must confirm that the real metadata response matches it.
 
 The [Clef adapter](../../server/app/providers/clef.py) sends one authorized JPEG
 with the two fixed noul questions through AI Gateway, without internal IDs, source
-text or filenames. Every dispatch uses a versioned fixed sale quote and the shared
-budget admission ledger. Returned token counts and gateway IDs are reconciliation
-telemetry. A gateway 429 is non-completed, releases its hold and re-admits after
-Retry-After within the attempt ceiling; unknown timeouts retain their reservation
-and do not automatically retry. Completed malformed output still incurs its fixed
-charge. The approved [threshold and human boundaries](../plan/bid-review.md#slice-5-default-on-presence-triage)
+text or filenames.
+Every dispatch uses the shared resource admission and durable usage records.
+Returned token counts and gateway IDs support request attribution and diagnosis.
+The approved [threshold and human boundaries](../plan/bid-review.md#slice-5-default-on-presence-triage)
 apply to both live console rows and immutable Word snapshots.
 
 The enabled request default does not manufacture clearance. Unconfigured, unchecked,
-unpriced, stale or unauthorized Clef stays undispatched while the text review
+stale or unauthorized Clef stays undispatched while the text review
 continues with triage-unavailable coverage. Missing/uncertain marks remain escalated,
 and even high-probability presence still requires human confirmation. Faint,
 greyscale, partial, wrong-company, prescribed-position, seam and signature-identity

@@ -217,7 +217,7 @@ def tenants(admin_engine, monkeypatch):
     with admin_engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE platform_trust_anchors, platform_operator_factors, platform_credentials, platform_cards, balance_entries, org_balances, platform_audit_logs, platform_models, evidence_sources, certificate_files, task_templates, template_revisions, templates, task_org_profiles, org_profile_revisions, org_profiles, task_certificates, certificate_revisions, certificates, task_features, feature_revisions, features, audit_logs, task_resources, product_revisions, products, jobs, usage_records, requirements, chunks, documents, tasks, api_tokens, memberships, orgs, users CASCADE"
+                "TRUNCATE platform_trust_anchors, platform_operator_factors, platform_credentials, platform_audit_logs, platform_models, evidence_sources, certificate_files, task_templates, template_revisions, templates, task_org_profiles, org_profile_revisions, org_profiles, task_certificates, certificate_revisions, certificates, task_features, feature_revisions, features, audit_logs, task_resources, product_revisions, products, jobs, usage_records, requirements, chunks, documents, tasks, api_tokens, memberships, orgs, users CASCADE"
             )
         )
     orgs, users = [], []
@@ -377,8 +377,8 @@ async def seed_platform_credential(
 async def credential_app(settings, *, llm: HTTPExtractor, queue):
     """Use stored platform credentials with an explicitly injected MockTransport adapter.
 
-    The adapter remains injectable for unknown-price, reasoning and stale-identity cases.
-    Its billing flags and request settings are untouched; only authentication moves to the
+    The adapter remains injectable for reasoning and stale-identity cases.
+    Its request settings are untouched; only authentication moves to the
     same encrypted store and per-call catalog resolver used by production API/worker calls.
     """
     from app.models.entities import PlatformModel
@@ -414,12 +414,6 @@ async def credential_app(settings, *, llm: HTTPExtractor, queue):
                 base_url=endpoint,
                 credential=credential_name,
                 revision=revision,
-                # These rows authorize credential resolution. Deliberate pricing faults stay
-                # on the injected adapter, rather than inventing nullable catalog prices.
-                vendor_input_usd_per_mtok=llm.settings.llm_input_usd_per_mtok or 0,
-                vendor_output_usd_per_mtok=llm.settings.llm_output_usd_per_mtok or 0,
-                sale_input_per_mtok=llm.sale[0] if llm.sale else 0,
-                sale_output_per_mtok=llm.sale[1] if llm.sale else 0,
                 enabled=True,
                 is_default=False,
                 reasoning=[],

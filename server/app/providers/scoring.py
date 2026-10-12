@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from decimal import Decimal
 from typing import TYPE_CHECKING, cast
 
 import httpx
@@ -54,7 +53,7 @@ WIRE_SCHEMA = strict_schema(ScoreWireOutput)
 
 
 def request_body(llm: HTTPExtractor, request: ScoreProviderRequest) -> dict:
-    """Build the exact body shared by reservation and transport."""
+    """Build the exact body shared by call planning and transport."""
 
     return json_request(llm, SYSTEM_PROMPT, request.model_dump_json(), WIRE_SCHEMA, "score")
 
@@ -106,9 +105,6 @@ class HTTPScoreProvider:
 
     def request_body(self, request: ScoreProviderRequest) -> dict:
         return request_body(self.llm, request)
-
-    def reservation(self, request: ScoreProviderRequest) -> Decimal:
-        return self.llm.reservation(self.request_body(request))
 
     @staticmethod
     def _validate_request(request: ScoreProviderRequest) -> None:

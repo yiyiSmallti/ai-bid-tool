@@ -33,12 +33,14 @@ from app.providers.annotation_renderer import (
 from app.schemas import annotation_contracts as schema
 from app.schemas.screenshot_contracts import PixelRect, PNGDescriptor
 from app.services import (
-    budget_preflight,
     evidence_sources,
     requirement_consumption,
     task_cosign,
     task_events,
     task_workflow,
+)
+from app.services import (
+    preflight as preflight_service,
 )
 from app.services import response_cards as cards
 from app.services.auth import HUMAN_ONLY_SCOPES, ROLE_SCOPES, Identity, set_actor_context
@@ -257,30 +259,29 @@ async def preflight(session, actor, task_id, body, storage, settings, renderer=N
         session, actor, task_id, body.input, renderer.identity(CANDIDATE_PROFILE)
     )
     # Reading and validating the exact archive is part of preflight, without any
-    # job, storage, review, audit or funds reservation side effect.
+    # job, storage, review or audit side effect.
     content, _ = await evidence_sources.read_preview(
         session, actor, body.input.source.evidence_source_id, storage
     )
     if len(content) > min(schema.PNG_BYTE_LIMIT, settings.max_upload_bytes):
         fail("output_limit_exceeded", "Source PNG exceeds the configured byte limit", 413)
     canvas = await renderer.predict(render_request(manifest))
-    data = await budget_preflight.attach(
+    data = await preflight_service.attach(
         session,
         {},
         command="evidence stamp",
         task_id=task_id,
         input_hash=manifest.canonical_sha256(),
-        currency=settings.billing_currency,
         settings=settings,
         quotes=[],
         planned_calls=0,
     )
-    data["budget_preflight"]["maximum_calls"] = 0
+    data["preflight"]["maximum_calls"] = 0
     return schema.AnnotationPreflight(
         input_hash=manifest.canonical_sha256(),
         manifest=manifest,
         predicted_output=canvas,
-        budget_preflight=data["budget_preflight"],
+        preflight=data["preflight"],
     )
 
 

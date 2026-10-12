@@ -20,7 +20,7 @@ function next(){if(!meta.value?.has_more)return;rememberProductCursor(previous.v
 function back(){if(previous.value.length)load(previous.value.pop());}
 async function cancel(){if(dirty.value&&!await confirmAction("放弃未保存的产品内容？","放弃未保存编辑","放弃编辑"))return;editing.value=false;form.value=blankProduct();}
 async function save(){if(!writable.value||busy.value)return;busy.value=true;error.value="";
- try{const result=await orgRequest("POST","/resources/products",{data:form.value},{contractVersion:4});receipt.value=checkProductRevision(result.data);editing.value=false;form.value=blankProduct();resetList();}catch(exc){if([401,403,404].includes(exc.status)){revoked.value=true;stopped=true;generation++;reader.stop();editing.value=false;form.value=blankProduct();receipt.value=null;rows.value=[];meta.value=null;}error.value=errorText(exc);}finally{busy.value=false;}}
+ try{const result=await orgRequest("POST","/resources/products",{data:form.value},{});receipt.value=checkProductRevision(result.data);editing.value=false;form.value=blankProduct();resetList();}catch(exc){if([401,403,404].includes(exc.status)){revoked.value=true;stopped=true;generation++;reader.stop();editing.value=false;form.value=blankProduct();receipt.value=null;rows.value=[];meta.value=null;}error.value=errorText(exc);}finally{busy.value=false;}}
 function clear(){stopped=true;generation++;clearTimeout(timer);reader.stop();rows.value=[];meta.value=null;form.value=blankProduct();editing.value=false;receipt.value=null;search.value="";error.value="单位会话已改变，请重新打开产品库";}
 function beforeUnload(event){if(dirty.value){event.preventDefault();event.returnValue="";}}
 const canLeave=async()=>!dirty.value||await confirmAction("放弃未保存的产品内容？","放弃未保存编辑","放弃编辑");

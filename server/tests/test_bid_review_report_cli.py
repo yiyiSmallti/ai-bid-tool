@@ -124,19 +124,17 @@ def interface():
             report_input_hash=SHA,
             decisions_snapshot_sha256=state["preview_decisions"],
             renderer_identity="synthetic-report-renderer-v1",
-            budget={
+            preflight={
                 "dry_run": True,
                 "command": "review report",
                 "task_id": ID,
                 "input_hash": RENDER_INPUT,
                 "as_of": NOW,
-                "task_budget": None,
                 "planned_calls": 0,
                 "maximum_calls": 0,
                 "estimate": zero,
                 "next_call": None,
                 "admission_blocker": None,
-                "first_pass_fits": True,
                 "full_run_guaranteed": False,
             },
             expires_at="2026-10-08T00:15:00Z",
@@ -232,7 +230,7 @@ def test_report_cli_http_snapshots_and_verified_download_both_modes(monkeypatch,
         }
         for name, flags in commands.items():
             code, body = invoke(["--mode", mode, *flags], capsys)
-            assert code == 0
+            assert code == 0, body
             if name == "download":
                 output = tmp_path / f"{mode}.docx"
                 assert output.read_bytes() == state["content"]
@@ -414,7 +412,9 @@ def test_report_download_refuses_existing_path_or_wrong_suffix_before_http(
 def test_report_discovery_matches_shared_models():
     schema = command_schema(cli.app)
     for name in ("review report", "review report download"):
-        assert name in schema["commands"] and name not in command_schema(cli.app, "3.0")["commands"]
+        assert name in schema["commands"]
+        with pytest.raises(ValueError, match="Only contract 5.0"):
+            command_schema(cli.app, "3.0")
     assert schema["commands"]["review report"]["input"]["title"] == "BidReportRenderRequest"
     assert (
         schema["commands"]["review report download"]["output"]["title"]

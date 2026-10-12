@@ -5,10 +5,8 @@ import base64
 import hashlib
 import json
 import math
-import re
 from collections.abc import Mapping
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import Any, Literal
 
 import httpx
@@ -18,9 +16,8 @@ from app.core.llm_options import validate_request_options
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import current_accounting, plan_calls
 from app.providers.llm import HTTPExtractor, OpenAICompatibleExtractor
-from app.providers.quotes import token_cost
-from app.schemas.budget_contracts import BudgetCallQuote
 from app.schemas.contracts import ProviderUsage
+from app.schemas.preflight_contracts import CallPlan
 
 AnalysisPurpose = Literal["match_requirements", "propose_regions", "read_text"]
 PURPOSES = frozenset({"match_requirements", "propose_regions", "read_text"})
@@ -71,7 +68,6 @@ class VisionAnalysis:
     rejected: list[RejectedVisionProposal]
     usage: ProviderUsage
     usages: list[ProviderUsage]
-    price_revision: str
 
 
 class _WireRect(BaseModel):
@@ -143,7 +139,6 @@ class _VisionCapability:
     max_images: int
     max_pixels: int
     token_bound: _ImageTokenBound
-    price_revision: str
     vendor_options: dict[str, Any]
 
 
@@ -155,14 +150,13 @@ class _PreparedVisionCall:
     body: dict[str, Any]
     input_tokens: int
     output_tokens: int
-    reserved_charge: Decimal
 
 
 def _positive_int(value: Any, name: str, *, maximum: int | None = None) -> int:
     if type(value) is not int or value < 1 or (maximum is not None and value > maximum):
         raise ProviderFailure(
             f"Screenshot vision {name} is not a verified positive bound",
-            code="billing_bound_unavailable",
+            code="invalid_vision_configuration",
         )
     return value
 
@@ -171,7 +165,7 @@ def _nonnegative_int(value: Any, name: str) -> int:
     if type(value) is not int or value < 0:
         raise ProviderFailure(
             f"Screenshot vision {name} is not a verified token rule",
-            code="billing_bound_unavailable",
+            code="invalid_vision_configuration",
         )
     return value
 
@@ -192,24 +186,14 @@ def _capability(provider: HTTPExtractor) -> _VisionCapability:
         "max_images",
         "max_pixels",
         "image_input_token_bound",
-        "price_revision",
     }
     if not isinstance(raw, dict) or set(raw) != required or raw.get("verified") is not True:
         raise ProviderFailure(
             "The selected model has no verified screenshot vision capability",
-            code="billing_bound_unavailable",
+            code="invalid_vision_configuration",
         )
     max_images = _positive_int(raw["max_images"], "max_images", maximum=20)
     max_pixels = _positive_int(raw["max_pixels"], "max_pixels", maximum=20_000_000)
-    price_revision = raw["price_revision"]
-    if (
-        not isinstance(price_revision, str)
-        or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,99}", price_revision) is None
-    ):
-        raise ProviderFailure(
-            "Screenshot vision price revision is unavailable",
-            code="billing_bound_unavailable",
-        )
     rule = raw["image_input_token_bound"]
     rule_fields = {"detail", "base_tokens", "tokens_per_image", "tokens_per_megapixel"}
     if (
@@ -224,7 +208,7 @@ def _capability(provider: HTTPExtractor) -> _VisionCapability:
     ):
         raise ProviderFailure(
             "Screenshot vision image token rule is unavailable",
-            code="billing_bound_unavailable",
+            code="invalid_vision_configuration",
         )
     base_tokens = _nonnegative_int(rule["base_tokens"], "base_tokens")
     per_image = _nonnegative_int(rule["tokens_per_image"], "tokens_per_image")
@@ -232,7 +216,7 @@ def _capability(provider: HTTPExtractor) -> _VisionCapability:
     if base_tokens + per_image + per_megapixel == 0:
         raise ProviderFailure(
             "Screenshot vision image token rule cannot be zero",
-            code="billing_bound_unavailable",
+            code="invalid_vision_configuration",
         )
     return _VisionCapability(
         max_images=max_images,
@@ -243,7 +227,6 @@ def _capability(provider: HTTPExtractor) -> _VisionCapability:
             tokens_per_image=per_image,
             tokens_per_megapixel=per_megapixel,
         ),
-        price_revision=price_revision,
         vendor_options=vendor_options,
     )
 
@@ -437,17 +420,6 @@ def _token_bounds(
     return input_tokens, output_tokens
 
 
-def _reservation(provider: HTTPExtractor, input_tokens: int, output_tokens: int) -> Decimal:
-    if provider.platform_model_id is None:
-        return Decimal(0)
-    amount = token_cost(input_tokens, output_tokens, provider.sale, reservation=True)
-    if amount is None:
-        raise ProviderFailure(
-            "Platform model prices are unavailable", code="billing_price_unavailable"
-        )
-    return amount
-
-
 def _prepare_call(
     provider: HTTPExtractor,
     requirements: list[dict],
@@ -470,7 +442,6 @@ def _prepare_call(
         body=body,
         input_tokens=input_tokens,
         output_tokens=output_tokens,
-        reserved_charge=_reservation(provider, input_tokens, output_tokens),
     )
 
 
@@ -480,13 +451,11 @@ def preview(
     images: list[VisionImage],
     purposes: list[AnalysisPurpose],
 ) -> dict[str, Any]:
-    """Build and price the exact first call without admission, persistence or HTTP."""
+    """Build the exact first call without admission, persistence or HTTP."""
     prepared = _prepare_call(provider, requirements, images, purposes)
     return {
-        "estimated_charge": prepared.reserved_charge,
         "input_tokens": prepared.input_tokens,
         "output_tokens": prepared.output_tokens,
-        "price_revision": prepared.capability.price_revision,
         "planned_calls": 1,
         # Platform adapters embed model id and catalog revision in version.
         "catalog_identity": provider.version,
@@ -495,14 +464,13 @@ def preview(
 
 def _prepared_quote(
     provider: HTTPExtractor, prepared: _PreparedVisionCall, image_count: int
-) -> BudgetCallQuote:
+) -> CallPlan:
     return provider.quote(
         prepared.body,
         capability="vision",
         input_tokens=prepared.input_tokens,
         output_tokens=prepared.output_tokens,
         image_count=image_count,
-        image_price_revision=prepared.capability.price_revision,
     )
 
 
@@ -511,7 +479,7 @@ def quote(
     requirements: list[dict],
     images: list[VisionImage],
     purposes: list[AnalysisPurpose],
-) -> BudgetCallQuote:
+) -> CallPlan:
     prepared = _prepare_call(provider, requirements, images, purposes)
     return _prepared_quote(provider, prepared, len(images))
 
@@ -649,11 +617,9 @@ async def analyze(
                     headers,
                     prepared.body,
                     safe_metadata=True,
-                    reserved_charge=prepared.reserved_charge,
                     quote=_prepared_quote(provider, prepared, len(images)),
                     image_usage=(
                         len(images),
-                        prepared.capability.price_revision,
                         hashlib.sha256(
                             json.dumps(
                                 {
@@ -700,5 +666,4 @@ async def analyze(
         rejected=rejected,
         usage=provider.total(usages),
         usages=usages,
-        price_revision=prepared.capability.price_revision,
     )

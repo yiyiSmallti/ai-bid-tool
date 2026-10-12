@@ -12,7 +12,7 @@ const work = fileURLToPath(new URL("../../data/work/", import.meta.url)), output
 const id = (suffix) => `00000000-0000-4000-8000-${String(suffix).padStart(12, "0")}`;
 const org = id(1), orgB = id(2), admin = id(3), colleague = id(4), pending = id(5);
 const now = "2026-10-08T10:00:00Z", invitationPath = "/app/setup-password#token=synthetic.invitation.signature";
-const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { llm_tokens: 0, ocr_pages: 0, usd: "0" }, duration_ms: 0 });
+const result = (command, data = {}, items = [], ok = true) => ({ ok, command, data, items, warnings: [], cost: { calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 }, duration_ms: 0 });
 const failure = (code) => result("org member error", { error: { code, message: "Untrusted <script>server input</script>", exit_code: 4 } }, [], false);
 const member = (user_id, email, role, fields = {}) => ({ user_id, email, role, active: true, password_set: true, revision: 1, created_by: admin, created_at: now, updated_at: now, ...fields });
 const visibleDialog = (page) => page.getByRole("dialog").filter({ visible: true });

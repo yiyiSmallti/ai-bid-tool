@@ -38,7 +38,6 @@ SCOPES = {
     "card:generate",
     "draft:run",
     "draft:read",
-    "billing:read",
     "evidence:source:read",
     "evidence:source:write",
     "task:read",
@@ -68,9 +67,6 @@ ROLE_SCOPES = {
     "admin": {
         "member:manage",
         "provider:write",
-        # billing:redeem is deliberately absent from SCOPES: tokens can never redeem cards.
-        "billing:read",
-        "billing:redeem",
         "evidence:source:read",
         "evidence:source:write",
         "task:read",
@@ -186,10 +182,7 @@ for _role, _scopes in ROLE_SCOPES.items():
     _scopes.add("score:read")
     if _role != "viewer":
         _scopes.add("score:rubric:review")
-    if _role == "admin":
-        _scopes.add("billing:alert:write")
     if _role in {"admin", "bidder"}:
-        _scopes.add("task:budget:write")
         _scopes.update({"confidential:write", "confidential:reveal"})
     if _role in {"bidder", "technical"}:
         _scopes.add("check:decide")
@@ -240,9 +233,6 @@ HUMAN_ONLY_SCOPES = {
     "screenshot:ingest",
     "check:decide",
     "score:rubric:review",
-    "billing:redeem",
-    "task:budget:write",
-    "billing:alert:write",
     "memory:approve",
     "memory:manage",
     "memory:eval:read",

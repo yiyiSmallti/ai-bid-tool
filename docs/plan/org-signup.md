@@ -59,13 +59,14 @@ lookup, editing an application after submission and SSO/OIDC.
    applications came from the same source in the last 24 hours.
 5. **Approve** calls the existing org-creation function in one transaction:
    - If no user has the email, create the user with the stored password hash, so the
-     applicant can sign in immediately. No setup link is issued.
+     applicant can sign in immediately.
+No setup link is issued.
    - If a user already has the email, approval requires `attach_existing_user=true`.
-     The existing password is never replaced; the stored hash is discarded, and the
-     existing user becomes admin of the new org. The console warns that the applicant
+The existing password is never replaced; the stored hash is discarded, and the
+     existing user becomes admin of the new org.
+The console warns that the applicant
      must already own that account.
-   - The operator may correct the org name before approving. The org starts active with
-     a zero prepaid balance.
+   - The operator may correct the org name before approving.
 6. **Reject** records an internal reason. The applicant is not notified by the
    application.
 7. A pending application that is not decided within 30 days becomes `expired` and

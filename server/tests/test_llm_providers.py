@@ -125,9 +125,7 @@ async def requirement_rows(app, tenants):
 
 async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, tmp_path, pdf_bytes):
     vendor = Vendor(anthropic_reply(GOOD_ITEMS))
-    settings = settings_for(
-        tmp_path, "anthropic", llm_input_usd_per_mtok=4.0, llm_output_usd_per_mtok=20.0
-    )
+    settings = settings_for(tmp_path, "anthropic")
     llm = AnthropicExtractor(settings, transport=vendor.transport())
     app = await credential_app(settings, llm=llm, queue=FakeQueue())
     async with app.router.lifespan_context(app), session_for(app, tenants) as (api, header):
@@ -135,10 +133,16 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
         _, document = await create_document(api, header, pdf_bytes)
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
-
         assert status["status"] == "succeeded", status
         assert status["result"]["created"] == 2
-        assert status["result"]["cost"] == {"llm_tokens": 1500, "ocr_pages": 0, "usd": 0.0108}
+        assert status["result"]["cost"] == {
+            "calls": 1,
+            "llm_tokens": 1500,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "browser_units": 0,
+            "unresolved_calls": 0,
+        }
         rows = await requirement_rows(app, tenants)
         assert [(r.page, r.quote) for r in rows] == [
             (1, "Minimum memory is 64 GB."),
@@ -152,8 +156,6 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
         assert rows[1].condition == {}
         [usage] = await usage_rows(app, tenants)
         assert (usage.provider, usage.model, usage.tokens) == ("anthropic", "claude-opus-5-5", 1500)
-        assert float(usage.usd) == pytest.approx(0.0108)
-
     [request] = vendor.requests
     body = json.loads(request.content)
     assert str(request.url) == "https://api.anthropic.com/v1/messages"
@@ -168,9 +170,7 @@ async def test_anthropic_extraction_saves_cited_requirements_and_cost(tenants, t
     assert SYNTHETIC_KEY not in json.dumps(status)
 
 
-async def test_openai_compatible_extraction_without_prices_records_unknown_cost(
-    tenants, tmp_path, pdf_bytes
-):
+async def test_openai_compatible_extraction_records_usage(tenants, tmp_path, pdf_bytes):
     reply = {
         "model": "synthetic-model",
         "choices": [
@@ -190,7 +190,14 @@ async def test_openai_compatible_extraction_without_prices_records_unknown_cost(
         await run_job(api, app, header, document, "parse")
         _, status = await run_job(api, app, header, document, "extract")
         assert status["status"] == "succeeded", status
-        assert status["result"]["cost"] == {"llm_tokens": 1000, "ocr_pages": 0, "usd": None}
+        assert status["result"]["cost"] == {
+            "calls": 1,
+            "llm_tokens": 1000,
+            "ocr_pages": 0,
+            "search_requests": 0,
+            "browser_units": 0,
+            "unresolved_calls": 0,
+        }
         assert len(await requirement_rows(app, tenants)) == 2
 
     [request] = vendor.requests

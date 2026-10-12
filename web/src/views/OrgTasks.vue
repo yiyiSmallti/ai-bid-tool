@@ -5,13 +5,13 @@ import { useRouter } from "vue-router";
 import { errorText, orgAccess, orgRequest } from "../org.js";
 const router = useRouter();
 const tasks = ref(null), error = ref(""), createError = ref(""), busy = ref(false), creating = ref(false);
-const name = ref(""), number = ref(""), deadline = ref(""), budget = ref("");
+const name = ref(""), number = ref(""), deadline = ref("");
 const createAllowed = computed(() => ["admin", "bidder"].includes(orgAccess.role));
 async function load() { try { tasks.value = (await orgRequest("GET", "/tasks")).items; } catch (exc) { error.value = errorText(exc); } }
 async function create() {
   busy.value = true; createError.value = "";
   try {
-    const body = { name: name.value, tender_number: number.value || null, deadline: deadline.value ? new Date(deadline.value).toISOString() : null, budget_usd: budget.value === "" ? null : Number(budget.value) };
+    const body = { name: name.value, tender_number: number.value || null, deadline: deadline.value ? new Date(deadline.value).toISOString() : null };
     const result = await orgRequest("POST", "/tasks", body);
     creating.value = false;
     await router.push(`/org/tasks/${result.data.id}`);
@@ -45,10 +45,9 @@ onMounted(load);
       <el-form-item label="任务名称" required><el-input v-model="name" required maxlength="200" show-word-limit /></el-form-item>
       <div class="grid">
         <el-form-item label="招标编号"><el-input v-model="number" maxlength="100" /></el-form-item>
-        <el-form-item label="预算记录（USD）"><el-input v-model="budget" type="number" min="0" step="any" /></el-form-item>
       </div>
       <el-form-item label="截止时间"><el-input v-model="deadline" type="datetime-local" /></el-form-item>
-      <p class="hint">截止时间按本机时区提交；预算仅作记录，不是强制费用上限。</p>
+      <p class="hint">截止时间按本机时区提交。</p>
       <el-alert v-if="createError" :title="createError" type="error" show-icon :closable="false" class="section" />
       <div class="actions dialog-actions"><el-button @click="creating = false">取消</el-button><el-button type="primary" native-type="submit" :loading="busy" :disabled="!name.trim()">创建任务</el-button></div>
     </el-form>

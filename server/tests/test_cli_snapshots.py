@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 import bid_cli.export as export_cli
-from app.schemas.contracts import Result
+from app.schemas.contracts import Cost, Result
 from bid_cli.client import Client
 from bid_cli.main import main
 from cryptography.fernet import Fernet
@@ -405,8 +405,6 @@ SANDBOX_RUN = {
     "metrics": None,
     "issues": [],
     "usage_ids": [],
-    "charge": None,
-    "charge_currency": None,
 }
 
 CLAUSE = {
@@ -582,10 +580,6 @@ PLATFORM_MODEL = {
     "model": "claude-opus-5-5",
     "base_url": None,
     "credential": "main",
-    "vendor_input_usd_per_mtok": 4.0,
-    "vendor_output_usd_per_mtok": 20.0,
-    "sale_input_per_mtok": 6.0,
-    "sale_output_per_mtok": 30.0,
     "enabled": True,
     "revision": 1,
     "updated_by": "ops@example.test",
@@ -597,7 +591,6 @@ PLATFORM_USAGE = {
     "org_id": IDENTIFIER,
     "org_name": "Synthetic tenant",
     "month": "2026-10-01",
-    "billing": "platform",
     "provider": "anthropic",
     "model": "claude-opus-5-5",
     "calls": 1,
@@ -605,24 +598,6 @@ PLATFORM_USAGE = {
     "input_tokens": 8,
     "output_tokens": 2,
     "ocr_pages": 0,
-    "vendor_usd": 0.1,
-    "unpriced_calls": 0,
-    "charge": 0.15,
-}
-PLATFORM_CARD = {
-    "id": IDENTIFIER,
-    "last4": "TURE",
-    "face_value": 10.0,
-    "currency": "USD",
-    "batch_id": IDENTIFIER,
-    "note": None,
-    "expires_at": None,
-    "status": "active",
-    "expired": False,
-    "created_by": "ops@example.test",
-    "created_at": "2026-10-01T00:00:00+00:00",
-    "redeemed_org_id": None,
-    "redeemed_at": None,
 }
 PLATFORM_AUDIT = {
     "id": IDENTIFIER,
@@ -782,7 +757,10 @@ async def fake_request(self, method, path, **kwargs):
         data = {
             "from": "2026-10",
             "to": "2026-10",
-            "totals": {"calls": 1, "tokens": 10, "vendor_usd": 0.1, "charge": 0.15},
+            "totals": {
+                "calls": 1,
+                "tokens": 10,
+            },
         }
         items = [PLATFORM_USAGE]
     elif path == "/platform/audit":
@@ -793,43 +771,6 @@ async def fake_request(self, method, path, **kwargs):
         items = [
             {"org_id": IDENTIFIER, "name": "Synthetic tenant", "role": "admin", "active": True}
         ]
-    elif path.endswith("/balance"):
-        data = {
-            "org_id": IDENTIFIER,
-            "mode": "add",
-            "delta": 10.0,
-            "balance": 10.0,
-            "currency": "USD",
-        }
-    elif path == "/platform/cards" and method == "POST":
-        data = {
-            "batch_id": IDENTIFIER,
-            "count": 1,
-            "face_value": 10.0,
-            "currency": "USD",
-            "expires_at": None,
-            "note": None,
-            "cards": [{"id": IDENTIFIER, "code": "SYNT-HETI-CFIX-TURE", "last4": "TURE"}],
-        }
-    elif path == "/platform/cards":
-        data, items = {"currency": "USD"}, [PLATFORM_CARD]
-    elif path.endswith("/void"):
-        data = {**PLATFORM_CARD, "status": "void"}
-    elif path == "/billing":
-        data = {"currency": "USD", "balance": 10.0}
-        items = [
-            {
-                "id": IDENTIFIER,
-                "created_at": "2026-10-01T00:00:00+00:00",
-                "kind": "redeem",
-                "amount": 10.0,
-                "balance_after": 10.0,
-                "currency": "USD",
-                "reason": None,
-            }
-        ]
-    elif path == "/billing/redeem":
-        data = {"card_id": IDENTIFIER, "amount": 10.0, "balance": 10.0, "currency": "USD"}
     elif path.endswith("/sandbox-runs"):
         if method == "POST":
             submit = kwargs.get("json") or json.loads(kwargs["data"]["submit"])
@@ -843,10 +784,8 @@ async def fake_request(self, method, path, **kwargs):
                     "policy_revision": "policy-v1",
                     "ready": True,
                     "issues": [],
-                    "estimated_cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+                    "estimated_cost": Cost().model_dump(),
                     "estimate_basis": "no_vendor_call",
-                    "reserved_charge": None,
-                    "charge_currency": None,
                     "estimated_duration_ms": None,
                 }
             else:
@@ -899,7 +838,6 @@ async def fake_request(self, method, path, **kwargs):
             "dry_run": False,
             "retry": True,
             "expected_input_hash": "a" * 64,
-            "max_charge": "2.5",
         }
         data = {
             "job_id": IDENTIFIER_2,
@@ -1093,11 +1031,9 @@ async def fake_request(self, method, path, **kwargs):
                 "rejected_references": {IDENTIFIER: ["m1:quote_not_sent"]},
                 "needs_material": [IDENTIFIER],
                 "usage_record_ids": [IDENTIFIER_4],
-                "charge": "0.001",
-                "billing_currency": "USD",
                 "stop_reason": None,
                 "warnings": [f"needs_material:{IDENTIFIER}"],
-                "cost": {"llm_tokens": 1000, "ocr_pages": 0, "usd": None},
+                "cost": Cost(calls=1, llm_tokens=1000).model_dump(),
                 "exit_code": 5,
             },
         }
@@ -1110,7 +1046,7 @@ async def fake_request(self, method, path, **kwargs):
                 "draft_id": IDENTIFIER,
                 "completion": "partial",
                 "warnings": [f"missing_card:{IDENTIFIER_4}"],
-                "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+                "cost": Cost().model_dump(),
                 "exit_code": 5,
             },
             "error": None,
@@ -1410,7 +1346,7 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             "card", "generate", "--task", IDENTIFIER, "--job", IDENTIFIER,
             "--requirement", IDENTIFIER, "--requirement", IDENTIFIER_2,
             "--reasoning", "high", "--retry", "--wait",
-            "--expect-input-hash", "a" * 64, "--max-charge", "2.5",
+            "--expect-input-hash", "a" * 64,
         ],
         "card update": [
             "card", "update", "--id", IDENTIFIER, "--input", str(card_update_input),
@@ -1674,12 +1610,6 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         "platform audit": ["platform", "audit", "--limit", "5"],
         "auth setup-password": ["auth", "setup-password"],
         "auth orgs": ["auth", "orgs", "--email", "boss@example.test"],
-        "platform org balance": ["platform", "org", "balance", "--id", IDENTIFIER, "--add", "10", "--reason", "Synthetic credit"],
-        "platform card create": ["platform", "card", "create", "--count", "1", "--face-value", "10", "--output", str(tmp_path / "cards.csv")],
-        "platform card list": ["platform", "card", "list", "--status", "active"],
-        "platform card void": ["platform", "card", "void", "--id", IDENTIFIER],
-        "billing balance": ["billing", "balance"],
-        "billing redeem": ["billing", "redeem"],
         "confidential field add": [
             "confidential", "field", "add", "--key", "bid_total", "--label", "投标总价",
             "--kind", "amount", "--scope", "task",

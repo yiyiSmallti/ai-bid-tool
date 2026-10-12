@@ -41,7 +41,6 @@ This table records the preimplementation differences that the contract requires 
 | [configured.py](../../server/app/providers/configured.py) `resolve_configured/model_identity` | Preserve BYOK revision/catalog ID/revision job binding; replacement does not increment catalog revision |
 | [llm.py](../../server/app/providers/llm.py) `HTTPExtractor`, [structured.py](../../server/app/providers/structured.py), [prototyping.py](../../server/app/providers/prototyping.py) | Replace job-long adapter key ownership with resolution before every HTTP call: extraction/drafting/check/score/Vision/prototypes/retries |
 | [screenshots.py](../../server/app/api/screenshots.py) `search_provider`, [processor.py](../../server/app/jobs/processor.py), [product_simulation.py](../../server/app/services/product_simulation.py) | Unified search prechecks/jobs/simulated proposals (模拟拟投); precheck metadata only, no decryption |
-| [prepaid-billing.md](../notes/prepaid-billing.md#admission-and-the-spending-bound) | Credential checks before each outbound call, preserving `JobExecution.admit/accounted_call`, UsageRecord, settlement |
 | [providers.py](../../cli/bid_cli/providers.py), [client.py](../../cli/bid_cli/client.py) | Reuse secure key-file reads/`platform=True` sessions, no X-Org-Id; no vendor-key env input for ordinary CLI |
 
 ## Data and migration outline
@@ -62,11 +61,12 @@ Add only global `platform_credentials`, not binding/history/platform Job/global 
 Clef uses two independent platform-only purposes: `clef_workers_ai` has provider
 `cloudflare` and fixed endpoint `https://gateway.ai.cloudflare.com`;
 `clef_gateway` has provider `cloudflare` and fixed endpoint
-`https://api.cloudflare.com/client/v4`. Neither is org-visible or BYOK. Their pinned
-IDs and generations belong only in server/platform configuration. The separate
-[Clef configuration and hardening contract](bid-review.md#providers-clef-and-charging)
-requires both at dispatch. Presence previews expose the binding hash and fixed sale
-price, without credential identifiers or platform routing configuration.
+`https://api.cloudflare.com/client/v4`.
+Neither is org-visible or BYOK.
+Their pinned
+IDs and generations belong only in server/platform configuration.
+Presence previews expose the binding hash and resource estimates, without
+credential identifiers or platform routing configuration.
 
 For noncatalog purposes, a partial unique index on purpose where `state != removed` ensures one nonremoved credential per service; disabled occupies the slot. After removal, new name/ID may replace it, but old jobs never rebind automatically. Catalog credentials can serve multiple models; add `platform_models.credential` foreign key to name and reject physical deletion. Catalog writes/resolutions check matching purpose/provider/normalized endpoint. Normalize empty Anthropic base_url to the existing adapter's official default. Endpoint changes need a new credential and explicit catalog update; never send old-key headers to a new service by editing an address.
 
@@ -90,7 +90,8 @@ Construct platform operators only through `platform.identify`, never body/email 
 
 1. Include approved exception in `agent.md` hard rule 1; migration `0038_platform_credentials.py` follows memory migration `0037`. Create tables/roles/functions/audit constraints, deny all ungranted access.
 2. Initially create catalog-name foreign key NOT VALID; new writes still validate. Existing same-name/provider-or-endpoint mismatches are migration conflicts requiring explicit separation, not automatic key authorization across endpoints.
-3. Maintenance window: stop relevant paid submissions and drain in-flight work; prepare consistent API/worker/standalone versions, roots, dedicated connections. Old env-reading workers and new console cannot coexist because disable would be ineffective. This plan performs no service operations.
+3. Old env-reading workers and new console cannot coexist because disable would be ineffective.
+This plan performs no service operations.
 4. Use existing bootstrap login to start operator-only new version without old vendor-key env. Explicitly import protected old environment export; this temporary file is not long-term authority. Check references/states, validate FK, then reopen tasks. Resolve old anonymous catalog entries explicitly; do not fabricate placeholder ciphertext for missing keys.
 5. Update templates/guides/real injection source; remove three legacy key classes, explicitly select search provider, verify every replica rejects old env. Check key-free business configuration and fake-provider E2E before traffic cutover.
 6. No destructive downgrade. Preserve tables/audit/roots and repair forward in maintenance mode. Returning to env-based versions violates disable/remove states. Disaster recovery rebuilds from retained DB/root backups and rechecks vendor revocation. Never store secret backups in docs/validation artifacts.
@@ -131,7 +132,12 @@ Reuse `bid platform login`/encrypted CLI session, `platform=True`, no org header
 
 ### Result, errors, and exit codes
 
-Reuse [Result/Cost](../../server/app/schemas/contracts.py) seven keys/published version without changing existing field types. Commands are additive. No api_key/ciphertext/envelope/auth headers in data/items/warnings. Use `data.error = {code,message,exit_code}` with fixed server messages. Existing Client.request non-2xx ServiceError drops extra data.probe; credential transport must validate/retain CredentialErrorData safe probe projections in the same seven-key Result. Never pass arbitrary provider/HTTP bodies or change other commands' error projections. Management/auth-metadata probes have zero LLM/OCR usage, `cost.usd=0.0`; billed endpoints cannot masquerade as free probes. duration_ms is measured.
+Reuse [Result/Cost](../../server/app/schemas/contracts.py) seven keys/published version without changing existing field types.
+Commands are additive.
+No api_key/ciphertext/envelope/auth headers in data/items/warnings.
+Use `data.error = {code,message,exit_code}` with fixed server messages.
+Existing Client.request non-2xx ServiceError drops extra data.probe; credential transport must validate/retain CredentialErrorData safe probe projections in the same seven-key Result.
+Never pass arbitrary provider/HTTP bodies or change other commands' error projections.
 
 ```json
 {
@@ -142,7 +148,7 @@ Reuse [Result/Cost](../../server/app/schemas/contracts.py) seven keys/published 
   },
   "items": [],
   "warnings": [],
-  "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0.0},
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 1
 }
 ```
@@ -185,12 +191,17 @@ Never store keys in browser session/localStorage/URL/errors/analytics/drafts/dow
 
 1. Prioritize fixed org ProviderConfig revision. source=org decrypts original org/config envelope only; failure has no platform fallback. Explicit platform selection uses fixed catalog ID/revision; no org config uses enabled platform default, otherwise DisabledLLM. No env model substitute.
 2. Submit/precheck/display query only references/state and save nonsecret identities. Catalog revision fixes name; search/standalone fix credential_id/provider/endpoint. Old search jobs lacking this field require resubmission, not inferred binding.
-3. `PlatformCredentialResolver.resolve_for_call` reads latest committed row through dedicated connection, verifies consumer/state/envelope, returns transient ResolvedCredential. Preserve billing admission: invalid credentials mean no HTTP/vendor call. If a reservation exists but nothing sent, close/release under provably-unsent rules, not unknown charges. Recheck state after admission wait, then construct headers. Never hold DB transaction/row lock during remote HTTP.
+3. `PlatformCredentialResolver.resolve_for_call` reads latest committed row through dedicated connection, verifies consumer/state/envelope, returns transient ResolvedCredential.
+Recheck state after admission wait, then construct headers.
+Never hold DB transaction/row lock during remote HTTP.
 4. Resolve anew for every retry/batch/structured/search call. Shared adapters retain references only, no secrets in Settings copies/default headers/long-lived httpx/boto clients/job parameters. Cache neither plaintext nor missing/disabled across calls; initially no Redis/TTL/invalidation notifications.
 5. Read-committed resolution is the effective boundary: resolutions starting after update commit see new state; old resolved in-flight calls may finish. No guarantee of immediate remote-call cancellation after commit. Internal metered-call diagnostics may record credential_id/secret_version; org outputs keep existing authorized projections without platform metadata.
 6. Key replacement preserves catalog revision/provider_identity/cache keys; queued old-catalog jobs use new keys next call. Changing catalog binding/service ID changes identity, fails old jobs, and requires resubmission. Disable/remove blocks new calls, not authorized completed-cache reads, which perform no outbound calls.
 
-Add nonsecret `BID_SEARCH_PROVIDER=perplexity|searxng|disabled`, default disabled; migration manifest requires explicit selection. Perplexity resolves the sole nonremoved vendor_search credential; SearXNG uses BID_SEARCH_URL without platform decryption. Missing/disabled Perplexity never falls back to SearXNG. standalone disabled makes no call; enabled resolves only standalone_llm, matching DB identity/nonsecret model settings. Database-free standalone online calls cease; fake/offline tests remain. Search charges remain an [open roadmap decision](roadmap.md#open-decisions); no passing costs to orgs or billing-rule changes here.
+Add nonsecret `BID_SEARCH_PROVIDER=perplexity|searxng|disabled`, default disabled; migration manifest requires explicit selection.
+Perplexity resolves the sole nonremoved vendor_search credential; SearXNG uses BID_SEARCH_URL without platform decryption.
+Missing/disabled Perplexity never falls back to SearXNG. standalone disabled makes no call; enabled resolves only standalone_llm, matching DB identity/nonsecret model settings.
+Database-free standalone online calls cease; fake/offline tests remain.
 
 ## Connection testing and audit
 
@@ -198,7 +209,8 @@ Probes use saved credentials only; disabled allowed, removed not. expected_revis
 
 Provider interface permits auth metadata only. Confirm exact authenticated model-list/identity paths, authentication, and free nature from vendor primary documentation before implementation. Unconfirmed adapters/Perplexity default unsupported; no generation/search disguised as free probe. At most 5 seconds/64 KiB, no retries/redirects, only bound endpoint. Reject loopback/private/link-local/metadata/DNS rebinding; private endpoints require deployment allowlist. HTTP 200 must match allowlisted authenticated structure, not public health pages/HTML. Return no body/headers/model names/URL/remote request IDs.
 
-Limit 10 probes/operator/minute and 5/credential/minute across replicas using audit/transaction locks; excess sends no request. probe-start/finish share probe_id; interruption leaves start, displayed interrupted/unknown, no fabricated finish. Failed finish audit yields audit_unavailable, never passed. Real generation uses existing model/org tests; platform-model test metering gap remains in [budget decisions](budget.md#待决定), without extending org-free paid probes.
+Limit 10 probes/operator/minute and 5/credential/minute across replicas using audit/transaction locks; excess sends no request. probe-start/finish share probe_id; interruption leaves start, displayed interrupted/unknown, no fabricated finish.
+Failed finish audit yields audit_unavailable, never passed.
 
 Audit actions: `credential.create/replace/set_active/remove/import/read/probe_start/probe_finish` and `credential.rewrap`. CredentialAuditDetails allowlists details; actor/object_id/outcome/time use existing columns. List-read audit stores no arbitrary query; failures only approved codes/known UUIDs. Changes/success audit share transaction; rejected/failed events commit outside failed transaction. Import dry-run remains read-only without audit; even audit failures cannot log keys in exceptions. Permissions/triggers enforce append-only, including maintenance paths.
 
@@ -243,7 +255,7 @@ Dependencies: migration/permissions → encryption/rotation/resolver → API/CLI
 | Concurrent replace/disable | Only one expected_revision succeeds; workers see new key next call; in-flight boundary reproducible; disable/remove sends nothing on next call, no env/old-key/SearXNG/anonymous fallback |
 | Identity/cache | Replace preserves catalog/cache identity; queued calls use new key; changed reference/service ID fails old jobs; completed caches readable; cover LLM batches/retry/structured/prototype/Vision/search/eval |
 | Audit faults/atomicity | Audit failure rolls back changes, prevents probes or success claims; failed events survive rollback; interrupted probes retain start; UPDATE/DELETE rejected |
-| Probe limits | Auth metadata only; unsupported no network; shared replica limits/time/size/DNS/redirect/private rules; no org content/vendor charges |
+| Probe limits | Auth metadata only; unsupported makes no network call; enforce shared replica/time/size/DNS/redirect/private-network bounds; send no org content. |
 | Import/cutover | Dry-run zero writes; identical replay skipped/conflict rolls back; unknown fields/bootstrap secrets rejected; startup rejects old env/direct settings, then DB works after removal; explicit SearXNG never substitutes for failed Perplexity |
 | Root rotation E2E | A/B BYOK history/platform credentials; read old/new, rewrap/concurrent replace/failure recovery/second-pass zero changes/remove old online key/calls; ordinary BYOK UPDATE rejected; backups recover with retained keys |
 | Result/CLI/pages | Seven-key/nested exit_code snapshots, full schema discovery; UI list/create/replace/disable/test/consumers/conflicts; no real-secret screenshots/HAR |
@@ -271,7 +283,7 @@ uv run python -c "import runpy; runpy.run_path('docs/plan/platform-credentials/p
 | Keys/job identity | DB resolution per outbound, no cross-call key cache, replacement preserves model revision | New value/disable visible next resolution; per-call reads/in-flight window accepted |
 | Removal/recovery | Tombstone/erase online ciphertext/nonreusable names/no key history | Traceability/no resurrection; reentry needed, backups/revocation separate |
 | Root rotation | BID_SECRETS_KEY; extend rotate-encryption across platform/BYOK history | Rotate entire shared domain; restricted BYOK rewrap |
-| Tests | Auth metadata only; Perplexity/unverified unsupported; no paid synthetic search | Preserve metering/org isolation; paid tests need approved dedicated org/budget, no org-free usage exception |
+| Tests | Auth metadata only; Perplexity/unverified endpoints return unsupported; no synthetic search requests. | Probes do not prove inference capability. Explicit model tests use an authorized org job and durable UsageRecord attribution. |
 | Admin CLI | Same TOTP session, read-only key-file, explicit import-env | Repeatable operations, no key argv/general JSON/token authority |
 
 All recommended defaults are approved. Deployment cutover follows database and end-to-end acceptance, not approval alone.

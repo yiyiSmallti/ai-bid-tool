@@ -1,14 +1,13 @@
 """Aggregate-only cross-org access for the platform console, checked against real PostgreSQL."""
 
-from datetime import UTC, date, datetime
-from decimal import Decimal
+from datetime import UTC, date, datetime, timedelta
 from uuid import uuid4
 
 import pytest
 from app.core.config import Settings
 from app.core.db import Database
 from app.models.entities import Document, Job, Task, UsageRecord, VendorCall
-from app.schemas.budget_contracts import BudgetCallQuote
+from app.schemas.preflight_contracts import CallPlan
 from app.services.auth import ROLE_SCOPES
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
@@ -20,8 +19,6 @@ FUNCTIONS = {
     "platform_usage_summary",
     "platform_create_org",
     "platform_set_org_active",
-    "platform_adjust_balance",
-    "redeem_card",
     "user_org_memberships",
 }
 
@@ -51,7 +48,6 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
         ).all()
         assert [tuple(p) for p in policies] == [
             ("memberships", "SELECT"),
-            ("org_balances", "SELECT"),
             ("orgs", "SELECT"),
             ("usage_records", "SELECT"),
         ]
@@ -60,8 +56,8 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
                 "SELECT p.proname, pg_get_userbyid(p.proowner), p.prosecdef, "
                 "has_function_privilege('bid_app', p.oid, 'EXECUTE'), "
                 "has_function_privilege('public', p.oid, 'EXECUTE') "
-                "FROM pg_proc p WHERE p.proname LIKE 'platform_%' AND p.proname <> 'platform_cards_final_status' AND p.proname NOT LIKE 'platform_credential_%' AND p.proname NOT LIKE 'platform_operator_%' AND p.proname NOT LIKE 'platform_trust_anchor_%' AND p.proname NOT LIKE 'platform_clef_%' "
-                "OR p.proname IN ('redeem_card', 'user_org_memberships')"
+                "FROM pg_proc p WHERE p.proname LIKE 'platform_%' AND p.proname NOT LIKE 'platform_credential_%' AND p.proname NOT LIKE 'platform_operator_%' AND p.proname NOT LIKE 'platform_trust_anchor_%' AND p.proname NOT LIKE 'platform_clef_%' "
+                "OR p.proname = 'user_org_memberships'"
             )
         ).all()
         assert {f[0] for f in functions} == FUNCTIONS
@@ -86,13 +82,12 @@ def test_platform_role_cannot_log_in_or_bypass_rls(admin_engine):
 
 def seed_usage(admin_engine, tenants):
     rows = [
-        # org A: two platform calls in October, one unpriced env call, one test-only call
-        (0, datetime(2026, 10, 1, 0, 0, tzinfo=UTC), "opus", 0.5, 1.0, False),
-        (0, datetime(2026, 10, 31, 23, 59, tzinfo=UTC), "opus", 0.25, 0.5, False),
-        (0, datetime(2026, 10, 15, tzinfo=UTC), None, None, None, False),
-        (0, datetime(2026, 10, 15, tzinfo=UTC), "opus", 9.0, 9.0, True),
-        # org B: one call in November, outside an October-only window
-        (1, datetime(2026, 11, 1, 0, 0, tzinfo=UTC), "opus", 0.1, 0.2, False),
+        # Org A has two platform calls, one local call and an excluded test-only call.
+        (0, datetime(2026, 10, 1, tzinfo=UTC), "opus", False),
+        (0, datetime(2026, 10, 31, 23, 59, tzinfo=UTC), "opus", False),
+        (0, datetime(2026, 10, 15, tzinfo=UTC), None, False),
+        (0, datetime(2026, 10, 15, tzinfo=UTC), "opus", True),
+        (1, datetime(2026, 11, 1, tzinfo=UTC), "opus", False),
     ]
     with Session(admin_engine) as session, session.begin():
         tasks = []
@@ -120,23 +115,16 @@ def seed_usage(admin_engine, tenants):
             documents.append(document)
             finish_scope(session)
         session.flush()
-        for index, created, model_id, usd, charge, test_only in rows:
+        for index, created, model_id, test_only in rows:
             org, user, run_id = tenants["orgs"][index], tenants["users"][index], uuid4()
             actor_context(session, org, user)
-            quote = BudgetCallQuote(
+            quote = CallPlan(
                 capability="llm",
-                payer="org_platform" if model_id else "org_direct",
                 provider="anthropic",
                 model="claude-opus-5-5",
                 version="test",
                 platform_model_id=model_id,
-                price_revision="synthetic-v1",
                 request_sha256="a" * 64,
-                currency="USD",
-                reserved_charge=Decimal(str(charge or 0)),
-                reserved_task_amount=Decimal(str(charge)) if model_id else None,
-                vendor_usd_upper_bound=Decimal(str(usd)) if usd is not None else None,
-                unknown_reason=None if model_id else "missing_price",
             )
             job = Job(
                 id=uuid4(),
@@ -146,6 +134,8 @@ def seed_usage(admin_engine, tenants):
                 kind="extract",
                 cache_key=uuid4().hex,
                 run_id=run_id,
+                status="running",
+                lease_until=datetime.now(UTC) + timedelta(minutes=5),
                 actor_user_id=user,
                 actor_kind="session",
                 actor_scopes=sorted(ROLE_SCOPES["admin"]),
@@ -158,15 +148,9 @@ def seed_usage(admin_engine, tenants):
                 task_id=tasks[index].id,
                 job_id=job.id,
                 run_id=run_id,
-                budget_revision=1,
                 capability=quote.capability,
-                payer=quote.payer,
-                currency=quote.currency,
-                price_revision=quote.price_revision,
                 request_sha256=quote.request_sha256,
-                reserved_charge=quote.reserved_charge,
-                reserved_task_amount=quote.reserved_task_amount,
-                quote=quote.model_dump(mode="json"),
+                provider_identity=quote.model_dump(mode="json"),
             )
             session.add(call)
             session.flush()
@@ -184,20 +168,14 @@ def seed_usage(admin_engine, tenants):
                     tokens=1000,
                     input_tokens=800,
                     output_tokens=200,
-                    usd=usd,
-                    charge=charge,
                     platform_model_id=model_id,
                     test_only=test_only,
                     created_at=created,
                     capability=quote.capability,
-                    payer=quote.payer,
-                    billing_currency=quote.currency,
-                    price_revision=quote.price_revision,
-                    task_amount=quote.reserved_task_amount,
                 )
             )
             session.flush()
-            call.state, call.charge = "completed", Decimal(str(charge or 0))
+            call.state = "completed"
             finish_scope(session)
 
 
@@ -209,17 +187,24 @@ async def test_usage_summary_aggregates_without_business_columns(runtime, admin_
             {"a": date(2026, 10, 1), "b": date(2026, 10, 1)},
         )
         assert list(result.keys()) == [
-            "org_id", "month", "billing", "provider", "model", "calls", "tokens",
-            "input_tokens", "output_tokens", "ocr_pages", "vendor_usd", "unpriced_calls",
-            "charge",
-        ]  # fmt: skip
+            "org_id",
+            "month",
+            "source",
+            "provider",
+            "model",
+            "calls",
+            "tokens",
+            "input_tokens",
+            "output_tokens",
+            "ocr_pages",
+            "search_requests",
+            "browser_units",
+        ]
         rows = sorted((tuple(r) for r in result.all()), key=lambda r: r[2])
         org_a = tenants["orgs"][0]
-        assert [
-            (r[0], r[1], r[2], r[5], r[6], float(r[10]), r[11], float(r[12])) for r in rows
-        ] == [
-            (org_a, date(2026, 10, 1), "platform", 2, 2000, 0.75, 0, 1.5),
-            (org_a, date(2026, 10, 1), "unbilled", 1, 1000, 0.0, 1, 0.0),
+        assert [(r[0], r[1], r[2], r[5], r[6], r[7], r[8]) for r in rows] == [
+            (org_a, date(2026, 10, 1), "local", 1, 1000, 800, 200),
+            (org_a, date(2026, 10, 1), "platform", 2, 2000, 1600, 400),
         ]
         november = await session.execute(
             text("SELECT org_id FROM platform_usage_summary('2026-11-01', '2026-11-30')")
@@ -236,7 +221,7 @@ async def test_org_summaries_and_status_changes(runtime, tenants):
             (await session.execute(text("SELECT * FROM platform_org_summaries()"))).mappings().all()
         )
         assert [set(r) for r in rows][0] == {
-            "id", "name", "active", "created_at", "member_count", "admin_emails", "currency", "balance"
+            "id", "name", "active", "created_at", "member_count", "admin_emails"
         }  # fmt: skip
         # Both fixture orgs share a creation timestamp, so compare without order.
         assert {(r["id"], r["member_count"], tuple(r["admin_emails"])) for r in rows} == {

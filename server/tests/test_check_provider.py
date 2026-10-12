@@ -12,14 +12,13 @@ Failure cases enumerated before implementation:
 * local requirement IDs and refs must be sent without database identifiers,
   and duplicate, missing, or unknown response IDs must survive wire parsing so
   the service can reject them against the request;
-* reservation must be calculated from the exact body that is sent, including
+* the call plan must be calculated from the exact body that is sent, including
   the strict schema and immutable prompt/adapter versions.
 
 All vendor traffic below uses ``httpx.MockTransport`` and synthetic text.
 """
 
 import json
-from decimal import Decimal
 from uuid import uuid4
 
 import httpx
@@ -39,8 +38,9 @@ from app.providers.checking import (
     supports_check,
 )
 from app.providers.llm import OpenAICompatibleExtractor
-from app.providers.quotes import serialized_request, zero_quote
+from app.providers.quotes import call_plan, serialized_request
 from app.schemas.check_contracts import OutboundContext, OutboundText
+from app.schemas.preflight_contracts import CallPlan
 from cryptography.fernet import Fernet
 from pydantic import ValidationError
 
@@ -49,7 +49,7 @@ class Accounting:
     def __init__(self) -> None:
         self.events: list[str] = []
         self.planned: list[int] = []
-        self.reservations: list[Decimal] = []
+        self.plans: list[CallPlan] = []
         self.platform_billed: list[bool] = []
         self.completed = []
         self.unknown_calls = []
@@ -59,10 +59,9 @@ class Accounting:
         self.planned.append(first_pass_calls)
 
     async def admit(self, quote):
-        reserved_charge, platform_billed = quote.reserved_charge, quote.payer == "org_platform"
         self.events.append("admit")
-        self.reservations.append(reserved_charge)
-        self.platform_billed.append(platform_billed)
+        self.plans.append(quote)
+        self.platform_billed.append(quote.platform_model_id is not None)
         return uuid4()
 
     async def complete(self, call_id, usage) -> None:
@@ -115,10 +114,6 @@ class FakeCheckProvider:
     def request_body(self, value: CheckProviderRequest) -> dict:
         return {"synthetic_request": value.model_dump(mode="json")}
 
-    def reservation(self, value: CheckProviderRequest) -> Decimal:
-        self.request_body(value)
-        return Decimal(0)
-
     async def check(self, value: CheckProviderRequest) -> CheckProviderResult:
         plan_calls(1)
 
@@ -127,9 +122,8 @@ class FakeCheckProvider:
             usage = self.synthetic_usage()
             return self.wire, usage
 
-        quote = zero_quote(
+        quote = call_plan(
             "llm",
-            "local_free",
             self.name,
             self.model,
             self.version,
@@ -149,8 +143,6 @@ class FakeCheckProvider:
             tokens=3,
             input_tokens=2,
             output_tokens=1,
-            usd=0,
-            charge=0,
             test_only=True,
         )
 
@@ -221,7 +213,6 @@ def adapter(tmp_path, vendor: Vendor) -> HTTPCheckProvider:
         settings,
         httpx.MockTransport(vendor),
         platform_model_id="synthetic-check-catalog",
-        sale_usd_per_mtok=(2.0, 8.0),
     )
     llm.version = "http-extract-v5:synthetic-check-catalog:7"
     return HTTPCheckProvider(llm)
@@ -253,9 +244,9 @@ async def test_http_check_sends_one_exact_accounted_structured_request(tmp_path)
     assert len(vendor.requests) == 1
 
     exact_body = provider.request_body(request())
-    assert accounting.reservations == [provider.reservation(request())]
+    assert accounting.plans == [provider.llm.quote(exact_body)]
     assert accounting.platform_billed == [True]
-    assert accounting.reservations[0] == provider.llm.reservation(exact_body)
+    assert accounting.plans[0].request_sha256 == provider.llm.quote(exact_body).request_sha256
     sent = json.loads(vendor.requests[0].content)
     assert sent == exact_body
     assert str(vendor.requests[0].url) == "https://check.example.test/v1/chat/completions"
@@ -361,7 +352,15 @@ async def test_factory_wraps_http_and_reuses_accounted_protocol_fake(tmp_path):
     assert result.usages[0].test_only is True
     assert accounting.planned == [1]
     assert accounting.events == ["plan", "admit", "complete"]
-    assert accounting.reservations == [Decimal(0)]
+    assert accounting.plans == [
+        call_plan(
+            "llm",
+            fake.name,
+            fake.model,
+            fake.version,
+            serialized_request(fake.request_body(request())),
+        )
+    ]
     assert accounting.platform_billed == [False]
 
 

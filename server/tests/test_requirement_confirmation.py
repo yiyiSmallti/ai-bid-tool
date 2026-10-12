@@ -49,7 +49,7 @@ async def post_decision(api, auth, requirement_id, payload):
     )
 
 
-async def test_review_cas_replay_history_and_v4_boundary(tenants, tmp_path):
+async def test_review_cas_replay_history_and_current_contract_aliases(tenants, tmp_path):
     async with phase_one_client(tenants, tmp_path) as (api, app, headers, _):
         task, _, job, requirements = await create_tender(
             api, app, headers[0], tmp_path, confirmed=False
@@ -101,7 +101,11 @@ async def test_review_cas_replay_history_and_v4_boundary(tenants, tmp_path):
             headers=headers[0],
         )
         assert page.status_code == 200, page.text
-        assert (await api.get(f"/requirements/{rid}/review", headers=headers[0])).status_code == 404
+        for prefix in ("", "/v4", "/v5"):
+            current = await api.get(f"{prefix}/requirements/{rid}/review", headers=headers[0])
+            assert current.status_code == 200, current.text
+            assert current.headers["X-Bid-Contract-Version"] == "5.0"
+            assert current.json()["data"]["requirement"] == replayed["requirement"]
         ARTIFACT.parent.mkdir(parents=True, exist_ok=True)
         ARTIFACT.write_text(
             json.dumps(

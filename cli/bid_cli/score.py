@@ -160,7 +160,6 @@ def score_run(
     reasoning: Annotated[str | None, typer.Option()] = None,
     dry_run: Annotated[bool, typer.Option()] = False,
     expected_input_hash: Annotated[str | None, typer.Option()] = None,
-    max_charge: Annotated[str | None, typer.Option()] = None,
     retry: Annotated[bool, typer.Option()] = False,
     wait: Annotated[bool, typer.Option()] = False,
     timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
@@ -177,7 +176,6 @@ def score_run(
         dry_run=dry_run,
         retry=retry,
         expected_input_hash=expected_input_hash,
-        max_charge=max_charge,  # pyright: ignore[reportArgumentType]
     )
     path = f"/tasks/{task}/scores/preview" if dry_run else f"/tasks/{task}/scores"
     body = cli.call("POST", path, json=request.model_dump(mode="json"))
@@ -211,7 +209,7 @@ def score_run(
                 ) from exc
             try:
                 validated = ScoreJobResult.model_validate(
-                    {key: value for key, value in output.items() if key != "budget"}
+                    {key: value for key, value in output.items() if key != "preflight"}
                 )
             except (TypeError, ValueError) as exc:
                 raise ServiceError(
@@ -221,8 +219,8 @@ def score_run(
                     4,
                 ) from exc
             body["data"] = validated.model_dump(mode="json")
-            if "budget" in output:
-                body["data"]["budget"] = output["budget"]
+            if "preflight" in output:
+                body["data"]["preflight"] = output["preflight"]
             body["warnings"] = terminal.get("warnings", [])
             body["cost"] = terminal.get("cost", body["cost"])
         except ServiceError as exc:
@@ -301,7 +299,6 @@ def rubric_generate(
     reasoning: Annotated[str | None, typer.Option()] = None,
     dry_run: Annotated[bool, typer.Option()] = False,
     expected_input_hash: Annotated[str | None, typer.Option()] = None,
-    max_charge: Annotated[str | None, typer.Option()] = None,
     retry: Annotated[bool, typer.Option()] = False,
     wait: Annotated[bool, typer.Option()] = False,
     timeout: Annotated[float, typer.Option(min=0.1, max=3600)] = 120,
@@ -316,7 +313,6 @@ def rubric_generate(
         dry_run=dry_run,
         retry=retry,
         expected_input_hash=expected_input_hash,
-        max_charge=max_charge,  # pyright: ignore[reportArgumentType]
     )
     path = f"/tasks/{task}/score-rubrics/preview" if dry_run else f"/tasks/{task}/score-rubrics"
     body = cli.call("POST", path, json=request.model_dump(mode="json"))
@@ -342,7 +338,7 @@ def rubric_generate(
                 ) from exc
             try:
                 validated = RubricGenerateResult.model_validate(
-                    {key: value for key, value in output.items() if key != "budget"}
+                    {key: value for key, value in output.items() if key != "preflight"}
                 )
             except (TypeError, ValueError) as exc:
                 raise ServiceError(
@@ -352,8 +348,8 @@ def rubric_generate(
                     4,
                 ) from exc
             body["data"] = validated.model_dump(mode="json")
-            if "budget" in output:
-                body["data"]["budget"] = output["budget"]
+            if "preflight" in output:
+                body["data"]["preflight"] = output["preflight"]
             body["warnings"] = terminal.get("warnings", [])
             body["cost"] = terminal.get("cost", body["cost"])
         except ServiceError as exc:

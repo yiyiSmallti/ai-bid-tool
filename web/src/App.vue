@@ -1,5 +1,5 @@
 <script setup>
-import { Coin, DataAnalysis, Document, Files, Lock, Memo, Monitor, OfficeBuilding, Tickets, User, Wallet } from "@element-plus/icons-vue";
+import { DataAnalysis, Document, Files, Lock, Memo, Monitor, OfficeBuilding, User } from "@element-plus/icons-vue";
 import zhCn from "element-plus/es/locale/lang/zh-cn";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
@@ -16,8 +16,7 @@ const menus = computed(() => area.value === "platform"
       { key: "credentials", to: "/platform/credentials", title: "服务凭据", icon: Lock },
       { key: "clef", to: "/platform/clef", title: "Clef 初筛配置", icon: Monitor },
       { key: "trust-anchors", to: "/platform/trust-anchors", title: "信任根证书", icon: Lock },
-      { key: "cards", to: "/platform/cards", title: "卡密", icon: Tickets },
-      { key: "usage", to: "/platform/usage", title: "用量与账单", icon: DataAnalysis },
+      { key: "usage", to: "/platform/usage", title: "用量", icon: DataAnalysis },
       { key: "audit", to: "/platform/audit", title: "审计", icon: Files },
     ]
   : [
@@ -31,7 +30,6 @@ const menus = computed(() => area.value === "platform"
       { key: "memory", to: "/org/memory", title: "单位记忆", icon: Memo },
       { key: "org-models", to: "/org/settings/models", title: "模型与服务配置", icon: Monitor },
       { key: "confidential", to: "/org/confidential", title: "保密字段", icon: Lock },
-      ...(orgAccess.role === "admin" ? [{ key: "billing", to: "/org/billing", title: "余额与充值", icon: Wallet }] : []),
     ]);
 async function signOut() {
   if (area.value === "org") {

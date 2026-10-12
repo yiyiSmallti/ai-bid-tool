@@ -80,8 +80,7 @@ def result(response):
     assert response.status_code == 200, response.text
     envelope = response.json()
     assert set(envelope) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-    assert envelope["ok"] is True and envelope["cost"]["basis"] == "zero"
-    assert envelope["cost"]["charge"] == envelope["cost"]["task_amount"] == "0"
+    assert envelope["ok"] is True and all(value == 0 for value in envelope["cost"].values())
     return envelope["data"]
 
 

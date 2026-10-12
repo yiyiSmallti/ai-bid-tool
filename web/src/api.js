@@ -47,7 +47,7 @@ const CONFIDENTIAL_MANAGEMENT_PATH = /^\/management\/(?:confidential-fields\/(?:
 const ANNOTATION_PATH = /^\/(?:screenshot-renditions\/[^/?]+\/(?:preview-link|content)|tasks\/[^/?]+\/annotations|annotations\/[^/?]+(?:\/(?:preview|releases|content))?|annotation-releases\/[^/?]+\/(?:preview|content))$/;
 const ORG_MEMBER_PATH = /^\/org\/members(?:\/[^/?]+\/(?:role|active|invitation))?$/;
 const ATTACHMENT_PATH = /^\/(?:management\/resources\/attachments\/query|resources\/attachments(?:\/[^/?]+(?:\/(?:revisions|assignment|deactivate))?|\/revisions\/[^/?]+(?:\/(?:reviews|file\/(?:download-link|download)|parts\/\d+\/(?:download-link|download)|pages\/\d+\/(?:preview-link|preview)))?)?|resources\/profiles\/revisions\/[^/?]+\/attachments|profile-attachment-links\/[^/?]+\/deactivate|tasks\/[^/?]+\/(?:attachments|attachment-sources)|task-attachments\/[^/?]+\/deactivate|attachment-sources\/[^/?]+(?:\/(?:privacy|preview\/(?:download-link|download)))?)$/;
-const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:workflow|progress|members(?:\/[^/?]+(?:\/remove)?)?|member-candidates|handover|archive|unarchive|board|activity|events(?:\/poll)?|documents|jobs|extractions|requirements|products|features|certificates|profiles|certificate-files|evidence-sources|cards(?:\/(?:dispositions|generations))?|drafts|exports|product-simulations|simulated-resources|model-redaction))?)?|documents\/[^/?]+(?:\/(?:chunks|parse|extract|download-link|download|pages\/\d+\/preview))?|exports\/[^/?]+(?:\/(?:download-link|download|preview(?:\/pages\/\d+)?))?|jobs\/[^/?]+(?:\/cancel)?|cards\/[^/?]+(?:\/(?:actions|classification))?|drafts\/[^/?]+|resources\/(?:products|features|certificates|profiles)(?:\/revisions\/[^/?]+\/file\/(?:download-link|download|pages\/\d+\/preview))?|evidence-sources\/[^/?]+\/preview\/(?:download-link|download)|resources\/profiles\/[^/?]+\/revisions|resources\/certificates\/(?:files|[^/?]+\/(?:revisions|file-revisions))|billing(?:\/redeem)?|confidential-fields(?:\/[^/?]+\/(?:revisions|values))?|confidential-values(?:\/[^/?]+\/reveal)?)$/;
+const ORG_PATH = /^\/(org\/current|tasks(?:\/[^/?]+(?:\/(?:workflow|progress|members(?:\/[^/?]+(?:\/remove)?)?|member-candidates|handover|archive|unarchive|board|activity|events(?:\/poll)?|documents|jobs|extractions|requirements|products|features|certificates|profiles|certificate-files|evidence-sources|cards(?:\/(?:dispositions|generations))?|drafts|exports|product-simulations|simulated-resources|model-redaction))?)?|documents\/[^/?]+(?:\/(?:chunks|parse|extract|download-link|download|pages\/\d+\/preview))?|exports\/[^/?]+(?:\/(?:download-link|download|preview(?:\/pages\/\d+)?))?|jobs\/[^/?]+(?:\/cancel)?|cards\/[^/?]+(?:\/(?:actions|classification))?|drafts\/[^/?]+|resources\/(?:products|features|certificates|profiles)(?:\/revisions\/[^/?]+\/file\/(?:download-link|download|pages\/\d+\/preview))?|evidence-sources\/[^/?]+\/preview\/(?:download-link|download)|resources\/profiles\/[^/?]+\/revisions|resources\/certificates\/(?:files|[^/?]+\/(?:revisions|file-revisions))|confidential-fields(?:\/[^/?]+\/(?:revisions|values))?|confidential-values(?:\/[^/?]+\/reveal)?)$/;
 function checkedPath(path, org) {
   if (typeof path !== "string" || !path.startsWith("/") || path.startsWith("//") || path.includes("\\")) throw new ApiError(0, "invalid_path", "请求地址不受支持");
   const url = new URL(path, window.location.origin);
@@ -58,17 +58,14 @@ function retryDelay(value) {
   if (!value) return 0;
   return /^\d+$/.test(value) ? Number(value) * 1000 : Math.max(0, Date.parse(value) - Date.now()) || 0;
 }
-async function parseResult(response, pathname, org, version4 = false) {
+async function parseResult(response, pathname, org) {
   let payload;
   try { payload = await response.json(); }
   catch { throw new ApiError(response.status, "invalid_response", "服务返回了无法识别的内容", null, retryDelay(response.headers.get("Retry-After"))); }
   const keys = ["ok", "command", "data", "items", "warnings", "cost", "duration_ms"];
   if (!payload || typeof payload !== "object" || !payload.data || typeof payload.data !== "object" || Array.isArray(payload.data) || typeof payload.ok !== "boolean" || typeof payload.command !== "string" || !payload.command || keys.some((key) => !(key in payload)) || Object.keys(payload).length !== keys.length || !Array.isArray(payload.items) || !Array.isArray(payload.warnings) || !payload.warnings.every(item => typeof item === "string") || !Number.isInteger(payload.duration_ms) || payload.duration_ms < 0) throw new ApiError(response.status, "invalid_response", "服务响应不符合 Result 契约");
-  if (version4) {
-    const cost = payload.cost, fields = ["llm_tokens", "ocr_pages", "usd", "basis", "charge", "billing_currency", "task_amount", "unpriced_calls", "unresolved_calls"];
-    const decimal = value => value === null || typeof value === "string" && /^\d+(?:\.\d+)?(?:[eE][+-]?\d+)?$/.test(value) && Number.isFinite(Number(value));
-    if (!cost || typeof cost !== "object" || Object.keys(cost).length !== fields.length || fields.some(field => !(field in cost)) || !["llm_tokens", "ocr_pages", "unpriced_calls", "unresolved_calls"].every(field => Number.isInteger(cost[field]) && cost[field] >= 0) || !(cost.usd === null || typeof cost.usd === "number" && Number.isFinite(cost.usd) && cost.usd >= 0) || !["actual", "first_pass_upper_bound", "unknown", "zero", "cache_hit"].includes(cost.basis) || !/^[A-Z]{3}$/.test(cost.billing_currency) || !decimal(cost.charge) || !decimal(cost.task_amount)) throw new ApiError(response.status, "invalid_response", "服务成本响应不符合 Result 4.0 契约");
-  }
+  const cost = payload.cost, fields = ["calls", "llm_tokens", "ocr_pages", "search_requests", "browser_units", "unresolved_calls"];
+  if (!cost || typeof cost !== "object" || Object.keys(cost).length !== fields.length || !fields.every(field => Number.isInteger(cost[field]) && cost[field] >= 0)) throw new ApiError(response.status, "invalid_response", "服务用量响应不符合 Result 5.0 契约");
   const assessmentRead = ["check show", "score show", "score rubric show"].includes(payload.command) &&
     (payload.data.report?.completion === "partial" || payload.data.completion === "partial" ||
       ["unavailable", "range_only"].includes(payload.data.total_status) ||
@@ -91,12 +88,9 @@ async function parseResult(response, pathname, org, version4 = false) {
   }
   return payload;
 }
-export async function request(method, path, body, { org = false, signal, binary = false, contractVersion, providerWrite = false } = {}) {
+export async function request(method, path, body, { org = false, signal, binary = false, providerWrite = false } = {}) {
   const pathname = checkedPath(path, org);
-  // The unversioned API deliberately projects legacy v3 costs. Assessment pages
-  // and job receipts require enforced budget preflight and actual Result 4 costs.
-  const assessmentJobs = /^\/tasks\/[^/]+\/jobs$/.test(pathname) && ["check", "score_rubric", "score"].includes(new URL(path, window.location.origin).searchParams.get("kind"));
-  const apiPath = org && (BID_REVIEW_PATH.test(pathname) || CONFIDENTIAL_MANAGEMENT_PATH.test(pathname) || ATTACHMENT_PATH.test(pathname) || MEMORY_PATH.test(pathname) || ANNOTATION_PATH.test(pathname) || QUALIFICATION_MANAGEMENT_PATH.test(pathname) || PRODUCT_MANAGEMENT_PATH.test(pathname) || FEATURE_MANAGEMENT_PATH.test(pathname) || TEMPLATE_MANAGEMENT_PATH.test(pathname) || PROVIDER_MANAGEMENT_PATH.test(pathname) || ASSESSMENT_PATH.test(pathname) || REQUIREMENT_REVIEW_PATH.test(pathname) || assessmentJobs || contractVersion === 4) ? `/v4${path}` : path;
+  const apiPath = path;
   const headers = {};
   const epoch = orgEpoch;
   const controller = new AbortController();
@@ -114,16 +108,11 @@ export async function request(method, path, body, { org = false, signal, binary 
   if (body !== undefined && !multipart) headers["Content-Type"] = "application/json";
   try {
     const response = await fetch(apiPath, { method, headers, credentials: "omit", cache: "no-store", redirect: "error", signal: controller.signal, body: body === undefined ? undefined : multipart ? body : JSON.stringify(body) });
-    const value = providerWrite ? await discardProviderWrite(response) : binary && response.ok ? await response.blob() : await parseResult(response, pathname, org, apiPath.startsWith("/v4/"));
+    const value = providerWrite ? await discardProviderWrite(response) : binary && response.ok ? await response.blob() : await parseResult(response, pathname, org);
     if (controller.signal.aborted || (org && epoch !== orgEpoch)) throw new DOMException("单位会话已改变", "AbortError");
     return value;
   } finally { orgRequests.delete(controller); signal?.removeEventListener("abort", abort); }
 }
-export const money = (value, currency = "") => {
-  if (value === null || value === undefined) return "未知";
-  const amount = Number(value).toLocaleString("zh-CN", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-  return currency ? `${amount} ${currency}` : amount;
-};
 export const count = (value) => Number(value ?? 0).toLocaleString("zh-CN");
 
 export async function orgSignupEnabled() {
@@ -196,10 +185,10 @@ export function submitProviderConfiguration(fields, control, options = {}) {
   try {
     if (fields.source === "platform") wire.platform_model_id = fields.platform_model_id;
     else if (fields.source === "org") {
-      Object.assign(wire, {provider:fields.provider,model:fields.model,base_url:fields.base_url,json_mode:fields.json_mode,reasoning:fields.reasoning,default_reasoning:fields.default_reasoning,input_usd_per_mtok:fields.input_usd_per_mtok,output_usd_per_mtok:fields.output_usd_per_mtok});
+      Object.assign(wire, {provider:fields.provider,model:fields.model,base_url:fields.base_url,json_mode:fields.json_mode,reasoning:fields.reasoning,default_reasoning:fields.default_reasoning});
       if (control?.value) wire.api_key = control.value;
     } else throw new ApiError(400,"invalid_input","配置来源无效");
     if (control) control.value = "";
-    return request("POST","/providers",wire,{...options,org:true,contractVersion:4,providerWrite:true});
+    return request("POST","/providers",wire,{...options,org:true,providerWrite:true});
   } finally { if (control) control.value = ""; delete wire.api_key; }
 }

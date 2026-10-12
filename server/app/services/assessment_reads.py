@@ -62,7 +62,7 @@ from app.schemas.console_assessments import (
     SubjectActions,
 )
 from app.schemas.contracts import Source
-from app.services import budgets, check, check_inputs, drafts
+from app.services import check, check_inputs, drafts
 from app.services import response_cards as cards
 from app.services.assessment_bounds import (
     cursor,
@@ -206,7 +206,6 @@ async def inputs(
         current_draft=selected_choice,
         redaction_enabled=task.model_redaction_enabled,
         redaction_revision=task.model_redaction_revision,
-        task_budget=await budgets.view(session, task, settings),
         actions=[
             await action(
                 session, actor, task_id, "check_run", "check:run", valid=available, checks=checks

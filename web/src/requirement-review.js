@@ -3,7 +3,7 @@ import { orgRequest } from "./org.js";
 export const reviewStates = { unconfirmed: "待确认", legacy_unconfirmed: "历史要求待确认", confirmed: "要求已确认", invalidated: "要求确认已失效" };
 export const entryOrigins = { extracted: "模型抽取", legacy: "历史抽取", manual_rejected: "拒绝项补录", manual_missing: "遗漏补录" };
 export const reviewActions = { seed: "创建待确认要求", manual_add: "人工补录", confirm: "确认要求", reopen: "重新打开", invalidate: "确认失效", source_repair: "修复引用" };
-export const requirementRequest = (method, path, body) => orgRequest(method, path, body, { contractVersion: 4 });
+export const requirementRequest = (method, path, body) => orgRequest(method, path, body, {});
 export function checkScope(scope, taskId, jobId = null) {
   if (!scope || scope.org_id !== orgSession.get()?.orgId || scope.task_id !== taskId || jobId && scope.extraction_job_id !== jobId) throw new Error("要求集合范围不符合契约");
 }

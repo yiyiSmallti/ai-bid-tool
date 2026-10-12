@@ -18,16 +18,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 from app.jobs.execution import JobExecution
-from app.models.entities import (
-    AuditLog,
-    BalanceEntry,
-    Chunk,
-    Job,
-    OrgBalance,
-    Requirement,
-    UsageRecord,
-    VendorCall,
-)
+from app.models.entities import AuditLog, Chunk, Job, Requirement, UsageRecord, VendorCall
 from app.models.score import ScoreRubricSet
 from app.schemas.contracts import ProviderUsage
 from app.schemas.score_contracts import (
@@ -257,9 +248,8 @@ async def rubric_counts(case):
     async with case["app"].state.db.transaction(UUID(case["header"]["X-Org-Id"])) as session:
         counts = {
             model.__tablename__: await session.scalar(select(func.count()).select_from(model))
-            for model in (Job, AuditLog, UsageRecord, VendorCall, BalanceEntry, ScoreRubricSet)
+            for model in (Job, AuditLog, UsageRecord, VendorCall, ScoreRubricSet)
         }
-        counts["balance"] = await session.scalar(select(OrgBalance.balance))
         return counts
 
 
@@ -319,13 +309,11 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     assert not case["vendor"].requests
     assert preview["scoring_requirement_ids"] == [case["requirements"][0]["id"]]
     assert preview["estimate_kind"] == "first_pass_upper_bound"
-    assert preview["estimated_charge"] == "0"
     assert preview["prompt_version"] == "score-rubric-v4"
     assert preview["schema_version"] == "score-rubric-wire-v4"
     assert preview["estimated_cost"]["llm_tokens"] >= 2 * case["llm"].settings.llm_max_output_tokens
-
     stale = await submit_rubric(case, preview, expected_input_hash="0" * 64)
-    assert stale.status_code == 409 and not case["vendor"].requests
+    assert stale.status_code == 409 and (not case["vendor"].requests)
     submitted = await submit_rubric(case, preview)
     assert submitted.status_code == 200, submitted.text
     terminal = await finish_rubric(case, submitted.json()["data"])
@@ -348,24 +336,20 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
         "cached": True,
     }
     assert await rubric_counts(case) == after
-
     cached_preview = await case["api"].post(
         f"/v4/tasks/{case['task']}/score-rubrics/preview",
         headers=case["header"],
         json={"extraction_job_id": case["extraction"], "dry_run": True},
     )
     assert cached_preview.status_code == 200, cached_preview.text
-    preflight = cached_preview.json()["data"]["budget_preflight"]
+    preflight = cached_preview.json()["data"]["preflight"]
     assert preflight["cached_job_id"] == str(result.job_id)
     assert preflight["planned_calls"] == 0
-    assert preflight["estimate"]["basis"] == "cache_hit"
-    assert Decimal(preflight["estimate"]["charge"]) == 0
-    assert Decimal(preflight["estimate"]["task_amount"]) == 0
+    assert preflight["estimate"]["calls"] == 0
     assert preflight["cached_result_cost"] is not None
-    assert cached_preview.json()["cost"]["basis"] == "cache_hit"
+    assert cached_preview.json()["cost"] == preflight["estimate"]
     assert len(case["vendor"].requests) == 2
     assert await rubric_counts(case) == after
-
     path = f"/v4/tasks/{case['task']}/score-rubrics/{result.rubric_id}"
     report = await case["api"].get(path, headers=case["header"])
     assert report.status_code == 200, report.text
@@ -373,9 +357,8 @@ async def test_rubric_preview_submit_worker_cache_and_cli_artifact(rubric_input_
     assert report.json()["data"]["rubric"]["state"] == "candidate"
     legacy_report = await case["api"].get(path.removeprefix("/v4"), headers=case["header"])
     assert legacy_report.status_code == 200, legacy_report.text
-    assert "requirement_review" not in legacy_report.json()["data"]["rubric"]
+    assert legacy_report.json()["data"] == report.json()["data"]
     assert (await case["api"].get(path, headers=case["headers"][1])).status_code == 404
-
     monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
     monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
     monkeypatch.setattr(
@@ -847,7 +830,7 @@ async def test_rubric_items_reject_unknown_sections_and_crossbatch_bindings(
     assert json.loads(artifact.read_text())["job"]["result"]["unresolved_requirements"] == 3
 
 
-@pytest.mark.parametrize("failure", ["refused", "task_budget_exceeded"])
+@pytest.mark.parametrize("failure", ["refused", "job_call_limit_exceeded"])
 async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_cli_exit5(
     rubric_input_case, monkeypatch, failure
 ):
@@ -863,16 +846,14 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
     if failure == "refused":
         vendor.item_failures = {2: "refused"}
     else:
-        # Exercise the shared admission seam and durable partial publication;
-        # cumulative task-budget ledger enforcement belongs to its migration suite.
         original_admit = JobExecution.admit
 
-        async def budget_admit(execution, quote):
+        async def bounded_admit(execution, quote):
             if len(vendor.requests) == 2:
-                raise execution.stop("task_budget_exceeded", "Synthetic task budget reached")
+                raise execution.stop("job_call_limit_exceeded", "Synthetic call ceiling reached")
             return await original_admit(execution, quote)
 
-        monkeypatch.setattr(JobExecution, "admit", budget_admit)
+        monkeypatch.setattr(JobExecution, "admit", bounded_admit)
     llm = platform_llm(case["app"].state.processor.settings, vendor)
     llm.settings = llm.settings.model_copy(update={"llm_batch_chars": 1000, "llm_concurrency": 1})
     install_rubric_resolver(monkeypatch, llm)
@@ -888,9 +869,9 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
     assert result["candidate_items"] == 1 and result["unresolved_requirements"] == 2
     assert result["stop_reason"] is not None
     expected_calls = 3 if failure == "refused" else 2
-    assert vendor.stages == ["structure", *(["items"] * (expected_calls - 1))]
+    assert vendor.stages == ["structure", *["items"] * (expected_calls - 1)]
     assert len(result["usage_record_ids"]) == expected_calls
-    if failure == "task_budget_exceeded":
+    if failure == "job_call_limit_exceeded":
         assert result["stop_reason"] == failure
     shown = await case["api"].get(
         f"/v4/tasks/{case['task']}/score-rubrics/{result['rubric_id']}", headers=case["header"]
@@ -909,22 +890,9 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
         calls = list(
             (await session.scalars(select(VendorCall).where(VendorCall.job_id == job_id))).all()
         )
-        entries = list(
-            (
-                await session.scalars(
-                    select(BalanceEntry).where(
-                        BalanceEntry.usage_record_id.in_([row.id for row in usages])
-                    )
-                )
-            ).all()
-        )
-        assert len(usages) == len(calls) == len(entries) == expected_calls
+        assert len(usages) == len(calls) == expected_calls
         assert {row.call_id for row in usages} == {row.id for row in calls}
         assert all(call.state == "completed" for call in calls)
-        assert all(row.charge > 0 for row in usages)
-        assert await session.scalar(select(OrgBalance.balance)) == Decimal("10") - sum(
-            (row.charge for row in usages), Decimal(0)
-        )
     monkeypatch.setenv("BID_SESSION", case["header"]["Authorization"].removeprefix("Bearer "))
     monkeypatch.setenv("BID_ORG", case["header"]["X-Org-Id"])
     monkeypatch.setattr(
@@ -934,8 +902,6 @@ async def test_rubric_failed_item_batch_retains_structure_and_valid_items_with_c
             mode, server, state, case["app"].state.processor.settings
         ),
     )
-    # The terminal job reports the partial generation (exit 5 for `generate --wait`); showing
-    # the retained candidate rubric afterwards is a successful read.
     job_exit, job_body = await asyncio.to_thread(invoke_live_cli, ["job", "status", terminal["id"]])
     assert job_exit == 5 and job_body["data"]["result"]["completion"] == "partial"
     exit_code, cli_body = await asyncio.to_thread(
@@ -1073,7 +1039,6 @@ async def test_rubric_platform_calls_settle_once_even_when_output_refused(
     llm = platform_llm(case["app"].state.processor.settings, case["vendor"])
     install_rubric_resolver(monkeypatch, llm)
     preview = await preview_rubric(case)
-    assert Decimal(preview["estimated_charge"]) > 0
     submitted = await submit_rubric(case, preview)
     assert submitted.status_code == 200, submitted.text
     terminal = await finish_rubric(case, submitted.json()["data"])
@@ -1085,34 +1050,16 @@ async def test_rubric_platform_calls_settle_once_even_when_output_refused(
         usages = list(
             (await session.scalars(select(UsageRecord).where(UsageRecord.job_id == job_id))).all()
         )
-        balance = await session.scalar(select(OrgBalance.balance))
-        entries = list(
-            (
-                await session.scalars(
-                    select(BalanceEntry).where(
-                        BalanceEntry.usage_record_id.in_([row.id for row in usages])
-                    )
-                )
-            ).all()
-        )
         expected_calls = 2 if mode in {"valid", "unknown_ref"} else 1
-        assert (
-            len(calls)
-            == len(usages)
-            == len(entries)
-            == len(case["vendor"].requests)
-            == expected_calls
-        )
+        assert len(calls) == len(usages) == len(case["vendor"].requests) == expected_calls
         assert (
             len({(row.org_id, row.job_id, row.run_id, row.call_id) for row in usages})
             == expected_calls
         )
         assert {row.call_id for row in usages} == {row.id for row in calls}
-        assert balance == Decimal("10") - sum((row.charge for row in usages), Decimal(0))
-        assert all(row.charge > 0 for row in usages)
         settled = usages[0]
         replay = ProviderUsage(**{key: getattr(settled, key) for key in ProviderUsage.model_fields})
-        run_id, call_id = settled.run_id, settled.call_id
+        run_id, call_id = (settled.run_id, settled.call_id)
     previous = await rubric_counts(case)
     execution = JobExecution(
         case["app"].state.processor.settings,
@@ -1140,7 +1087,7 @@ async def test_rubric_cancel_drains_usage_and_fences_publication(rubric_input_ca
     install_rubric_resolver(
         monkeypatch, platform_llm(case["app"].state.processor.settings, case["vendor"])
     )
-    case["vendor"].entered, case["vendor"].release = asyncio.Event(), asyncio.Event()
+    case["vendor"].entered, case["vendor"].release = (asyncio.Event(), asyncio.Event())
     preview = await preview_rubric(case)
     submitted = await submit_rubric(case, preview)
     assert submitted.status_code == 200, submitted.text
@@ -1163,7 +1110,7 @@ async def test_rubric_cancel_drains_usage_and_fences_publication(rubric_input_ca
                 await session.scalars(select(UsageRecord).where(UsageRecord.job_id == UUID(job_id)))
             ).all()
         )
-        assert len(usages) == 1 and usages[0].charge > 0
+        assert len(usages) == 1
         audits = list(
             (
                 await session.scalars(

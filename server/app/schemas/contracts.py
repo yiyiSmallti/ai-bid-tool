@@ -1,34 +1,25 @@
 from datetime import datetime
-from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-CONTRACT_VERSION = "4.0"
+CONTRACT_VERSION = "5.0"
 
 
 class Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", from_attributes=True)
 
 
-class LegacyCost(Contract):
-    llm_tokens: int = 0
-    ocr_pages: int = 0
-    usd: float | None = 0.0
+class Cost(Contract):
+    """Provider usage counters; the envelope name is retained for CLI compatibility."""
 
-
-class Cost(LegacyCost):
-    basis: Literal["actual", "first_pass_upper_bound", "unknown", "zero", "cache_hit"] = "zero"
-    charge: Decimal | None = Field(
-        default=Decimal(0), ge=0, max_digits=18, decimal_places=8, allow_inf_nan=False
-    )
-    billing_currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
-    task_amount: Decimal | None = Field(
-        default=Decimal(0), ge=0, max_digits=18, decimal_places=8, allow_inf_nan=False
-    )
-    unpriced_calls: int = Field(default=0, ge=0)
+    calls: int = Field(default=0, ge=0)
+    llm_tokens: int = Field(default=0, ge=0)
+    ocr_pages: int = Field(default=0, ge=0)
+    search_requests: int = Field(default=0, ge=0)
+    browser_units: int = Field(default=0, ge=0)
     unresolved_calls: int = Field(default=0, ge=0)
 
 
@@ -42,10 +33,6 @@ class Result(Contract):
     duration_ms: int = 0
 
 
-class LegacyResult(Result):
-    cost: LegacyCost = Field(default_factory=LegacyCost)
-
-
 class Login(Contract):
     email: str = Field(min_length=3, max_length=254)
     password: str = Field(min_length=1, max_length=1024)
@@ -56,7 +43,6 @@ class TaskCreate(Contract):
     name: str = Field(min_length=1, max_length=200)
     tender_number: str | None = Field(default=None, max_length=100)
     deadline: datetime | None = None
-    budget_usd: float | None = Field(default=None, ge=0)
 
     @field_validator("deadline")
     @classmethod
@@ -139,7 +125,6 @@ class ProviderUsage(Contract):
     gateway_trace_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9_-]{1,128}$")
     provider_config_id: UUID | None = None
     image_count: int = Field(default=0, ge=0, le=20)
-    image_price_revision: str | None = None
     image_input_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     provider: str
     model: str
@@ -147,21 +132,14 @@ class ProviderUsage(Contract):
     duration_ms: int = Field(ge=0)
     tokens: int = Field(default=0, ge=0)
     ocr_pages: int = Field(default=0, ge=0)
-    usd: float | None = Field(default=None, ge=0)
     test_only: bool = False
     input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(default=0, ge=0)
-    # Set only for calls billed to the org through a platform catalog model.
+    # Fixed catalog identity for calls routed through a platform model.
     platform_model_id: str | None = None
-    charge: float | None = Field(default=None, ge=0)
     capability: Literal["llm", "vision", "ocr", "search", "embedding", "browser"] = "llm"
-    payer: Literal["org_platform", "org_direct", "platform_absorbed", "local_free"] = "org_direct"
-    billing_currency: str = Field(default="USD", pattern=r"^[A-Z]{3}$")
-    task_amount: Decimal | None = Field(
-        default=None, ge=0, max_digits=18, decimal_places=8, allow_inf_nan=False
-    )
-    price_revision: str = Field(default="legacy", min_length=1, max_length=100)
     search_requests: int = Field(default=0, ge=0)
+    browser_units: int = Field(default=0, ge=0)
 
 
 class PageText(Contract):

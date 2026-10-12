@@ -1,7 +1,7 @@
 <script setup>
 import BidPresenceLocation from "./BidPresenceLocation.vue";
 import { computed } from "vue";
-import { money } from "../api.js";
+
 import { formatTime } from "../org.js";
 import { reviewError } from "../bid-review.js";
 const props = defineProps({ row: { type: Object, required: true } });
@@ -52,8 +52,8 @@ const position = citation => `${citation.page_label === "rendered_docx" ? "固�
     <template v-else-if="row.kind === 'obligation'">
       <h4>{{ row.obligation.starred ? '★ 条款' : row.obligation.triangle ? '▲ 条款' : '符合性条款' }} · {{ status(row.outcome) }}</h4><p>{{ row.obligation.text }}</p><p>招标{{ position(row.obligation.citation) }}</p><blockquote>{{ row.obligation.citation.quote }}</blockquote><p>投标响应尚未确定；没有已核验的投标原文引句。</p><p>未覆盖：{{ reviewError({ code: row.reason_code }) }}</p>
     </template>
-    <template v-else-if="row.kind === 'usage'"><p>模型：{{ row.usage.provider }} / {{ row.usage.model }} · 输入 {{ row.usage.input_tokens }} tokens · 输出 {{ row.usage.output_tokens }} tokens · 服务成本 {{ money(row.usage.usd, 'USD') }}</p></template>
-    <template v-else-if="row.kind === 'cost'"><p>运行成本 {{ money(row.cost.usd, 'USD') }} · 平台扣费 {{ money(row.cost.charge, row.cost.billing_currency) }} · 计入任务预算 {{ money(row.cost.task_amount, row.cost.billing_currency) }} · 未确定调用 {{ row.cost.unresolved_calls }}</p></template>
+    <template v-else-if="row.kind === 'usage'"><p>模型：{{ row.usage.provider }} / {{ row.usage.model }} · 输入 {{ row.usage.input_tokens }} tokens · 输出 {{ row.usage.output_tokens }} tokens</p></template>
+    <template v-else-if="row.kind === 'cost'"><p>调用 {{ row.cost.calls }} 次 · {{ row.cost.llm_tokens }} tokens · OCR {{ row.cost.ocr_pages }} 页 · 搜索 {{ row.cost.search_requests }} 次 · 浏览器 {{ row.cost.browser_units }} 单位 · 未确定调用 {{ row.cost.unresolved_calls }}</p></template>
     <template v-else>
       <h4 v-if="row.label">{{ row.label }}</h4><p v-if="row.text">{{ row.text }}</p><p v-if="row.value !== undefined">{{ text(row.value) }}</p><p v-for="(value,index) in row.values" :key="index">{{ text(value) }}</p>
     </template>

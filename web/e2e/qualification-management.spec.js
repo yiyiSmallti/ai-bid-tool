@@ -23,7 +23,7 @@ const quote=value=>`'${value.replace(/'/g,`'\\''`)}'`;
 const O='00000000-0000-0000-0000-000000000002',U='00000000-0000-0000-0000-000000000003',T='00000000-0000-0000-0000-000000000001',P='00000000-0000-0000-0000-000000000010',C='00000000-0000-0000-0000-000000000011';
 const B='00000000-0000-0000-0000-000000000099';
 const rid=(kind,n)=>`00000000-0000-0000-0000-${String((kind==='profiles'?100:200)+n).padStart(12,'0')}`;
-const date='2026-10-06T00:00:00Z',cost={llm_tokens:0,ocr_pages:0,usd:0,basis:'zero',charge:'0',billing_currency:'USD',task_amount:'0',unpriced_calls:0,unresolved_calls:0};
+const date='2026-10-06T00:00:00Z',cost={ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result=(command,data={},items=[],ok=true)=>({ok,command,data,items,warnings:[],cost,duration_ms:0});
 const records=[],health=new WeakMap();
 test.beforeEach(async({page})=>{
@@ -39,7 +39,7 @@ test.afterEach(async({page},info)=>{
  if(info.status==='passed'&&!errors.length&&!overlay)await page.screenshot({path:join(output,`${info.title.replace(/[^a-z0-9]+/gi,'-').toLowerCase()}.png`),fullPage:true});
  records.push({scenario:info.title,status:info.status==='passed'&&(errors.length||overlay)?'failed':info.status,console_errors:errors.length,framework_overlay:overlay,measurements:info.annotations.filter(item=>item.type==='measurement').map(item=>JSON.parse(item.description))});
  const index=process.env.E2E_STATIC_DIR?join(resolve(process.env.E2E_STATIC_DIR),'index.html'):null;
- writeFileSync(join(output,'result.json'),JSON.stringify({mode:'mocked_api',fixture_version:'qualification-management-v1',schema_version:'4.0',browser:'chromium',browser_version:page.context().browser()?.version()??null,build_sha256:index?createHash('sha256').update(readFileSync(index)).digest('hex'):null,base_url:process.env.E2E_BASE_URL??null,artifact_directory:output,command:`cd web && E2E_BASE_URL=${quote(process.env.E2E_BASE_URL??'http://127.0.0.1:8000')} ${index?`E2E_STATIC_DIR=${quote(dirname(index))} `:''}E2E_OUTPUT=${quote(outputBase)} node_modules/.bin/playwright test e2e/qualification-management.spec.js`,scenarios:records,passed:records.every(r=>r.status==='passed')},null,2));
+ writeFileSync(join(output,'result.json'),JSON.stringify({mode:'mocked_api',fixture_version:'qualification-management-v1',schema_version:'5.0',browser:'chromium',browser_version:page.context().browser()?.version()??null,build_sha256:index?createHash('sha256').update(readFileSync(index)).digest('hex'):null,base_url:process.env.E2E_BASE_URL??null,artifact_directory:output,command:`cd web && E2E_BASE_URL=${quote(process.env.E2E_BASE_URL??'http://127.0.0.1:8000')} ${index?`E2E_STATIC_DIR=${quote(dirname(index))} `:''}E2E_OUTPUT=${quote(outputBase)} node_modules/.bin/playwright test e2e/qualification-management.spec.js`,scenarios:records,passed:records.every(r=>r.status==='passed')},null,2));
  expect(errors).toEqual([]);expect(overlay).toBe(0);
 });
 async function fixture(page,options={}){
@@ -55,7 +55,7 @@ async function fixture(page,options={}){
  const file=(n)=>({id:rid('certificates',n+500),org_id:O,certificate_id:C,certificate_revision_id:rid('certificates',n),revision:n,data:content('certificates',n),file:{name:'synthetic.pdf',sha256:'a'.repeat(64),size_bytes:123,page_count:2,media_type:'application/pdf'},parts:[]});
  files.set(1,file(1));if(options.currentFile)files.set(2,file(2));
  await page.route(url=>!url.pathname.startsWith('/app/'),async route=>{
-  const req=route.request(),url=new URL(req.url()),path=url.pathname.replace(/^\/v4(?=\/)/,'');const requestOrg=req.headers()['x-org-id']??O;requests.push({path,method:req.method(),org_id:requestOrg,url:url.pathname+url.search});
+  const req=route.request(),url=new URL(req.url()),path=url.pathname;const requestOrg=req.headers()['x-org-id']??O;requests.push({path,method:req.method(),org_id:requestOrg,url:url.pathname+url.search});
   const read=req.method()==='GET'||req.method()==='POST'&&path.startsWith('/management/')&&path.endsWith('/query');
   if(read){reads.active++;reads.max=Math.max(reads.max,reads.active);}
   try{
@@ -68,7 +68,7 @@ async function fixture(page,options={}){
    if(path==='/tasks')return route.fulfill({json:result('task list',{org_id:B},[])});
    const match=path.match(/^\/management\/resources\/(profiles|certificates)\/query$/);
    if(match){const kind=match[1],items=[{org_id:B,ref:{kind,resource_id:rid(kind,8000)},name:kind==='profiles'?'乙单位专属资料':'乙单位专属证照',revision_id:rid(kind,8001),revision:1,lifecycle:{state:'active',revision:0},provenance:'declared',created_at:date,revised_at:date,revised_by:U,actions:actions()}];return route.fulfill({json:result('resource query',{org_id:B,as_of:date,returned:items.length,next_cursor:null,has_more:false},items)});}
-   if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
+   if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
    throw new Error(`Unexpected org B request: ${req.method()} ${path}`);
   }
   const failure=(code,status=409)=>route.fulfill({status,json:result('resource write',{error:{code,message:code,exit_code:status===403||status===404?4:2}},[],false)});
@@ -77,7 +77,7 @@ async function fixture(page,options={}){
   if(path===`/tasks/${T}/workflow`)return route.fulfill({json:result('task workflow',{workflow:{org_id:O,task_id:T,state:state.archived?'archived':'active'}})});
   if(path===`/tasks/${T}/members`){const items=state.taskRole?[{org_id:O,task_id:T,user_id:U,role:state.taskRole,active:true,review_domains:[]}]:[];return route.fulfill({json:result('task members',{...meta(items),task_id:T},items)});}
   const match=path.match(/^\/management\/resources\/(profiles|certificates)(?:\/(.*))?$/);
-  if(match){expect(url.pathname.startsWith('/v4/')).toBe(true);const kind=match[1],tail=match[2],id=rootId(kind);
+  if(match){expect(url.pathname.startsWith('/')).toBe(true);const kind=match[1],tail=match[2],id=rootId(kind);
    if(tail==='query'){const body=req.postDataJSON();queries.push({kind,...body});expect(url.search).toBe('');if(state.delay&&body.q==='迟到查询')await new Promise(r=>{release=r;});if(state.cursorError&&body.cursor)return failure('management_cursor_expired');let items=body.q==='空结果'?[]:[{org_id:state.foreign?'00000000-0000-0000-0000-000000000099':O,ref:{kind,resource_id:id},name:content(kind,state.head).name,revision_id:rid(kind,state.head),revision:state.head,lifecycle:lifecycle(),provenance:'declared',created_at:date,revised_at:date,revised_by:U,actions:actions()}];let next=state.paginated&&!body.cursor?'opaque-next':null;
     if(state.largePages&&kind==='profiles'){
      const index=body.cursor===null?0:Number(body.cursor.replace('opaque-page-',''));expect(body.limit).toBe(25);
@@ -102,7 +102,7 @@ async function fixture(page,options={}){
   if(path.includes('/file/download-link'))return route.fulfill({json:result('resource certificate download link',{url:`/resources/certificates/revisions/${rid('certificates',1)}/file/download?signature=synthetic`,expires_in:300})});
   if(path.includes('/file/download')){expect(req.headers()['x-org-id']).toBe(O);expect(req.headers().authorization).toBeTruthy();return route.fulfill({contentType:'application/pdf',body:'%PDF-synthetic'});}
   if(path.includes('/file/pages/')){expect(req.headers().authorization).toBe('Bearer synthetic-qualification-session');expect(requestOrg).toBe(O);return route.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgaPj/HwAEggJ/59habAAAAABJRU5ErkJggg==','base64')});}
-  if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
+  if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
   throw new Error(`Unexpected qualification request: ${req.method()} ${path}`);
   }finally{if(read)reads.active--;}
  });return {state,writes,queries,requests,pins,reads,totals,release:()=>release?.(),releaseRead:path=>gates.get(path)?.()};
@@ -256,7 +256,7 @@ test('exact historical certificate PNG preview uses authenticated revision pages
  expect(await image.getAttribute('src')).toMatch(/^data:image\/png;base64,/);
  const requests=f.requests.filter(request=>request.path.includes('/file/pages/'));
  expect(requests.length).toBeGreaterThan(0);
- expect(requests.every(request=>request.path.startsWith(`/resources/certificates/revisions/${rid('certificates',1)}/file/pages/`)&&request.org_id===O&&request.url.startsWith('/v4/'))).toBe(true);
+ expect(requests.every(request=>request.path.startsWith(`/resources/certificates/revisions/${rid('certificates',1)}/file/pages/`)&&request.org_id===O&&request.url.startsWith('/'))).toBe(true);
  expect(requests.some(request=>request.path.includes(rid('certificates',2)))).toBe(false);
  expect(f.writes).toHaveLength(0);
  info.annotations.push({type:'measurement',description:JSON.stringify({preview_revision:1,decoded_png_signature_valid:true,authenticated_org_match:true,page_requests:requests.length})});

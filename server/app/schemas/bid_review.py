@@ -7,8 +7,8 @@ from uuid import UUID
 
 from pydantic import AwareDatetime, Field, StringConstraints, model_validator
 
-from app.schemas.budget_contracts import BudgetPreflightData
 from app.schemas.contracts import Contract, Cost
+from app.schemas.preflight_contracts import PreflightData
 from app.schemas.screenshot_contracts import PNGDescriptor, Sha256
 
 FILE_LIMIT = 20
@@ -147,10 +147,10 @@ class BidPrepareRequest(Contract):
 
 
 class BidPreparePreview(Contract):
+    preflight: PreflightData
     dry_run: Literal[True] = True
     submission_id: UUID
     input_hash: Sha256
-    budget: BudgetPreflightData
     expires_at: AwareDatetime
     preflight_token: str = Field(min_length=1, max_length=4096, repr=False)
     local_only: Literal[True] = True
@@ -158,18 +158,16 @@ class BidPreparePreview(Contract):
 
     @model_validator(mode="after")
     def local_calls_and_exact_expiry(self) -> Self:
-        if self.budget.input_hash != self.input_hash or self.budget.planned_calls is None:
+        if self.preflight.input_hash != self.input_hash or self.preflight.planned_calls is None:
             raise ValueError("local preparation needs the exact input hash and a bounded call plan")
-        if not 0 <= self.budget.planned_calls <= PAGE_LIMIT:
+        if not 0 <= self.preflight.planned_calls <= PAGE_LIMIT:
             raise ValueError("local preparation OCR calls cannot exceed the page limit")
-        if self.budget.maximum_calls is not None and self.budget.maximum_calls > PAGE_LIMIT:
+        if self.preflight.maximum_calls is not None and self.preflight.maximum_calls > PAGE_LIMIT:
             raise ValueError("local preparation maximum calls cannot exceed the page limit")
-        quote = self.budget.next_call
-        if quote is not None and (quote.payer != "local_free" or quote.capability != "ocr"):
-            raise ValueError("preparation permits only metered local-free OCR calls")
-        if self.budget.estimate.task_amount != 0 or self.budget.estimate.charge != 0:
-            raise ValueError("local preparation cannot invent paid liability")
-        if (self.expires_at - self.budget.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
+        quote = self.preflight.next_call
+        if quote is not None and (quote.capability != "ocr"):
+            raise ValueError("preparation permits only local OCR calls")
+        if (self.expires_at - self.preflight.as_of).total_seconds() != PREFLIGHT_TTL_SECONDS:
             raise ValueError("preparation preview expires after 15 minutes")
         return self
 

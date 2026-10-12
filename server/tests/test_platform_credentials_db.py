@@ -252,9 +252,8 @@ def test_catalog_binding_and_committed_disable_block_reader(credential_db):
     model_id = "model_" + uuid4().hex[:20]
     statement = text(
         "INSERT INTO platform_models(id,capability,provider,model,base_url,credential, "
-        "vendor_input_usd_per_mtok,vendor_output_usd_per_mtok, "
-        "sale_input_per_mtok,sale_output_per_mtok,updated_by) "
-        "VALUES(:model,'llm_extract','openai','synthetic',:endpoint,:name,0,0,0,0,:actor)"
+        "updated_by) "
+        "VALUES(:model,'llm_extract','openai','synthetic',:endpoint,:name,:actor)"
     )
     with pytest.raises(DBAPIError, match="credential_reference_mismatch"):
         with credential_db.begin() as connection:

@@ -49,13 +49,15 @@ Prototype screenshots carry no watermark, burned-in label, fixed footer or visib
 Adjacent-plan boundaries follow; unapproved plans are coordination interfaces, not existing capabilities:
 
 - [screenshots.md](screenshots.md#capture-provenance-and-hashes) local logged-in-system screenshots remain in its local privacy flow. Sandbox connects neither personal Chrome, intranet systems nor existing sessions. That plan defaults to no DOM/HAR; DOM/archives here apply only to public vendor capture without login, never expanding sensitive-UI capture.
-- [annotation.md](annotation.md#provider-authorized-reads-and-local-output) Rust algorithms may support later deterministic processing, but local subprocesses are not this isolation implementation. Sandbox format/integrity validation does not depend on annotation profiles.
+- [annotation.md](annotation.md#jobs-usage-and-publication) Rust algorithms may support later deterministic processing, but local subprocesses are not this isolation implementation. Sandbox format/integrity validation does not depend on annotation profiles.
 - [export.md](export.md#evidence-index-and-pdf-page-attachments) owns export implementation; screenshots.md/card gates determine artifact evidence relationships/eligibility, without extra source-type exclusions here.
 - [Model outbound redaction](../notes/model-drafting-redaction.md) still determines model text inputs. Sandbox artifacts/HAR/DOM/PDF/fetched text do not automatically become model inputs; web instructions are always data.
 
 ## Threat model and trust boundary
 
-Attackers may control all HTML/JavaScript, remote pages/PDFs/redirects/DNS/resource responses/filenames/page text/forged output manifests. Assume Chromium/PDF parsers may be compromised, even the sandbox driver may be taken over. LLM safety checks, DOM sanitization, CSP/browser contexts alone cannot isolate hosts. Protect databases/credentials, other orgs and unselected same-org materials, host files/services, internal networks/cloud metadata/balances, availability and human gates.
+Attackers may control all HTML/JavaScript, remote pages/PDFs/redirects/DNS/resource responses/filenames/page text/forged output manifests.
+Assume Chromium/PDF parsers may be compromised, even the sandbox driver may be taken over.
+LLM safety checks, DOM sanitization, CSP/browser contexts alone cannot isolate hosts.
 
 The trusted computing base includes API authorization/storage services, fixed-profile scheduler, execution-node supervisor, fetch broker and chosen isolation runtime, each with minimum privileges. This contract cannot prove elimination of host-administrator compromise, simultaneous host-kernel/virtualization compromise or every microarchitectural side channel. Independent nodes without business credentials/network isolation limit compromise impact; installing a runtime does not mean no escape risk.
 
@@ -126,15 +128,17 @@ These are approved server-profile maxima; deployment may lower them and callers 
 
 cgroup/runtime enforces CPU quotas/memory/processes; external supervisor meters/stops cumulative CPU/wall time. Stream ingress enforces file/network/protocol bounds; validate declared image dimensions/decoding memory/actual encoded size. `asyncio.wait_for` or killing only a browser while descendants survive is insufficient. [Docker resource constraints](https://docs.docker.com/engine/containers/resource_constraints/) describe explicit container limits; table values are project recommendations requiring actual Chromium/PDF-chain acceptance.
 
-Recommend at most 2 concurrent runs/20 queued per org, 4 concurrent per node lowered by reserved-memory capacity; broker at most 2 connections per origin/60 requests per org per minute. Fair scheduling prevents monopolization. Persistent runs/leases/broker counts enforce limits, not one-worker counters. Queues over 10 minutes fail retryably without sandbox allocation. Jobs across retries get at most 3 new instances without model-budget resets. Execution limits are nonretryable input/resource failures, never automatic larger-machine loops.
+Recommend at most 2 concurrent runs/20 queued per org, 4 concurrent per node lowered by reserved-memory capacity; broker at most 2 connections per origin/60 requests per org per minute. Fair scheduling prevents monopolization. Persistent runs/leases/broker counts enforce limits, not one-worker counters. Queues over 10 minutes fail retryably without sandbox allocation. Jobs across retries get at most 3 new instances without resetting model call limits. Execution limits are nonretryable input/resource failures, never automatic larger-machine loops.
 
 Lifecycle requires observable termination/cleanup:
 
-1. Worker acquires lease/rechecks member/task/source permissions/fixed inputs/policy/cost gates, submitting unique `(org_id, job_id, attempt_id)` descriptors. Supervisor creates an execution group idempotently, with at most one render/validate instance per phase; duplicate dispatch cannot add another. Register persistent local inventory/hard expiry before execution. Sequential phases share cumulative CPU/wall/output budget and peak memory cannot exceed profile; validation gains no fresh budget.
+1. Worker acquires lease/rechecks member/task/source permissions/fixed inputs/policy/resource gates, submitting unique `(org_id, job_id, attempt_id)` descriptors. Supervisor creates an execution group idempotently, with at most one render/validate instance per phase; duplicate dispatch cannot add another. Register persistent local inventory/hard expiry before execution. Sequential phases share cumulative CPU/wall/output budget and peak memory cannot exceed profile; validation gains no fresh budget.
 2. Create new instances/private temporary storage/clean browser contexts, starting after read-only stream hash checks. Never reuse cookie/cache/service worker/memory snapshot/input volume/business-data image layers.
 3. Completion/cancellation/lease loss/heartbeat failure/overflow/any fault closes fetch/result ingress first, revokes broker capability, then terminates the entire process/cgroup/VM. Wall deadline is independent of DB heartbeats, expiring even after worker SIGKILL/control disconnect/database outage.
 4. Confirm process/network reclamation within 10 seconds; remove volumes/profiles/shm/input/output/destroy single-run keys. Persistent reaper checks orphans every 60 seconds. Host restart cleans old instances before accepting work. Unconfirmed cleanup marks cleanup_pending, quarantines node capacity and alerts; residue cannot serve the next org.
-5. Successful candidates archive only after complete validation/cleanup/current-attempt/authorization rechecks. Cleanup failure may retain trusted-side encrypted isolated candidates for recovery without download. Measured resources/incurred vendor cost survive cancellation/cleanup failure. Temporary cleanup never deletes historical evidence/usage/audit.
+5. Successful candidates archive only after complete validation/cleanup/current-attempt/authorization rechecks.
+Cleanup failure may retain trusted-side encrypted isolated candidates for recovery without download.
+Temporary cleanup never deletes historical evidence/usage/audit.
 
 ## Artifact egress, storage and provenance
 
@@ -189,7 +193,7 @@ Fixed inputs/source history are append-only; only restricted services transition
 
 ## Draft Pydantic and Provider contract
 
-Approved interface shapes follow; implementation/validation: [sandbox_contracts.py](../../server/app/schemas/sandbox_contracts.py). Reuse [`Contract, Cost, Result`](../../server/app/schemas/contracts.py) extra=forbid with shared Pydantic v2 API/CLI Schema. UUID/hash/money/time are explicit types; new capabilities do not preassign existing contract version numbers.
+Approved interface shapes follow; implementation/validation: [sandbox_contracts.py](../../server/app/schemas/sandbox_contracts.py). Reuse [`Contract, Cost, Result`](../../server/app/schemas/contracts.py) extra=forbid with shared Pydantic v2 API/CLI Schema. UUID/hash/resource-count/time are explicit types; new capabilities do not preassign existing contract version numbers.
 
 ```python
 Sha256 = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -262,8 +266,6 @@ class SandboxPreview(Contract):
     issues: list[SandboxIssue]
     estimated_cost: Cost
     estimate_basis: Literal["no_vendor_call", "upper_bound", "unknown"]
-    reserved_charge: Decimal | None = Field(default=None, ge=0)
-    charge_currency: str | None = None
     estimated_duration_ms: int | None = Field(default=None, ge=0)
 
 
@@ -319,8 +321,6 @@ class SandboxRunView(Contract):
     metrics: SandboxMetrics | None
     issues: list[SandboxIssue]
     usage_ids: list[UUID]
-    charge: Decimal | None = Field(default=None, ge=0)
-    charge_currency: str | None = None
 
 
 class SandboxDownloadLink(Contract):
@@ -365,7 +365,10 @@ Proposed new scopes sandbox:render/capture/read: first two for valid admin/bidde
 
 Missing/cross-org/unauthorized resources uniformly return 404; missing authentication 401/action permission 403. Recheck membership/token before/after execution. Platform operators gain no org-source access. Policy maintenance is outside these scopes, with no agent policy-change/intranet-self-grant route. Local CLI uses local PG/RLS/services/isolated execution nodes, never direct host-browser fallback.
 
-Result has exactly **`ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`**. Details/submission/download receipts use data/items=[]; lists use items with pagination scope only in data. Errors use data.error.code/necessary IDs, warnings sanitized reasons only. Typed data contains CPU/memory/storage metrics/charge without arbitrary Cost fields. Successful file streams may be binary; errors return Result before streaming, and interruptions cannot become success/partial final files.
+Result has exactly **`ok`, `command`, `data`, `items`, `warnings`, `cost`, `duration_ms`**.
+Details/submission/download receipts use data/items=[]; lists use items with pagination scope only in data.
+Errors use data.error.code/necessary IDs, warnings sanitized reasons only.
+Successful file streams may be binary; errors return Result before streaming, and interruptions cannot become success/partial final files.
 
 For initial capture with no vendor call, broker rejection emits this CLI structure with exit 4; duration is measured, and errors echo neither target query parameters nor page text:
 
@@ -376,7 +379,7 @@ For initial capture with no vendor call, broker rejection emits this CLI structu
   "data": {"error": {"code": "sandbox_network_denied"}},
   "items": [],
   "warnings": [],
-  "cost": {"llm_tokens": 0, "ocr_pages": 0, "usd": 0},
+  "cost": {"calls": 0, "llm_tokens": 0, "ocr_pages": 0, "search_requests": 0, "browser_units": 0, "unresolved_calls": 0},
   "duration_ms": 18
 }
 ```
@@ -391,7 +394,7 @@ For initial capture with no vendor call, broker rejection emits this CLI structu
 
 Missing required entry pages/archives or resource-limit violations fail the entire vendor capture without usable partial evidence. Under the subsequently approved incomplete-resource decision, failed/denied subresources may instead produce a marked capture after successful entry-document loading; authorization/policy changes still fail the run. Offline prototypes warn for blocked external resources, not partially acquired real evidence. --wait/job status share terminal failure classifications; nonterminal queries return 0 with explicit state, and cleanup_pending never reports succeeded. Errors have ok=false; history queries may return 0 without erasing failures/cleanup states. HTTP input 400/422, conflict 409, resource 404, temporary fault 503/429 follow these meanings. Unexpected protocol exceptions use safe codes/exit 4 without traceback/bare exit 1.
 
---dry-run performs identical authorization/input-hash/static-policy/quota/known-price checks, **without external DNS/fetch/browser startup/queueing/business-audit-usage-object writes**. Unknown website content/final size/duration is null, never preflight proof of reachability. Commands are noninteractive; CLI/API inputs/Result/bid schema stay synchronized, existing output remains unchanged and incompatible changes follow major-version rules.
+--dry-run performs identical authorization/input-hash/static-policy/quota/capability checks, **without external DNS/fetch/browser startup/queueing/business-audit-usage-object writes**. Unknown website content/final size/duration is null, never preflight proof of reachability. Commands are noninteractive; CLI/API inputs/Result/bid schema stay synchronized, existing output remains unchanged and incompatible changes follow major-version rules.
 
 ## Job dispatch, call admission and costs
 
@@ -399,21 +402,18 @@ Add jobs.kind=sandbox_render/sandbox_capture without changing existing kinds. Re
 
 Reuse [background jobs](../notes/background-jobs.md): commit business jobs before dispatch, locked claiming/org context/independent heartbeat/leases/run_id/cancellation. Network/render/storage I/O holds no long business locks; short final transactions recheck fixed inputs/current permissions/attempt. Old attempts may settle real cost but cannot publish, overwrite new state or undo cancellation. Persistent instance IDs/supervisor deadlines bound duplicate dispatch/worker crashes/temporary DB outages without unmanaged long-lived browsers.
 
-Costs have three categories, without new balance tables/accounting systems:
-
 | Work | Admission/accounting |
 | --- | --- |
-| Initial local Playwright/PDF/public fetch/validation | Same Job execution/quota guards; record supervisor resources, zero-model Cost/no fake tokens/empty UsageRecord/prepaid-model debit |
-| Upstream HTML generation or future agent LLM/Vision/OCR/Search | Provider layer only; every call/retry uses JobExecution.admit/accounted_call, existing vendor_calls/UsageRecord/prepaid settlement; rejection/cancellation retains costs |
-| Future paid remote browser/broker/compute prices | Disabled initially; first define units/price revisions/enforceable counts-deadlines/per-call upper bounds, then same vendor-call admission/prepaid settlement. Non-token capability cannot masquerade as LLM catalog rows |
+| Initial local Playwright/PDF/public fetch/validation | Reuse Job execution/quota guards and record supervisor resources; local execution makes no model calls and invents no tokens or UsageRecord. |
+| Upstream HTML generation or future agent LLM/Vision/OCR/Search | Use Provider layer only; every call/retry goes through JobExecution.admit/accounted_call and durable usage records. Rejection/cancellation retains dispatched usage. |
 
-Zero model cost does not promise free CPU/broker egress/storage. Upstream generation is charged only in its original job; sandbox views may link usage IDs without double-counting job cost. Pure local runs work with zero balance. USD is vendor cost, charge platform currency; unknown vendor costs are null, never invented 0.
+Provider-call counts and local CPU/broker egress/storage measurements remain distinct.
 
-Actual billed calls obey [prepaid admission/spending bounds](../notes/prepaid-billing.md#admission-and-the-spending-bound): persist reservations before sending, lock job then org balance, compute balance minus all unsettled reservations, and check cumulative call count/settled cost/reservations against job caps. Unknown prices reject paid calls; every retry gets new call_id, settlement replay retains `(org_id,job_id,run_id,call_id)` without duplicate debit.
+No current automatic reconciliation command is implied.
+Call/retry contracts: [llm-providers.md](../notes/llm-providers.md), [`calls.py`](../../server/app/providers/calls.py).
 
-Existing adapters compute model-token reservations, not browser time/network bytes. Future compute pricing calculates R from enforceable supervisor caps/approved pricing then same admission. Settle results before interpretation/publication; overshoot/settlement failure stops further calls, unknown outcomes retain reservations pending reconciliation rather than lease expiry/destruction/cancellation release. No current automatic reconciliation command is implied. Call/retry contracts: [llm-providers.md](../notes/llm-providers.md), [`calls.py`](../../server/app/providers/calls.py).
-
-Future composition with child jobs cannot reset spending through repeated creation; define parent execution budgets/child-call ownership first. Initial slice receives existing HTML without budget coordination or claims of roadmap C03 task-level budgets. Run/network/CPU/output limits apply to every identity.
+Initial slice receives existing HTML and records resource usage under the shared Result contract.
+Run/network/CPU/output limits apply to every identity.
 
 ## Technical options and recommendations
 
@@ -436,9 +436,9 @@ Recommend dedicated Colima/Linux VM on macOS without home/project/other host mou
 
 Future A01 separates model orchestration/authorization/untrusted execution: pages/PDFs/tool outputs are untrusted data and cannot change system prompts/tool Schema/allowed sources/budgets/approvals/confirmations. Model calls stay in trusted Providers with no keys in code sandboxes. Before subsequent model requests, reapply explicit source allowlists/length limits/existing redaction.
 
-Tool scheduling accepts registered tool_name + typed_arguments + input_refs only, resolves inputs from current initiator permissions and selects profiles. Instances have no generic bid login state. Business actions require typed intents routed by an external broker through existing API/CLI authorization/audit/budget, not arbitrary HTTP/SQL/shell/environment passthrough. Worker/agent identity persists across the chain without human confirmation/export rights.
+Tool scheduling accepts registered tool_name + typed_arguments + input_refs only, resolves inputs from current initiator permissions and selects profiles. Instances have no generic bid login state. Business actions require typed intents routed by an external broker through existing API/CLI authorization/audit/resource limits, not arbitrary HTTP/SQL/shell/environment passthrough. Worker/agent identity persists across the chain without human confirmation/export rights.
 
-Every new allowed tool declares read sets/external side effects/network policy/output/cost bounds/cancellation/recovery; sandboxing grants no automatic email/external writes/installations/new tools. Shared multistep state uses explicit authorized-storage artifacts, not reused data-bearing containers. Cumulative parent budgets/recoverable orchestration need separate contracts. These are A01 prerequisites; no agent-tool entrypoint ships here.
+Every new allowed tool declares read sets/external side effects/network policy/output/resource bounds/cancellation/recovery; sandboxing grants no automatic email/external writes/installations/new tools. Shared multistep state uses explicit authorized-storage artifacts, not reused data-bearing containers. Cumulative parent resource limits/recoverable orchestration need separate contracts. These are A01 prerequisites; no agent-tool entrypoint ships here.
 
 ## Audit and abuse response
 
@@ -455,7 +455,7 @@ Ordinary logs/audit/cost/errors/task lists contain no raw HTML/JS/page/model out
 | Page-forged images/receipts/paths/confirmation fields | Fixed frames/Schema/trusted sources/hash-relationship checks; page text is not vendor-parameter authenticity certification |
 | Residual processes/cache/temp files crossing orgs | Disposable instances/volumes, confirmed cleanup/restart reaper; uncleared nodes reject new tasks |
 | Malicious PNG/archive attacks, downloaded HTML storage XSS | Isolated validation decoding/fixed archiver/attachment-nosniff; main site never executes untrusted content |
-| Excess free rendering/same-URL concurrency/endless retries | Org/node/origin quotas/cross-attempt caps; original model-admission ledger remains, no cross-org cache |
+| Excess rendering/same-URL concurrency/endless retries | Org/node/origin quotas/cross-attempt caps; original model-admission ledger remains, no cross-org cache |
 
 ## End-to-end acceptance after approval
 
@@ -470,18 +470,19 @@ Recommend Schema/authorization/relationship constraints → offline rendering/in
 7. **Lifecycle disruption**: inject running cancellation/lease expiry-takeover/worker SIGKILL/supervisor restart/DB-control disconnect/storage-archive failures. Hard deadlines act independently, no old-attempt publication, duplicate dispatch means one instance/phase, cumulative phase caps/10-second cleanup/60-second orphan checks hold. Unconfirmed cleanup stops node admissions/downloads; next instance cannot see prior canary/cookie/cache/temp volume/memory snapshot.
 8. **Output/browser reexecution**: forged kind/size/hash, duplicate ordinals/excess artifacts/archive traversal/MIME confusion/PNG bombs reject. Downloaded malicious HTML/PDF/archives cannot execute at app origin/access app Cookies; storage holds org-encrypted bytes only without public permanent URLs.
 9. **Human gates/revocation**: token/agent/worker confirmation/protected-card reopen/export attempts reject. Handoff to screenshots.md permits prototype Evidence like real screenshots with one human keep/replace before final export; vendor pages/PDFs become evidence via card confirmation. Positive consumption acceptance belongs to screenshots.md. Sandbox checks source/hash handoff/no delegated decisions, not blanket prototype rejection. Disable membership/revoke tokens/replace selection-policy before queue/execution/download; old signatures/jobs cannot bypass.
-10. **Cost/idempotency**: local zero calls/empty UsageRecord, measured resources/no duplicate upstream costs. Future composition uses fake Providers to test reservation-before-call/concurrent balance minus holds/cancellation-rejection settlement/one-time settlement/unknown reservations/no retry budget resets. Paid browsers reject without non-token pricing contracts. Same capture_key never refetches; new key does. dry-run has zero network/execution/persistent writes.
+10. **Cost/idempotency**: local zero calls/empty UsageRecord, measured resources/no duplicate upstream costs.
+Same capture_key never refetches; new key does. dry-run has zero network/execution/persistent writes.
 11. **Contracts/repeatable artifacts**: verify both CLI modes' seven keys/all applicable codes/schema/redacted errors/atomic downloads; no initial partial scenario or invented exit 5. Save repeatable synthetic inputs/attacks/commands/policy-image digests/artifact hashes/screenshots/proxy decisions/outside packet counts/resource peaks/before-after inventories/JUnit-machine results to independent artifacts/temporary acceptance directories, not docs. Clearly mark pass/fail/skipped; missing-runtime skips cannot prove production isolation.
 
-CI external model/billing Providers are fake, but local BrowserProvider/runtime execute for real. Network attacks use isolated synthetic sources/receivers, not actual vendors/cloud metadata/secrets. Test-only policies map sources; production private-address rejection remains separately verified and exceptions never enter production profiles. Authorized public-site compatibility evals are separate; screenshot success cannot replace attack acceptance or incur real vendor costs in CI.
+Network attacks use isolated synthetic sources/receivers, not actual vendors/cloud metadata/secrets.
+Test-only policies map sources; production private-address rejection remains separately verified and exceptions never enter production profiles.
 
 ## Explicitly out of scope
 
 - LLM prototype generation/search/vision integration, automatic parameter satisfaction, fabricated vendor pages/reports/certificates, authenticity certification or capture success as confirmation.
 - Logged-in sites/personal browsers/intranet-bastion capture/Cookie-credential import/CAPTCHA bypass/forms/shopping-payment/external writes; local screenshots authorization is not expanded.
-- Generic code interpreters/shell/arbitrary Playwright/images/package installation/MCP tools/full A01 orchestration-parent-child budgets/document-free jobs/persistent containers/cross-run volumes.
+- Generic code interpreters/shell/arbitrary Playwright/images/package installation/MCP tools/full A01 orchestration-parent-child resource limits/document-free jobs/persistent containers/cross-run volumes.
 - New Evidence-source confirmation/Card binding/image privacy release/full Rust annotations/OCR/Word-PDF export changes/automatic confirmation-export; adjacent plans follow their approvals.
-- Commercial remote browsers/compute-storage billing/automatic reconciliation/new recharge-payment/BYOK/production deployment/real-key-network-policy changes/long-term source deletion-backup cleanup; this document authorizes none.
 
 ## Decisions
 
@@ -500,9 +501,9 @@ Unlabeled prototypes and evidence-use ownership by screenshots.md are settled pr
 | Archive default | ① manifest, explicit bundle; ② mandatory all allowed bodies; ③ later redacted HAR | **①**, traceability/storage control; ② aids offline verification at more storage; ③ declares omitted fields, never complete sessions |
 | Initial limits | ① Table's 1/2 GiB, 60/120 seconds, 64/128 MiB output, 2 concurrent/org; ② lower trial profile | **①** acceptance maxima, reducible after tests; both hard-terminate without silent downsampling/omission/resource expansion |
 | Sources/tasks | ① Successful extraction/fixed product-feature selection required; ② tender-free playground too | **①**, Job.document_id/tenant relationships without placeholders; ② requires generic-job/input-ownership contract first |
-| Initial cost | ① Local resources metered/no compute fee; ② compute/remote-browser prices now | **①**, existing model prepaid admission remains; ② requires non-token pricing/bounds/same ledger, not positive-balance checks alone |
-| Cleanup/orphans | ① 10-second cleanup/60-second inspection/trusted unreferenced encrypted candidates 24 hours; ② shorter candidate retention | **①**, recovery/exposure balance; historical archives excluded, both stop node work on cleanup failure |
+| Resource usage | Record browser units, requests and duration with model call counts | Use the shared six-field resource contract; local supervisor measurements remain distinct from provider usage. |
+| Cleanup/orphans | ① 10-second cleanup/60-second inspection/trusted unreferenced encrypted candidates 24 hours; ② shorter candidate retention | Option ①; historical archives are excluded and cleanup failure stops node work. |
 | Prototype/web HTML display | ① PNG preview/untrusted attachment download; ② isolated-origin interaction now | **①**, no main-site reexecution; ② requires origin/CSP/permissions/redispatch acceptance. Both keep source internal/screenshots.md use unchanged |
 | Chromium vendor-renderer sandbox under gVisor | ① Disable renderer seccomp-bpf only for runsc vendor capture, retain namespace sandbox; ② disable for all gVisor rendering; ③ keep enabled/defer capture | **①** (approved after 2026-10-03 tests): gVisor renderer seccomp blocks other-thread sched_getaffinity, crashing script-heavy vendor pages. Disabling that layer retains gVisor/container seccomp/network-free/resource/Chromium namespace isolation. Prototypes retain full Chromium sandbox |
 | Partial vendor-resource failures | ① Capture after entry-document load, log failed resources/mark vendor_resources_incomplete, require ingestion review; ② any failure fails all | **①** (2026-10-03 approval): slow/denied real-site resources make ② nearly unusable; failed entry/auth/policy changes still fail all |
-| Built-in agents | ① Boundaries only, separate A01 tool/budget approval; ② fixed tools now | **①**, validate isolation/cost for two real workloads first; ② lists side effects/parent-child budgets before implementation, never sandbox as authorization |
+| Built-in agents | ① Boundaries only, separate A01 tool/resource-limit approval; ② fixed tools now | **①**, validate isolation/resource use for two real workloads first; ② lists side effects/parent-child resource limits before implementation, never sandbox as authorization |

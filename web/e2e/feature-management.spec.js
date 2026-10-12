@@ -22,7 +22,7 @@ const O="00000000-0000-0000-0000-000000000002", U="00000000-0000-0000-0000-00000
 const rid=n=>`00000000-0000-0000-0000-${String(100+n).padStart(12,"0")}`;
 const PR="00000000-0000-0000-0000-000000000030";
 const date="2026-10-06T00:00:00Z";
-const cost={llm_tokens:0,ocr_pages:0,usd:0,basis:"zero",charge:"0",billing_currency:"USD",task_amount:"0",unpriced_calls:0,unresolved_calls:0};
+const cost={ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 };
 const result=(command,data={},items=[],ok=true)=>({ok,command,data,items,warnings:[],cost,duration_ms:0});
 const records=[],browserHealth=new WeakMap();
 test.beforeEach(async({page})=>{
@@ -39,7 +39,7 @@ test.afterEach(async({page},info)=>{
   if(info.status==="passed"&&!health.length&&!overlay)await page.screenshot({path:join(output,`${scenario}.png`),fullPage:true});
   records.push({scenario:info.title,status:info.status==="passed"&&(health.length||overlay)?"failed":info.status,console_errors:health.length,framework_overlay:overlay,measurements:info.annotations.filter(item=>item.type==="measurement").map(item=>JSON.parse(item.description))});
   const index=process.env.E2E_STATIC_DIR?join(resolve(process.env.E2E_STATIC_DIR),"index.html"):null;
-  writeFileSync(join(output,"result.json"),JSON.stringify({mode:"mocked_api",fixture_version:"feature-management-v1",schema_version:"4.0",browser:"chromium",browser_version:page.context().browser()?.version()??null,build_sha256:index?createHash("sha256").update(readFileSync(index)).digest("hex"):null,base_url:process.env.E2E_BASE_URL??null,command:`cd web && E2E_BASE_URL=http://127.0.0.1:8000 ${index?'E2E_STATIC_DIR="$PWD/dist" ':''}E2E_OUTPUT=../data/work/management-pages-validation/browser node_modules/.bin/playwright test e2e/feature-management.spec.js`,scenarios:records,passed:records.every(r=>r.status==="passed")},null,2));
+  writeFileSync(join(output,"result.json"),JSON.stringify({mode:"mocked_api",fixture_version:"feature-management-v1",schema_version:"5.0",browser:"chromium",browser_version:page.context().browser()?.version()??null,build_sha256:index?createHash("sha256").update(readFileSync(index)).digest("hex"):null,base_url:process.env.E2E_BASE_URL??null,command:`cd web && E2E_BASE_URL=http://127.0.0.1:8000 ${index?'E2E_STATIC_DIR="$PWD/dist" ':''}E2E_OUTPUT=../data/work/management-pages-validation/browser node_modules/.bin/playwright test e2e/feature-management.spec.js`,scenarios:records,passed:records.every(r=>r.status==="passed")},null,2));
   expect(health,"Unexpected browser runtime or console error").toEqual([]);expect(overlay,"Framework error overlay").toBe(0);
 });
 async function fixture(page,options={}){
@@ -57,17 +57,17 @@ async function fixture(page,options={}){
   const meta=(items,next=null)=>({org_id:O,as_of:date,returned:items.length,next_cursor:next,has_more:!!next});
   const row=(id=P)=>({org_id:O,ref:{kind:"features",resource_id:id},name:id===P?featureData(state.head).name:(state.created?.data.name??"后页功能"),revision_id:rid(state.head),revision:state.head,lifecycle:lifecycle(),provenance:state.simulated?"simulated":"declared",created_at:date,revised_at:date,revised_by:null,actions:actions()});
   await page.route(url=>!url.pathname.startsWith("/app/"),async route=>{
-    const req=route.request(),url=new URL(req.url()),path=url.pathname.replace(/^\/v4(?=\/)/,"");requests.push({path,method:req.method(),url:url.pathname+url.search});
+    const req=route.request(),url=new URL(req.url()),path=url.pathname;requests.push({path,method:req.method(),url:url.pathname+url.search});
     if(path==="/org/current")return route.fulfill({json:result("org current",{org_id:O,user_id:U,role:state.role})});
     if(path===`/tasks/${T}/workflow`)return route.fulfill({json:result("task workflow",{workflow:{org_id:O,task_id:T,state:state.archived?"archived":"active",revision:1,last_event_cursor:"opaque",owner_user_id:U}})});
     if(path===`/tasks/${T}/members`){const items=state.taskRole?[{org_id:O,task_id:T,user_id:U,role:state.taskRole,active:true,review_domains:[],revision:1}]:[];return route.fulfill({json:result("task member list",{...meta(items),task_id:T},items)});}
     if(path==="/management/resources/products/query"){
-      const body=req.postDataJSON();productQueries.push(body);expect(body.limit).toBe(25);expect(["active","all"]).toContain(body.state);expect(req.method()).toBe("POST");expect(url.pathname.startsWith("/v4/")).toBe(true);
+      const body=req.postDataJSON();productQueries.push(body);expect(body.limit).toBe(25);expect(["active","all"]).toContain(body.state);expect(req.method()).toBe("POST");expect(url.pathname.startsWith("/")).toBe(true);
       const items=state.parentInactive&&body.state==="active"||body.q==="无候选"?[]:[{org_id:O,ref:{kind:"products",resource_id:PR},name:body.cursor?"后页关联产品":"合成关联产品",revision_id:rid(40),revision:1,lifecycle:{state:state.parentInactive?"inactive":"active",revision:state.parentInactive?1:0},provenance:"declared",created_at:date,revised_at:date,revised_by:null,actions:[]}];
       return route.fulfill({json:result("resource query",meta(items,state.productPaginated&&!body.cursor?"product-cursor":null),items)});
     }
     if(path==="/management/resources/features/query"){
-      expect(url.pathname.startsWith("/v4/")).toBe(true);expect(req.method()).toBe("POST");expect(url.search).toBe("");const body=req.postDataJSON();queries.push(body);expect(body.limit).toBeLessThanOrEqual(100);queriesInFlight++;maxQueries=Math.max(maxQueries,queriesInFlight);
+      expect(url.pathname.startsWith("/")).toBe(true);expect(req.method()).toBe("POST");expect(url.search).toBe("");const body=req.postDataJSON();queries.push(body);expect(body.limit).toBeLessThanOrEqual(100);queriesInFlight++;maxQueries=Math.max(maxQueries,queriesInFlight);
       if(state.delaySearch&&body.q==="旧查询"||state.delayEmptySearch&&body.q==="空结果")await new Promise(resolve=>{delayedRelease=resolve;});
       queriesInFlight--;if(state.queryError)return route.fulfill({status:413,json:result("resource query",{error:{code:"management_result_too_large",message:"Result too large",exit_code:2}},[],false)});
       const items=state.empty||body.q==="空结果"?[]:[row(body.cursor?Q:P),...(!body.cursor&&state.created?[{...row(Q),revision:1,revision_id:rid(20)}]:[])];if(state.foreign)items[0].org_id=Q;if(state.oversize)while(items.length<=100)items.push(row());
@@ -85,7 +85,7 @@ async function fixture(page,options={}){
       if(path===`/management/resources/features/${P}/lifecycle`){if(state.lifecycleConflict){state.lifecycleConflict=false;state.lifecycleRevision++;state.inactive=true;return route.fulfill({status:409,json:result("resource lifecycle set",{error:{code:"lifecycle_conflict",message:"Changed",exit_code:2}},[],false)});}expect(body.expected_revision).toBe(state.head);expect(body.expected_lifecycle_revision).toBe(state.lifecycleRevision);state.lifecycleRevision++;state.inactive=body.state==="inactive";return route.fulfill({json:result("resource lifecycle set",{lifecycle:lifecycle(),existing_selections:"preserved",event:{id:Q,org_id:O,ref:{kind:"features",resource_id:P},revision:state.lifecycleRevision,resource_revision:state.head,before:state.inactive?"active":"inactive",after:body.state,reason_code:body.reason_code,actor_user_id:U,actor_kind:"session",created_at:date}})});}
       if(path===`/tasks/${T}/features`){expect(body.revision).toBeGreaterThan(0);const duplicate=pins.some(pin=>pin.feature_revision_id===rid(body.revision)&&pin.lot===(body.lot??null));if((state.inactive||state.parentInactive)&&!duplicate)return route.fulfill({status:409,json:result("task resource add",{error:{code:"resource_inactive",message:"Inactive",exit_code:2}},[],false)});const pin={id:Q,org_id:O,task_id:T,feature_revision_id:rid(body.revision),revision:body.revision,lot:body.lot??null,data:featureData(body.revision),duplicate,replaced_snapshot_id:duplicate?null:pins[0]?.id??null};if(!duplicate){pins.splice(0,pins.length,pin);}return route.fulfill({json:result("task resource add",pin)});}
     }
-    if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"4.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{llm_tokens:0,ocr_pages:0,usd:0},duration_ms:0}});
+    if(req.method()==="GET"&&path==="/health")return route.fulfill({json:{ok:true,command:"health",data:{status:"ok",version:"5.0",real_llm_configured:false,org_signup_enabled:false},items:[],warnings:[],cost:{ calls: 0, llm_tokens: 0, ocr_pages: 0, search_requests: 0, browser_units: 0, unresolved_calls: 0 },duration_ms:0}});
     throw new Error(`Unexpected feature request: ${req.method()} ${path}`);
   });return {state,writes,queries,productQueries,requests,pins,release:()=>delayedRelease?.(),maxQueries:()=>maxQueries};
 }

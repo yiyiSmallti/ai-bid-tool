@@ -2,7 +2,7 @@
 
 Failure inventory: raw persisted data is spread into a response; secret fields
 or platform request overrides are serialized; disabled catalog identity changes;
-legacy prices are silently substituted; cursor is reused across actors/filters;
+legacy provider identities are silently substituted; cursor is reused across actors/filters;
 oversize metadata is accepted; read preconditions become write preconditions.
 """
 
@@ -67,11 +67,7 @@ def row(owner, source="platform", **changes):
                 {"name": "low", "label": "Low", "request_options": {"reasoning_effort": "low"}}
             ],
             "default_reasoning": "low",
-            "input_usd_per_mtok": None,
-            "output_usd_per_mtok": None,
             "catalog_revision": 3,
-            "sale_input_per_mtok": 5,
-            "sale_output_per_mtok": 8,
             **{key: CANARY for key in FORBIDDEN},
         },
         **{key: CANARY for key in FORBIDDEN},
@@ -101,14 +97,11 @@ def test_projection_allowlist_disabled_identity_and_saved_terms():
     assert value["configuration"]["base_url"] is None
     assert value["configuration"]["expected_revision"] is None
     assert value["reasoning"] == [{"name": "low", "label": "Low"}]
-    assert value["catalog_revision"] == 3 and value["sale_input_per_mtok"] == 5
+    assert value["catalog_revision"] == 3
     assert value["revised_by"] == str(owner.user_id)
     saved["data"].pop("catalog_revision")
-    saved["data"].pop("sale_input_per_mtok")
-    saved["data"].pop("sale_output_per_mtok")
     legacy = service.metadata(owner, saved, None)
     assert legacy.catalog_revision is None
-    assert legacy.sale_input_per_mtok is None and legacy.sale_output_per_mtok is None
     assert legacy.revised_by is None
 
 
@@ -120,7 +113,7 @@ def test_byok_exposes_only_nonsecret_saved_input_and_official_choices():
     assert value["catalog_state"] == "not_applicable"
     assert value["configuration"]["base_url"] == "https://api.example.test/v1"
     assert value["configuration"]["reasoning"][0]["request_options"] == {"reasoning_effort": "low"}
-    assert value["sale_input_per_mtok"] is None and value["catalog_revision"] is None
+    assert value["catalog_revision"] is None
 
 
 def test_catalog_allowlist_drops_wholesale_endpoint_credentials_and_overrides():
@@ -129,8 +122,6 @@ def test_catalog_allowlist_drops_wholesale_endpoint_credentials_and_overrides():
         "revision": 2,
         "model": "Official",
         "provider": "openai",
-        "sale_input_per_mtok": 1,
-        "sale_output_per_mtok": 2,
         "is_default": True,
         "reasoning": [{"name": "low", "label": "Low", "request_options": {"secret": CANARY}}],
         "default_reasoning": "low",
@@ -154,8 +145,6 @@ def test_projection_types_reject_new_secret_fields(field):
         "revision": 1,
         "model": "Official",
         "provider": "openai",
-        "sale_input_per_mtok": 1,
-        "sale_output_per_mtok": 2,
         "default": False,
         "reasoning": [],
         "default_reasoning": None,

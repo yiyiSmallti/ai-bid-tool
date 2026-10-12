@@ -4,13 +4,15 @@ kind: adr
 
 # 0007 Task liability and prepaid reservations
 
-Status: accepted. Date: 2026-10-05.
+Status: superseded by 0011. Date: 2026-10-05.
+
+Superseded by [ADR 0011](0011-remove-billing.md).
 
 ## Context
 
 [ADR 0002](0002-prepaid-billing.md) originally allowed in-flight spending without
 estimated holds. The durable per-call prepaid reservation mechanism and the
-approved [task-budget contract](../plan/budget.md) require concurrent work to
+approved task-budget contract require concurrent work to
 respect both prepaid availability and task liability.
 
 ## Decision
@@ -24,7 +26,7 @@ liability. Humans alone change caps with optimistic revision checks and audit.
 
 Keep all other prepaid decisions, including deployment currency, controlled
 credit functions, immutable ledgers and token restrictions. Operational behavior
-is specified in [Task budgets](../notes/task-budgets.md).
+is specified in Task budgets.
 
 ## Consequences
 

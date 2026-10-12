@@ -14,9 +14,8 @@ from app.core.db import Database
 from app.core.security import TokenSigner
 from app.models.entities import Chunk
 from app.providers.storage import Storage
-from app.schemas.budget_contracts import BudgetTaskCreate
 from app.schemas.citation_repair_contracts import CitationRepairRequest
-from app.schemas.contracts import JobAction, Result
+from app.schemas.contracts import JobAction, Result, TaskCreate
 from app.services import citation_repair, documents, page_previews, requirements, tender_jobs
 
 CHUNK_FIELDS = ("id", "document_id", "seq", "page", "text", "ocr", "citation_verified", "blocks")
@@ -36,15 +35,11 @@ def create_router(
     router = APIRouter()
 
     @router.post("/tasks", name="task_create", response_model=Result)
-    async def task_create(body: BudgetTaskCreate, ctx=Depends(context, scope="function")):
+    async def task_create(body: TaskCreate, ctx=Depends(context, scope="function")):
         session, identity = ctx
-        task = await documents.create_task(session, identity, body, settings.billing_currency)
-        from app.services import budgets
+        task = await documents.create_task(session, identity, body)
 
         data = serial(task, documents.TASK_FIELDS)
-        data["budget"] = (await budgets.view(session, task, settings.billing_currency)).model_dump(
-            mode="json"
-        )
         return result("task create", data)
 
     @router.get("/tasks", name="task_list", response_model=Result)

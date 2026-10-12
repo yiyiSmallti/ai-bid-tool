@@ -42,7 +42,7 @@ REVIEW = {
 def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
     monkeypatch.setenv("BID_SESSION", "synthetic-session")
     monkeypatch.setenv("BID_ORG", ID)
-    calls, snapshots = [], {}
+    calls, snapshots = ([], {})
     scenario = "queued"
 
     def handler(request):
@@ -73,10 +73,7 @@ def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
             return httpx.Response(
                 200,
                 json=Result(
-                    ok=True,
-                    command="job cancel",
-                    data={"id": ID, "status": "cancelled"},
-                    cost={"billing_currency": "CNY"},
+                    ok=True, command="job cancel", data={"id": ID, "status": "cancelled"}, cost={}
                 ).model_dump(mode="json"),
             )
         if request.url.path.endswith("/jobs/" + ID):
@@ -106,12 +103,9 @@ def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
                 }
             return httpx.Response(
                 200,
-                json=Result(
-                    ok=True,
-                    command="job status",
-                    data=data,
-                    cost={"basis": "actual", "billing_currency": "CNY"},
-                ).model_dump(mode="json"),
+                json=Result(ok=True, command="job status", data=data, cost={"calls": 1}).model_dump(
+                    mode="json"
+                ),
             )
         if request.method == "POST":
             data = (
@@ -145,9 +139,9 @@ def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
             data = {"task_id": ID, "returned": 0, "has_more": False, "next_cursor": None}
         return httpx.Response(
             200,
-            json=Result(
-                ok=True, command="evidence stamp", data=data, cost={"billing_currency": "CNY"}
-            ).model_dump(mode="json"),
+            json=Result(ok=True, command="evidence stamp", data=data, cost={}).model_dump(
+                mode="json"
+            ),
         )
 
     @asynccontextmanager
@@ -158,7 +152,7 @@ def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
             yield client
 
     monkeypatch.setattr(Client, "transport", transport)
-    plan, review = tmp_path / "plan.json", tmp_path / "review.json"
+    plan, review = (tmp_path / "plan.json", tmp_path / "review.json")
     plan.write_text(json.dumps(PLAN))
     review.write_text(json.dumps(REVIEW))
     stamp = ["evidence", "stamp", "--task", ID, "--input", str(plan)]
@@ -215,7 +209,6 @@ def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
         assert calls[before][:2] == (method, "/v4" + path)
         assert len(calls) == before + 1
         assert set(body) == {"ok", "command", "data", "items", "warnings", "cost", "duration_ms"}
-        assert body["cost"]["billing_currency"] == "CNY"
     for scenario, code in [
         ("succeeded", 0),
         ("failed", 4),
@@ -251,11 +244,11 @@ def test_annotation_cli_transport_snapshots(monkeypatch, capsys, tmp_path):
         snapshots[scenario] = body
         if scenario == "succeeded":
             assert body["data"]["id"] == ID
-            assert body["cost"]["basis"] == "actual"
+            assert body["cost"]["calls"] == 1
         if scenario in {"failed", "cancelled", "retryable-failed", "wait-timeout"}:
             assert body["ok"] is False
     expected = Path(__file__).parent / "snapshots" / "annotation-cli.json"
-    if os.environ.get("UPDATE_ANNOTATION_SNAPSHOTS") == "1":
+    if os.environ.get("BID_UPDATE_SNAPSHOTS") == "1":
         expected.write_text(json.dumps(snapshots, indent=2) + "\n")
     assert snapshots == json.loads(expected.read_text())
 
@@ -283,4 +276,5 @@ def test_annotation_cli_rejects_invalid_input_without_transport(monkeypatch, cap
     schema = command_schema()
     assert schema["commands"]["evidence stamp"]["input"]
     assert "evidence annotation release retry" in schema["commands"]
-    assert "evidence stamp" not in command_schema(version="3.0")["commands"]
+    with pytest.raises(ValueError, match="Only contract 5.0"):
+        command_schema(version="3.0")

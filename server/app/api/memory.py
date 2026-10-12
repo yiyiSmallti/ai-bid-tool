@@ -158,7 +158,7 @@ def create_router(context, db, queue, settings, storage):
         ctx=Depends(context, scope="function"),
     ):
         if management_view:
-            if getattr(request.state, "contract_version", None) != "4.0":
+            if getattr(request.state, "contract_version", None) != "5.0":
                 raise not_found()
             from app.memory import management
             from app.schemas.management_pages import PageQuery
@@ -170,7 +170,6 @@ def create_router(context, db, queue, settings, storage):
             return management.page_result(
                 "memory feedback list",
                 page,
-                settings.billing_currency,
                 round((time.monotonic() - started) * 1000),
             )
         return await feedback.list_feedback(

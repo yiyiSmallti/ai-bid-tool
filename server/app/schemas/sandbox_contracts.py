@@ -1,4 +1,3 @@
-from decimal import Decimal
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -120,8 +119,6 @@ class SandboxPreview(Contract):
     issues: list[SandboxIssue]
     estimated_cost: Cost
     estimate_basis: Literal["no_vendor_call", "upper_bound", "unknown"]
-    reserved_charge: Decimal | None = Field(default=None, ge=0)
-    charge_currency: str | None = Field(default=None, min_length=1)
     estimated_duration_ms: StrictNonNegativeInt | None = None
 
     @field_validator("dry_run", mode="before")
@@ -131,7 +128,7 @@ class SandboxPreview(Contract):
             raise ValueError("dry_run must be a boolean")
         return value
 
-    @field_validator("profile", "policy_revision", "charge_currency")
+    @field_validator("profile", "policy_revision")
     @classmethod
     def strings_are_not_blank(cls, value):
         if value is not None and not value.strip():
@@ -244,10 +241,8 @@ class SandboxRunView(Contract):
     metrics: SandboxMetrics | None
     issues: list[SandboxIssue]
     usage_ids: list[UUID]
-    charge: Decimal | None = Field(default=None, ge=0)
-    charge_currency: str | None = Field(default=None, min_length=1)
 
-    @field_validator("profile", "policy_revision", "charge_currency")
+    @field_validator("profile", "policy_revision")
     @classmethod
     def strings_are_not_blank(cls, value):
         if value is not None and not value.strip():

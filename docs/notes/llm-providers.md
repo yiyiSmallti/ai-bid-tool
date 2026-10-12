@@ -43,23 +43,30 @@ win on conflict. Set the output limit through `BID_LLM_MAX_OUTPUT_TOKENS`.
 
 The model sees each PDF page as `<page number="N">` and each Word block as
 `<block id="p37">` inside its section, and returns items that cite a page
-number or block ID as `ref` with a verbatim quote. Word citations are covered
-in [docx-citations.md](docx-citations.md). Output is constrained to `WIRE_SCHEMA`:
+number or block ID as `ref` with a verbatim quote.
+Word citations are covered
+in [docx-citations.md](docx-citations.md).
+Output is constrained to `WIRE_SCHEMA`:
 Anthropic through `output_config.format`, OpenAI-compatible services through
 `response_format` (`json_schema`, or `json_object` with the schema in the
-prompt). The adapter maps each known `ref` back to its chunk ID and document ID,
-so the model never reproduces UUIDs. An unknown `ref` rejects only that item with
-`unknown_position`; other verified items from the paid response continue through
-the processor. `condition` is typed as
+prompt).
+The adapter maps each known `ref` back to its chunk ID and document ID,
+so the model never reproduces UUIDs.
+`condition` is typed as
 `param/op/value/unit` or null, because structured outputs require closed
-objects. The processor then checks every quote against the stored page or
-block text. Normalization is used only to locate a unique contiguous span: the
+objects.
+The processor then checks every quote against the stored page or
+block text.
+Normalization is used only to locate a unique contiguous span: the
 exact source characters are saved as `source.quote`, while the model's original
-text is retained separately as top-level `model_quote`. No match is rejected as
+text is retained separately as top-level `model_quote`.
+No match is rejected as
 `quote_not_at_position`; more than one normalized match is rejected as
 `ambiguous_quote` unless exactly one is bounded by segment separators, as
-described in [docx-citations.md](docx-citations.md). Gap-fill coverage locates
-quotes with the same rule in original offsets. Rejected items are listed in `result.rejected` with their
+described in [docx-citations.md](docx-citations.md).
+Gap-fill coverage locates
+quotes with the same rule in original offsets.
+Rejected items are listed in `result.rejected` with their
 position, model quote, reason, and a warning.
 
 The prompt requires one requirement per hardware or software parameter,
@@ -98,18 +105,17 @@ Existing result fields and the `extract(chunks, schema)` provider entry point ar
 unchanged.
 
 Gap filling adds the input and output tokens of its calls, at the selected
-model and reasoning level. For `S` uncovered segments grouped into `B` initial
-gap batches, it normally adds `B` calls. Splitting can create at most `2*S-B`
+model and reasoning level.
+For `S` uncovered segments grouped into `B` initial
+gap batches, it normally adds `B` calls.
+Splitting can create at most `2*S-B`
 batch attempts before reaching individual segments; including the two transient
 retries per batch, the upper bound is `3*(2*S-B)` vendor calls per extraction
-attempt. A requeued job starts a new attempt and can incur those costs again.
-These are bounds on calls, not a fixed token or price cap.
-The shared job execution layer additionally enforces a cumulative vendor-call
-ceiling and, for platform-billed requests, a charge ceiling and per-call
-reservation. All recursive and gap-fill requests, including transient retries,
-pass the same admission point immediately before HTTP dispatch. The spending
-bound, unknown outcomes and accounting keys are defined in
-[prepaid-billing.md](prepaid-billing.md#admission-and-the-spending-bound).
+attempt.
+A requeued job starts a new attempt and can incur those costs again.
+These are bounds on calls, not a fixed token cap.
+All recursive and gap-fill requests, including transient retries,
+pass the same admission point immediately before HTTP dispatch.
 
 On Anthropic, effort comes from `BID_LLM_EFFORT`, and a safety decline is
 retried server-side on another model (`fallbacks: "default"`) unless
@@ -119,7 +125,7 @@ actually answered.
 | Vendor result | Job outcome |
 | --- | --- |
 | Timeout, connection error (including a TLS connection dropped mid-response), HTTP 408/409/429/5xx/529 | The call is retried after 10 and 30 seconds; if it still fails, the job is requeued with exit code 3, at most three attempts |
-| Quota used up, unpaid account or expired plan: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; reset time and payer-specific guidance follow [provider-config.md](provider-config.md#quota-and-balance) |
+| Upstream quota/account unavailable: HTTP 402, `insufficient_quota`, `billing_error`, Zhipu `QUOTA_CODES` | Failed, `provider_quota_exhausted`, exit 4; correct upstream configuration before retrying |
 | Other HTTP errors, such as 400 or 401 | Failed, `provider_unavailable`, exit 4 |
 | Refusal | Failed, `provider_refused` |
 | Output limit reached on an unsplittable batch | Failed, `provider_output_truncated`; lower the reasoning level or raise `BID_LLM_MAX_OUTPUT_TOKENS` |
@@ -127,27 +133,25 @@ actually answered.
 | Some items have an empty quote or text, an unknown `ref`, no unique source match, or a quote not found at the cited position | Succeeded; those items are listed in `result.rejected` with a reason and not saved |
 | No item passes | Failed, `invalid_citation`; nothing saved |
 | An unexpected error while assembling results | Failed, `processing_failed`; every finished call is still recorded, and the log holds the exception type and stack without its message |
-| No funds for the next call, or a job ceiling reached | Failed, `insufficient_balance`, `job_charge_limit_exceeded`, or `job_call_limit_exceeded`; no partial extraction is saved, prior usage remains |
 | Attempt cancelled, superseded or expired | `job_attempt_stopped` fences further calls; it cannot overwrite a newer attempt or cancellation |
-| Usage cannot be persisted, or exceeds its reserved bound | Failed, `usage_accounting_failed` or `call_charge_bound_exceeded`; no further calls from the attempt |
-| Missing or invalid vendor token counts | Failed, `invalid_provider_usage`; keep the reservation for reconciliation instead of inventing zero usage |
+| Missing or invalid vendor token counts | Mark dispatched usage unresolved; fail without assuming zero use or automatically resending |
 
-Each response with valid usage produces one `ProviderUsage`. Inside a job,
-`HTTPExtractor.post` awaits immediate durable settlement through
-`accounted_call` before interpreting model output. Aggregate adapter usage and
+Each response with valid usage produces one `ProviderUsage`.
+Inside a job,
+`HTTPExtractor.post` awaits immediate durable usage recording through
+`accounted_call` before interpreting model output.
+Aggregate adapter usage and
 `ProviderFailure.usage` remain available to standalone consumers, but the job
-processor does not insert these records again. Job costs are computed from
+processor does not insert these records again.
+Job costs are computed from
 persisted usage across all attempts, including failed and cancelled calls.
-USD is computed from configured per-million-token prices, or `null` when
-either price is missing. Anthropic cached input tokens are included in input
-usage at those configured prices.
+Anthropic cached input tokens are included in input token counts.
 
 ### Structured response drafting
 
 `LLMProvider.draft(requirements, materials)` is implemented by both HTTP adapters
-through [drafting.py](../../server/app/providers/drafting.py). It uses the shared
-tenant model resolver and `with_reasoning`, the same per-request timeout, request options,
-finite transient retries, reservation and `HTTPExtractor.post` settlement. The
+through [drafting.py](../../server/app/providers/drafting.py).
+The
 extraction prompt, wire format, parallel batches, gap filling and citation
 post-processing retain their own entry point and behavior.
 
@@ -162,12 +166,15 @@ declarations from proof and leave unavailable evidence empty.
 `groups` budgets serialized requirements together with the complete material
 text, with a budget of the reasoning level's extraction batch size times
 `BID_DRAFTING_BATCH_SCALE`, because requirement quotes are far shorter than the
-document pages that budget was tuned for. Whole requirements are batched in order;
-a large single input gets its own batch. Up to `BID_LLM_CONCURRENCY` batches run at once, as for extraction; each
-call is still admitted against the job's call ceiling and charge cap before it is
-sent. Completed batches are returned in request order whichever finished first. Truncated or malformed responses halve the requirement batch;
-one requirement is the terminal boundary. No field/page text is spliced, no
-previous response is supplied and no drafting gap-fill pass runs. `plan_calls`
+document pages that budget was tuned for.
+Whole requirements are batched in order;
+a large single input gets its own batch.
+Completed batches are returned in request order whichever finished first.
+Truncated or malformed responses halve the requirement batch;
+one requirement is the terminal boundary.
+No field/page text is spliced, no
+previous response is supplied and no drafting gap-fill pass runs.
+`plan_calls`
 receives the planned first-pass batch count before any requests, so recursive
 halves and transient retries share the correctly scaled cumulative ceiling.
 
@@ -192,8 +199,6 @@ fixed reasoning level and its generation snapshot.
   bodies can echo input, so they are never stored or logged.
 - An empty environment variable counts as unset; a selected provider without
   its key or model stops startup.
-- The configured prices apply to whichever model answered. After a refusal
-  fallback, the recorded cost is an estimate at the primary model's prices.
 - A rejected first-pass quote does not count as coverage and may therefore
   trigger gap filling. Rejected gap-fill items are reported without another
   repair round. If a missing item was a ★ clause, the ★ rule still adds it
@@ -228,7 +233,6 @@ fixed reasoning level and its generation snapshot.
 - [server/app/jobs/processor.py](../../server/app/jobs/processor.py): usage recording and job states.
 - [server/app/core/config.py](../../server/app/core/config.py): `llm_*` settings and startup validation.
 - [server/tests/test_llm_providers.py](../../server/tests/test_llm_providers.py): end-to-end cases through the API and job processor.
-- [server/tests/test_card_generation.py](../../server/tests/test_card_generation.py): drafting calls through both adapters with fixed inputs and per-call billing.
 - [server/tests/test_parameter_extraction.py](../../server/tests/test_parameter_extraction.py): parameter coverage, original positions, rejection, deduplication and per-call accounting through the API and job processor.
 - [test_adversarial_citations.py](../../server/tests/test_adversarial_citations.py): located star membership and citation continuity through human review and draft assembly.
 - [evals/extract_tender.py](../../evals/extract_tender.py): real-vendor run on a public tender.

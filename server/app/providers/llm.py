@@ -8,7 +8,6 @@ import re
 import ssl
 import time
 from collections.abc import Sequence
-from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -23,8 +22,7 @@ from app.models.entities import Job, PlatformModel
 from app.providers.base import MalformedOutput, ProviderFailure, TruncatedOutput
 from app.providers.calls import accounted_call, plan_calls
 from app.providers.disabled import DisabledLLM
-from app.providers.quotes import serialized_request, token_cost
-from app.schemas.budget_contracts import BudgetCallQuote, Capability
+from app.providers.quotes import serialized_request
 from app.schemas.contracts import (
     Category,
     ExtractedRequirement,
@@ -35,6 +33,7 @@ from app.schemas.contracts import (
     Source,
 )
 from app.schemas.platform_credentials import CatalogResolveTarget
+from app.schemas.preflight_contracts import CallPlan, Capability
 from app.services.extraction import cited, fingerprint, locate_span, location_of, normalize
 
 ADAPTER_VERSION = "http-extract-v5"
@@ -334,7 +333,6 @@ class HTTPExtractor:
         transport: httpx.AsyncBaseTransport | None = None,
         *,
         platform_model_id: str | None = None,
-        sale_usd_per_mtok: tuple[float, float] | None = None,
         provider_config_id: UUID | None = None,
         org_owned: bool = False,
         credential_resolver=None,
@@ -346,7 +344,6 @@ class HTTPExtractor:
         self.model = settings.llm_model
         self.transport = transport
         self.platform_model_id = platform_model_id
-        self.sale = sale_usd_per_mtok
         self.provider_config_id, self.org_owned = provider_config_id, org_owned
         self.credential_resolver, self.credential_target = credential_resolver, credential_target
 
@@ -364,7 +361,6 @@ class HTTPExtractor:
             settings,
             self.transport,
             platform_model_id=self.platform_model_id,
-            sale_usd_per_mtok=self.sale,
             provider_config_id=self.provider_config_id,
             org_owned=self.org_owned,
             credential_resolver=self.credential_resolver,
@@ -566,27 +562,12 @@ class HTTPExtractor:
             tokens=sum(u.tokens for u in usages),
             input_tokens=sum(u.input_tokens for u in usages),
             output_tokens=sum(u.output_tokens for u in usages),
-            usd=None if any(u.usd is None for u in usages) else sum(u.usd or 0 for u in usages),
             platform_model_id=self.platform_model_id,
             provider_config_id=self.provider_config_id,
-            charge=0
-            if self.org_owned
-            else None
-            if self.sale is None
-            else sum(u.charge or 0 for u in usages),
             capability=usages[0].capability if usages else "llm",
-            payer="org_platform" if self.platform_model_id is not None else "org_direct",
-            billing_currency=self.settings.billing_currency,
-            price_revision=f"{self.version}:price:{self.model_revision or 0}",
-            task_amount=None
-            if any(u.task_amount is None for u in usages)
-            else sum((u.task_amount or Decimal(0) for u in usages), Decimal(0)),
         )
 
     def usage(self, started: float, model: str, input_tokens: int, output_tokens: int):
-        prices = (self.settings.llm_input_usd_per_mtok, self.settings.llm_output_usd_per_mtok)
-        usd = token_cost(input_tokens, output_tokens, prices, reservation=False)
-        charge = token_cost(input_tokens, output_tokens, self.sale, reservation=False)
         return ProviderUsage(
             provider=self.name,
             model=model,
@@ -595,15 +576,8 @@ class HTTPExtractor:
             tokens=input_tokens + output_tokens,
             input_tokens=input_tokens,
             output_tokens=output_tokens,
-            usd=float(usd) if usd is not None else None,
             platform_model_id=self.platform_model_id,
             provider_config_id=self.provider_config_id,
-            charge=0 if self.org_owned else float(charge) if charge is not None else None,
-            task_amount=charge
-            if self.platform_model_id is not None
-            else usd
-            if self.settings.billing_currency == "USD"
-            else None,
         )
 
     def build_request(self, body: dict) -> dict:
@@ -630,7 +604,7 @@ class HTTPExtractor:
             or type(copies) is not int
             or copies < 1
         ):
-            raise ProviderFailure("Model output limit is invalid", code="billing_bound_unavailable")
+            raise ProviderFailure("Model output limit is invalid", code="invalid_provider_options")
         # A compatible endpoint may ignore any smaller alias that is present.
         return max(limits) * copies
 
@@ -644,56 +618,22 @@ class HTTPExtractor:
         input_tokens: int | None = None,
         output_tokens: int | None = None,
         image_count: int = 0,
-        image_price_revision: str | None = None,
-    ) -> BudgetCallQuote:
+    ) -> CallPlan:
         wire = self.serialized_request(body)
         inputs = len(wire) + 4096 if input_tokens is None else input_tokens
         outputs = self.output_token_bound(body) if output_tokens is None else output_tokens
-        vendor = token_cost(
-            inputs,
-            outputs,
-            (self.settings.llm_input_usd_per_mtok, self.settings.llm_output_usd_per_mtok),
-            reservation=True,
-        )
-        platform = self.platform_model_id is not None
-        charge = (
-            token_cost(inputs, outputs, self.sale, reservation=True) if platform else Decimal(0)
-        )
-        if charge is None:
-            raise ProviderFailure(
-                "Platform model prices are unavailable", code="billing_price_unavailable"
-            )
-        currency = self.settings.billing_currency
-        task_amount = charge if platform else vendor if currency == "USD" else None
-        return BudgetCallQuote(
+        return CallPlan(
             capability=capability,
-            payer="org_platform" if platform else "org_direct",
             provider=self.name,
             model=self.model,
             version=self.version,
             provider_config_id=self.provider_config_id,
             platform_model_id=self.platform_model_id,
-            price_revision=f"{self.version}:price:{self.model_revision or 0}",
             request_sha256=hashlib.sha256(wire).hexdigest(),
-            currency=currency,
-            reserved_charge=charge,
-            reserved_task_amount=task_amount,
-            vendor_usd_upper_bound=vendor,
             input_tokens_upper_bound=inputs,
             output_tokens_upper_bound=outputs,
             image_count=image_count,
-            image_price_revision=image_price_revision,
-            unknown_reason=(
-                None
-                if task_amount is not None
-                else "currency_conversion_required"
-                if currency != "USD"
-                else "missing_price"
-            ),
         )
-
-    def reservation(self, body: dict) -> Decimal:
-        return self.quote(body).reserved_charge
 
     def response_usage(self, payload: dict, started: float) -> ProviderUsage:
         tokens = payload.get("usage")
@@ -727,9 +667,8 @@ class HTTPExtractor:
         body: dict,
         *,
         safe_metadata: bool = False,
-        reserved_charge: Decimal | None = None,
-        image_usage: tuple[int, str, str] | None = None,
-        quote: BudgetCallQuote | None = None,
+        image_usage: tuple[int, str] | None = None,
+        quote: CallPlan | None = None,
     ) -> tuple[dict, ProviderUsage]:
         key = self.settings.llm_api_key
         request_headers = dict(headers)
@@ -738,10 +677,6 @@ class HTTPExtractor:
         if fixed_quote.request_sha256 != hashlib.sha256(wire).hexdigest():
             raise ProviderFailure(
                 "Provider request differs from its quote", code="invalid_provider_quote"
-            )
-        if reserved_charge is not None and reserved_charge != fixed_quote.reserved_charge:
-            raise ProviderFailure(
-                "Provider reservation differs from its quote", code="invalid_provider_quote"
             )
 
         async def prepare():
@@ -814,7 +749,7 @@ class HTTPExtractor:
                 self.check_status(response, key=key)
             reported_model = payload.get("model") or self.model
             # Known Anthropic fallback identities are metadata, never free-form
-            # model text. An unrecognized echo is still charged, then rejected.
+            # model text. An unrecognized echo is still recorded, then rejected.
             trusted_model = reported_model == self.model or (
                 self.name == "anthropic"
                 and isinstance(reported_model, str)
@@ -836,9 +771,7 @@ class HTTPExtractor:
             )
             usage = self.response_usage(metadata, started)
             if image_usage is not None:
-                usage.image_count, usage.image_price_revision, usage.image_input_sha256 = (
-                    image_usage
-                )
+                usage.image_count, usage.image_input_sha256 = image_usage
             return (response, payload, trusted_model, echoed_key), usage
 
         try:
@@ -927,7 +860,7 @@ class HTTPExtractor:
                     f"Model quota is used up or the plan is unavailable ({kind})"
                     + (f"; it resets at {reset.group()}" if reset else "")
                     + (
-                        ". Ask your organization administrator to recharge or renew with the vendor."
+                        ". Ask your organization administrator to review the vendor account quota."
                         if self.org_owned
                         else ". Contact your system administrator."
                     ),
@@ -1066,13 +999,6 @@ def create_llm(settings: Settings, *, credential_resolver=None, credential_targe
     return DisabledLLM()
 
 
-def billable(llm) -> bool:
-    """Whether calls go to a platform model that can actually be called and charged."""
-    return bool(getattr(llm, "platform_model_id", None)) and not isinstance(
-        llm, UnavailablePlatformModel
-    )
-
-
 class UnavailablePlatformModel(DisabledLLM):
     """The catalog default exists but its credential is missing from the deployment."""
 
@@ -1104,8 +1030,6 @@ def platform_llm(
             "llm_model": entry.model,
             "llm_api_key": None,
             "llm_base_url": entry.base_url,
-            "llm_input_usd_per_mtok": float(entry.vendor_input_usd_per_mtok),
-            "llm_output_usd_per_mtok": float(entry.vendor_output_usd_per_mtok),
         }
     )
     extractor = AnthropicExtractor if entry.provider == "anthropic" else OpenAICompatibleExtractor
@@ -1116,10 +1040,6 @@ def platform_llm(
         credential_resolver=credential_resolver,
         credential_target=CatalogResolveTarget(
             model_id=entry.id, expected_model_revision=entry.revision
-        ),
-        sale_usd_per_mtok=(
-            float(entry.sale_input_per_mtok),
-            float(entry.sale_output_per_mtok),
         ),
     )
     # Editing the catalog entry changes the job cache key.

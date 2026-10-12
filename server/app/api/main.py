@@ -47,7 +47,6 @@ from app.providers.llm import resolve_llm
 from app.providers.local_ocr import LocalOCR
 from app.providers.storage import create_storage
 from app.schemas.contracts import CONTRACT_VERSION, Result
-from app.services import billing
 from app.services.auth import authenticate, set_actor_context
 
 CONSOLE_HEADERS = {
@@ -141,7 +140,6 @@ def create_app(
         await db.verify_role()
         await get_connections(settings).management.verify()
         await get_connections(settings).reader.verify()
-        await billing.verify_currency(db, settings.billing_currency)
         try:
             yield
         finally:
@@ -297,66 +295,13 @@ def create_app(
     @app.middleware("http")
     async def contract_header(request: Request, call_next):
         start = time.monotonic()
-        version = "4.0" if request.url.path.startswith("/v4/") else "3.0"
-        if version == "4.0":
+        version = "5.0"
+        if request.url.path.startswith(("/v4/", "/v5/")):
             request.scope["path"] = request.scope["path"][3:]
             request.scope["raw_path"] = request.scope["path"].encode()
         request.state.contract_version = version
         path = request.scope["path"]
-        budget_route = path in {"/billing/low-balance-policy", "/billing/notices"} or (
-            path.startswith("/tasks/") and "/budget" in path
-        )
-        agent_route = path.startswith("/agent-sessions/") or (
-            path.startswith("/tasks/") and path.endswith("/agent-sessions")
-        )
-        parts = path.strip("/").split("/")
-        assessment_route = (
-            (
-                len(parts) == 3
-                and parts[0] == "tasks"
-                and parts[2] in {"assessment-inputs", "assessment-citation"}
-            )
-            or (
-                len(parts) == 3
-                and parts[0] == "tasks"
-                and parts[2] == "jobs"
-                and request.query_params.get("kind")
-                in {"check", "score_rubric", "score", "annotation_render", "annotation_release"}
-            )
-            or (
-                request.query_params.get("view") == "console"
-                and (
-                    path.startswith("/checks/")
-                    or (
-                        path.startswith("/tasks/")
-                        and any(
-                            segment in {"checks", "score-rubrics", "scores"}
-                            for segment in parts[2:]
-                        )
-                    )
-                )
-            )
-        )
-        bid_review_route = (
-            "bid-submissions" in parts
-            or "bid-reviews" in parts
-            or ("bid-review-artifacts" in parts and parts[-1] != "download")
-        )
-        annotation_route = (
-            len(parts) == 3 and parts[0] == "tasks" and parts[2] == "annotations"
-        ) or (parts[0] in {"annotations", "annotation-releases"} and parts[-1] != "content")
-        response = (
-            error_response(request, ServiceError("not_found", "Resource not found", 404, 4))
-            if version == "3.0"
-            and (
-                budget_route
-                or agent_route
-                or assessment_route
-                or annotation_route
-                or bid_review_route
-            )
-            else await call_next(request)
-        )
+        response = await call_next(request)
         response.headers["X-Bid-Contract-Version"] = version
         response.headers["X-Duration-Ms"] = str(int((time.monotonic() - start) * 1000))
         response.headers["Cache-Control"] = "no-store"
@@ -374,15 +319,8 @@ def create_app(
                     if path == "/auth/org-applications"
                     else int((time.monotonic() - start) * 1000)
                 )
-                if "budget_preflight" in payload.get("data", {}):
-                    payload["cost"] = payload["data"]["budget_preflight"]["estimate"]
-                cost = payload.get("cost", {})
-                if cost.get("basis") in {"zero", "cache_hit"}:
-                    cost["billing_currency"] = settings.billing_currency
-                if version == "3.0":
-                    from app.schemas.compatibility import legacy_projection
-
-                    payload = legacy_projection(payload)
+                if "preflight" in payload.get("data", {}):
+                    payload["cost"] = payload["data"]["preflight"]["estimate"]
                 raw = json.dumps(payload, ensure_ascii=False).encode()
             headers = {
                 key: value for key, value in response.headers.items() if key != "content-length"
@@ -691,11 +629,9 @@ def create_app(
                     )
             raise
 
-    from app.api.budgets import create_router as create_budget_router
     from app.api.org_members import create_router as create_org_member_router
 
     app.include_router(create_org_member_router(context, crypto))
-    app.include_router(create_budget_router(context, settings))
     app.include_router(create_org_console_router(context, storage, settings))
     app.include_router(create_task_workflow_router(context, settings))
     from app.api.requirement_confirmation import create_router as create_requirement_review_router

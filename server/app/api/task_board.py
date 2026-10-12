@@ -34,14 +34,14 @@ MAX_BUFFER_BYTES = 256 * 1024
 MAX_BUFFER_FRAMES = 100
 
 
-def bounded_result(command, data, items, *, warnings=None, currency="USD"):
+def bounded_result(command, data, items, *, warnings=None):
     result = Result(
         ok=True,
         command=command,
         data=data,
         items=items,
         warnings=warnings or [],
-        cost=Cost(billing_currency=currency),
+        cost=Cost(),
     )
     if len(result.model_dump_json().encode()) > MAX_RESULT_BYTES:
         raise ServiceError("board_limit_exceeded", "Snapshot exceeds 1 MiB response bound", 422, 2)
@@ -256,10 +256,10 @@ def create_router(context, db, storage, queue, settings):
             except ValidationError as error:
                 raise RequestValidationError(error.errors()) from None
             if view == "requirement-review":
-                if request.state.contract_version != "4.0":
+                if request.state.contract_version != "5.0":
                     raise ServiceError(
                         "contract_version_required",
-                        "Requirement review requires contract 4.0",
+                        "Requirement review requires contract 5.0",
                         404,
                         4,
                     )
@@ -272,7 +272,6 @@ def create_router(context, db, storage, queue, settings):
                     "task board",
                     data.model_dump(mode="json"),
                     [item.model_dump(mode="json") for item in items],
-                    currency=settings.billing_currency,
                 )
             result_view = await task_board.board(
                 session,
@@ -291,7 +290,6 @@ def create_router(context, db, storage, queue, settings):
                 result_view.model_dump(mode="json", exclude={"rows"}),
                 [row.model_dump(mode="json") for row in result_view.rows],
                 warnings=["requirement_review_pending:open_requirement_review"] if pending else [],
-                currency=settings.billing_currency,
             )
 
         return await read(credentials, x_org_id, operation)
@@ -313,10 +311,10 @@ def create_router(context, db, storage, queue, settings):
                 from app.services.task_workflow import access
 
                 await access(session, actor, task_id)
-                if request.state.contract_version != "4.0":
+                if request.state.contract_version != "5.0":
                     raise ServiceError(
                         "contract_version_required",
-                        "Requirement review requires contract 4.0",
+                        "Requirement review requires contract 5.0",
                         404,
                         4,
                     )
@@ -335,7 +333,6 @@ def create_router(context, db, storage, queue, settings):
                     "task progress",
                     data.model_dump(mode="json"),
                     [job.model_dump(mode="json") for job in jobs],
-                    currency=settings.billing_currency,
                 )
             result_view = await task_board.progress(
                 session,
@@ -349,7 +346,6 @@ def create_router(context, db, storage, queue, settings):
                 "task progress",
                 result_view.model_dump(mode="json", exclude={"jobs"}),
                 [job.model_dump(mode="json") for job in result_view.jobs],
-                currency=settings.billing_currency,
             )
 
         return await read(credentials, x_org_id, operation)

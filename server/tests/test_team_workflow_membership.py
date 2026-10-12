@@ -367,7 +367,7 @@ async def test_archive_rejects_unsettled_call_of_failed_job(
     api, headers, tenants, admin_engine, pdf_bytes, pending_state
 ):
     from app.models.entities import Job, VendorCall
-    from app.schemas.budget_contracts import BudgetCallQuote
+    from app.schemas.preflight_contracts import CallPlan
 
     task = await new_task(api, headers[0])
     uploaded = await api.post(
@@ -395,7 +395,8 @@ async def test_archive_rejects_unsettled_call_of_failed_job(
             document_id=document,
             kind="extract",
             cache_key=uuid4().hex * 2,
-            status="failed",
+            status="running",
+            lease_until=datetime.now(UTC) + timedelta(minutes=5),
             run_id=uuid4(),
             actor_user_id=user,
             actor_kind="session",
@@ -403,38 +404,27 @@ async def test_archive_rejects_unsettled_call_of_failed_job(
         )
         session.add(job)
         session.flush()
-        quote = BudgetCallQuote(
+        quote = CallPlan(
             capability="llm",
-            payer="local_free",
             provider="test",
             model="test",
             version="test",
-            price_revision="test",
             request_sha256="a" * 64,
-            currency="USD",
-            reserved_charge="0",
-            reserved_task_amount="0",
-            vendor_usd_upper_bound="0",
         )
         call = VendorCall(
             org_id=org,
             task_id=UUID(task),
             job_id=job.id,
             run_id=job.run_id,
-            budget_revision=1,
             capability=quote.capability,
-            payer=quote.payer,
-            currency=quote.currency,
-            price_revision=quote.price_revision,
             request_sha256=quote.request_sha256,
-            reserved_charge=quote.reserved_charge,
-            reserved_task_amount=quote.reserved_task_amount,
-            quote=quote.model_dump(mode="json"),
+            provider_identity=quote.model_dump(mode="json"),
         )
         session.add(call)
         session.flush()
         if pending_state == "unknown":
             call.state = "unknown"
+        job.status = "failed"
     response = await api.post(
         f"/tasks/{task}/archive",
         headers=headers[0],
