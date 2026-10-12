@@ -6,7 +6,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
 
 from app.core.errors import not_found
-from app.memory import management
 from app.schemas.contracts import Result
 from app.schemas.management_pages import MemoryQuery, PageQuery, ResourceDetailQuery
 
@@ -21,6 +20,8 @@ def create_router(context, settings):
 
     @router.post("/query", name="memory_browse", response_model=Result)
     async def query(body: MemoryQuery, ctx=Depends(management_context, scope="function")):
+        from app.memory import management
+
         started = time.monotonic()
         page = await management.query(ctx[0], ctx[1], body, settings)
         return management.page_result(
@@ -35,6 +36,8 @@ def create_router(context, settings):
         revision: int | None = Query(None, ge=1),
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.memory import management
+
         started = time.monotonic()
         value = await management.detail(
             ctx[0], ctx[1], memory_id, ResourceDetailQuery(revision=revision), settings
@@ -51,6 +54,8 @@ def create_router(context, settings):
     async def history(
         memory_id: UUID, body: PageQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.memory import management
+
         started = time.monotonic()
         page = await management.history(ctx[0], ctx[1], memory_id, body, settings)
         return management.page_result(

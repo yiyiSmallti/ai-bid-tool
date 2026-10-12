@@ -1,8 +1,7 @@
 from contextlib import asynccontextmanager
-from uuid import UUID
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.core.config import Settings
 
@@ -32,15 +31,6 @@ class Database:
                 raise RuntimeError("Runtime role must not own application tables")
 
     @asynccontextmanager
-    async def transaction(self, org_id: UUID | None = None):
+    async def transaction(self):
         async with self.sessions() as session, session.begin():
-            if org_id is not None:
-                await set_org(session, org_id)
             yield session
-
-
-async def set_org(session: AsyncSession, org_id: UUID) -> None:
-    # Transaction-local configuration cannot leak through pooled connections.
-    await session.execute(
-        text("SELECT set_config('app.current_org', :org, true)"), {"org": str(org_id)}
-    )

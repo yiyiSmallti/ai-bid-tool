@@ -6,7 +6,6 @@ from sqlalchemy import select
 from app.models.entities import Job, UsageRecord
 from app.schemas.contracts import ProviderUsage, Result
 from app.schemas.provider_contracts import ProviderConfigSet, ProviderTest
-from app.services import provider_configs as service
 
 
 def create_router(context, db, settings, llm, resolve, processor, transport=None):
@@ -14,6 +13,8 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
 
     @router.get("/providers", name="provider_list", response_model=Result)
     async def provider_list(history: bool = False, ctx=Depends(context, scope="function")):
+        from app.services import provider_configs as service
+
         session, actor = ctx
         data, items, active = await service.list_configs(session, actor, settings, history=history)
         return Result(
@@ -25,6 +26,8 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
 
     @router.post("/providers", name="provider_set", response_model=Result)
     async def provider_set(body: ProviderConfigSet, ctx=Depends(context, scope="function")):
+        from app.services import provider_configs as service
+
         return Result(
             ok=True,
             command="provider set",
@@ -33,6 +36,8 @@ def create_router(context, db, settings, llm, resolve, processor, transport=None
 
     @router.post("/providers/test", name="provider_test", response_model=Result)
     async def provider_test(body: ProviderTest, ctx=Depends(context, scope="function")):
+        from app.services import provider_configs as service
+
         session, actor = ctx
         await service.require_access(session, actor, write=True)
         provider = await resolve(session) if resolve else llm

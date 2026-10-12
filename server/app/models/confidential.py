@@ -1,101 +1,140 @@
-"""Org-defined confidential fields and their append-only encrypted values."""
-
-from uuid import UUID
+from datetime import datetime
+from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Computed,
-    ForeignKey,
+    DateTime,
     ForeignKeyConstraint,
     Index,
     Integer,
+    PrimaryKeyConstraint,
     String,
     Text,
     UniqueConstraint,
-    text,
+    column,
+)
+from sqlalchemy import (
+    text as sql_text,
 )
 from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.models.entities import Base, Tenant
-from app.models.response_cards import tenant_fk
-
-
-class ConfidentialField(Tenant, Base):
-    __tablename__ = "confidential_fields"
-    created_by: Mapped[UUID] = mapped_column()
-    key: Mapped[str] = mapped_column(String(48))
-    label: Mapped[str] = mapped_column(String(100))
-    kind: Mapped[str] = mapped_column(String(20))
-    scope: Mapped[str] = mapped_column(String(10))
-    archived: Mapped[bool] = mapped_column(Boolean, default=False, server_default=text("false"))
-    revision: Mapped[int] = mapped_column(Integer, default=1, server_default=text("1"))
-    search_vector: Mapped[str] = mapped_column(
-        TSVECTOR, Computed("public.management_confidential_vector(key, label)", persisted=True)
-    )
-    __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        UniqueConstraint("org_id", "key"),
-        tenant_fk("created_by", "memberships", "user_id"),
-        CheckConstraint("key ~ '^[a-z][a-z0-9_]{1,47}$'", name="confidential_field_key"),
-        CheckConstraint("btrim(label) <> ''", name="confidential_field_label"),
-        CheckConstraint(
-            "kind IN ('amount', 'contact', 'identity', 'bank_account', 'other')",
-            name="confidential_field_kind",
-        ),
-        CheckConstraint("scope IN ('org', 'task')", name="confidential_field_scope"),
-        CheckConstraint("revision >= 1", name="confidential_field_revision"),
-    )
+from app.models.entities import Base
 
 
 class ConfidentialFieldSearchToken(Base):
-    """Derived key/label lexemes, never values; maintained only by field triggers."""
+    "Derived key/label lexemes, never values; maintained only by field triggers."
 
     __tablename__ = "confidential_field_search_tokens"
-    org_id: Mapped[UUID] = mapped_column(ForeignKey("orgs.id"), primary_key=True)
-    token: Mapped[str] = mapped_column(Text(collation="C"), primary_key=True)
-    field_id: Mapped[UUID] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(Text(collation="C"), nullable=False, primary_key=True)
+    field_id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True)
     __table_args__ = (
+        PrimaryKeyConstraint("token", "field_id", name="management_confidential_token_prefix"),
         ForeignKeyConstraint(
-            ["org_id", "field_id"],
-            ["confidential_fields.org_id", "confidential_fields.id"],
+            ["field_id"],
+            ["confidential_fields.id"],
+            name="management_confidential_token_field",
             ondelete="CASCADE",
         ),
-        Index("management_confidential_token_owner", "org_id", "field_id", "token"),
+        Index("management_confidential_token_owner", "field_id", "token"),
     )
 
 
-class ConfidentialValue(Tenant, Base):
-    __tablename__ = "confidential_values"
-    created_by: Mapped[UUID] = mapped_column()
-    field_id: Mapped[UUID] = mapped_column()
-    # Null for an org-scope field's value; the task for a task-scope field's value.
-    task_id: Mapped[UUID | None] = mapped_column()
-    version: Mapped[int] = mapped_column(Integer)
-    encrypted_value: Mapped[str] = mapped_column(Text)
-    tail: Mapped[str | None] = mapped_column(String(4))
+class ConfidentialField(Base):
+    __tablename__ = "confidential_fields"
+    id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+    key: Mapped[str] = mapped_column(String(48), nullable=False)
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    scope: Mapped[str] = mapped_column(String(10), nullable=False)
+    archived: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=sql_text("false")
+    )
+    revision: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default=sql_text("1")
+    )
+    search_vector: Mapped[str | None] = mapped_column(
+        TSVECTOR,
+        Computed(
+            "public.management_confidential_vector((key)::text, (label)::text)", persisted=True
+        ),
+        nullable=True,
+    )
     __table_args__ = (
-        UniqueConstraint("org_id", "id"),
-        tenant_fk("field_id", "confidential_fields"),
-        tenant_fk("task_id", "tasks"),
-        tenant_fk("created_by", "memberships", "user_id"),
-        CheckConstraint("version >= 1", name="confidential_value_version"),
+        CheckConstraint(
+            "(((key)::text ~ '^[a-z][a-z0-9_]{1,47}$'::text))", name="confidential_field_key"
+        ),
+        CheckConstraint(
+            "(((kind)::text = ANY ((ARRAY['amount'::character varying, 'contact'::character varying, 'identity'::character varying, 'bank_account'::character varying, 'other'::character varying])::text[])))",
+            name="confidential_field_kind",
+        ),
+        CheckConstraint("((btrim((label)::text) <> ''::text))", name="confidential_field_label"),
+        CheckConstraint("((revision >= 1))", name="confidential_field_revision"),
+        CheckConstraint(
+            "(((scope)::text = ANY ((ARRAY['library'::character varying, 'task'::character varying])::text[])))",
+            name="confidential_field_scope",
+        ),
+        UniqueConstraint("key", name="confidential_fields_key_key"),
+        PrimaryKeyConstraint("id", name="confidential_fields_pkey"),
+        Index("management_confidential_fields_active_browse", "archived", "key", "id"),
+        Index("management_confidential_fields_browse", "key", "id"),
+        Index("management_confidential_fields_org_browse", "scope", "archived", "key", "id"),
+    )
+
+
+class ConfidentialValue(Base):
+    __tablename__ = "confidential_values"
+    id: Mapped[UUID] = mapped_column(nullable=False, primary_key=True, default=uuid4)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=sql_text("now()")
+    )
+    field_id: Mapped[UUID] = mapped_column(nullable=False)
+    task_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    encrypted_value: Mapped[str] = mapped_column(Text, nullable=False)
+    tail: Mapped[str | None] = mapped_column(String(4), nullable=True)
+    __table_args__ = (
+        CheckConstraint("((version >= 1))", name="confidential_value_version"),
+        PrimaryKeyConstraint("id", name="confidential_values_pkey"),
+        ForeignKeyConstraint(
+            ["field_id"], ["confidential_fields.id"], name="confidential_values_field_id_fkey"
+        ),
+        ForeignKeyConstraint(["task_id"], ["tasks.id"], name="confidential_values_task_id_fkey"),
+        Index(
+            "management_confidential_org_history",
+            "field_id",
+            column("version").desc(),
+            column("id").desc(),
+            postgresql_include=["created_at", "tail"],
+            postgresql_where=sql_text("(task_id IS NULL)"),
+        ),
+        Index(
+            "management_confidential_task_history",
+            "field_id",
+            "task_id",
+            column("version").desc(),
+            column("id").desc(),
+            postgresql_include=["created_at", "tail"],
+            postgresql_where=sql_text("(task_id IS NOT NULL)"),
+        ),
         Index(
             "uq_confidential_values_org_version",
-            "org_id",
             "field_id",
             "version",
             unique=True,
-            postgresql_where=text("task_id IS NULL"),
+            postgresql_where=sql_text("(task_id IS NULL)"),
         ),
         Index(
             "uq_confidential_values_task_version",
-            "org_id",
             "field_id",
             "task_id",
             "version",
             unique=True,
-            postgresql_where=text("task_id IS NOT NULL"),
+            postgresql_where=sql_text("(task_id IS NOT NULL)"),
         ),
     )

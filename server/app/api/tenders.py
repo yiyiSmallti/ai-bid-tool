@@ -16,7 +16,7 @@ from app.models.entities import Chunk
 from app.providers.storage import Storage
 from app.schemas.citation_repair_contracts import CitationRepairRequest
 from app.schemas.contracts import JobAction, Result, TaskCreate
-from app.services import citation_repair, documents, page_previews, requirements, tender_jobs
+from app.services import documents, requirements, tender_jobs
 
 CHUNK_FIELDS = ("id", "document_id", "seq", "page", "text", "ocr", "citation_verified", "blocks")
 
@@ -92,7 +92,6 @@ def create_router(
                 crypto,
                 f"/documents/{document_id}/download",
                 "download",
-                identity.org_id,
                 document_id=document_id,
             ),
         )
@@ -101,9 +100,9 @@ def create_router(
     async def download(document_id: UUID, signature: str, ctx=Depends(context, scope="function")):
         session, identity = ctx
         document = await documents.require_document(session, document_id)
-        check_signature(crypto, signature, "download", identity.org_id, document_id=document_id)
+        check_signature(crypto, signature, "download", document_id=document_id)
         return Response(
-            await storage.read(identity.org_id, document.storage_key),
+            await storage.read(document.storage_key),
             media_type=document.media_type,
         )
 
@@ -115,6 +114,8 @@ def create_router(
         ctx=Depends(context, scope="function"),
     ):
         session, identity = ctx
+        from app.services import page_previews
+
         png = await page_previews.document_page(
             session, identity, document_id, page, zoom, storage, settings
         )
@@ -177,6 +178,8 @@ def create_router(
         "/tasks/{task_id}/requirements/repair", name="req_repair_preview", response_model=Result
     )
     async def req_repair_preview(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
+        from app.services import citation_repair
+
         data, items = await citation_repair.repair_citations(ctx[0], ctx[1], task_id, job)
         return result("req repair-citations", data=data, items=items)
 
@@ -186,6 +189,8 @@ def create_router(
     async def req_repair_execute(
         task_id: UUID, body: CitationRepairRequest, ctx=Depends(context, scope="function")
     ):
+        from app.services import citation_repair
+
         data, items = await citation_repair.repair_citations(
             ctx[0], ctx[1], task_id, body.extraction_job_id, body
         )

@@ -13,7 +13,6 @@ from app.models.screenshots import ScreenshotAsset, ScreenshotRendition
 from app.providers.base import ProviderFailure
 from app.schemas import annotation_contracts as schema
 from app.schemas.contracts import Cost, Result
-from app.services import annotations, screenshots
 from app.services.versioned import audit
 
 BODY = TypeAdapter(schema.AnnotationPreflightRequest | schema.AnnotationSubmit)
@@ -72,6 +71,8 @@ def create_router(context, storage, queue, settings, tokens, processor):
 
     @router.post("/tasks/{task_id}/annotations", name="evidence_stamp", response_model=Result)
     async def stamp(task_id: UUID, request: Request, ctx=Depends(context, scope="function")):
+        from app.services import annotations
+
         started = monotonic()
         session, actor = ctx
         # Resolve task visibility before validating user-controlled source IDs.
@@ -115,6 +116,8 @@ def create_router(context, storage, queue, settings, tokens, processor):
         limit: int = Query(default=50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import annotations
+
         data, items = await annotations.list_candidates(
             ctx[0],
             ctx[1],
@@ -128,11 +131,15 @@ def create_router(context, storage, queue, settings, tokens, processor):
         "/annotations/{annotation_id}", name="evidence_annotation_show", response_model=Result
     )
     async def show(annotation_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import annotations
+
         return result(
             "evidence annotation show", await annotations.show(ctx[0], ctx[1], annotation_id)
         )
 
     async def preview_link(session, actor, row, *, release=False):
+        from app.services import annotations, screenshots
+
         material = await annotations.material_row(
             session, actor, row.annotation_id if release else row.id
         )
@@ -178,6 +185,8 @@ def create_router(context, storage, queue, settings, tokens, processor):
         response_model=Result,
     )
     async def preview(annotation_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import annotations
+
         row = await annotations.material_row(ctx[0], ctx[1], annotation_id)
         return result("evidence annotation preview", await preview_link(ctx[0], ctx[1], row))
 
@@ -192,6 +201,8 @@ def create_router(context, storage, queue, settings, tokens, processor):
         limit: int = Query(default=50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import annotations
+
         data, items = await annotations.list_releases(
             ctx[0],
             ctx[1],
@@ -207,6 +218,8 @@ def create_router(context, storage, queue, settings, tokens, processor):
         response_model=Result,
     )
     async def retry(annotation_id: UUID, request: Request, ctx=Depends(context, scope="function")):
+        from app.services import annotations
+
         await annotations.material_row(ctx[0], ctx[1], annotation_id)
         body = await bounded_input(request, TypeAdapter(schema.AnnotationReleaseRetry))
         return result(
@@ -220,6 +233,8 @@ def create_router(context, storage, queue, settings, tokens, processor):
         response_model=Result,
     )
     async def release_preview(release_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import annotations
+
         row = await annotations.release_row(ctx[0], ctx[1], release_id)
         return result(
             "evidence annotation release preview",
@@ -227,6 +242,8 @@ def create_router(context, storage, queue, settings, tokens, processor):
         )
 
     async def read_content(session, actor, ident, signature, *, release=False):
+        from app.services import annotations, screenshots
+
         row = (
             await annotations.release_row(session, actor, ident)
             if release

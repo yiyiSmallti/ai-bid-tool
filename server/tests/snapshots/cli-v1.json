@@ -1,27 +1,4 @@
 {
-  "auth orgs": {
-    "command": "auth orgs",
-    "cost": {
-      "browser_units": 0,
-      "calls": 0,
-      "llm_tokens": 0,
-      "ocr_pages": 0,
-      "search_requests": 0,
-      "unresolved_calls": 0
-    },
-    "data": {},
-    "duration_ms": 0,
-    "items": [
-      {
-        "active": true,
-        "name": "Synthetic tenant",
-        "org_id": "00000000-0000-0000-0000-000000000001",
-        "role": "admin"
-      }
-    ],
-    "ok": true,
-    "warnings": []
-  },
   "card classify": {
     "command": "card classify",
     "cost": {
@@ -2043,148 +2020,6 @@
     "ok": false,
     "warnings": []
   },
-  "login": {
-    "command": "login",
-    "cost": {
-      "browser_units": 0,
-      "calls": 0,
-      "llm_tokens": 0,
-      "ocr_pages": 0,
-      "search_requests": 0,
-      "unresolved_calls": 0
-    },
-    "data": {
-      "authenticated": true,
-      "expires_in": 3600,
-      "org_id": "00000000-0000-0000-0000-000000000001"
-    },
-    "duration_ms": 0,
-    "items": [],
-    "ok": true,
-    "warnings": []
-  },
-  "org use": {
-    "command": "org use",
-    "cost": {
-      "browser_units": 0,
-      "calls": 0,
-      "llm_tokens": 0,
-      "ocr_pages": 0,
-      "search_requests": 0,
-      "unresolved_calls": 0
-    },
-    "data": {
-      "org_id": "00000000-0000-0000-0000-000000000001",
-      "role": "admin"
-    },
-    "duration_ms": 0,
-    "items": [],
-    "ok": true,
-    "warnings": []
-  },
-  "platform login": {
-    "command": "platform login",
-    "cost": {
-      "browser_units": 0,
-      "calls": 0,
-      "llm_tokens": 0,
-      "ocr_pages": 0,
-      "search_requests": 0,
-      "unresolved_calls": 0
-    },
-    "data": {
-      "authenticated": true,
-      "email": "ops@example.test",
-      "expires_in": 1800
-    },
-    "duration_ms": 0,
-    "items": [],
-    "ok": true,
-    "warnings": []
-  },
-  "platform model list": {
-    "command": "platform model list",
-    "cost": {
-      "browser_units": 0,
-      "calls": 0,
-      "llm_tokens": 0,
-      "ocr_pages": 0,
-      "search_requests": 0,
-      "unresolved_calls": 0
-    },
-    "data": {},
-    "duration_ms": 0,
-    "items": [
-      {
-        "base_url": null,
-        "capability": "llm_extract",
-        "credential": "main",
-        "credential_configured": true,
-        "default": true,
-        "enabled": true,
-        "id": "opus-standard",
-        "model": "claude-opus-5-5",
-        "provider": "anthropic",
-        "revision": 1,
-        "updated_at": "2026-10-01T00:00:00+00:00",
-        "updated_by": "ops@example.test"
-      }
-    ],
-    "ok": true,
-    "warnings": []
-  },
-  "platform model set": {
-    "command": "platform model set",
-    "cost": {
-      "browser_units": 0,
-      "calls": 0,
-      "llm_tokens": 0,
-      "ocr_pages": 0,
-      "search_requests": 0,
-      "unresolved_calls": 0
-    },
-    "data": {
-      "base_url": null,
-      "capability": "llm_extract",
-      "credential": "main",
-      "credential_configured": true,
-      "default": true,
-      "enabled": true,
-      "id": "opus-standard",
-      "model": "claude-opus-5-5",
-      "provider": "anthropic",
-      "revision": 1,
-      "updated_at": "2026-10-01T00:00:00+00:00",
-      "updated_by": "ops@example.test"
-    },
-    "duration_ms": 0,
-    "items": [],
-    "ok": true,
-    "warnings": []
-  },
-  "platform model test": {
-    "command": "platform model test",
-    "cost": {
-      "browser_units": 0,
-      "calls": 0,
-      "llm_tokens": 0,
-      "ocr_pages": 0,
-      "search_requests": 0,
-      "unresolved_calls": 0
-    },
-    "data": {
-      "items": 1,
-      "model_id": "opus-standard",
-      "passed": true,
-      "usage": {
-        "tokens": 10
-      }
-    },
-    "duration_ms": 0,
-    "items": [],
-    "ok": true,
-    "warnings": []
-  },
   "req extract": {
     "command": "req extract",
     "cost": {
@@ -3255,18 +3090,6 @@
               "minimum": 0,
               "title": "Output Tokens Upper Bound",
               "type": "integer"
-            },
-            "platform_model_id": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null,
-              "title": "Platform Model Id"
             },
             "provider": {
               "maxLength": 100,
@@ -9134,53 +8957,6 @@
               "next_cursor"
             ],
             "title": "AssessmentJobPageData",
-            "type": "object"
-          }
-        },
-        "auth orgs": {
-          "cli_parameters": [
-            {
-              "default": null,
-              "multiple": false,
-              "name": "email",
-              "options": [
-                "--email"
-              ],
-              "required": true,
-              "type": "text"
-            },
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "json_output",
-              "options": [
-                "--json"
-              ],
-              "required": false,
-              "type": "boolean"
-            }
-          ],
-          "input": {
-            "additionalProperties": false,
-            "properties": {
-              "email": {
-                "maxLength": 254,
-                "minLength": 3,
-                "title": "Email",
-                "type": "string"
-              },
-              "password": {
-                "maxLength": 1024,
-                "minLength": 1,
-                "title": "Password",
-                "type": "string"
-              }
-            },
-            "required": [
-              "email",
-              "password"
-            ],
-            "title": "OrgLookup",
             "type": "object"
           }
         },
@@ -25011,18 +24787,6 @@
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
                   },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
-                  },
                   "provider": {
                     "maxLength": 100,
                     "minLength": 1,
@@ -31263,69 +31027,6 @@
             }
           ],
           "input": null
-        },
-        "login": {
-          "cli_parameters": [
-            {
-              "default": null,
-              "multiple": false,
-              "name": "email",
-              "options": [
-                "--email"
-              ],
-              "required": true,
-              "type": "text"
-            },
-            {
-              "default": null,
-              "multiple": false,
-              "name": "org",
-              "options": [
-                "--org"
-              ],
-              "required": true,
-              "type": "uuid"
-            },
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "json_output",
-              "options": [
-                "--json"
-              ],
-              "required": false,
-              "type": "boolean"
-            }
-          ],
-          "input": {
-            "additionalProperties": false,
-            "properties": {
-              "email": {
-                "maxLength": 254,
-                "minLength": 3,
-                "title": "Email",
-                "type": "string"
-              },
-              "org_id": {
-                "format": "uuid",
-                "title": "Org Id",
-                "type": "string"
-              },
-              "password": {
-                "maxLength": 1024,
-                "minLength": 1,
-                "title": "Password",
-                "type": "string"
-              }
-            },
-            "required": [
-              "email",
-              "password",
-              "org_id"
-            ],
-            "title": "Login",
-            "type": "object"
-          }
         },
         "memory add": {
           "cli_parameters": [
@@ -37598,31 +37299,6 @@
             "type": "object"
           }
         },
-        "org use": {
-          "cli_parameters": [
-            {
-              "default": null,
-              "multiple": false,
-              "name": "org_id",
-              "options": [
-                "org_id"
-              ],
-              "required": true,
-              "type": "uuid"
-            },
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "json_output",
-              "options": [
-                "--json"
-              ],
-              "required": false,
-              "type": "boolean"
-            }
-          ],
-          "input": null
-        },
         "platform clef check": {
           "cli_parameters": [
             {
@@ -37778,12 +37454,6 @@
                   "gateway_id": {
                     "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
                     "title": "Gateway Id",
-                    "type": "string"
-                  },
-                  "platform_model_id": {
-                    "const": "bid-review-clef",
-                    "default": "bid-review-clef",
-                    "title": "Platform Model Id",
                     "type": "string"
                   },
                   "revision": {
@@ -38040,12 +37710,6 @@
                     "title": "Gateway Id",
                     "type": "string"
                   },
-                  "platform_model_id": {
-                    "const": "bid-review-clef",
-                    "default": "bid-review-clef",
-                    "title": "Platform Model Id",
-                    "type": "string"
-                  },
                   "revision": {
                     "minimum": 1,
                     "title": "Revision",
@@ -38240,12 +37904,6 @@
                     "title": "Gateway Id",
                     "type": "string"
                   },
-                  "platform_model_id": {
-                    "const": "bid-review-clef",
-                    "default": "bid-review-clef",
-                    "title": "Platform Model Id",
-                    "type": "string"
-                  },
                   "revision": {
                     "minimum": 1,
                     "title": "Revision",
@@ -38372,7 +38030,6 @@
               },
               "purpose": {
                 "enum": [
-                  "catalog_llm",
                   "standalone_llm",
                   "vendor_search",
                   "clef_workers_ai",
@@ -38406,42 +38063,6 @@
           },
           "output": {
             "$defs": {
-              "CatalogConsumer": {
-                "additionalProperties": false,
-                "properties": {
-                  "default": {
-                    "title": "Default",
-                    "type": "boolean"
-                  },
-                  "enabled": {
-                    "title": "Enabled",
-                    "type": "boolean"
-                  },
-                  "kind": {
-                    "const": "catalog_model",
-                    "default": "catalog_model",
-                    "title": "Kind",
-                    "type": "string"
-                  },
-                  "model_id": {
-                    "title": "Model Id",
-                    "type": "string"
-                  },
-                  "model_revision": {
-                    "minimum": 1,
-                    "title": "Model Revision",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "model_id",
-                  "model_revision",
-                  "enabled",
-                  "default"
-                ],
-                "title": "CatalogConsumer",
-                "type": "object"
-              },
               "CredentialData": {
                 "additionalProperties": false,
                 "properties": {
@@ -38473,7 +38094,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -38616,21 +38236,7 @@
                 "properties": {
                   "consumers": {
                     "items": {
-                      "discriminator": {
-                        "mapping": {
-                          "catalog_model": "#/$defs/CatalogConsumer",
-                          "service": "#/$defs/ServiceConsumer"
-                        },
-                        "propertyName": "kind"
-                      },
-                      "oneOf": [
-                        {
-                          "$ref": "#/$defs/CatalogConsumer"
-                        },
-                        {
-                          "$ref": "#/$defs/ServiceConsumer"
-                        }
-                      ]
+                      "$ref": "#/$defs/ServiceConsumer"
                     },
                     "title": "Consumers",
                     "type": "array"
@@ -38678,7 +38284,6 @@
                   },
                   "purpose": {
                     "enum": [
-                      "catalog_llm",
                       "standalone_llm",
                       "vendor_search",
                       "clef_workers_ai",
@@ -38710,10 +38315,6 @@
                     "format": "date-time",
                     "title": "Updated At",
                     "type": "string"
-                  },
-                  "updated_by": {
-                    "title": "Updated By",
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -38728,8 +38329,7 @@
                   "fingerprint",
                   "last_four",
                   "created_at",
-                  "updated_at",
-                  "updated_by"
+                  "updated_at"
                 ],
                 "title": "CredentialView",
                 "type": "object"
@@ -38853,7 +38453,6 @@
                   },
                   "purpose": {
                     "enum": [
-                      "catalog_llm",
                       "standalone_llm",
                       "vendor_search",
                       "clef_workers_ai",
@@ -38956,7 +38555,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -39217,7 +38815,6 @@
                 "anyOf": [
                   {
                     "enum": [
-                      "catalog_llm",
                       "standalone_llm",
                       "vendor_search",
                       "clef_workers_ai",
@@ -39255,42 +38852,6 @@
           },
           "items": {
             "$defs": {
-              "CatalogConsumer": {
-                "additionalProperties": false,
-                "properties": {
-                  "default": {
-                    "title": "Default",
-                    "type": "boolean"
-                  },
-                  "enabled": {
-                    "title": "Enabled",
-                    "type": "boolean"
-                  },
-                  "kind": {
-                    "const": "catalog_model",
-                    "default": "catalog_model",
-                    "title": "Kind",
-                    "type": "string"
-                  },
-                  "model_id": {
-                    "title": "Model Id",
-                    "type": "string"
-                  },
-                  "model_revision": {
-                    "minimum": 1,
-                    "title": "Model Revision",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "model_id",
-                  "model_revision",
-                  "enabled",
-                  "default"
-                ],
-                "title": "CatalogConsumer",
-                "type": "object"
-              },
               "ServiceConsumer": {
                 "additionalProperties": false,
                 "properties": {
@@ -39327,21 +38888,7 @@
             "properties": {
               "consumers": {
                 "items": {
-                  "discriminator": {
-                    "mapping": {
-                      "catalog_model": "#/$defs/CatalogConsumer",
-                      "service": "#/$defs/ServiceConsumer"
-                    },
-                    "propertyName": "kind"
-                  },
-                  "oneOf": [
-                    {
-                      "$ref": "#/$defs/CatalogConsumer"
-                    },
-                    {
-                      "$ref": "#/$defs/ServiceConsumer"
-                    }
-                  ]
+                  "$ref": "#/$defs/ServiceConsumer"
                 },
                 "title": "Consumers",
                 "type": "array"
@@ -39389,7 +38936,6 @@
               },
               "purpose": {
                 "enum": [
-                  "catalog_llm",
                   "standalone_llm",
                   "vendor_search",
                   "clef_workers_ai",
@@ -39421,10 +38967,6 @@
                 "format": "date-time",
                 "title": "Updated At",
                 "type": "string"
-              },
-              "updated_by": {
-                "title": "Updated By",
-                "type": "string"
               }
             },
             "required": [
@@ -39439,8 +38981,7 @@
               "fingerprint",
               "last_four",
               "created_at",
-              "updated_at",
-              "updated_by"
+              "updated_at"
             ],
             "title": "CredentialView",
             "type": "object"
@@ -39465,7 +39006,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -39704,42 +39244,6 @@
           },
           "output": {
             "$defs": {
-              "CatalogConsumer": {
-                "additionalProperties": false,
-                "properties": {
-                  "default": {
-                    "title": "Default",
-                    "type": "boolean"
-                  },
-                  "enabled": {
-                    "title": "Enabled",
-                    "type": "boolean"
-                  },
-                  "kind": {
-                    "const": "catalog_model",
-                    "default": "catalog_model",
-                    "title": "Kind",
-                    "type": "string"
-                  },
-                  "model_id": {
-                    "title": "Model Id",
-                    "type": "string"
-                  },
-                  "model_revision": {
-                    "minimum": 1,
-                    "title": "Model Revision",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "model_id",
-                  "model_revision",
-                  "enabled",
-                  "default"
-                ],
-                "title": "CatalogConsumer",
-                "type": "object"
-              },
               "CredentialData": {
                 "additionalProperties": false,
                 "properties": {
@@ -39771,7 +39275,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -39914,21 +39417,7 @@
                 "properties": {
                   "consumers": {
                     "items": {
-                      "discriminator": {
-                        "mapping": {
-                          "catalog_model": "#/$defs/CatalogConsumer",
-                          "service": "#/$defs/ServiceConsumer"
-                        },
-                        "propertyName": "kind"
-                      },
-                      "oneOf": [
-                        {
-                          "$ref": "#/$defs/CatalogConsumer"
-                        },
-                        {
-                          "$ref": "#/$defs/ServiceConsumer"
-                        }
-                      ]
+                      "$ref": "#/$defs/ServiceConsumer"
                     },
                     "title": "Consumers",
                     "type": "array"
@@ -39976,7 +39465,6 @@
                   },
                   "purpose": {
                     "enum": [
-                      "catalog_llm",
                       "standalone_llm",
                       "vendor_search",
                       "clef_workers_ai",
@@ -40008,10 +39496,6 @@
                     "format": "date-time",
                     "title": "Updated At",
                     "type": "string"
-                  },
-                  "updated_by": {
-                    "title": "Updated By",
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -40026,8 +39510,7 @@
                   "fingerprint",
                   "last_four",
                   "created_at",
-                  "updated_at",
-                  "updated_by"
+                  "updated_at"
                 ],
                 "title": "CredentialView",
                 "type": "object"
@@ -40164,42 +39647,6 @@
           },
           "output": {
             "$defs": {
-              "CatalogConsumer": {
-                "additionalProperties": false,
-                "properties": {
-                  "default": {
-                    "title": "Default",
-                    "type": "boolean"
-                  },
-                  "enabled": {
-                    "title": "Enabled",
-                    "type": "boolean"
-                  },
-                  "kind": {
-                    "const": "catalog_model",
-                    "default": "catalog_model",
-                    "title": "Kind",
-                    "type": "string"
-                  },
-                  "model_id": {
-                    "title": "Model Id",
-                    "type": "string"
-                  },
-                  "model_revision": {
-                    "minimum": 1,
-                    "title": "Model Revision",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "model_id",
-                  "model_revision",
-                  "enabled",
-                  "default"
-                ],
-                "title": "CatalogConsumer",
-                "type": "object"
-              },
               "CredentialData": {
                 "additionalProperties": false,
                 "properties": {
@@ -40231,7 +39678,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -40374,21 +39820,7 @@
                 "properties": {
                   "consumers": {
                     "items": {
-                      "discriminator": {
-                        "mapping": {
-                          "catalog_model": "#/$defs/CatalogConsumer",
-                          "service": "#/$defs/ServiceConsumer"
-                        },
-                        "propertyName": "kind"
-                      },
-                      "oneOf": [
-                        {
-                          "$ref": "#/$defs/CatalogConsumer"
-                        },
-                        {
-                          "$ref": "#/$defs/ServiceConsumer"
-                        }
-                      ]
+                      "$ref": "#/$defs/ServiceConsumer"
                     },
                     "title": "Consumers",
                     "type": "array"
@@ -40436,7 +39868,6 @@
                   },
                   "purpose": {
                     "enum": [
-                      "catalog_llm",
                       "standalone_llm",
                       "vendor_search",
                       "clef_workers_ai",
@@ -40468,10 +39899,6 @@
                     "format": "date-time",
                     "title": "Updated At",
                     "type": "string"
-                  },
-                  "updated_by": {
-                    "title": "Updated By",
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -40486,8 +39913,7 @@
                   "fingerprint",
                   "last_four",
                   "created_at",
-                  "updated_at",
-                  "updated_by"
+                  "updated_at"
                 ],
                 "title": "CredentialView",
                 "type": "object"
@@ -40622,42 +40048,6 @@
           },
           "output": {
             "$defs": {
-              "CatalogConsumer": {
-                "additionalProperties": false,
-                "properties": {
-                  "default": {
-                    "title": "Default",
-                    "type": "boolean"
-                  },
-                  "enabled": {
-                    "title": "Enabled",
-                    "type": "boolean"
-                  },
-                  "kind": {
-                    "const": "catalog_model",
-                    "default": "catalog_model",
-                    "title": "Kind",
-                    "type": "string"
-                  },
-                  "model_id": {
-                    "title": "Model Id",
-                    "type": "string"
-                  },
-                  "model_revision": {
-                    "minimum": 1,
-                    "title": "Model Revision",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "model_id",
-                  "model_revision",
-                  "enabled",
-                  "default"
-                ],
-                "title": "CatalogConsumer",
-                "type": "object"
-              },
               "CredentialData": {
                 "additionalProperties": false,
                 "properties": {
@@ -40689,7 +40079,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -40832,21 +40221,7 @@
                 "properties": {
                   "consumers": {
                     "items": {
-                      "discriminator": {
-                        "mapping": {
-                          "catalog_model": "#/$defs/CatalogConsumer",
-                          "service": "#/$defs/ServiceConsumer"
-                        },
-                        "propertyName": "kind"
-                      },
-                      "oneOf": [
-                        {
-                          "$ref": "#/$defs/CatalogConsumer"
-                        },
-                        {
-                          "$ref": "#/$defs/ServiceConsumer"
-                        }
-                      ]
+                      "$ref": "#/$defs/ServiceConsumer"
                     },
                     "title": "Consumers",
                     "type": "array"
@@ -40894,7 +40269,6 @@
                   },
                   "purpose": {
                     "enum": [
-                      "catalog_llm",
                       "standalone_llm",
                       "vendor_search",
                       "clef_workers_ai",
@@ -40926,10 +40300,6 @@
                     "format": "date-time",
                     "title": "Updated At",
                     "type": "string"
-                  },
-                  "updated_by": {
-                    "title": "Updated By",
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -40944,8 +40314,7 @@
                   "fingerprint",
                   "last_four",
                   "created_at",
-                  "updated_at",
-                  "updated_by"
+                  "updated_at"
                 ],
                 "title": "CredentialView",
                 "type": "object"
@@ -41018,42 +40387,6 @@
           "input": null,
           "output": {
             "$defs": {
-              "CatalogConsumer": {
-                "additionalProperties": false,
-                "properties": {
-                  "default": {
-                    "title": "Default",
-                    "type": "boolean"
-                  },
-                  "enabled": {
-                    "title": "Enabled",
-                    "type": "boolean"
-                  },
-                  "kind": {
-                    "const": "catalog_model",
-                    "default": "catalog_model",
-                    "title": "Kind",
-                    "type": "string"
-                  },
-                  "model_id": {
-                    "title": "Model Id",
-                    "type": "string"
-                  },
-                  "model_revision": {
-                    "minimum": 1,
-                    "title": "Model Revision",
-                    "type": "integer"
-                  }
-                },
-                "required": [
-                  "model_id",
-                  "model_revision",
-                  "enabled",
-                  "default"
-                ],
-                "title": "CatalogConsumer",
-                "type": "object"
-              },
               "CredentialData": {
                 "additionalProperties": false,
                 "properties": {
@@ -41085,7 +40418,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -41228,21 +40560,7 @@
                 "properties": {
                   "consumers": {
                     "items": {
-                      "discriminator": {
-                        "mapping": {
-                          "catalog_model": "#/$defs/CatalogConsumer",
-                          "service": "#/$defs/ServiceConsumer"
-                        },
-                        "propertyName": "kind"
-                      },
-                      "oneOf": [
-                        {
-                          "$ref": "#/$defs/CatalogConsumer"
-                        },
-                        {
-                          "$ref": "#/$defs/ServiceConsumer"
-                        }
-                      ]
+                      "$ref": "#/$defs/ServiceConsumer"
                     },
                     "title": "Consumers",
                     "type": "array"
@@ -41290,7 +40608,6 @@
                   },
                   "purpose": {
                     "enum": [
-                      "catalog_llm",
                       "standalone_llm",
                       "vendor_search",
                       "clef_workers_ai",
@@ -41322,10 +40639,6 @@
                     "format": "date-time",
                     "title": "Updated At",
                     "type": "string"
-                  },
-                  "updated_by": {
-                    "title": "Updated By",
-                    "type": "string"
                   }
                 },
                 "required": [
@@ -41340,8 +40653,7 @@
                   "fingerprint",
                   "last_four",
                   "created_at",
-                  "updated_at",
-                  "updated_by"
+                  "updated_at"
                 ],
                 "title": "CredentialView",
                 "type": "object"
@@ -41462,7 +40774,6 @@
                       "credential_removed",
                       "credential_unreadable",
                       "credential_backend_unavailable",
-                      "credential_audit_unavailable",
                       "credential_env_forbidden",
                       "credential_probe_auth_failed",
                       "credential_probe_unsupported",
@@ -41624,335 +40935,6 @@
             ]
           }
         },
-        "platform login": {
-          "cli_parameters": [
-            {
-              "default": null,
-              "multiple": false,
-              "name": "email",
-              "options": [
-                "--email"
-              ],
-              "required": true,
-              "type": "text"
-            },
-            {
-              "default": null,
-              "multiple": false,
-              "name": "totp",
-              "options": [
-                "--totp"
-              ],
-              "required": true,
-              "type": "text"
-            },
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "json_output",
-              "options": [
-                "--json"
-              ],
-              "required": false,
-              "type": "boolean"
-            }
-          ],
-          "input": {
-            "additionalProperties": false,
-            "properties": {
-              "email": {
-                "maxLength": 254,
-                "minLength": 3,
-                "title": "Email",
-                "type": "string"
-              },
-              "password": {
-                "maxLength": 1024,
-                "minLength": 1,
-                "title": "Password",
-                "type": "string"
-              },
-              "totp": {
-                "pattern": "^\\d{6}$",
-                "title": "Totp",
-                "type": "string"
-              }
-            },
-            "required": [
-              "email",
-              "password",
-              "totp"
-            ],
-            "title": "PlatformLogin",
-            "type": "object"
-          }
-        },
-        "platform model list": {
-          "cli_parameters": [
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "json_output",
-              "options": [
-                "--json"
-              ],
-              "required": false,
-              "type": "boolean"
-            }
-          ],
-          "input": null
-        },
-        "platform model set": {
-          "cli_parameters": [
-            {
-              "default": null,
-              "multiple": false,
-              "name": "input",
-              "options": [
-                "--input"
-              ],
-              "required": true,
-              "type": "path"
-            },
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "json_output",
-              "options": [
-                "--json"
-              ],
-              "required": false,
-              "type": "boolean"
-            }
-          ],
-          "input": {
-            "$defs": {
-              "ReasoningLevel": {
-                "additionalProperties": false,
-                "description": "One of the vendor's official reasoning levels for a catalog model.",
-                "properties": {
-                  "batch_chars": {
-                    "default": 8000,
-                    "maximum": 200000,
-                    "minimum": 1000,
-                    "title": "Batch Chars",
-                    "type": "integer"
-                  },
-                  "effort": {
-                    "anyOf": [
-                      {
-                        "pattern": "^[a-z]{1,10}$",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Effort"
-                  },
-                  "label": {
-                    "anyOf": [
-                      {
-                        "maxLength": 60,
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Label"
-                  },
-                  "name": {
-                    "pattern": "^[a-z0-9_-]{1,20}$",
-                    "title": "Name",
-                    "type": "string"
-                  },
-                  "request_options": {
-                    "additionalProperties": true,
-                    "title": "Request Options",
-                    "type": "object"
-                  }
-                },
-                "required": [
-                  "name"
-                ],
-                "title": "ReasoningLevel",
-                "type": "object"
-              }
-            },
-            "additionalProperties": false,
-            "properties": {
-              "base_url": {
-                "anyOf": [
-                  {
-                    "maxLength": 300,
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Base Url"
-              },
-              "capability": {
-                "const": "llm_extract",
-                "title": "Capability",
-                "type": "string"
-              },
-              "credential": {
-                "pattern": "^[a-z0-9_]{1,40}$",
-                "title": "Credential",
-                "type": "string"
-              },
-              "default": {
-                "default": false,
-                "title": "Default",
-                "type": "boolean"
-              },
-              "default_reasoning": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Default Reasoning"
-              },
-              "enabled": {
-                "default": true,
-                "title": "Enabled",
-                "type": "boolean"
-              },
-              "expected_revision": {
-                "anyOf": [
-                  {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Expected Revision"
-              },
-              "id": {
-                "pattern": "^[a-z0-9][a-z0-9_-]{0,39}$",
-                "title": "Id",
-                "type": "string"
-              },
-              "model": {
-                "maxLength": 100,
-                "minLength": 1,
-                "title": "Model",
-                "type": "string"
-              },
-              "provider": {
-                "enum": [
-                  "anthropic",
-                  "openai"
-                ],
-                "title": "Provider",
-                "type": "string"
-              },
-              "reasoning": {
-                "items": {
-                  "$ref": "#/$defs/ReasoningLevel"
-                },
-                "maxItems": 8,
-                "title": "Reasoning",
-                "type": "array"
-              }
-            },
-            "required": [
-              "id",
-              "capability",
-              "provider",
-              "model",
-              "credential"
-            ],
-            "title": "PlatformModelSet",
-            "type": "object"
-          }
-        },
-        "platform model test": {
-          "cli_parameters": [
-            {
-              "default": null,
-              "multiple": false,
-              "name": "model_id",
-              "options": [
-                "--id"
-              ],
-              "required": true,
-              "type": "text"
-            },
-            {
-              "default": null,
-              "multiple": false,
-              "name": "test_org",
-              "options": [
-                "--test-org"
-              ],
-              "required": false,
-              "type": "uuid"
-            },
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "dry_run",
-              "options": [
-                "--dry-run"
-              ],
-              "required": false,
-              "type": "boolean"
-            },
-            {
-              "default": "False",
-              "multiple": false,
-              "name": "json_output",
-              "options": [
-                "--json"
-              ],
-              "required": false,
-              "type": "boolean"
-            }
-          ],
-          "input": {
-            "additionalProperties": false,
-            "properties": {
-              "dry_run": {
-                "default": false,
-                "title": "Dry Run",
-                "type": "boolean"
-              },
-              "test_org_id": {
-                "anyOf": [
-                  {
-                    "format": "uuid",
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Test Org Id"
-              }
-            },
-            "title": "PlatformModelTest",
-            "type": "object"
-          },
-          "preflight": {
-            "$ref": "#/$defs/PreflightData"
-          }
-        },
         "platform trust-anchor add": {
           "cli_parameters": [
             {
@@ -42019,10 +41001,6 @@
                 "title": "Created At",
                 "type": "string"
               },
-              "created_by": {
-                "title": "Created By",
-                "type": "string"
-              },
               "disabled_at": {
                 "anyOf": [
                   {
@@ -42035,18 +41013,6 @@
                 ],
                 "default": null,
                 "title": "Disabled At"
-              },
-              "disabled_by": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Disabled By"
               },
               "enabled": {
                 "title": "Enabled",
@@ -42110,7 +41076,6 @@
               "id",
               "enabled",
               "revision",
-              "created_by",
               "created_at",
               "created"
             ],
@@ -42164,10 +41129,6 @@
                 "title": "Created At",
                 "type": "string"
               },
-              "created_by": {
-                "title": "Created By",
-                "type": "string"
-              },
               "disabled_at": {
                 "anyOf": [
                   {
@@ -42180,18 +41141,6 @@
                 ],
                 "default": null,
                 "title": "Disabled At"
-              },
-              "disabled_by": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Disabled By"
               },
               "enabled": {
                 "title": "Enabled",
@@ -42255,7 +41204,6 @@
               "id",
               "enabled",
               "revision",
-              "created_by",
               "created_at"
             ],
             "title": "TrustAnchorView",
@@ -42284,10 +41232,6 @@
                 "title": "Created At",
                 "type": "string"
               },
-              "created_by": {
-                "title": "Created By",
-                "type": "string"
-              },
               "disabled_at": {
                 "anyOf": [
                   {
@@ -42300,18 +41244,6 @@
                 ],
                 "default": null,
                 "title": "Disabled At"
-              },
-              "disabled_by": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "default": null,
-                "title": "Disabled By"
               },
               "enabled": {
                 "title": "Enabled",
@@ -42375,7 +41307,6 @@
               "id",
               "enabled",
               "revision",
-              "created_by",
               "created_at"
             ],
             "title": "TrustAnchorView",
@@ -66800,18 +65731,6 @@
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
                   },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
-                  },
                   "provider": {
                     "maxLength": 100,
                     "minLength": 1,
@@ -67141,18 +66060,6 @@
                     "minimum": 0,
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
-                  },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
                   },
                   "provider": {
                     "maxLength": 100,
@@ -68673,18 +67580,6 @@
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
                   },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
-                  },
                   "provider": {
                     "maxLength": 100,
                     "minLength": 1,
@@ -69469,18 +68364,6 @@
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
                   },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
-                  },
                   "provider": {
                     "maxLength": 100,
                     "minLength": 1,
@@ -69810,18 +68693,6 @@
                     "minimum": 0,
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
-                  },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
                   },
                   "provider": {
                     "maxLength": 100,
@@ -75463,18 +74334,6 @@
                     "minimum": 0,
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
-                  },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
                   },
                   "provider": {
                     "maxLength": 100,
@@ -84457,18 +83316,6 @@
                     "minimum": 0,
                     "title": "Output Tokens Upper Bound",
                     "type": "integer"
-                  },
-                  "platform_model_id": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "default": null,
-                    "title": "Platform Model Id"
                   },
                   "provider": {
                     "maxLength": 100,
@@ -95722,14 +94569,6 @@
           "type": "text"
         },
         {
-          "name": "state",
-          "options": [
-            "--state"
-          ],
-          "required": false,
-          "type": "path"
-        },
-        {
           "name": "contract_version",
           "options": [
             "--contract-version"
@@ -95992,8 +94831,7 @@
     },
     "data": {
       "id": "00000000-0000-0000-0000-000000000001",
-      "name": "Synthetic task",
-      "org_id": "00000000-0000-0000-0000-000000000001"
+      "name": "Synthetic task"
     },
     "duration_ms": 0,
     "items": [],
@@ -96086,8 +94924,7 @@
     "items": [
       {
         "id": "00000000-0000-0000-0000-000000000001",
-        "name": "Synthetic task",
-        "org_id": "00000000-0000-0000-0000-000000000001"
+        "name": "Synthetic task"
       }
     ],
     "ok": true,
@@ -96390,12 +95227,12 @@
       "unresolved_calls": 0
     },
     "data": {
-      "encrypted_token_file": "<encrypted-token-file>",
       "expires_at": "2030-01-01T00:00:00+00:00",
       "id": "00000000-0000-0000-0000-000000000001",
       "scopes": [
         "task:read"
-      ]
+      ],
+      "token_file": "<token-file>"
     },
     "duration_ms": 0,
     "items": [],

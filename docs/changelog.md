@@ -6,6 +6,15 @@ kind: changelog
 
 Delivered scope by date. See [mechanism notes](README.md#mechanism-notes) for each scope's mechanism.
 
+## 2026-10-12：单人安装 Phase A 基础层
+
+- ORM 对齐单人 baseline，移除组织、用户、成员和角色模型，补齐 Clef 与凭据探测模型。
+- 使用安装访问密钥、短期控制台会话或受限 API 令牌认证；移除密码登录、组织选择和平台登录、模型目录入口。
+- 数据库事务、队列、工作器、文件存储和密钥轮换移除组织参数；凭据解析和 Clef 使用运行时数据库连接。
+- CLI 支持环境访问密钥、仅属主可读的密钥文件和 API 令牌；令牌创建输出私有文件路径。
+- 更新测试数据库清理、单人认证夹具、运行脚本、CI 环境与[开发步骤](guides/development.md)。领域服务迁移继续按[单人安装计划](plan/single-user.md)推进。
+- 停用凭据启用及已有凭据导入比对需要 baseline 提供受人工身份保护的修订绑定密文读取函数；缺少该能力时返回明确错误。
+
 ## 2026-10-12：单人本地安装第一阶段，移除多人功能入口
 
 - 删除单位申请、平台单位管理、运营用量和审计查询、管理员开通、单位成员邀请与管理的 API、CLI 和页面入口。

@@ -1,8 +1,8 @@
 """Explicit task boundary for existing service entry points.
 
 Locators are declared at the service, never derived from an HTTP path. A stored
-parent is resolved under org RLS before task authorization, and the original
-service still applies its object binding, domain, human and content gates.
+parent is resolved before task authorization, and the original service still
+applies its object binding, human and content gates.
 """
 
 from collections.abc import Callable
@@ -50,9 +50,7 @@ def task_authorized(
                 table = Base.metadata.tables[table_name]
                 stored = (
                     await session.execute(
-                        select(table.c.task_id).where(
-                            table.c.id == values[argument], table.c.org_id == actor.org_id
-                        )
+                        select(table.c.task_id).where(table.c.id == values[argument])
                     )
                 ).first()
                 if stored is None:
@@ -66,14 +64,11 @@ def task_authorized(
                 task_id = target
             if task_id is not None:
                 action = scope(values) if callable(scope) else scope
-                domain = (
-                    {"bidder": "commercial", "technical": "technical"}.get(actor.role)
-                    if review
-                    else None
-                )
-                await access(
-                    session, actor, task_id, scope=action, write=write, domain=domain, lock=lock
-                )
+                await access(session, actor, task_id, scope=action, write=write, lock=lock)
+                if review and (actor.actor_kind != "session" or actor.token_id is not None):
+                    from app.core.errors import ServiceError
+
+                    raise ServiceError("forbidden", "A human session is required", 403, 4)
             elif not optional:
                 raise not_found()
             return await function(*args, **kwargs)

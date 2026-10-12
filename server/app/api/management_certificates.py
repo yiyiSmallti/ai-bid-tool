@@ -16,7 +16,6 @@ from app.schemas.management_pages import (
     ResourceLifecycleSet,
     ResourceQuery,
 )
-from app.services import management_certificates as certificates
 
 
 def create_router(context, settings):
@@ -30,15 +29,21 @@ def create_router(context, settings):
         return session, actor
 
     def page(command, value, started):
+        from app.services import management_certificates as certificates
+
         return certificates.page_result(command, value, round((time.monotonic() - started) * 1000))
 
     def detail(command, value, started):
+        from app.services import management_certificates as certificates
+
         return certificates.detail_result(
             command, value, round((time.monotonic() - started) * 1000)
         )
 
     @router.post("/query", name="resource_certificate_browse", response_model=Result)
     async def query(body: ResourceQuery, ctx=Depends(management_context, scope="function")):
+        from app.services import management_certificates as certificates
+
         started = time.monotonic()
         session, actor = ctx
         return page(
@@ -52,6 +57,8 @@ def create_router(context, settings):
         as_of: date | None = Query(None),
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_certificates as certificates
+
         started = time.monotonic()
         session, actor = ctx
         return detail(
@@ -70,6 +77,8 @@ def create_router(context, settings):
     async def history(
         certificate_id: UUID, body: PageQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.services import management_certificates as certificates
+
         started = time.monotonic()
         session, actor = ctx
         return page(
@@ -88,6 +97,8 @@ def create_router(context, settings):
         body: ResourceLifecycleSet,
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_certificates as certificates
+
         started = time.monotonic()
         session, actor = ctx
         return detail(
@@ -104,6 +115,8 @@ def create_router(context, settings):
     async def lifecycle_history(
         certificate_id: UUID, body: PageQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.services import management_certificates as certificates
+
         started = time.monotonic()
         session, actor = ctx
         return page(

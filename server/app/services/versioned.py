@@ -54,8 +54,6 @@ class VersionedKind:
 def audit(session: AsyncSession, actor: Identity, action: str, object_id: UUID, details: dict):
     session.add(
         AuditLog(
-            org_id=actor.org_id,
-            actor_user_id=actor.user_id,
             actor_token_id=actor.token_id,
             action=action,
             object_id=object_id,
@@ -66,7 +64,6 @@ def audit(session: AsyncSession, actor: Identity, action: str, object_id: UUID, 
             else "external_agent"
             if actor.token_id
             else None,
-            on_behalf_of_user_id=actor.user_id if actor.principal_id or actor.token_id else None,
             agent_principal_id=actor.principal_id,
             agent_session_id=actor.session_id,
             agent_step_id=actor.step_id,

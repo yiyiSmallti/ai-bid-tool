@@ -19,8 +19,6 @@ from app.schemas.response_card_contracts import (
     DraftRequest,
     TaskRedactionSet,
 )
-from app.services import card_generation, drafts
-from app.services import response_cards as cards
 
 
 def create_router(context, db, storage, queue, settings, llm, resolve):
@@ -37,6 +35,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.get("/tasks/{task_id}/cards", name="card_list", response_model=Result)
     async def card_list(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
+        from app.services import response_cards as cards
+
         data, items = await cards.list_cards(ctx[0], ctx[1], task_id, job)
         return result("card list", data, items, await cards.scope_warnings(ctx[0], job))
 
@@ -44,6 +44,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     async def card_show(
         card_id: UUID, history: bool = False, ctx=Depends(context, scope="function")
     ):
+        from app.services import response_cards as cards
+
         data = await cards.show_card(ctx[0], ctx[1], card_id, history=history)
         current = data["card"] if history else data
         return result(
@@ -54,6 +56,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.post("/tasks/{task_id}/cards", name="card_create", response_model=Result)
     async def card_create(task_id: UUID, body: CardCreate, ctx=Depends(context, scope="function")):
+        from app.services import response_cards as cards
+
         return result(
             "card create", await cards.create_card(ctx[0], ctx[1], task_id, body, storage)
         )
@@ -73,6 +77,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.put("/cards/{card_id}", name="card_update", response_model=Result)
     async def card_update(card_id: UUID, body: CardUpdate, ctx=Depends(context, scope="function")):
+        from app.services import response_cards as cards
+
         ctx[0].info["memory_settings"] = settings
         view = await cards.update_card(ctx[0], ctx[1], card_id, body, storage)
         warnings = await dispatch_feedback(ctx[0], ctx[1])
@@ -82,6 +88,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     async def card_classify(
         card_id: UUID, body: CardClassify, ctx=Depends(context, scope="function")
     ):
+        from app.services import response_cards as cards
+
         return result("card classify", await cards.classify_card(ctx[0], ctx[1], card_id, body))
 
     @router.post(
@@ -90,10 +98,14 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     async def card_disposition(
         task_id: UUID, body: DispositionBatch, ctx=Depends(context, scope="function")
     ):
+        from app.services import response_cards as cards
+
         return result("card disposition", await cards.dispose_cards(ctx[0], ctx[1], task_id, body))
 
     @router.post("/cards/{card_id}/actions", name="card_action", response_model=Result)
     async def card_action(card_id: UUID, body: CardAction, ctx=Depends(context, scope="function")):
+        from app.services import response_cards as cards
+
         ctx[0].info["memory_settings"] = settings
         view = await cards.card_action(ctx[0], ctx[1], card_id, body, storage, settings)
         warnings = list(view["warning_codes"])
@@ -111,6 +123,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     async def task_redaction_set(
         task_id: UUID, body: TaskRedactionSet, ctx=Depends(context, scope="function")
     ):
+        from app.services import response_cards as cards
+
         return result(
             "task redaction set", await cards.set_redaction(ctx[0], ctx[1], task_id, body)
         )
@@ -119,6 +133,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     async def draft(
         request: Request, task_id: UUID, body: DraftRequest, ctx=Depends(context, scope="function")
     ):
+        from app.services import drafts
+        from app.services import response_cards as cards
+
         session, actor = ctx
         data, job = await drafts.submit_draft(session, actor, task_id, body, storage)
         warnings = await cards.scope_warnings(session, body.extraction_job_id)
@@ -141,6 +158,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
     async def card_generate(
         task_id: UUID, body: CardGenerateRequest, ctx=Depends(context, scope="function")
     ):
+        from app.services import card_generation
+
         session, actor = ctx
         provider = await resolve(session) if resolve else llm
         data, job, warnings = await card_generation.submit_generation(
@@ -162,6 +181,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.get("/drafts/{draft_id}", name="draft_show", response_model=Result)
     async def draft_show(draft_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import drafts
+        from app.services import response_cards as cards
+
         view = await drafts.show_draft(ctx[0], ctx[1], draft_id, storage)
         warnings = [
             f"negative_deviation:{row['requirement_id']}"
@@ -178,6 +200,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve):
 
     @router.get("/tasks/{task_id}/drafts", name="draft_list", response_model=Result)
     async def draft_list(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
+        from app.services import drafts
+        from app.services import response_cards as cards
+
         data, items = await drafts.list_drafts(ctx[0], ctx[1], task_id, job, storage)
         return result("draft list", data, items, await cards.scope_warnings(ctx[0], job))
 

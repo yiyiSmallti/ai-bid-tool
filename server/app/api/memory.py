@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
 from app.core.errors import ServiceError, not_found
-from app.memory import candidates, crud, feedback, retrieval
 from app.schemas.contracts import Result
 from app.schemas.memory_contracts import (
     MemoryCandidateJobRequest,
@@ -29,6 +28,8 @@ def create_router(context, db, queue, settings, storage):
 
     @router.post("/memories", name="memory_add", response_model=Result)
     async def add(body: MemoryCreate, ctx=Depends(context, scope="function")):
+        from app.memory import crud
+
         return await crud.create_memory(ctx[0], ctx[1], body, settings)
 
     @router.get("/memories", name="memory_list", response_model=Result)
@@ -42,6 +43,8 @@ def create_router(context, db, queue, settings, storage):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.memory import crud
+
         try:
             request = MemoryListRequest(
                 target=MemoryTarget(scope=scope, user_id=user_id, task_id=task_id),
@@ -61,6 +64,8 @@ def create_router(context, db, queue, settings, storage):
     async def retrieve(
         body: MemoryRetrievalRequest, preview: bool = False, ctx=Depends(context, scope="function")
     ):
+        from app.memory import retrieval
+
         output = await retrieval.retrieve(ctx[0], ctx[1], body, settings, preview=preview)
         return Result(
             ok=True,
@@ -72,10 +77,14 @@ def create_router(context, db, queue, settings, storage):
 
     @router.get("/memories/{memory_id}", name="memory_show", response_model=Result)
     async def show(memory_id: UUID, ctx=Depends(context, scope="function")):
+        from app.memory import crud
+
         return await crud.show_memory(ctx[0], ctx[1], memory_id)
 
     @router.put("/memories/{memory_id}", name="memory_update", response_model=Result)
     async def update(memory_id: UUID, body: MemoryUpdate, ctx=Depends(context, scope="function")):
+        from app.memory import crud
+
         return await crud.update_memory(ctx[0], ctx[1], memory_id, body, settings)
 
     @router.get("/memories/{memory_id}/history", name="memory_history", response_model=Result)
@@ -85,24 +94,34 @@ def create_router(context, db, queue, settings, storage):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.memory import crud
+
         return await crud.history(ctx[0], ctx[1], memory_id, settings, cursor=cursor, limit=limit)
 
     @router.post("/memories/{memory_id}/decisions", name="memory_decision", response_model=Result)
     async def decide(memory_id: UUID, body: MemoryDecision, ctx=Depends(context, scope="function")):
+        from app.memory import crud
+
         return await crud.decide_memory(ctx[0], ctx[1], memory_id, body, settings)
 
     @router.post("/memories/{memory_id}/disable", name="memory_disable", response_model=Result)
     async def disable(memory_id: UUID, body: MemoryDisable, ctx=Depends(context, scope="function")):
+        from app.memory import crud
+
         return await crud.disable_memory(ctx[0], ctx[1], memory_id, body, settings)
 
     @router.delete("/memories/{memory_id}", name="memory_delete", response_model=Result)
     async def delete(memory_id: UUID, body: MemoryDelete, ctx=Depends(context, scope="function")):
+        from app.memory import crud
+
         return await crud.delete_memory(ctx[0], ctx[1], memory_id, body, settings)
 
     @router.get(
         "/memory-retrievals/{retrieval_id}", name="memory_retrieval_show", response_model=Result
     )
     async def retrieval_show(retrieval_id: UUID, ctx=Depends(context, scope="function")):
+        from app.memory import retrieval
+
         output = await retrieval.show_retrieval(ctx[0], ctx[1], retrieval_id, settings)
         return Result(
             ok=True,
@@ -114,6 +133,8 @@ def create_router(context, db, queue, settings, storage):
 
     @router.get("/jobs/{job_id}/memory", name="memory_used", response_model=Result)
     async def used(job_id: UUID, ctx=Depends(context, scope="function")):
+        from app.memory import retrieval
+
         data = await retrieval.used(ctx[0], ctx[1], job_id, storage)
         return Result(ok=True, command="memory used", data=data.model_dump(mode="json"))
 
@@ -123,6 +144,8 @@ def create_router(context, db, queue, settings, storage):
     async def run(
         task_id: UUID, body: MemoryCandidateJobRequest, ctx=Depends(context, scope="function")
     ):
+        from app.memory import candidates
+
         session, actor = ctx
         output, job = await candidates.submit_candidates(session, actor, task_id, body, settings)
         if job is not None:
@@ -157,6 +180,8 @@ def create_router(context, db, queue, settings, storage):
         limit: int | None = Query(None, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.memory import feedback
+
         if management_view:
             if getattr(request.state, "contract_version", None) != "5.0":
                 raise not_found()
@@ -185,12 +210,16 @@ def create_router(context, db, queue, settings, storage):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.memory import feedback
+
         return await feedback.list_samples(ctx[0], ctx[1], task_id, cursor=cursor, limit=limit)
 
     @router.get(
         "/memory-evaluations/{sample_id}", name="memory_samples_show", response_model=Result
     )
     async def samples_show(sample_id: UUID, ctx=Depends(context, scope="function")):
+        from app.memory import feedback
+
         return await feedback.show_sample(ctx[0], ctx[1], sample_id, settings)
 
     @router.post(
@@ -201,6 +230,8 @@ def create_router(context, db, queue, settings, storage):
     async def samples_review(
         sample_id: UUID, body: MemoryEvalReview, ctx=Depends(context, scope="function")
     ):
+        from app.memory import feedback
+
         return await feedback.review_sample(ctx[0], ctx[1], sample_id, body, settings)
 
     return router

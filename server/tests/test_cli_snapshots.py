@@ -7,7 +7,6 @@ import bid_cli.export as export_cli
 from app.schemas.contracts import Cost, Result
 from bid_cli.client import Client
 from bid_cli.main import main
-from cryptography.fernet import Fernet
 
 IDENTIFIER = "00000000-0000-0000-0000-000000000001"
 IDENTIFIER_2 = "00000000-0000-0000-0000-000000000002"
@@ -612,11 +611,7 @@ CONFIDENTIAL_VALUE = {
 async def fake_request(self, method, path, **kwargs):
     # Contract fixtures only: no real service, provider or user data is involved.
     data, items, warnings = {}, [], []
-    if path == "/auth/login":
-        data = {"session": "synthetic-fixture-session", "org_id": IDENTIFIER, "expires_in": 3600}
-    elif path == "/org/current":
-        data = {"org_id": IDENTIFIER, "role": "admin"}
-    elif path == "/confidential-fields":
+    if path == "/confidential-fields":
         if method == "POST":
             assert kwargs["json"] == {
                 "key": "bid_total",
@@ -640,23 +635,6 @@ async def fake_request(self, method, path, **kwargs):
     elif path == "/confidential-values":
         data = {"task_id": IDENTIFIER, "missing": 0}
         items = [CONFIDENTIAL_VALUE]
-    elif path == "/platform/auth/login":
-        data = {
-            "session": "synthetic-fixture-session",
-            "email": "ops@example.test",
-            "expires_in": 1800,
-        }
-    elif path == "/platform/models":
-        if method == "POST":
-            data = PLATFORM_MODEL
-        else:
-            items = [PLATFORM_MODEL]
-    elif path.startswith("/platform/models/"):
-        data = {"model_id": "opus-standard", "passed": True, "items": 1, "usage": {"tokens": 10}}
-    elif path == "/auth/orgs":
-        items = [
-            {"org_id": IDENTIFIER, "name": "Synthetic tenant", "role": "admin", "active": True}
-        ]
     elif path.endswith("/sandbox-runs"):
         if method == "POST":
             submit = kwargs.get("json") or json.loads(kwargs["data"]["submit"])
@@ -686,9 +664,9 @@ async def fake_request(self, method, path, **kwargs):
     elif path.startswith("/sandbox-runs/"):
         data = SANDBOX_RUN
     elif path == "/tasks" and method == "POST":
-        data = {"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}
+        data = {"id": IDENTIFIER, "name": "Synthetic task"}
     elif path == "/tasks":
-        items = [{"id": IDENTIFIER, "name": "Synthetic task", "org_id": IDENTIFIER}]
+        items = [{"id": IDENTIFIER, "name": "Synthetic task"}]
     elif path == "/export-template-bindings":
         if method == "POST":
             data = EXPORT_BINDING
@@ -1031,8 +1009,6 @@ async def fake_request(self, method, path, **kwargs):
 
 
 def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, pdf_bytes):
-    monkeypatch.setenv("BID_CLI_KEY", Fernet.generate_key().decode())
-    monkeypatch.setenv("BID_PASSWORD", "synthetic-test-password")
     monkeypatch.setattr(Client, "request", fake_request)
     monkeypatch.setattr(Client, "download_template", fake_download)
     monkeypatch.setattr(Client, "download_certificate_file", fake_scan_download)
@@ -1200,10 +1176,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         )
     )
     monkeypatch.setenv("BID_CARD_CODE", "SYNT-HETI-CFIX-TURE")
-    common = ["--state", str(tmp_path / "session.enc")]
+    common = []
     commands = {
-        "login": ["login", "--email", "synthetic@example.test", "--org", IDENTIFIER],
-        "org use": ["org", "use", IDENTIFIER],
         "task create": ["task", "create", "--name", "Synthetic task"],
         "task list": ["task", "list"],
         "sandbox render": [
@@ -1478,11 +1452,6 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             "--output",
             str(tmp_path / "source.png"),
         ],
-        "platform login": ["platform", "login", "--email", "ops@example.test", "--totp", "123456"],
-        "platform model list": ["platform", "model", "list"],
-        "platform model set": ["platform", "model", "set", "--input", str(platform_model_input)],
-        "platform model test": ["platform", "model", "test", "--id", "opus-standard", "--test-org", IDENTIFIER],
-        "auth orgs": ["auth", "orgs", "--email", "boss@example.test"],
         "confidential field add": [
             "confidential", "field", "add", "--key", "bid_total", "--label", "投标总价",
             "--kind", "amount", "--scope", "task",
@@ -1522,8 +1491,8 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
             assert name not in partial_commands
         body = json.loads(capsys.readouterr().out)
         body["duration_ms"] = 0
-        if "encrypted_token_file" in body["data"]:
-            body["data"]["encrypted_token_file"] = "<encrypted-token-file>"
+        if "token_file" in body["data"]:
+            body["data"]["token_file"] = "<token-file>"
         if "output_path" in body["data"]:
             body["data"]["output_path"] = "<download-output>"
         assert "synthetic-fixture-token" not in json.dumps(body)
@@ -1531,6 +1500,9 @@ def test_every_command_json_snapshot(monkeypatch, tmp_path, capsys, docx_bytes, 
         assert "synthetic-fixture-session" not in json.dumps(body)
         assert "Synthetic value" not in json.dumps(body)
         actual[name] = body
+    (tmp_path / "cli-actual.json").write_text(
+        json.dumps(actual, ensure_ascii=False, sort_keys=True, indent=2) + "\n"
+    )
     snapshot = Path(__file__).with_name("snapshots") / "cli-v1.json"
     import os
 

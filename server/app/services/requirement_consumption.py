@@ -26,7 +26,7 @@ def gap_reason(review) -> str | None:
 
 
 async def effective(session, requirements, *, citations=None):
-    from app.services.requirement_confirmation import effective_reviews
+    from app.services.requirement_source import effective_reviews
 
     return await effective_reviews(session, requirements, citation_validity=citations)
 

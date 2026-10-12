@@ -21,14 +21,6 @@ from app.schemas.bid_review import (
     BidSubmissionCreate,
 )
 from app.schemas.contracts import Cost, Result
-from app.services import (
-    bid_review,
-    bid_review_findings,
-    bid_review_presence,
-    bid_review_privacy,
-    bid_review_report,
-    bid_review_run,
-)
 
 
 def create_router(context, settings, storage, queue):
@@ -46,6 +38,8 @@ def create_router(context, settings, storage, queue):
     @router.post("/tasks/{task_id}/bid-submissions", name="review_upload", response_model=Result)
     async def upload(task_id: UUID, request: Request, ctx=Depends(context, scope="function")):
         # Reject unauthorized identities before retaining multipart bytes.
+        from app.services import bid_review
+
         await bid_review.access(
             ctx[0], ctx[1], task_id, "bid-review:upload", write=True, lock=False
         )
@@ -68,6 +62,8 @@ def create_router(context, settings, storage, queue):
         body: BidPrepareRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review
+
         if body.submission_id != submission_id:
             raise ServiceError(
                 "invalid_input", "Preparation submission does not match route", 422, 2
@@ -87,6 +83,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review
+
         data, items = await bid_review.list_submissions(
             ctx[0], ctx[1], task_id, BidReviewListQuery(cursor=cursor, limit=limit), settings
         )
@@ -96,6 +94,8 @@ def create_router(context, settings, storage, queue):
         "/bid-submissions/{submission_id}", name="review_submission_show", response_model=Result
     )
     async def show(submission_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import bid_review
+
         return result(
             "review submission show", await bid_review.show(ctx[0], ctx[1], submission_id, settings)
         )
@@ -107,7 +107,7 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(20, ge=1, le=50),
         ctx=Depends(context, scope="function"),
     ):
-        from app.services import bid_signature_views
+        from app.services import bid_review, bid_signature_views
 
         root = await bid_review.required(ctx[0], submission_id)
         await bid_review.access(ctx[0], ctx[1], root.task_id)
@@ -124,6 +124,8 @@ def create_router(context, settings, storage, queue):
         )
 
     async def binding(ctx):
+        from app.services import bid_review_run
+
         try:
             _, value = await bid_review_run.resolve_binding(ctx[0], settings)
             return value
@@ -137,6 +139,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(25, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_privacy
+
         await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id)
         return result(
             "review redaction",
@@ -157,6 +161,8 @@ def create_router(context, settings, storage, queue):
         body: privacy_contracts.BidNameListRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_privacy
+
         return result(
             "review redaction names",
             await bid_review_privacy.add_names(ctx[0], ctx[1], submission_id, body, settings),
@@ -169,6 +175,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(25, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_privacy
+
         await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id)
         data, items = await bid_review_privacy.list_authorizations(
             ctx[0], ctx[1], submission_id, settings, await binding(ctx), cursor=cursor, limit=limit
@@ -181,6 +189,8 @@ def create_router(context, settings, storage, queue):
         body: privacy_contracts.OutboundAuthorizationRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_privacy
+
         await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id, write=True)
         return result(
             "review outbound authorize",
@@ -197,6 +207,8 @@ def create_router(context, settings, storage, queue):
         body: privacy_contracts.OutboundRevokeRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_privacy
+
         return result(
             "review outbound revoke",
             await bid_review_privacy.revoke(ctx[0], ctx[1], submission_id, body, settings),
@@ -216,6 +228,8 @@ def create_router(context, settings, storage, queue):
         body: presence_contracts.PresencePrepareRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_presence, bid_review_privacy
+
         await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id, write=True)
         return result(
             "review presence prepare",
@@ -226,6 +240,8 @@ def create_router(context, settings, storage, queue):
 
     @router.get("/bid-submissions/{submission_id}/presence-preview", response_model=Result)
     async def presence_preview(submission_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import bid_review_presence, bid_review_privacy
+
         await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id)
         try:
             provider_binding = await presence_binding(ctx)
@@ -244,6 +260,8 @@ def create_router(context, settings, storage, queue):
         body: presence_contracts.PresenceAuthorizationRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_presence, bid_review_privacy
+
         await bid_review_privacy.human_access(ctx[0], ctx[1], submission_id, write=True)
         provider_binding = await presence_binding(ctx) if body.allow_external else None
         return result(
@@ -258,6 +276,7 @@ def create_router(context, settings, storage, queue):
         from fastapi.responses import Response
 
         from app.models.bid_review_presence import BidPresenceImage
+        from app.services import bid_review_presence, bid_review_privacy
 
         image = await ctx[0].get(BidPresenceImage, image_id)
         if image is None:
@@ -280,6 +299,8 @@ def create_router(context, settings, storage, queue):
     async def run(
         task_id: UUID, body: run_contracts.BidReviewRequest, ctx=Depends(context, scope="function")
     ):
+        from app.services import bid_review_run
+
         data = await bid_review_run.submit(ctx[0], ctx[1], task_id, body, queue, settings)
         response = result("review run", data)
         if isinstance(data, run_contracts.BidReviewPreview):
@@ -293,6 +314,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_run
+
         data, items = await bid_review_run.list_runs(
             ctx[0], ctx[1], task_id, settings, cursor=cursor, limit=limit
         )
@@ -306,6 +329,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_run
+
         data = await bid_review_run.show(
             ctx[0], ctx[1], review_id, settings, section=section, cursor=cursor, limit=limit
         )
@@ -323,6 +348,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_report
+
         data, items = await bid_review_report.show(
             ctx[0],
             ctx[1],
@@ -345,6 +372,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_report
+
         data, items = await bid_review_report.history(
             ctx[0], ctx[1], review_id, settings, cursor=cursor, limit=limit
         )
@@ -358,6 +387,8 @@ def create_router(context, settings, storage, queue):
         body: report_contracts.BidReportRenderRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_report
+
         data = await bid_review_report.submit(ctx[0], ctx[1], review_id, body, queue, settings)
         response = result("review report", data)
         if isinstance(data, report_contracts.BidReportRenderPreview):
@@ -368,6 +399,7 @@ def create_router(context, settings, storage, queue):
     async def report_link(artifact_id: UUID, ctx=Depends(context, scope="function")):
         from app.api.common import signed_link
         from app.core.security import TokenSigner
+        from app.services import bid_review_report
         from app.services.versioned import audit
 
         row, snapshot = await bid_review_report.download_gate(ctx[0], ctx[1], artifact_id)
@@ -401,6 +433,7 @@ def create_router(context, settings, storage, queue):
     ):
         from app.api.common import attachment, check_signature
         from app.core.security import TokenSigner
+        from app.services import bid_review_report
 
         row, _ = await bid_review_report.download_gate(ctx[0], ctx[1], artifact_id)
         check_signature(
@@ -439,6 +472,8 @@ def create_router(context, settings, storage, queue):
         outcome: findings_contracts.FindingOutcome | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_findings
+
         data, items = await bid_review_findings.list_findings(
             ctx[0],
             ctx[1],
@@ -459,6 +494,8 @@ def create_router(context, settings, storage, queue):
         body: findings_contracts.BidReviewDecisionRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_findings
+
         return result(
             "review decide",
             await bid_review_findings.decide(
@@ -480,6 +517,8 @@ def create_router(context, settings, storage, queue):
         body: findings_contracts.BidReviewClassificationRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_findings
+
         return result(
             "review classify",
             await bid_review_findings.decide(
@@ -501,6 +540,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_findings
+
         data, items = await bid_review_findings.history(
             ctx[0],
             ctx[1],
@@ -522,6 +563,8 @@ def create_router(context, settings, storage, queue):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import bid_review_findings
+
         data, items = await bid_review_findings.history(
             ctx[0],
             ctx[1],

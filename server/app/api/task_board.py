@@ -16,7 +16,6 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.db import set_org
 from app.core.errors import ServiceError
 from app.core.security import TokenSigner
 from app.schemas.contracts import Category, Cost, Result
@@ -26,7 +25,6 @@ from app.schemas.task_board import (
     EventReplayQuery,
     TaskProgressQuery,
 )
-from app.services import task_board, task_events
 from app.services.auth import authenticate, set_actor_context
 
 MAX_RESULT_BYTES = 1024 * 1024
@@ -116,21 +114,19 @@ class StreamCaps:
         async with self.guard:
             try:
                 connection = await self._connection()
-                org = await self._slot(connection, "task_stream_org:" + str(actor.org_id), 100)
-                if org is None:
+                installation = await self._slot(connection, "task_stream_installation", 100)
+                if installation is None:
                     raise ServiceError("stream_limit", "Stream limit exceeded; retry later", 429, 3)
                 identity = await self._slot(
                     connection,
                     "task_stream_identity:"
-                    + ":".join(
-                        map(str, (actor.org_id, actor.user_id, actor.token_id or "", task_id))
-                    ),
+                    + ":".join(map(str, (actor.actor_kind, actor.token_id or "", task_id))),
                     3,
                 )
                 if identity is None:
-                    await self._unlock(connection, org)
+                    await self._unlock(connection, installation)
                     raise ServiceError("stream_limit", "Stream limit exceeded; retry later", 429, 3)
-                return self.generation, org, identity
+                return self.generation, installation, identity
             except SQLAlchemyError:
                 await self._invalidate()
                 raise ServiceError(
@@ -169,6 +165,7 @@ class BoardRouter(APIRouter):
 
 
 def create_router(context, db, storage, queue, settings):
+
     router = BoardRouter()
     bearer = HTTPBearer(auto_error=False)
     crypto = TokenSigner.for_tokens(settings)
@@ -176,28 +173,26 @@ def create_router(context, db, storage, queue, settings):
     router.stream_caps = caps
 
     @asynccontextmanager
-    async def snapshot(credentials, org_id):
+    async def snapshot(credentials):
         if credentials is None:
             raise ServiceError("invalid_session", "Bearer credentials required", 401, 4)
-        # Isolation is selected before the first org/auth SQL statement. Releasing
-        # the connection before socket writes avoids a long-lived RLS transaction.
+        # Release the snapshot connection before socket writes or polling waits.
         async with db.engine.connect() as connection:
             connection = await connection.execution_options(isolation_level="REPEATABLE READ")
             async with (
                 AsyncSession(bind=connection, expire_on_commit=False) as session,
                 session.begin(),
             ):
-                await set_org(session, org_id)
                 await session.execute(text("SET LOCAL statement_timeout='2000ms'"))
-                actor = await authenticate(session, credentials.credentials, org_id, crypto)
+                actor = await authenticate(session, credentials.credentials, crypto, settings)
                 await set_actor_context(session, actor)
                 session.info["memory_settings"] = settings
                 yield session, actor
 
-    async def read(credentials, org_id, operation):
+    async def read(credentials, operation):
         deadline = asyncio.timeout(2)
         try:
-            async with deadline, snapshot(credentials, org_id) as (session, actor):
+            async with deadline, snapshot(credentials) as (session, actor):
                 return await operation(session, actor)
         except DBAPIError as error:
             # Cancelling an in-flight psycopg query leaves the connection busy, so the
@@ -224,9 +219,10 @@ def create_router(context, db, storage, queue, settings):
         cursor: str | None = None,
         limit: int = Query(50, ge=1, le=100),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-        x_org_id: UUID = Header(...),
     ):
         async def operation(session, actor):
+            from app.services import task_board
+
             if extraction_job_id is None:
                 from app.services.task_access import access
 
@@ -288,7 +284,7 @@ def create_router(context, db, storage, queue, settings):
                 warnings=["requirement_review_pending:open_requirement_review"] if pending else [],
             )
 
-        return await read(credentials, x_org_id, operation)
+        return await read(credentials, operation)
 
     @router.get("/tasks/{task_id}/progress", name="task_progress", response_model=Result)
     async def progress(
@@ -299,9 +295,10 @@ def create_router(context, db, storage, queue, settings):
         cursor: str | None = None,
         limit: int = Query(20, ge=1, le=20),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-        x_org_id: UUID = Header(...),
     ):
         async def operation(session, actor):
+            from app.services import task_board
+
             if view == "requirement-review":
                 from app.services import requirement_board
                 from app.services.task_access import access
@@ -344,7 +341,7 @@ def create_router(context, db, storage, queue, settings):
                 [job.model_dump(mode="json") for job in result_view.jobs],
             )
 
-        return await read(credentials, x_org_id, operation)
+        return await read(credentials, operation)
 
     @router.get("/tasks/{task_id}/activity", name="task_activity", response_model=Result)
     async def activity(
@@ -352,9 +349,10 @@ def create_router(context, db, storage, queue, settings):
         cursor: str | None = None,
         limit: int = Query(50, ge=1, le=100),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-        x_org_id: UUID = Header(...),
     ):
         async def operation(session, actor):
+            from app.services import task_board
+
             page = await task_board.activity(
                 session, actor, task_id, storage, settings, cursor=cursor, limit=limit
             )
@@ -364,16 +362,18 @@ def create_router(context, db, storage, queue, settings):
                 [item.model_dump(mode="json") for item in page.items],
             )
 
-        return await read(credentials, x_org_id, operation)
+        return await read(credentials, operation)
 
-    async def replay(credentials, org_id, task_id, cursor, limit):
+    async def replay(credentials, task_id, cursor, limit):
         async def operation(session, actor):
+            from app.services import task_events
+
             page = await task_events.replay(
                 session, actor, task_id, settings, storage, cursor=cursor, limit=limit
             )
             return actor, page
 
-        return await read(credentials, org_id, operation)
+        return await read(credentials, operation)
 
     @router.get("/tasks/{task_id}/events/poll", name="task_events_poll", response_model=Result)
     async def poll(
@@ -382,12 +382,11 @@ def create_router(context, db, storage, queue, settings):
         limit: int = Query(100, ge=1, le=100),
         wait_seconds: int = Query(0, ge=0, le=25),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-        x_org_id: UUID = Header(...),
     ):
         query = EventReplayQuery(cursor=cursor, limit=limit, wait_seconds=wait_seconds)
         deadline = time.monotonic() + query.wait_seconds
         while True:
-            _, page = await replay(credentials, x_org_id, task_id, query.cursor, query.limit)
+            _, page = await replay(credentials, task_id, query.cursor, query.limit)
             if page.events or page.reset_required or time.monotonic() >= deadline:
                 break
             query.cursor = page.next_cursor
@@ -404,9 +403,8 @@ def create_router(context, db, storage, queue, settings):
         task_id: UUID,
         last_event_id: str | None = Header(None),
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-        x_org_id: UUID = Header(...),
     ):
-        actor, initial = await replay(credentials, x_org_id, task_id, last_event_id, 50)
+        actor, initial = await replay(credentials, task_id, last_event_id, 50)
         key = await caps.acquire(actor, task_id)
 
         async def messages():
@@ -434,18 +432,18 @@ def create_router(context, db, storage, queue, settings):
                             )
                         )
                         heartbeat = time.monotonic() + 15
-                    # Each next batch checks current user/token/org/task/objects.
+                    # Each next batch checks current credentials and task objects.
                     # No transaction survives any yield or polling delay.
                     await asyncio.sleep(1)
                     try:
-                        _, page = await replay(credentials, x_org_id, task_id, cursor, 50)
+                        _, page = await replay(credentials, task_id, cursor, 50)
                     except ServiceError as error:
                         if error.code in (
                             "event_cursor_expired",
                             "board_changed",
                             "invalid_event_cursor",
                         ):
-                            _, fresh = await replay(credentials, x_org_id, task_id, None, 100)
+                            _, fresh = await replay(credentials, task_id, None, 100)
                             from app.schemas.task_board import StreamResetRequired
 
                             reason = (

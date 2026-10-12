@@ -12,9 +12,6 @@ from app.providers.storage import create_storage
 
 async def run():
     settings = Settings.load()
-    from app.core.credential_db import get_connections
-
-    await get_connections(settings).reader.verify()
     db = Database(settings)
     await db.verify_role()
     queue = Queue(settings)
@@ -37,9 +34,6 @@ async def run():
             await queue.recover_sandbox_jobs()
             await queue.app.run_worker_async(queues=["bid"])
     finally:
-        from app.core.credential_db import close_connections
-
-        await close_connections(settings)
         await db.engine.dispose()
 
 

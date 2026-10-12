@@ -11,17 +11,17 @@ from sqlalchemy import select, text
 from app.core.config import Settings
 from app.core.errors import ServiceError, not_found
 from app.core.security import Secrets
-from app.models.entities import Chunk, Document, Job, Membership, Requirement, User
+from app.models.entities import Chunk, Document, Job, Requirement
 from app.models.requirement_confirmation import (
     RequirementReview,
     RequirementReviewEvent,
     RequirementReviewRequest,
     RequirementReviewSet,
 )
-from app.models.team_workflow import TaskMember
 from app.schemas import requirement_confirmation as schema
 from app.schemas.contracts import ExtractedRequirement
 from app.services.extraction import fingerprint
+from app.services.requirement_seeds import seed_reviews
 from app.services.requirement_source import (
     canonical,
     content_of,
@@ -30,7 +30,7 @@ from app.services.requirement_source import (
     raw_digest,
     verify,
 )
-from app.services.task_access import access, fail
+from app.services.task_access import access
 from app.services.versioned import audit
 
 __all__ = [
@@ -44,8 +44,11 @@ __all__ = [
     "decide",
     "confirm_batch",
     "consumption_manifest",
-    "seed_reviews",
 ]
+
+
+def fail(code, message, status=409, exit_code=2):
+    raise ServiceError(code, message, status, exit_code)
 
 
 def config(settings):
@@ -127,6 +130,9 @@ async def scope_row(session, actor, task_id, job_id, *, lock=False):
 
 
 async def members(session, actor, task_id):
+    from app.models.entities import Membership, User
+    from app.models.team_workflow import TaskMember
+
     rows = (
         await session.execute(
             select(TaskMember, Membership, User)
@@ -693,126 +699,6 @@ def save_receipt(session, actor, task_id, request, action, request_hash, payload
             receipt_ciphertext=seal(settings, actor.org_id, row_id, payload),
         )
     )
-
-
-async def seed_reviews(
-    session,
-    actor,
-    task_id,
-    extraction_job_id,
-    *,
-    settings,
-    origin="extracted",
-    manual_request=None,
-    manual_requirement_id=None,
-):
-    """Publish encrypted seeds in the extract transaction; never reset existing decisions."""
-    if origin == "legacy":
-        await access(session, actor, task_id, "req:confirm", write=True, require_member=True)
-    job = await session.get(Job, extraction_job_id)
-    if job is None or (job.org_id, job.task_id, job.kind, job.status) != (
-        actor.org_id,
-        task_id,
-        "extract",
-        "succeeded",
-    ):
-        raise not_found()
-    scope = await session.scalar(
-        select(RequirementReviewSet).where(
-            RequirementReviewSet.org_id == actor.org_id,
-            RequirementReviewSet.extraction_job_id == job.id,
-        )
-    )
-    if scope is None:
-        scope = RequirementReviewSet(
-            id=uuid4(),
-            org_id=actor.org_id,
-            task_id=task_id,
-            extraction_job_id=job.id,
-            document_id=job.document_id,
-            origin="manual" if origin.startswith("manual") else "model",
-            revision=1,
-            membership_sha256=digest([]),
-            confirmation_sha256=digest([]),
-        )
-        session.add(scope)
-        await session.flush()
-    reqs = list(
-        (
-            await session.scalars(
-                select(Requirement).where(Requirement.job_id == job.id).order_by(Requirement.id)
-            )
-        ).all()
-    )
-    if manual_request is not None:
-        # A manual add owns only its new ID, never historical model rows.
-        if manual_requirement_id is None:
-            fail("invalid_manual_entry", "Manual seed requires its newly inserted requirement", 422)
-        reqs = [req for req in reqs if req.id == manual_requirement_id]
-    states = await effective_reviews(session, reqs)
-    for req in reqs:
-        if states[req.id].stored is not None:
-            continue
-        eff = states[req.id]
-        rid, eid = uuid4(), uuid4()
-        snapshot = content_of(req).model_dump(mode="json")
-        ciphertext = seal(settings, actor.org_id, rid, snapshot)
-        pin = eff.source_pin.model_dump(mode="json") if eff.source_pin else None
-        row = RequirementReview(
-            id=rid,
-            org_id=actor.org_id,
-            task_id=task_id,
-            extraction_job_id=job.id,
-            requirement_id=req.id,
-            origin=origin,
-            revision=1,
-            current_event_id=eid,
-            state="legacy_unconfirmed" if origin == "legacy" else "unconfirmed",
-            review_hash=eff.review_hash,
-            source_pin=pin,
-            snapshot_ciphertext=ciphertext,
-            rejected_job_id=manual_request.rejected_item.job_id
-            if manual_request and manual_request.rejected_item
-            else None,
-            rejected_index=manual_request.rejected_item.index
-            if manual_request and manual_request.rejected_item
-            else None,
-            rejected_summary_sha256=manual_request.rejected_item.summary_sha256
-            if manual_request and manual_request.rejected_item
-            else None,
-        )
-        session.add(row)
-        await session.flush()
-        session.add(
-            RequirementReviewEvent(
-                id=eid,
-                org_id=actor.org_id,
-                task_id=task_id,
-                extraction_job_id=job.id,
-                requirement_id=req.id,
-                review_id=rid,
-                revision=1,
-                action="manual_add" if manual_request else "seed",
-                state_after="legacy_unconfirmed" if origin == "legacy" else "unconfirmed",
-                review_hash=eff.review_hash,
-                snapshot_sha256=digest(snapshot),
-                snapshot_ciphertext=ciphertext,
-                source_pin=pin,
-                actor_kind="session" if manual_request or origin == "legacy" else "worker",
-                actor_user_id=actor.user_id if manual_request or origin == "legacy" else None,
-                request_id=manual_request.request_id if manual_request else None,
-                reason_sha256=raw_digest(manual_request.reason) if manual_request else None,
-                reason_ciphertext=seal(
-                    settings, actor.org_id, rid, {"reason": manual_request.reason}
-                )
-                if manual_request
-                else None,
-                occurred_at=datetime.now(UTC),
-            )
-        )
-        await session.flush()
-    await session.refresh(scope)
-    return scope
 
 
 async def apply_decision(session, actor, req, body, settings, *, effective=None):

@@ -73,7 +73,6 @@ from app.schemas.console_assessments import (
 )
 from app.schemas.contracts import (
     JobAction,
-    Login,
     Result,
     TaskCreate,
     TokenCreate,
@@ -111,12 +110,6 @@ from app.schemas.memory_contracts import (
     MemoryRetrievalData,
     MemoryRetrievalRequest,
     MemoryUpdate,
-)
-from app.schemas.platform_contracts import (
-    OrgLookup,
-    PlatformLogin,
-    PlatformModelSet,
-    PlatformModelTest,
 )
 from app.schemas.platform_credentials import (
     CredentialCreateInput,
@@ -327,8 +320,6 @@ COMMANDS = {
     "export download": None,
     "export provenance": None,
     "export template-sample": None,
-    "login": Login,
-    "org use": None,
     "task create": TaskCreate,
     "task list": None,
     "resource product add": ProductCreate,
@@ -371,10 +362,6 @@ COMMANDS = {
     "job wait": None,
     "job cancel": None,
     "token create": TokenCreate,
-    "platform login": PlatformLogin,
-    "platform model list": None,
-    "platform model set": PlatformModelSet,
-    "platform model test": None,
     "platform credential list": CredentialListQuery,
     "platform credential show": None,
     "platform credential create": CredentialCreateInput,
@@ -383,7 +370,6 @@ COMMANDS = {
     "platform credential remove": CredentialRemove,
     "platform credential test": CredentialTest,
     "platform credential import-env": CredentialImportManifest,
-    "auth orgs": OrgLookup,
     "schema": None,
     "screenshot prepare": ScreenshotPrepareInput,
     "screenshot add": ScreenshotIngest,
@@ -684,7 +670,6 @@ COMMANDS.update(
     {
         "task create": TaskCreate,
         "provider test": ProviderTest,
-        "platform model test": PlatformModelTest,
         "product simulate": ProductSimulationInput,
     }
 )
@@ -806,7 +791,6 @@ def command_schema(app=None, version: str = "5.0") -> dict:
                 "product simulate": ProductSimulationInput,
                 "task create": TaskCreate,
                 "provider test": ProviderTest,
-                "platform model test": PlatformModelTest,
             }
         )
         outputs.update({})

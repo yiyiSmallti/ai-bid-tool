@@ -1,4 +1,4 @@
-"""Write-only operator workflows and uncached single-consumer credential resolution."""
+"""Human-managed local credentials and uncached service resolution."""
 
 import hashlib
 import hmac
@@ -13,11 +13,10 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.core.config import Settings
-from app.core.credential_db import close_connections, get_connections
+from app.core.db import Database
 from app.core.errors import ServiceError
 from app.core.provider_secrets import ProviderSecrets
 from app.schemas.platform_credentials import (
-    CatalogResolveTarget,
     CredentialCreate,
     CredentialData,
     CredentialError,
@@ -37,15 +36,14 @@ from app.schemas.platform_credentials import (
     CredentialTest,
     CredentialView,
     PlatformCredentialEnvelope,
-    PlatformOperator,
     ResolvedCredential,
-    ResolveTarget,
     ServiceResolveTarget,
 )
+from app.services.auth import Identity, set_actor_context
 
 ERROR_MESSAGES = {
     "invalid_input": "Invalid credential input",
-    "invalid_session": "Invalid platform session",
+    "invalid_session": "A human session is required",
     "not_found": "Credential not found",
     "revision_conflict": "Credential changed; refresh before retrying",
     "credential_name_conflict": "Credential name is already used",
@@ -57,7 +55,6 @@ ERROR_MESSAGES = {
     "credential_removed": "Credential has been removed",
     "credential_unreadable": "Credential cannot be decrypted",
     "credential_backend_unavailable": "Credential database is unavailable",
-    "credential_audit_unavailable": "Credential audit could not be saved",
     "credential_env_forbidden": "Legacy vendor credential configuration is forbidden",
     "credential_probe_auth_failed": "Credential authentication was refused",
     "credential_probe_unsupported": "Authentication metadata probe is unsupported",
@@ -82,7 +79,10 @@ def credential_error(code: str) -> ServiceError:
         status, exit_code = 409, 2
     elif code in {"credential_missing", "credential_disabled", "credential_removed"}:
         status, exit_code = 409, 4
-    elif code in {"credential_unreadable", "credential_env_forbidden"}:
+    elif code in {
+        "credential_unreadable",
+        "credential_env_forbidden",
+    }:
         status, exit_code = 503, 4
     elif code in {
         "credential_probe_auth_failed",
@@ -105,19 +105,23 @@ def database_error(exc: SQLAlchemyError) -> ServiceError:
     return credential_error(code if code in ERROR_MESSAGES else "credential_backend_unavailable")
 
 
-def require_operator(actor: PlatformOperator) -> None:
-    if not isinstance(actor, PlatformOperator) or actor.session_expires_at <= datetime.now(UTC):
+def require_human(actor: Identity) -> None:
+    if (
+        not isinstance(actor, Identity)
+        or actor.actor_kind != "session"
+        or actor.token_id is not None
+        or (actor.session_expires_at is not None and actor.session_expires_at <= datetime.now(UTC))
+    ):
         raise credential_error("invalid_session")
 
 
 class PlatformCredentialResolver:
-    def __init__(self, settings: Settings):
-        self.settings = settings
-        self.connections = get_connections(settings)
+    def __init__(self, settings: Settings, db: Database):
+        self.settings, self.db = settings, db
 
     async def _read(self, statement: str, params: dict) -> dict:
         try:
-            async with self.connections.reader.transaction() as connection:
+            async with self.db.transaction() as connection:
                 value = await connection.scalar(text(statement), params)
             if not isinstance(value, dict):
                 raise credential_error("credential_missing")
@@ -125,7 +129,7 @@ class PlatformCredentialResolver:
         except SQLAlchemyError as exc:
             raise database_error(exc) from None
 
-    async def readiness(self, target: ResolveTarget) -> CredentialReadiness:
+    async def readiness(self, target: ServiceResolveTarget) -> CredentialReadiness:
         value = await self._read(
             "SELECT public.platform_credential_readiness(CAST(:target AS jsonb))",
             {"target": target.model_dump_json()},
@@ -171,17 +175,11 @@ class PlatformCredentialResolver:
         except (ServiceError, ValidationError, ValueError, KeyError, TypeError):
             raise credential_error("credential_unreadable") from None
 
-    async def resolve_for_call(self, target: ResolveTarget) -> ResolvedCredential:
-        if isinstance(target, CatalogResolveTarget):
-            row = await self._read(
-                "SELECT public.platform_credential_resolve_catalog(:model,:revision)",
-                {"model": target.model_id, "revision": target.expected_model_revision},
-            )
-        else:
-            row = await self._read(
-                "SELECT public.platform_credential_resolve_service(:service,:id)",
-                {"service": target.service, "id": target.credential_id},
-            )
+    async def resolve_for_call(self, target: ServiceResolveTarget) -> ResolvedCredential:
+        row = await self._read(
+            "SELECT public.platform_credential_resolve_service(:service,:id)",
+            {"service": target.service, "id": target.credential_id},
+        )
         return self._decrypt(row)
 
     async def resolve_for_probe(self, probe_id: UUID) -> ResolvedCredential:
@@ -192,73 +190,53 @@ class PlatformCredentialResolver:
             )
         )
 
-    async def resolve_for_operator_check(
+    async def resolve_for_human_check(
         self,
-        actor: PlatformOperator,
+        actor: Identity,
         credential_id: UUID,
         expected_revision: int,
         purpose: Literal["import", "activate"],
     ) -> ResolvedCredential:
-        require_operator(actor)
-        return self._decrypt(
-            await self._read(
-                "SELECT public.platform_credential_resolve_operator_check(:id,:revision,:purpose)",
-                {"id": credential_id, "revision": expected_revision, "purpose": purpose},
-            )
-        )
-
-    async def close(self) -> None:
-        await close_connections(self.settings)
+        """Decrypt one revision, disabled or not, for a comparison the human requested."""
+        require_human(actor)
+        try:
+            async with self.db.transaction() as connection:
+                await set_actor_context(connection, actor)
+                row = await connection.scalar(
+                    text("SELECT public.platform_credential_resolve_human(:id,:revision,:purpose)"),
+                    {"id": credential_id, "revision": expected_revision, "purpose": purpose},
+                )
+        except SQLAlchemyError as exc:
+            raise database_error(exc) from None
+        if not isinstance(row, dict):
+            raise credential_error("credential_missing")
+        return self._decrypt(row)
 
 
 class PlatformCredentialService:
-    def __init__(self, settings: Settings, *, probe=None):
-        self.settings = settings
-        self.connections = get_connections(settings)
-        self.resolver = PlatformCredentialResolver(settings)
+    def __init__(self, settings: Settings, db: Database, *, probe=None):
+        self.settings, self.db = settings, db
+        self.resolver = PlatformCredentialResolver(settings, db)
         if probe is None:
             from app.providers.credential_probe import MetadataCredentialProbe
 
             probe = MetadataCredentialProbe()
         self.probe = probe
 
-    async def _manage(self, actor: PlatformOperator, action: str, body: dict) -> dict:
-        require_operator(actor)
+    async def _manage(self, actor: Identity, action: str, body: dict) -> dict:
+        require_human(actor)
         try:
-            async with self.connections.management.transaction() as connection:
+            async with self.db.transaction() as connection:
+                await set_actor_context(connection, actor)
                 value = await connection.scalar(
-                    text(
-                        "SELECT public.platform_credential_manage(:action,:actor,CAST(:body AS jsonb))"
-                    ),
-                    {"action": action, "actor": actor.email, "body": json.dumps(body)},
+                    text("SELECT public.platform_credential_manage(:action,CAST(:body AS jsonb))"),
+                    {"action": action, "body": json.dumps(body)},
                 )
             if not isinstance(value, dict):
                 raise credential_error("credential_backend_unavailable")
             return value
         except SQLAlchemyError as exc:
             raise database_error(exc) from None
-
-    async def record_failure(
-        self,
-        actor: PlatformOperator,
-        action: str,
-        error: ServiceError,
-        credential_id: UUID | None = None,
-    ):
-        action = {"list": "read", "show": "read", "test": "probe_start"}.get(action, action)
-        try:
-            await self._manage(
-                actor,
-                "audit",
-                {
-                    "action": action,
-                    "outcome": "failed",
-                    "id": str(credential_id) if credential_id else None,
-                    "error_code": error.code,
-                },
-            )
-        except ServiceError:
-            raise credential_error("credential_audit_unavailable") from None
 
     def _view(self, raw: dict) -> CredentialView:
         view = CredentialView.model_validate(raw)
@@ -277,13 +255,13 @@ class PlatformCredentialService:
     def _data(self, raw: dict) -> CredentialData:
         return CredentialData(credential=self._view(raw["credential"]))
 
-    async def list_credentials(self, actor: PlatformOperator, query: CredentialListQuery):
+    async def list_credentials(self, actor: Identity, query: CredentialListQuery):
         result = await self._manage(actor, "list", query.model_dump(mode="json", exclude_none=True))
         return CredentialListData(next_after_name=result.get("next_after_name")), [
             self._view(item) for item in result["items"]
         ]
 
-    async def show(self, actor: PlatformOperator, credential_id: UUID) -> CredentialData:
+    async def show(self, actor: Identity, credential_id: UUID) -> CredentialData:
         return self._data(await self._manage(actor, "show", {"id": str(credential_id)}))
 
     def _encrypted(
@@ -306,8 +284,8 @@ class PlatformCredentialService:
             "last_four": raw[-4:],
         }
 
-    async def create(self, actor: PlatformOperator, body: CredentialCreate) -> CredentialData:
-        require_operator(actor)
+    async def create(self, actor: Identity, body: CredentialCreate) -> CredentialData:
+        require_human(actor)
         credential_id = uuid4()
         value = {
             **body.model_dump(mode="json"),
@@ -317,7 +295,7 @@ class PlatformCredentialService:
         return self._data(await self._manage(actor, "create", value))
 
     async def replace(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialReplace
+        self, actor: Identity, credential_id: UUID, body: CredentialReplace
     ) -> CredentialData:
         view = (await self.show(actor, credential_id)).credential
         if view.revision != body.expected_revision:
@@ -336,18 +314,18 @@ class PlatformCredentialService:
         return self._data(await self._manage(actor, "replace", value))
 
     async def set_active(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialSetActive
+        self, actor: Identity, credential_id: UUID, body: CredentialSetActive
     ) -> CredentialData:
         value = {**body.model_dump(mode="json"), "id": str(credential_id)}
         if body.active:
-            resolved = await self.resolver.resolve_for_operator_check(
+            resolved = await self.resolver.resolve_for_human_check(
                 actor, credential_id, body.expected_revision, "activate"
             )
             value["checked_revision"] = resolved.revision
         return self._data(await self._manage(actor, "set_active", value))
 
     async def remove(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialRemove
+        self, actor: Identity, credential_id: UUID, body: CredentialRemove
     ) -> CredentialData:
         return self._data(
             await self._manage(
@@ -355,8 +333,8 @@ class PlatformCredentialService:
             )
         )
 
-    async def import_env(self, actor: PlatformOperator, body: CredentialImportRequest):
-        require_operator(actor)
+    async def import_env(self, actor: Identity, body: CredentialImportRequest):
+        require_human(actor)
         metadata = [entry.model_dump(mode="json") for entry in body.entries]
         preflight = await self._manage(actor, "import", {"preflight": True, "entries": metadata})
         existing = {item["name"]: item.get("credential") for item in preflight["items"]}
@@ -370,7 +348,7 @@ class PlatformCredentialService:
                 view = CredentialView.model_validate(old)
                 if view.state == "removed":
                     raise credential_error("credential_import_conflict")
-                resolved = await self.resolver.resolve_for_operator_check(
+                resolved = await self.resolver.resolve_for_human_check(
                     actor, view.id, view.revision, "import"
                 )
                 values.update(
@@ -389,7 +367,7 @@ class PlatformCredentialService:
         ), [CredentialImportItem.model_validate(item) for item in result["items"]]
 
     async def test(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialTest
+        self, actor: Identity, credential_id: UUID, body: CredentialTest
     ) -> CredentialProbeData | CredentialErrorData:
         authorization = await self._manage(
             actor,
@@ -427,7 +405,7 @@ class PlatformCredentialService:
         try:
             result = await self._manage(actor, "probe_finish", probe.model_dump(mode="json"))
         except ServiceError:
-            raise credential_error("credential_audit_unavailable") from None
+            raise credential_error("credential_backend_unavailable") from None
         safe = CredentialProbeData.model_validate(result)
         if safe.probe.outcome == "passed":
             return safe

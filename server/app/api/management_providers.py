@@ -9,7 +9,6 @@ from app.core.errors import not_found
 from app.schemas.contracts import Result
 from app.schemas.management_pages import PageQuery
 from app.schemas.management_providers import ProviderCatalogQuery
-from app.services import management_providers as service
 
 
 def create_router(context, settings):
@@ -27,6 +26,8 @@ def create_router(context, settings):
 
     @router.get("", name="provider_show", response_model=Result)
     async def show(ctx=Depends(management_context, scope="function")):
+        from app.services import management_providers as service
+
         started = time.monotonic()
         session, actor = ctx
         value = await service.settings(session, actor)
@@ -34,6 +35,8 @@ def create_router(context, settings):
 
     @router.get("/revisions/{config_id}", name="provider_revision_show", response_model=Result)
     async def revision(config_id: UUID, ctx=Depends(management_context, scope="function")):
+        from app.services import management_providers as service
+
         started = time.monotonic()
         session, actor = ctx
         value = await service.revision(session, actor, config_id)
@@ -41,6 +44,8 @@ def create_router(context, settings):
 
     @router.post("/history/query", name="provider_history_page", response_model=Result)
     async def history(body: PageQuery, ctx=Depends(management_context, scope="function")):
+        from app.services import management_providers as service
+
         started = time.monotonic()
         session, actor = ctx
         value = await service.history(session, actor, body)
@@ -50,6 +55,8 @@ def create_router(context, settings):
     async def catalog(
         body: ProviderCatalogQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.services import management_providers as service
+
         started = time.monotonic()
         session, actor = ctx
         value = await service.catalog(session, actor, body)

@@ -31,7 +31,6 @@ def preview_quote(image, config) -> CallPlan:
         provider="cloudflare",
         model=MODEL,
         version=VERSION,
-        platform_model_id=config.platform_model_id,
         request_sha256=bids.digest(
             {
                 "image": image["sha256"],
@@ -119,7 +118,7 @@ async def triage(execution, fixed, signing, storage):
     }
     if not clef["available"] or execution.stopped is not None:
         return coverage, [], ["clef_disabled" if not clef["enabled"] else "clef_unavailable"]
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         images = await bid_review_presence.authorized_images(
             session,
             fixed.root.id,
@@ -149,11 +148,11 @@ async def triage(execution, fixed, signing, storage):
     }
     selected = [image for image in images if str(image["page_id"]) in required]
     adapter = HTTPClefProvider(
-        fixed.clef_config, execution.settings, remaining_calls=max(0, 40 - used)
+        fixed.clef_config, execution.settings, execution.db, remaining_calls=max(0, 40 - used)
     )
 
     async def before_send():
-        async with execution.db.transaction(execution.org_id) as session:
+        async with execution.db.transaction() as session:
             if execution.before_admit is not None:
                 await execution.before_admit(session)
             # The separate image grant and exact storage hashes are checked again
@@ -218,7 +217,7 @@ async def triage(execution, fixed, signing, storage):
         for location in value["required_locations"]
     ):
         errors.append("signing_presence_escalated_to_human")
-    async with execution.db.transaction(execution.org_id) as session:
+    async with execution.db.transaction() as session:
         calls = (
             await session.scalars(
                 select(VendorCall).where(

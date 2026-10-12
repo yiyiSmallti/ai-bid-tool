@@ -12,7 +12,6 @@ from app.models.entities import Job
 from app.schemas.check_contracts import CheckRequest, FindingDecisionRequest
 from app.schemas.console_assessments import AssessmentHistoryQuery, CheckPageRequest
 from app.schemas.contracts import Result
-from app.services import assessment_reads, check
 from app.services.assessment_bounds import bounded_result, query_model
 
 
@@ -58,6 +57,8 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
 
     @router.post("/tasks/{task_id}/checks", name="check_run", response_model=Result)
     async def check_run(task_id: UUID, body: CheckRequest, ctx=Depends(context, scope="function")):
+        from app.services import check
+
         session, actor = ctx
         data, job = await check.submit_check(session, actor, task_id, body, storage, settings)
         dispatch_error = await dispatch(session, actor, job)
@@ -75,6 +76,8 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         extraction_job_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import assessment_reads, check
+
         if view == "console":
             query = query_model(
                 AssessmentHistoryQuery,
@@ -120,6 +123,8 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         entry_id: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import assessment_reads, check
+
         if view == "console":
             if part is None or part == "summary":
                 if any(
@@ -196,6 +201,8 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         body: FindingDecisionRequest,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import check
+
         data = await check.decide_finding(
             ctx[0], ctx[1], report_id, finding_id, body, storage, settings
         )
@@ -213,6 +220,8 @@ def create_router(context, db, storage, queue, settings) -> APIRouter:
         limit: int = Query(50, ge=1, le=200),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import check
+
         data, items = await check.decision_history(
             ctx[0],
             ctx[1],

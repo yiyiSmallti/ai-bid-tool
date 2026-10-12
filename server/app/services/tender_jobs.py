@@ -128,7 +128,7 @@ async def submit(
             if suffix == ".docx":
                 planned_calls = 0
             elif storage is not None:
-                content = await storage.read(identity.org_id, document.storage_key)
+                content = await storage.read(document.storage_key)
                 if hashlib.sha256(content).hexdigest() != document.sha256:
                     raise ServiceError(
                         "content_mismatch", "Stored document hash does not match", 409, 4
@@ -163,8 +163,6 @@ async def submit(
     identifier = await session.scalar(
         insert(Job)
         .values(
-            org_id=identity.org_id,
-            actor_user_id=identity.user_id,
             actor_token_id=identity.token_id,
             actor_kind=identity.actor_kind,
             actor_scopes=sorted(identity.scopes),
@@ -178,7 +176,7 @@ async def submit(
             else None,
             provider_identity=model_identity(model) if kind == "extract" else None,
         )
-        .on_conflict_do_nothing(index_elements=["org_id", "cache_key"])
+        .on_conflict_do_nothing(index_elements=["cache_key"])
         .returning(Job.id)
     )
     job = await session.scalar(select(Job).where(Job.cache_key == cache_key).with_for_update())
@@ -188,8 +186,8 @@ async def submit(
         or (job.status == "running" and job.lease_until and job.lease_until < datetime.now(UTC))
     ):
         job.status, job.error, job.result, job.queue_id = "queued", None, {}, None
-        if job.actor_user_id is None:
-            job.actor_user_id, job.actor_token_id = identity.user_id, identity.token_id
+        if job.actor_kind is None:
+            job.actor_token_id = identity.token_id
             job.actor_kind, job.actor_scopes = identity.actor_kind, sorted(identity.scopes)
         job.attempts, job.lease_until, job.finished_at, job.run_id = 0, None, None, None
     if job.status in {"failed", "cancelled"}:
@@ -206,7 +204,7 @@ async def submit(
         # Commit the durable job before making it visible to the independent queue.
         await session.commit()
         try:
-            queue_id = await queue.enqueue(str(identity.org_id), str(job.id))
+            queue_id = await queue.enqueue(str(job.id))
         except Exception as exc:
             raise ServiceError(
                 "queue_unavailable",
@@ -214,7 +212,7 @@ async def submit(
                 503,
                 3,
             ) from exc
-        async with db.transaction(identity.org_id) as update:
+        async with db.transaction() as update:
             saved = await update.get(Job, job.id)
             if saved is not None:
                 saved.queue_id = queue_id

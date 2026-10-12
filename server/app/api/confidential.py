@@ -15,7 +15,6 @@ from app.schemas.confidential_contracts import (
     ConfidentialValueSet,
 )
 from app.schemas.contracts import Result
-from app.services import confidential
 
 
 def create_router(context: Callable[..., Any], settings: Settings) -> APIRouter:
@@ -24,6 +23,8 @@ def create_router(context: Callable[..., Any], settings: Settings) -> APIRouter:
 
     @router.post("/confidential-fields", name="confidential_field_add", response_model=Result)
     async def field_add(body: ConfidentialFieldCreate, ctx=Depends(context, scope="function")):
+        from app.services import confidential
+
         session, actor = ctx
         return result(
             "confidential field add", await confidential.create_field(session, actor, body)
@@ -31,6 +32,8 @@ def create_router(context: Callable[..., Any], settings: Settings) -> APIRouter:
 
     @router.get("/confidential-fields", name="confidential_field_list", response_model=Result)
     async def field_list(archived: bool = False, ctx=Depends(context, scope="function")):
+        from app.services import confidential
+
         session, actor = ctx
         items = await confidential.list_fields(session, actor, archived=archived)
         return result("confidential field list", {"count": len(items)}, items)
@@ -43,6 +46,8 @@ def create_router(context: Callable[..., Any], settings: Settings) -> APIRouter:
     async def field_update(
         field_id: UUID, body: ConfidentialFieldUpdate, ctx=Depends(context, scope="function")
     ):
+        from app.services import confidential
+
         session, actor = ctx
         return result(
             "confidential field update",
@@ -55,6 +60,8 @@ def create_router(context: Callable[..., Any], settings: Settings) -> APIRouter:
     async def value_set(
         field_id: UUID, body: ConfidentialValueSet, ctx=Depends(context, scope="function")
     ):
+        from app.services import confidential
+
         session, actor = ctx
         return result(
             "confidential set",
@@ -69,12 +76,16 @@ def create_router(context: Callable[..., Any], settings: Settings) -> APIRouter:
     async def value_history(
         field_id: UUID, task_id: UUID | None = None, ctx=Depends(context, scope="function")
     ):
+        from app.services import confidential
+
         session, actor = ctx
         items = await confidential.history(session, actor, field_id, task_id)
         return result("confidential history", {"count": len(items)}, items)
 
     @router.get("/confidential-values", name="confidential_list", response_model=Result)
     async def value_list(task_id: UUID | None = None, ctx=Depends(context, scope="function")):
+        from app.services import confidential
+
         session, actor = ctx
         items = await confidential.list_values(session, actor, task_id)
         return result(
@@ -92,6 +103,8 @@ def create_router(context: Callable[..., Any], settings: Settings) -> APIRouter:
         response_model=Result,
     )
     async def value_reveal(value_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import confidential
+
         session, actor = ctx
         return result(
             "confidential reveal", await confidential.reveal(session, actor, value_id, secrets)

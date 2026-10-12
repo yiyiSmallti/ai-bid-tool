@@ -1,68 +1,94 @@
-"""Saved response inputs and human reviewers for retained API acceptance."""
+"""Saved response inputs and installation-human reviews for API acceptance."""
 
-from app.core.config import Settings
-from app.core.security import Secrets
-from app.models.team_workflow import RequirementWorkflow
-from sqlalchemy import select, text
+from hashlib import sha256
+from uuid import UUID, uuid4
+
+from app.models.entities import Chunk, Document, Job, Requirement
+from app.services.auth import HUMAN_SCOPES
 from sqlalchemy.orm import Session
-from task_access_fixtures import add_member, person
+from task_access_fixtures import new_task
 from task_fixtures import actor_context, confirm_requirements
-from test_response_cards import CERTIFICATE_PAGE, require_action, select_real_materials
-from test_team_workflow_stream_acceptance import seed_scope
 
 
-def legacy_policy(admin_engine, scope):
-    """Persist an old multi-domain policy without restoring its removed API."""
+async def seed_scope(api, headers, admin_engine, *, count=1):
+    task_id = UUID(await new_task(api, headers))
+    document_id, job_id, chunk_id = uuid4(), uuid4(), uuid4()
+    requirements = [uuid4() for _ in range(count)]
+    quotes = [f"Synthetic requirement {index + 1}." for index in range(count)]
     with Session(admin_engine) as session, session.begin():
-        actor = actor_context(session, scope["org_id"], scope["user_id"])
-        # Only the owner fixture can materialize a policy from the old installation.
-        # The removed public scope is needed by the unchanged database row guard.
-        import json
-
-        session.execute(
-            text("SELECT set_config('app.actor_scopes',:scopes,true)"),
-            {"scopes": json.dumps(sorted(actor.scopes | {"task:review-policy"}))},
-        )
-        row = session.scalar(
-            select(RequirementWorkflow).where(
-                RequirementWorkflow.org_id == scope["org_id"],
-                RequirementWorkflow.requirement_id == scope["requirement_ids"][0],
+        actor_context(session)
+        session.add(
+            Document(
+                id=document_id,
+                task_id=task_id,
+                name="Synthetic extraction.pdf",
+                sha256=sha256(str(task_id).encode()).hexdigest(),
+                storage_key=f"synthetic-extraction/{document_id}.pdf",
+                media_type="application/pdf",
+                page_count=1,
+                status="parsed",
+                citation_mode="page",
             )
         )
-        if row is None:
-            row = RequirementWorkflow(
-                org_id=scope["org_id"],
-                task_id=scope["task_id"],
-                extraction_job_id=scope["job_id"],
-                requirement_id=scope["requirement_ids"][0],
+        session.flush()
+        session.add(
+            Chunk(
+                id=chunk_id,
+                task_id=task_id,
+                document_id=document_id,
+                page=1,
+                seq=1,
+                text="\n".join(quotes),
             )
-            session.add(row)
-        row.co_sign_required = True
-        row.policy_revision = (row.policy_revision or 0) + 1
-        row.policy_changed_by_user_id = scope["user_id"]
-        row.policy_reason_ciphertext = Secrets.for_data(Settings()).encrypt(
-            "Synthetic legacy multi-domain policy"
         )
+        session.add(
+            Job(
+                id=job_id,
+                task_id=task_id,
+                document_id=document_id,
+                kind="extract",
+                cache_key=sha256(str(job_id).encode()).hexdigest(),
+                status="succeeded",
+                actor_kind="session",
+                actor_scopes=sorted(HUMAN_SCOPES),
+                result={},
+            )
+        )
+        session.flush()
+        session.add_all(
+            Requirement(
+                id=identifier,
+                task_id=task_id,
+                document_id=document_id,
+                chunk_id=chunk_id,
+                page=1,
+                quote=quote,
+                text=quote,
+                category="technical",
+                starred=False,
+                condition={},
+                fingerprint=sha256(f"{job_id}:{index}".encode()).hexdigest(),
+                job_id=job_id,
+            )
+            for index, (identifier, quote) in enumerate(zip(requirements, quotes, strict=True))
+        )
+    return {
+        "task_id": task_id,
+        "document_id": document_id,
+        "job_id": job_id,
+        "chunk_id": chunk_id,
+        "requirement_ids": requirements,
+        "headers": headers,
+    }
 
 
-async def response_scope(api, headers, tenants, admin_engine, *, required=False, count=1):
-    scope = await seed_scope(api, headers, tenants, admin_engine, count=count)
+async def response_scope(api, headers, admin_engine, *, count=1):
+    scope = await seed_scope(api, headers, admin_engine, count=count)
     with Session(admin_engine) as session, session.begin():
-        confirm_requirements(session, scope["org_id"], scope["task_id"])
-    members = {}
-    for index, (domain, role) in enumerate((("commercial", "bidder"), ("technical", "technical"))):
-        user, auth = await person(api, admin_engine, tenants["orgs"][0], role)
-        result = await add_member(
-            api, headers[0], scope["task_id"], user, index + 1, "contributor", [domain]
-        )
-        assert result.active
-        members[domain] = {"user": user, "headers": auth}
-    scope["members"] = members
-    if required:
-        legacy_policy(admin_engine, scope)
+        confirm_requirements(session, scope["task_id"])
     created = await api.post(
         f"/tasks/{scope['task_id']}/cards",
-        headers=headers[0],
+        headers=headers,
         json={
             "extraction_job_id": str(scope["job_id"]),
             "requirement_id": str(scope["requirement_ids"][0]),
@@ -99,6 +125,8 @@ async def refresh_card(api, auth, scope):
 
 
 async def attach_material(api, owner, scope, tmp_path):
+    from test_response_cards import CERTIFICATE_PAGE, select_real_materials
+
     _, _, _, _, source = await select_real_materials(api, owner, str(scope["task_id"]), tmp_path)
     updated = await api.put(
         f"/cards/{scope['card']['id']}",
@@ -123,15 +151,15 @@ async def attach_material(api, owner, scope, tmp_path):
     assert updated.status_code == 200, updated.text
     scope["card"] = updated.json()["data"]
     assert scope["card"]["evidence"] and all(
-        e["confirmed_by"] is None for e in scope["card"]["evidence"]
+        e["confirmed_at"] is None for e in scope["card"]["evidence"]
     )
 
 
-async def confirm(api, scope, domain="technical", **changes):
+async def confirm(api, scope, **changes):
     card = scope["card"]
     return await api.post(
         f"/cards/{card['id']}/actions",
-        headers=scope["members"][domain]["headers"],
+        headers=scope["headers"],
         json={
             "expected_revision": card["revision"],
             "action": "confirm",
@@ -151,10 +179,12 @@ async def complete(api, owner, scope):
 
 
 async def revoke(api, owner, scope, mutation):
+    from test_response_cards import require_action
+
     if mutation == "card_reopen":
         scope["card"] = await require_action(
             api,
-            scope["members"]["technical"]["headers"],
+            scope["headers"],
             scope["card"],
             "reopen",
             reason="Synthetic review reopened",

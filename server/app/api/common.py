@@ -1,4 +1,4 @@
-"""Result envelopes and short-lived signed download links shared by the org routes."""
+"""Result envelopes and short-lived signed download links shared by the routes."""
 
 from typing import Any
 from urllib.parse import quote
@@ -24,27 +24,25 @@ def result(command: str, data=None, items=None, warnings=None) -> dict:
     ).model_dump(mode="json")
 
 
-def signed_link(
-    crypto: TokenSigner, path: str, kind: str, org_id: UUID, **identifiers: UUID | int | str
-) -> dict:
-    """A download URL for `path` that only this org can open for LINK_SECONDS."""
+def signed_link(crypto: TokenSigner, path: str, kind: str, **identifiers: UUID | int | str) -> dict:
+    """A download URL for `path` that can be opened for LINK_SECONDS."""
     signature = crypto.issue(
-        {"kind": kind, "org_id": str(org_id), **{k: str(v) for k, v in identifiers.items()}},
+        {"kind": kind, **{k: str(v) for k, v in identifiers.items()}},
         LINK_SECONDS,
     )
     return {"url": f"{path}?signature={signature}", "expires_in": LINK_SECONDS}
 
 
 def check_signature(
-    crypto: TokenSigner, signature: str, kind: str, org_id: UUID, **identifiers: UUID | int | str
+    crypto: TokenSigner, signature: str, kind: str, **identifiers: UUID | int | str
 ) -> None:
-    """Accept only an unexpired link of this kind for this org and these identifiers;
+    """Accept only an unexpired link of this kind for these identifiers;
     anything else is indistinguishable from a missing resource."""
     try:
         payload = crypto.open(signature)
     except ServiceError as exc:
         raise not_found() from exc
-    expected = {"kind": kind, "org_id": str(org_id), **{k: str(v) for k, v in identifiers.items()}}
+    expected = {"kind": kind, **{k: str(v) for k, v in identifiers.items()}}
     if any(payload.get(key) != value for key, value in expected.items()):
         raise not_found()
 

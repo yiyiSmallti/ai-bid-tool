@@ -10,7 +10,6 @@ from app.api.common import attachment, check_signature, result, signed_link
 from app.core.errors import ServiceError
 from app.schemas import attachment_contracts as c
 from app.schemas.contracts import Result
-from app.services import attachments as service
 from app.services.versioned import audit
 
 PRIVACY = TypeAdapter(c.AttachmentPrivacyInput)
@@ -32,6 +31,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         return session, actor
 
     def output(command, data=None, items=None):
+        from app.services import attachments as service
+
         value = result(command, data, items, service.WARNINGS)
         if len(json.dumps(value, ensure_ascii=True).encode()) > c.LIST_JSON_LIMIT:
             raise ServiceError(
@@ -55,6 +56,8 @@ def create_router(context, settings, storage, crypto, queue=None):
             raise ServiceError("invalid_input", "Invalid attachment metadata", 422, 2) from None
 
     async def upload(request, ctx, identifier=None):
+        from app.services import attachments as service
+
         session, actor = ctx
         await service.access(session, actor, "attachment:write")
         from app.api.attachment_upload import receive
@@ -99,6 +102,7 @@ def create_router(context, settings, storage, crypto, queue=None):
     )
     async def browse_route(request: Request, ctx=Depends(configured)):
         from app.core.errors import not_found
+        from app.services import attachments as service
 
         if getattr(request.state, "contract_version", None) != "5.0":
             raise not_found()
@@ -123,6 +127,8 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def list_route(
         query: c.AttachmentListQuery = Depends(archive_query), ctx=Depends(configured)
     ):
+        from app.services import attachments as service
+
         return output(
             "resource attachment list", *await service.list_archives(ctx[0], ctx[1], query)
         )
@@ -133,6 +139,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_revision_show",
     )
     async def revision_route(revision_id: UUID, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "resource attachment revision show", await service.revision(ctx[0], ctx[1], revision_id)
         )
@@ -143,6 +151,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_show",
     )
     async def show_route(attachment_id: UUID, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output("resource attachment show", await service.show(ctx[0], ctx[1], attachment_id))
 
     @router.get(
@@ -153,6 +163,8 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def history_route(
         attachment_id: UUID, query: c.PageQuery = Depends(page_query), ctx=Depends(configured)
     ):
+        from app.services import attachments as service
+
         return output(
             "resource attachment history",
             *await service.revisions(ctx[0], ctx[1], attachment_id, query),
@@ -164,6 +176,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_assign",
     )
     async def assignment_route(attachment_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "resource attachment assign",
             await service.assign(
@@ -177,6 +191,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_deactivate",
     )
     async def deactivate_route(attachment_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "resource attachment deactivate",
             await service.deactivate_archive(
@@ -190,6 +206,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_review",
     )
     async def review_route(revision_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "resource attachment review",
             await service.review(
@@ -205,6 +223,8 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def reviews_route(
         revision_id: UUID, query: c.PageQuery = Depends(page_query), ctx=Depends(configured)
     ):
+        from app.services import attachments as service
+
         return output(
             "resource attachment reviews",
             *await service.reviews(ctx[0], ctx[1], revision_id, query),
@@ -216,6 +236,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_profile_attachment_link",
     )
     async def link_route(profile_revision_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "resource profile attachment link",
             await service.link_profile(
@@ -234,6 +256,8 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def links_route(
         profile_revision_id: UUID, query: c.PageQuery = Depends(page_query), ctx=Depends(configured)
     ):
+        from app.services import attachments as service
+
         return output(
             "resource profile attachment list",
             *await service.profile_links(ctx[0], ctx[1], profile_revision_id, query),
@@ -245,6 +269,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_profile_attachment_deactivate",
     )
     async def unlink_route(link_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "resource profile attachment deactivate",
             await service.deactivate_link(
@@ -256,6 +282,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         "/tasks/{task_id}/attachments", response_model=Result, name="task_attachment_select"
     )
     async def select_route(task_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "task attachment select",
             await service.select(
@@ -267,6 +295,8 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def selections_route(
         task_id: UUID, query: c.PageQuery = Depends(page_query), ctx=Depends(configured)
     ):
+        from app.services import attachments as service
+
         return output(
             "task attachment list", *await service.selections(ctx[0], ctx[1], task_id, query)
         )
@@ -277,6 +307,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="task_attachment_deactivate",
     )
     async def deselect_route(selection_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "task attachment deactivate",
             await service.deactivate_selection(
@@ -290,6 +322,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="evidence_attachment_source_create",
     )
     async def source_create_route(task_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "evidence attachment source create",
             await service.create_source(
@@ -307,6 +341,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         query: c.AttachmentSourceListQuery = Depends(source_query),
         ctx=Depends(configured),
     ):
+        from app.services import attachments as service
+
         return output(
             "evidence attachment source list",
             *await service.sources(ctx[0], ctx[1], task_id, query),
@@ -318,6 +354,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="evidence_attachment_source_show",
     )
     async def source_route(source_id: UUID, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "evidence attachment source show", await service.source(ctx[0], ctx[1], source_id)
         )
@@ -328,6 +366,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="evidence_attachment_privacy_review",
     )
     async def privacy_route(source_id: UUID, request: Request, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         return output(
             "evidence attachment privacy review",
             await service.privacy_review(
@@ -341,6 +381,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         return response
 
     async def issue(ctx, path, kind, identifier, *, source=False, history=False, **ids):
+        from app.services import attachments as service
+
         session, actor = ctx
         if source:
             from app.services.attachment_pages import source_row
@@ -374,6 +416,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_file_bytes",
     )
     async def original_bytes(revision_id: UUID, signature: str, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         root, _, _, _ = await service.revision_parts(ctx[0], revision_id)
         check_signature(
             crypto,
@@ -392,6 +436,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_part_download",
     )
     async def part_link(revision_id: UUID, ordinal: int, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         await service.revision(ctx[0], ctx[1], revision_id)
         service.fail(
             "attachment_upload_mode_not_enabled", "Part uploads and downloads are not enabled"
@@ -402,6 +448,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         name="resource_attachment_part_bytes",
     )
     async def part_bytes(revision_id: UUID, ordinal: int, signature: str, ctx=Depends(configured)):
+        from app.services import attachments as service
+
         check_signature(
             crypto, signature, "attachment-part", ctx[1].org_id, id=revision_id, part=ordinal
         )
@@ -415,6 +463,8 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def page_link(
         revision_id: UUID, page: int, zoom: int = Query(1, ge=1, le=2), ctx=Depends(configured)
     ):
+        from app.services import attachments as service
+
         revision = await service.revision(ctx[0], ctx[1], revision_id)
         if not 1 <= page <= revision["page_count"]:
             service.fail("invalid_source_page", "Page is outside the original", 400)
@@ -434,6 +484,8 @@ def create_router(context, settings, storage, crypto, queue=None):
         zoom: int = Query(1, ge=1, le=2),
         ctx=Depends(configured),
     ):
+        from app.services import attachments as service
+
         root, _, _, _ = await service.revision_parts(ctx[0], revision_id)
         check_signature(
             crypto,
@@ -466,6 +518,8 @@ def create_router(context, settings, storage, crypto, queue=None):
     async def source_bytes(
         source_id: UUID, signature: str, history: bool = False, ctx=Depends(configured)
     ):
+        from app.services import attachments as service
+
         check_signature(
             crypto,
             signature,

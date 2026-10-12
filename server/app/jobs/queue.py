@@ -25,30 +25,30 @@ class Queue:
                 conninfo=url.render_as_string(hide_password=False), min_size=1, max_size=5
             )
         )
-        self.processor: Callable[[str, str], Awaitable[None]] | None = None
+        self.processor: Callable[[str], Awaitable[None]] | None = None
 
         @self.app.task(
             name="bid.process",
             queue="bid",
             retry=procrastinate.RetryStrategy(max_attempts=3, wait=5),
         )
-        async def process(org_id: str, job_id: str):
+        async def process(job_id: str):
             if self.processor is None:
                 raise RuntimeError("Worker processor is not configured")
-            await self.processor(org_id, job_id)
+            await self.processor(job_id)
 
         self.sandbox_task = register_sandbox_task(self.app, lambda: self.processor)
         self.task = process
 
         @self.app.task(name="bid.annotation_cleanup", queue="bid", retry=True)
-        async def annotation_cleanup(org_id: str, job_id: str):
+        async def annotation_cleanup(job_id: str):
             from uuid import UUID
 
             from app.services.annotation_objects import reconcile
 
             if self.processor is None:
                 raise RuntimeError("Worker processor is not configured")
-            await reconcile(self.processor, UUID(org_id), UUID(job_id))
+            await reconcile(self.processor, UUID(job_id))
 
         self.annotation_cleanup_task = annotation_cleanup
 
@@ -57,14 +57,14 @@ class Queue:
         self.attachment_invalidation_task = register(self.app, lambda: self.processor)
 
         @self.app.task(name="bid.agent_wake", queue="bid", retry=True)
-        async def agent_wake(org_id: str, session_id: str):
+        async def agent_wake(session_id: str):
             from uuid import UUID
 
             from app.jobs.agent import wake
 
             if self.processor is None:
                 raise RuntimeError("Worker processor is not configured")
-            await wake(self.processor, UUID(org_id), UUID(session_id))
+            await wake(self.processor, UUID(session_id))
 
         @self.app.periodic(cron="* * * * * */30")
         @self.app.task(name="bid.agent_recover", queue="bid", retry=True)
@@ -83,11 +83,9 @@ class Queue:
         raw = await connection.get_raw_connection()
         return raw.driver_connection
 
-    async def enqueue_in_transaction(self, session: AsyncSession, org_id: str, job_id: str) -> int:
+    async def enqueue_in_transaction(self, session: AsyncSession, job_id: str) -> int:
         connection = await self.transaction_connection(session)
-        return await self.task.configure(connection=connection).defer_async(
-            org_id=org_id, job_id=job_id
-        )
+        return await self.task.configure(connection=connection).defer_async(job_id=job_id)
 
     async def enqueue_attachment_invalidation_in_transaction(self, session, **arguments):
         from app.jobs.attachment_events import enqueue
@@ -95,12 +93,12 @@ class Queue:
         return await enqueue(self, session, **arguments)
 
     async def enqueue_annotation_cleanup_in_transaction(
-        self, session: AsyncSession, org_id: str, job_id: str, *, delay: int = 300
+        self, session: AsyncSession, job_id: str, *, delay: int = 300
     ) -> int:
         """Commit delayed cleanup with the stage record, without requeueing rendering."""
         from app.services.annotation_objects import GRACE_SECONDS
 
-        key = f"annotation-cleanup:{org_id}:{job_id}"
+        key = f"annotation-cleanup:{job_id}"
         await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key})
         existing = await session.scalar(
             text(
@@ -116,7 +114,7 @@ class Queue:
             connection=connection,
             queueing_lock=key,
             schedule_at=datetime.now(UTC) + timedelta(seconds=max(GRACE_SECONDS, delay)),
-        ).defer_async(org_id=org_id, job_id=job_id)
+        ).defer_async(job_id=job_id)
 
     async def ensure_process_delivery(self, session: AsyncSession, job) -> None:
         """A killed queue worker may never have reached the business Job claim."""
@@ -134,12 +132,12 @@ class Queue:
             else False
         )
         if not runnable:
-            job.queue_id = await self.enqueue_in_transaction(session, str(job.org_id), str(job.id))
+            job.queue_id = await self.enqueue_in_transaction(session, str(job.id))
 
     async def enqueue_agent_wake(
-        self, session: AsyncSession, org_id: str, session_id: str, *, delay: int = 30
+        self, session: AsyncSession, session_id: str, *, delay: int = 30
     ) -> int:
-        key = f"agent-wake:{org_id}:{session_id}"
+        key = f"agent-wake:{session_id}"
         await session.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": key})
         existing = await session.scalar(
             text(
@@ -155,10 +153,10 @@ class Queue:
             connection=connection,
             queueing_lock=key,
             schedule_at=datetime.now(UTC) + timedelta(seconds=max(0, min(delay, 30))),
-        ).defer_async(org_id=org_id, session_id=session_id)
+        ).defer_async(session_id=session_id)
 
     async def recover_agent_wakes(self) -> None:
-        """Only queue metadata is global; business recovery always re-enters tenant RLS."""
+        """Only queue metadata is global; business recovery validates application state."""
         from app.jobs.processor import Processor
 
         if not isinstance(self.processor, Processor):
@@ -183,12 +181,12 @@ class Queue:
                 )
             )
 
-    async def enqueue(self, org_id: str, job_id: str) -> int:
+    async def enqueue(self, job_id: str) -> int:
         async with self.lock, self.app.open_async():
-            return await self.task.defer_async(org_id=org_id, job_id=job_id)
+            return await self.task.defer_async(job_id=job_id)
 
     async def recover_sandbox_jobs(self) -> None:
-        """Close abandoned deliveries only after tenant-scoped application checks."""
+        """Close abandoned deliveries only after application checks."""
         from app.jobs.processor import Processor
 
         if not isinstance(self.processor, Processor):
@@ -205,12 +203,11 @@ class Queue:
         for candidate in candidates:
             counts["checked"] += 1
             try:
-                org_id = UUID(str(candidate.task_kwargs.get("org_id")))
                 job_id = UUID(str(candidate.task_kwargs.get("job_id")))
             except ValueError:
                 counts["invalid"] += 1
                 continue
-            async with self.processor.db.transaction(org_id) as session:
+            async with self.processor.db.transaction() as session:
                 # Serialize recovery with queue completion/retry and other starters;
                 # recheck the heartbeat because it may have resumed since the scan.
                 queued = await session.scalar(
@@ -228,9 +225,7 @@ class Queue:
                 if queued is None:
                     counts["retained"] += 1
                     continue
-                job = await session.scalar(
-                    select(Job).where(Job.id == job_id, Job.org_id == org_id).with_for_update()
-                )
+                job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
                 if job is not None and (job.kind != "sandbox" or job.status not in end_statuses):
                     counts["retained"] += 1
                     continue
@@ -248,6 +243,6 @@ class Queue:
             counts,
         )
 
-    async def enqueue_sandbox(self, org_id: str, job_id: str) -> int:
+    async def enqueue_sandbox(self, job_id: str) -> int:
         async with self.lock, self.app.open_async():
-            return await self.sandbox_task.defer_async(org_id=org_id, job_id=job_id)
+            return await self.sandbox_task.defer_async(job_id=job_id)

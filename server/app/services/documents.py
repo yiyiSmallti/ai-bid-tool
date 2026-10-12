@@ -18,12 +18,12 @@ from app.services.auth import Identity
 from app.services.parsing import validate_document_async
 from app.services.task_authorization import task_authorized
 
-TASK_FIELDS = ("id", "name", "org_id", "model_redaction_enabled", "model_redaction_revision")
+TASK_FIELDS = ("id", "name", "model_redaction_enabled", "model_redaction_revision")
 
 
 async def create_task(session: AsyncSession, identity: Identity, body: TaskCreate) -> Task:
     identity.require("task:create")
-    task = Task(org_id=identity.org_id, created_by=identity.user_id, **body.model_dump())
+    task = Task(**body.model_dump())
     session.add(task)
     await session.flush()
     from app.services.task_access import seed
@@ -34,22 +34,7 @@ async def create_task(session: AsyncSession, identity: Identity, body: TaskCreat
 
 async def list_tasks(session: AsyncSession, identity: Identity):
     identity.require("task:read")
-    from app.models.team_workflow import TaskMember
-
-    query = select(Task).order_by(Task.created_at)
-    if not (
-        identity.actor_kind == "session" and identity.token_id is None and identity.role == "admin"
-    ):
-        query = query.where(
-            Task.id.in_(
-                select(TaskMember.task_id).where(
-                    TaskMember.org_id == identity.org_id,
-                    TaskMember.user_id == identity.user_id,
-                    TaskMember.active.is_(True),
-                )
-            )
-        )
-    return (await session.scalars(query)).all()
+    return (await session.scalars(select(Task).order_by(Task.created_at))).all()
 
 
 @task_authorized("task:read", parent=("document_id", "documents"))
@@ -87,12 +72,11 @@ async def upload(
     suffix = Path(name).suffix.lower()
     await validate_document_async(content, suffix, max_pages, settings)
     digest = hashlib.sha256(content).hexdigest()
-    key = f"org/{identity.org_id}/task/{task_id}/{digest}{suffix}"
-    await storage.put(identity.org_id, key, content)
+    key = f"task/{task_id}/{digest}{suffix}"
+    await storage.put(key, content)
     identifier = await session.scalar(
         insert(Document)
         .values(
-            org_id=identity.org_id,
             task_id=task_id,
             name=name,
             sha256=digest,
@@ -101,7 +85,7 @@ async def upload(
             if suffix == ".pdf"
             else "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         )
-        .on_conflict_do_nothing(index_elements=["org_id", "task_id", "sha256"])
+        .on_conflict_do_nothing(index_elements=["task_id", "sha256"])
         .returning(Document.id)
     )
     document = await session.scalar(

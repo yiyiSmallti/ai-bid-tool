@@ -1,4 +1,4 @@
-"""Platform-managed public CA metadata; never uploaded-bid signer identities."""
+"""Local public CA metadata; never uploaded-bid signer identities."""
 
 from typing import Annotated, Literal
 from uuid import UUID
@@ -28,9 +28,7 @@ class TrustAnchorView(TrustAnchorPreview):
     id: UUID
     enabled: bool
     revision: int = Field(strict=True, ge=1)
-    created_by: str
     created_at: AwareDatetime
-    disabled_by: str | None = None
     disabled_at: AwareDatetime | None = None
 
 

@@ -2,7 +2,7 @@ from app.models.entities import Base
 
 __all__ = ["Base"]
 
-# Register response tables for migration metadata and SQL-level isolation tests.
+# Register all retained tables for migration metadata.
 from app.models import agent as agent
 from app.models import annotations as annotations
 from app.models import attachments as attachments
@@ -24,4 +24,5 @@ from app.models import response_cards as response_cards
 from app.models import sandbox as sandbox
 from app.models import score as score
 from app.models import screenshots as screenshots
-from app.models import team_workflow as team_workflow
+from app.models import settings as settings
+from app.models import task_events as task_events

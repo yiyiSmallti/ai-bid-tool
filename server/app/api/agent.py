@@ -15,7 +15,6 @@ from app.schemas.contracts import Result
 
 
 def create_router(context, settings, queue, llm, resolve, storage):
-    from app.services import agents
 
     router = APIRouter()
 
@@ -27,6 +26,8 @@ def create_router(context, settings, queue, llm, resolve, storage):
 
     @router.post("/tasks/{task_id}/agent-sessions", name="agent_start", response_model=Result)
     async def start(task_id: UUID, body: AgentStartRequest, ctx=Depends(context, scope="function")):
+        from app.services import agents
+
         resources(ctx)
         return await agents.start(ctx[0], ctx[1], task_id, body, settings, queue)
 
@@ -37,12 +38,16 @@ def create_router(context, settings, queue, llm, resolve, storage):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import agents
+
         return await agents.list_sessions(
             ctx[0], ctx[1], task_id, AgentListRequest(cursor=cursor, limit=limit)
         )
 
     @router.get("/agent-sessions/{session_id}", name="agent_show", response_model=Result)
     async def show(session_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import agents
+
         return await agents.show(ctx[0], ctx[1], session_id)
 
     @router.get(
@@ -54,6 +59,8 @@ def create_router(context, settings, queue, llm, resolve, storage):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import agents
+
         return await agents.messages(
             ctx[0], ctx[1], session_id, AgentListRequest(cursor=cursor, limit=limit), settings
         )
@@ -65,6 +72,8 @@ def create_router(context, settings, queue, llm, resolve, storage):
         limit: int = Query(50, ge=1, le=100),
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import agents
+
         return await agents.steps(
             ctx[0], ctx[1], session_id, AgentListRequest(cursor=cursor, limit=limit), settings
         )
@@ -75,12 +84,16 @@ def create_router(context, settings, queue, llm, resolve, storage):
     async def message(
         session_id: UUID, body: AgentMessageRequest, ctx=Depends(context, scope="function")
     ):
+        from app.services import agents
+
         return await agents.message(ctx[0], ctx[1], session_id, body, settings)
 
     @router.post("/agent-sessions/{session_id}/resume", name="agent_resume", response_model=Result)
     async def resume(
         session_id: UUID, body: AgentResumeRequest, ctx=Depends(context, scope="function")
     ):
+        from app.services import agents
+
         resources(ctx)
         return await agents.resume(ctx[0], ctx[1], session_id, body, settings, queue)
 
@@ -88,6 +101,8 @@ def create_router(context, settings, queue, llm, resolve, storage):
     async def cancel(
         session_id: UUID, body: AgentCancelRequest, ctx=Depends(context, scope="function")
     ):
+        from app.services import agents
+
         return await agents.cancel(ctx[0], ctx[1], session_id, body, settings)
 
     return router

@@ -97,27 +97,21 @@ def test_citation_checks_every_source_and_star_rules():
             validate_extraction(Extraction(items=[item]), chunks)
 
 
-async def test_local_storage_rejects_cross_tenant_and_traversal(tmp_path):
-    org = uuid4()
+async def test_local_storage_rejects_traversal(tmp_path):
     storage = LocalStorage(tmp_path, Fernet.generate_key().decode())
-    key = f"org/{org}/task/test/file.pdf"
-    await storage.put(org, key, b"test")
-    assert await storage.read(org, key) == b"test"
-    for scope, invalid in (
-        (uuid4(), key),
-        (org, f"org/{org}/../../outside"),
-        (org, "/tmp/outside"),
-    ):
+    key = "task/test/file.pdf"
+    await storage.put(key, b"test")
+    assert await storage.read(key) == b"test"
+    for invalid in ("../../outside", "/tmp/outside", "task/../outside", ""):
         with pytest.raises(ServiceError):
-            await storage.read(scope, invalid)
+            await storage.read(invalid)
 
 
 async def test_concurrent_immutable_storage_writes_are_atomic(tmp_path):
     import asyncio
 
-    org = uuid4()
     storage = LocalStorage(tmp_path, Fernet.generate_key().decode())
-    key = f"org/{org}/task/test/file.pdf"
-    await asyncio.gather(*(storage.put(org, key, b"synthetic" * 10000) for _ in range(8)))
-    assert await storage.read(org, key) == b"synthetic" * 10000
+    key = "task/test/file.pdf"
+    await asyncio.gather(*(storage.put(key, b"synthetic" * 10000) for _ in range(8)))
+    assert await storage.read(key) == b"synthetic" * 10000
     assert not list(tmp_path.rglob("*.tmp"))

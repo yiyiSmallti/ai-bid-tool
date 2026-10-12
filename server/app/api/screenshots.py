@@ -30,20 +30,14 @@ from app.schemas.screenshot_contracts import (
     VendorSearchInput,
 )
 from app.schemas.simulation_contracts import ProductSimulationInput
-from app.services import (
-    product_simulation,
-    prototype_decisions,
-    prototype_generation,
-    screenshot_jobs,
-    screenshots,
-    vendor_search,
-)
-from app.services import response_cards as cards
 from app.services.versioned import audit
 
 
-async def memory_upload(request: Request, max_bytes: int = screenshots.MAX_BYTES):
+async def memory_upload(request: Request, max_bytes: int | None = None):
     """Avoid UploadFile/SpooledTemporaryFile: no pre-release image may touch disk."""
+    from app.services import screenshots
+
+    max_bytes = screenshots.MAX_BYTES if max_bytes is None else max_bytes
     media, options = parse_options_header(request.headers.get("content-type", ""))
     boundary = options.get(b"boundary")
     if media != b"multipart/form-data" or not boundary or len(boundary) > 200:
@@ -55,18 +49,24 @@ async def memory_upload(request: Request, max_bytes: int = screenshots.MAX_BYTES
     state = {"name": "", "headers_size": 0, "ended": False}
 
     def data(chunk, start, end):
+        from app.services import screenshots
+
         limit = min(max_bytes, screenshots.MAX_BYTES) if state["name"] == "file" else 128 * 1024
         if len(current) + end - start > limit:
             screenshots.fail("upload_too_large", "Upload exceeds limit", 413)
         current.extend(chunk[start:end])
 
     def header_field(chunk, start, end):
+        from app.services import screenshots
+
         state["headers_size"] += end - start
         if state["headers_size"] > 8192:
             screenshots.fail("invalid_upload", "Multipart headers exceed limit")
         header_name.extend(chunk[start:end])
 
     def header_data(chunk, start, end):
+        from app.services import screenshots
+
         state["headers_size"] += end - start
         if state["headers_size"] > 8192:
             screenshots.fail("invalid_upload", "Multipart headers exceed limit")
@@ -78,6 +78,8 @@ async def memory_upload(request: Request, max_bytes: int = screenshots.MAX_BYTES
         header_value.clear()
 
     def headers_finished():
+        from app.services import screenshots
+
         _, values = parse_options_header(headers.get(b"content-disposition", b""))
         name = values.get(b"name", b"")
         if name not in {b"file", b"input"} or name.decode() in fields:
@@ -180,6 +182,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
 
     @router.post("/tasks/{task_id}/screenshots", name="screenshot_add", response_model=Result)
     async def ingest(task_id: UUID, request: Request, ctx=Depends(context, scope="function")):
+        from app.services import response_cards as cards
+        from app.services import screenshots
+
         actor = await cards.access(ctx[0], ctx[1], "screenshot:ingest")
         screenshots.ingest_human(actor)
         body, png = await memory_upload(request, settings.max_upload_bytes)
@@ -212,6 +217,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         cursor: UUID | None = None,
         ctx=Depends(context, scope="function"),
     ):
+        from app.services import response_cards as cards
+        from app.services import screenshots
+
         session, actor = ctx
         from app.services.task_access import access as task_access
 
@@ -252,6 +260,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
 
     @router.get("/screenshots/{asset_id}", name="screenshot_show", response_model=Result)
     async def show(asset_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import screenshots
+
         return result("screenshot show", await screenshots.show(ctx[0], ctx[1], asset_id))
 
     @router.post(
@@ -260,6 +270,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def withdraw(
         asset_id: UUID, body: ScreenshotWithdraw, ctx=Depends(context, scope="function")
     ):
+        from app.services import screenshots
+
         return result(
             "screenshot withdraw", await screenshots.withdraw(ctx[0], ctx[1], asset_id, body.reason)
         )
@@ -270,6 +282,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         response_model=Result,
     )
     async def preview_link(rendition_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import screenshots
+
         session, actor = ctx
         session.info["attachment_settings"] = settings
         asset, row = await screenshots.rendition_access(
@@ -308,6 +322,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
 
     @router.get("/screenshot-renditions/{rendition_id}/content", name="screenshot_content")
     async def content(rendition_id: UUID, signature: str, ctx=Depends(context, scope="function")):
+        from app.services import screenshots
+
         session, actor = ctx
         session.info["attachment_settings"] = settings
         asset, row = await screenshots.rendition_access(session, actor, rendition_id)
@@ -359,6 +375,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def annotate(
         asset_id: UUID, body: ScreenshotAnnotate, ctx=Depends(context, scope="function")
     ):
+        from app.services import screenshot_jobs
+
         data, job = await screenshot_jobs.submit_render(ctx[0], ctx[1], asset_id, body, storage)
         await dispatch(ctx[0], ctx[1], job)
         return result("screenshot annotate", data)
@@ -369,6 +387,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def analyze(
         task_id: UUID, body: ScreenshotAnalyzeInput, ctx=Depends(context, scope="function")
     ):
+        from app.services import screenshot_jobs
+
         provider = await resolve(ctx[0]) if resolve else llm
         data, job = await screenshot_jobs.submit_analysis(
             ctx[0], ctx[1], task_id, body, storage, provider, settings
@@ -380,6 +400,7 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def generate_prototype(
         task_id: UUID, body: PrototypeGenerateInput, ctx=Depends(context, scope="function")
     ):
+        from app.services import prototype_generation
         from app.services.sandbox import browser_for
 
         provider = await resolve(ctx[0]) if resolve else llm
@@ -402,6 +423,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def search(
         task_id: UUID, body: VendorSearchInput, ctx=Depends(context, scope="function")
     ):
+        from app.services import vendor_search
+
         data, job = await vendor_search.submit(
             ctx[0], ctx[1], task_id, body, await search_provider()
         )
@@ -414,6 +437,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def simulate_products(
         task_id: UUID, body: ProductSimulationInput, ctx=Depends(context, scope="function")
     ):
+        from app.services import product_simulation
+
         data, job = await product_simulation.submit(
             ctx[0],
             ctx[1],
@@ -434,6 +459,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         response_model=Result,
     )
     async def simulated_resources(task_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import product_simulation
+
         return result(
             "simulated resources",
             await product_simulation.task_marks(ctx[0], ctx[1], task_id),
@@ -443,6 +470,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         "/screenshot-searches/{search_id}", name="evidence_search_show", response_model=Result
     )
     async def show_search(search_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import vendor_search
+
         run = await vendor_search.show(ctx[0], ctx[1], search_id)
         return result("evidence candidates", await vendor_search.view(ctx[0], run))
 
@@ -454,16 +483,22 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def adopt_candidate(
         candidate_id: UUID, body: VendorSearchAdopt, ctx=Depends(context, scope="function")
     ):
+        from app.services import vendor_search
+
         data = await vendor_search.adopt(ctx[0], ctx[1], candidate_id, body)
         return result("evidence adopt", data)
 
     @router.get("/prototype-runs/{prototype_id}", name="prototype_show", response_model=Result)
     async def show_prototype(prototype_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import prototype_generation
+
         row = await prototype_generation.show(ctx[0], ctx[1], prototype_id)
         return result("prototype show", prototype_generation.view(row))
 
     @router.get("/prototype-runs/{prototype_id}/source", name="prototype_source")
     async def prototype_source(prototype_id: UUID, ctx=Depends(context, scope="function")):
+        from app.services import prototype_generation
+
         session, actor = ctx
         row, png = await prototype_generation.source(session, actor, prototype_id, storage)
         audit(
@@ -483,6 +518,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def suggestions(
         analysis_id: UUID, cursor: UUID | None = None, ctx=Depends(context, scope="function")
     ):
+        from app.services import screenshot_jobs
+
         data, items = await screenshot_jobs.suggestions(ctx[0], ctx[1], analysis_id, cursor)
         return result("screenshot suggestions", data, items)
 
@@ -494,6 +531,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def decision_preview(
         task_id: UUID, body: PrototypeDecisionPreviewInput, ctx=Depends(context, scope="function")
     ):
+        from app.services import prototype_decisions
+
         return result(
             "screenshot prototype-decisions preview",
             await prototype_decisions.preview(ctx[0], ctx[1], task_id, body, storage),
@@ -507,6 +546,8 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
     async def decision_apply(
         task_id: UUID, body: PrototypeDecisionBatch, ctx=Depends(context, scope="function")
     ):
+        from app.services import prototype_decisions
+
         return result(
             "screenshot prototype-decisions apply",
             await prototype_decisions.apply(ctx[0], ctx[1], task_id, body, storage),
@@ -518,6 +559,9 @@ def create_router(context, db, storage, queue, settings, llm, resolve, processor
         response_model=Result,
     )
     async def decision_list(task_id: UUID, job: UUID, ctx=Depends(context, scope="function")):
+        from app.services import prototype_decisions
+        from app.services import response_cards as cards
+
         session, actor = ctx
         from app.services.task_access import access as task_access
 

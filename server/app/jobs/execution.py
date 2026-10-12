@@ -22,14 +22,13 @@ from app.models.entities import (
     Job,
     Task,
     UsageRecord,
-    User,
     VendorCall,
 )
 from app.providers.base import ProviderFailure
 from app.providers.calls import current_accounting, current_drafting_input
 from app.schemas.contracts import Cost, ProviderUsage
 from app.schemas.preflight_contracts import CallPlan
-from app.services.auth import ROLE_SCOPES, SCOPES, Identity, membership
+from app.services.auth import HUMAN_SCOPES, SCOPES, Identity, set_actor_context
 
 ADMISSION_STOPS = {"job_call_limit_exceeded"}
 JOB_SCOPES = {
@@ -60,11 +59,6 @@ async def locked_job(session: AsyncSession, job_id: UUID) -> Job | None:
     task_id = await session.scalar(select(Job.task_id).where(Job.id == job_id))
     if task_id is not None:
         await session.scalar(select(Task).where(Task.id == task_id).with_for_update())
-        from app.models.team_workflow import TaskWorkflow
-
-        await session.scalar(
-            select(TaskWorkflow).where(TaskWorkflow.task_id == task_id).with_for_update()
-        )
     job = await session.scalar(select(Job).where(Job.id == job_id).with_for_update())
     if job is not None and job.task_id != task_id:
         raise ProviderFailure("Job task binding changed", code="job_attempt_stopped")
@@ -74,8 +68,8 @@ async def locked_job(session: AsyncSession, job_id: UUID) -> Job | None:
 
 
 async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) -> Identity:
-    """Saved grants are an upper bound, never a substitute for live membership."""
-    if job.actor_user_id is None or not job.actor_scopes or job.actor_kind is None:
+    """Saved grants remain bounded by live token or agent authority."""
+    if not job.actor_scopes or job.actor_kind is None:
         raise ProviderFailure(
             "Resubmit this job with an authorized identity", code="job_actor_required"
         )
@@ -91,22 +85,13 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
         from app.services.bid_preparation import worker_access
 
         return await worker_access(session, job, bind_context=bind_context)
-    member = await membership(session, job.actor_user_id, job.org_id)
-    user = await session.get(User, job.actor_user_id)
-    if user is None or not user.active:
-        raise ProviderFailure("Submitter is no longer active", code="forbidden")
-    scopes = set(job.actor_scopes) & ROLE_SCOPES[member.role]
+    scopes = set(job.actor_scopes) & HUMAN_SCOPES
     if job.actor_token_id is not None:
         token = await session.get(ApiToken, job.actor_token_id)
-        if (
-            token is None
-            or token.user_id != user.id
-            or token.revoked
-            or token.expires_at <= datetime.now(UTC)
-        ):
+        if token is None or token.revoked or token.expires_at <= datetime.now(UTC):
             raise ProviderFailure("Submission token is no longer active", code="forbidden")
         scopes &= set(token.scopes) & SCOPES
-    actor = Identity(user.id, job.org_id, scopes, member.role, job.actor_token_id, job.actor_kind)
+    actor = Identity(scopes=scopes, token_id=job.actor_token_id, actor_kind=job.actor_kind)
     if job.agent_principal_id is not None:
         from app.models.agent import AgentPrincipal
         from app.services.auth import agent_identity
@@ -127,10 +112,8 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
             select(SandboxInput.purpose)
             .join(SandboxRun, SandboxRun.input_id == SandboxInput.id)
             .where(
-                SandboxRun.org_id == job.org_id,
                 SandboxRun.job_id == job.id,
                 SandboxRun.task_id == job.task_id,
-                SandboxInput.org_id == job.org_id,
                 SandboxInput.task_id == job.task_id,
             )
         )
@@ -139,12 +122,12 @@ async def authorized_job(session: AsyncSession, job: Job, *, bind_context=True) 
         actor.require("sandbox:render" if purpose == "prototype_offline" else "sandbox:capture")
     else:
         actor.require(JOB_SCOPES.get(job.kind, "task:read"))
-    if job.task_id is not None:
-        from app.services.task_access import access as task_access
-
-        # The actual initiator is retained; workers receive no human admin recovery.
-        worker = replace(actor, actor_kind="worker", job_id=job.id, run_id=job.run_id)
-        await task_access(session, worker, job.task_id, write=True, bind_context=bind_context)
+    if job.task_id is not None and await session.get(Task, job.task_id) is None:
+        raise ProviderFailure("Task is unavailable", code="not_found")
+    if bind_context:
+        await set_actor_context(
+            session, replace(actor, actor_kind="worker", job_id=job.id, run_id=job.run_id)
+        )
     return actor
 
 
@@ -176,9 +159,9 @@ async def job_cost(session: AsyncSession, job_id: UUID) -> dict:
 
 
 class JobExecution:
-    def __init__(self, settings: Settings, db: Database, org_id: UUID, job_id: UUID, run_id: UUID):
+    def __init__(self, settings: Settings, db: Database, job_id: UUID, run_id: UUID):
         self.settings, self.db = settings, db
-        self.org_id, self.job_id, self.run_id = org_id, job_id, run_id
+        self.job_id, self.run_id = job_id, run_id
         self.stopped: ProviderFailure | None = None
         self.planned_calls = 0
         self.absolute_call_ceiling: int | None = None
@@ -235,7 +218,7 @@ class JobExecution:
         return job
 
     async def heartbeat(self) -> None:
-        async with self.db.transaction(self.org_id) as session:
+        async with self.db.transaction() as session:
             try:
                 await self.owned_job(session)
             except ServiceError as error:
@@ -288,9 +271,9 @@ class JobExecution:
     async def audit_stop(self, action: str, code: str) -> None:
         # The denied admission transaction is already rolled back. Task/Job locks
         # also serialize duplicate error reports from concurrent batches.
-        async with self.db.transaction(self.org_id) as session:
+        async with self.db.transaction() as session:
             job = await locked_job(session, self.job_id)
-            if job is None or job.actor_user_id is None:
+            if job is None:
                 return
             details = {
                 "job_id": str(self.job_id),
@@ -314,12 +297,9 @@ class JobExecution:
                 from app.services.versioned import audit
 
                 actor = Identity(
-                    job.actor_user_id,
-                    job.org_id,
-                    set(job.actor_scopes),
-                    "viewer",
-                    job.actor_token_id,
-                    "worker",
+                    scopes=set(job.actor_scopes),
+                    token_id=job.actor_token_id,
+                    actor_kind="worker",
                     principal_id=job.agent_principal_id,
                     session_id=job.agent_session_id,
                     step_id=job.agent_step_id,
@@ -346,7 +326,7 @@ class JobExecution:
 
     async def _admit_once(self, quote: CallPlan) -> UUID:
         call_id = uuid4()
-        async with self.db.transaction(self.org_id) as session:
+        async with self.db.transaction() as session:
             job = await self.owned_job(session)
             if job.agent_session_id is not None:
                 from app.services.agent_limits import guard_job
@@ -390,7 +370,6 @@ class JobExecution:
             session.add(
                 VendorCall(
                     id=call_id,
-                    org_id=self.org_id,
                     job_id=self.job_id,
                     run_id=self.run_id,
                     task_id=job.task_id,
@@ -407,7 +386,7 @@ class JobExecution:
         return call_id
 
     async def _complete_once(self, call_id: UUID, usage: ProviderUsage) -> None:
-        async with self.db.transaction(self.org_id) as session:
+        async with self.db.transaction() as session:
             # A late receipt remains durable even after cancellation or takeover.
             job = await locked_job(session, self.job_id)
             if job is None:
@@ -431,7 +410,6 @@ class JobExecution:
                 "provider",
                 "version",
                 "provider_config_id",
-                "platform_model_id",
                 "image_count",
             )
             if any(getattr(usage, field) != getattr(quote, field) for field in fields):
@@ -444,14 +422,13 @@ class JobExecution:
                 insert(UsageRecord)
                 .values(
                     id=call_id,
-                    org_id=self.org_id,
                     task_id=job.task_id,
                     job_id=self.job_id,
                     run_id=self.run_id,
                     call_id=call_id,
                     **stored_usage,
                 )
-                .on_conflict_do_nothing(index_elements=["org_id", "job_id", "run_id", "call_id"])
+                .on_conflict_do_nothing(index_elements=["job_id", "run_id", "call_id"])
                 .returning(UsageRecord.id)
             )
             if record_id is not None:
@@ -463,9 +440,7 @@ class JobExecution:
             if job.kind == "card_generate":
                 from app.memory.retrieval import settle_call
 
-                await settle_call(
-                    session, self.org_id, self.job_id, self.run_id, call_id, "completed"
-                )
+                await settle_call(session, self.job_id, self.run_id, call_id, "completed")
 
     async def complete(self, call_id: UUID, usage: ProviderUsage) -> None:
         for attempt in range(3):
@@ -495,10 +470,10 @@ class JobExecution:
 
     async def unknown(self, call_id: UUID) -> None:
         try:
-            async with self.db.transaction(self.org_id) as session:
+            async with self.db.transaction() as session:
                 # Match completion's Task -> Job -> call lock order. Late completion is
-                # allowed even when the original lease or membership has ended.
-                await locked_job(session, self.job_id)
+                # allowed even when the original lease has ended.
+                job = await locked_job(session, self.job_id)
                 await session.execute(
                     update(VendorCall)
                     .where(
@@ -509,11 +484,10 @@ class JobExecution:
                     )
                     .values(state="unknown")
                 )
-                from app.memory.retrieval import settle_call
+                if job is not None and job.kind == "card_generate":
+                    from app.memory.retrieval import settle_call
 
-                await settle_call(
-                    session, self.org_id, self.job_id, self.run_id, call_id, "unknown"
-                )
+                    await settle_call(session, self.job_id, self.run_id, call_id, "unknown")
         except SQLAlchemyError:
             # A failed marker leaves the durable pending call in place.
             # Never replace an accounting stop with a raw pool/driver exception.
@@ -529,7 +503,7 @@ class JobExecution:
         usage exists and the admission cannot represent an unknown dispatch.
         """
         try:
-            async with self.db.transaction(self.org_id) as session:
+            async with self.db.transaction() as session:
                 await locked_job(session, self.job_id)
                 await session.execute(
                     update(VendorCall)
@@ -550,7 +524,7 @@ class JobExecution:
 
     async def finalize_result(self) -> None:
         """Refresh cumulative usage without publishing an obsolete attempt."""
-        async with self.db.transaction(self.org_id) as session:
+        async with self.db.transaction() as session:
             job = await locked_job(session, self.job_id)
             if (
                 job is None

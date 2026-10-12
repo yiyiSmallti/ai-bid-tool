@@ -6,7 +6,6 @@ from sqlalchemy import select
 
 from app.models.attachments import TaskAttachment
 from app.models.entities import AuditLog
-from app.services import task_events
 
 BATCH = 100
 
@@ -14,7 +13,6 @@ BATCH = 100
 def register(app, processor_getter):
     @app.task(name="bid.attachment_invalidate", queue="bid", retry=True)
     async def run(
-        org_id: str,
         action: str,
         request_id: str,
         root_id: str,
@@ -24,7 +22,7 @@ def register(app, processor_getter):
         processor = processor_getter()
         if processor is None:
             raise RuntimeError("Worker processor is not configured")
-        async with processor.db.transaction(UUID(org_id)) as session:
+        async with processor.db.transaction() as session:
             # Only a committed successful mutation can produce this maintenance work.
             receipt = await session.scalar(
                 select(AuditLog.id)
@@ -49,10 +47,11 @@ def register(app, processor_getter):
                     )
                 ).all()
             )
+            from app.services import task_events
+
             for task_id in tasks[:BATCH]:
                 await task_events.append(
                     session,
-                    UUID(org_id),
                     task_id,
                     {"type": "board_changed", "invalidate_all": True},
                 )
@@ -60,7 +59,6 @@ def register(app, processor_getter):
                 await enqueue(
                     processor.queue,
                     session,
-                    org_id=org_id,
                     action=action,
                     request_id=request_id,
                     root_id=root_id,

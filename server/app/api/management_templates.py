@@ -13,7 +13,6 @@ from app.schemas.management_pages import (
     ResourceQuery,
     TemplateDetailQuery,
 )
-from app.services import management_templates as templates
 
 
 def create_router(context, settings):
@@ -27,13 +26,19 @@ def create_router(context, settings):
         return session, actor
 
     def page(command, value, started):
+        from app.services import management_templates as templates
+
         return templates.page_result(command, value, round((time.monotonic() - started) * 1000))
 
     def detail(command, value, started):
+        from app.services import management_templates as templates
+
         return templates.detail_result(command, value, round((time.monotonic() - started) * 1000))
 
     @router.post("/query", name="resource_template_browse", response_model=Result)
     async def query(body: ResourceQuery, ctx=Depends(management_context, scope="function")):
+        from app.services import management_templates as templates
+
         started = time.monotonic()
         session, actor = ctx
         return page(
@@ -47,6 +52,8 @@ def create_router(context, settings):
         revision_id: UUID | None = Query(None),
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_templates as templates
+
         if revision is not None and revision_id is not None:
             templates.fail("invalid_input", "Choose revision or revision_id, not both", 422)
         started = time.monotonic()
@@ -68,6 +75,8 @@ def create_router(context, settings):
     async def history(
         template_id: UUID, body: PageQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.services import management_templates as templates
+
         started = time.monotonic()
         session, actor = ctx
         return page(
@@ -84,6 +93,8 @@ def create_router(context, settings):
         body: ResourceLifecycleSet,
         ctx=Depends(management_context, scope="function"),
     ):
+        from app.services import management_templates as templates
+
         started = time.monotonic()
         session, actor = ctx
         return detail(
@@ -100,6 +111,8 @@ def create_router(context, settings):
     async def lifecycle_history(
         template_id: UUID, body: PageQuery, ctx=Depends(management_context, scope="function")
     ):
+        from app.services import management_templates as templates
+
         started = time.monotonic()
         session, actor = ctx
         return page(

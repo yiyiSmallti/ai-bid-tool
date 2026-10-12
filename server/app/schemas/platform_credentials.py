@@ -1,7 +1,9 @@
-"""Platform credential wire contracts and private resolver interfaces."""
+"""Local service credential contracts and private resolver interfaces."""
+
+from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Annotated, Literal, Protocol, Self
+from typing import TYPE_CHECKING, Annotated, Literal, Protocol, Self
 from urllib.parse import urlsplit
 from uuid import UUID
 
@@ -9,15 +11,16 @@ from pydantic import AwareDatetime, ConfigDict, Field, SecretStr, field_validato
 
 from app.schemas.contracts import CONTRACT_VERSION, Contract, Cost, Result
 
+if TYPE_CHECKING:
+    from app.services.auth import Identity
+
 # Additive commands keep the existing seven-key Result and its published version.
 RESULT_CONTRACT_VERSION = CONTRACT_VERSION
 CredentialName = Annotated[str, Field(pattern=r"^[a-z0-9_]{1,40}$")]
 Revision = Annotated[int, Field(strict=True, ge=1)]
 Fingerprint = Annotated[str, Field(pattern=r"^sha256:[a-f0-9]{16}$")]
 Provider = Literal["anthropic", "openai", "perplexity", "cloudflare"]
-Purpose = Literal[
-    "catalog_llm", "standalone_llm", "vendor_search", "clef_workers_ai", "clef_gateway"
-]
+Purpose = Literal["standalone_llm", "vendor_search", "clef_workers_ai", "clef_gateway"]
 CredentialState = Literal["active", "disabled", "removed"]
 Reason = Literal[
     "setup", "scheduled_rotation", "vendor_revoked", "incident", "retired", "migration"
@@ -46,7 +49,6 @@ ErrorCode = Literal[
     "credential_removed",
     "credential_unreadable",
     "credential_backend_unavailable",
-    "credential_audit_unavailable",
     "credential_env_forbidden",
     "credential_probe_auth_failed",
     "credential_probe_unsupported",
@@ -162,21 +164,10 @@ class CredentialTest(CredentialContract):
     mode: Literal["authentication"] = "authentication"
 
 
-class CatalogConsumer(CredentialContract):
-    kind: Literal["catalog_model"] = "catalog_model"
-    model_id: str
-    model_revision: Revision
-    enabled: bool
-    default: bool
-
-
 class ServiceConsumer(CredentialContract):
     kind: Literal["service"] = "service"
     service: Literal["vendor_search", "standalone_llm", "clef_workers_ai", "clef_gateway"]
     selected: bool
-
-
-Consumer = Annotated[CatalogConsumer | ServiceConsumer, Field(discriminator="kind")]
 
 
 class CredentialView(CredentialSpec):
@@ -188,9 +179,8 @@ class CredentialView(CredentialSpec):
     last_four: str = Field(pattern=r"^[!-~]{4}$")
     created_at: AwareDatetime
     updated_at: AwareDatetime
-    updated_by: str
-    # Catalog references and fixed service selection only; never tenant jobs, orgs or BYOK.
-    consumers: list[Consumer] = Field(default_factory=list)
+    # Fixed service selection only; never job details or provider configuration secrets.
+    consumers: list[ServiceConsumer] = Field(default_factory=list)
 
 
 class CredentialListQuery(CredentialContract):
@@ -241,10 +231,8 @@ class CredentialImportEntry(CredentialCreate):
     @model_validator(mode="after")
     def source_matches_destination(self) -> Self:
         if self.source_env.startswith("BID_PLATFORM_CREDENTIAL_"):
-            if self.purpose != "catalog_llm" or self.source_env != (
-                "BID_PLATFORM_CREDENTIAL_" + self.name.upper()
-            ):
-                raise ValueError("catalog import must preserve its credential name")
+            if self.source_env != "BID_PLATFORM_CREDENTIAL_" + self.name.upper():
+                raise ValueError("credential import must preserve its name")
         elif self.source_env == "BID_PERPLEXITY_API_KEY" and self.purpose != "vendor_search":
             raise ValueError("Perplexity import requires the search purpose")
         elif self.source_env == "BID_LLM_API_KEY" and self.purpose != "standalone_llm":
@@ -262,7 +250,7 @@ class CredentialImportRequest(CredentialContract):
     def unique_names_and_sources(self) -> Self:
         names = [entry.name for entry in self.entries]
         sources = [entry.source_env for entry in self.entries]
-        services = [entry.purpose for entry in self.entries if entry.purpose != "catalog_llm"]
+        services = [entry.purpose for entry in self.entries]
         if (
             len(set(names)) != len(names)
             or len(set(sources)) != len(sources)
@@ -323,7 +311,6 @@ class CredentialAuditDetails(CredentialContract):
     error_code: ErrorCode | None = None
     checked: int | None = Field(default=None, ge=0)
     rewritten: int | None = Field(default=None, ge=0)
-    # Actor, action and timestamp use existing platform_audit_logs columns.
 
 
 class PlatformCredentialEnvelope(CredentialSpec, SecretInput):
@@ -335,21 +322,11 @@ class PlatformCredentialEnvelope(CredentialSpec, SecretInput):
     secret_version: Revision
 
 
-class CatalogResolveTarget(CredentialContract):
-    kind: Literal["catalog_model"] = "catalog_model"
-    model_id: str
-    expected_model_revision: Revision
-    # Service reads the credential name and endpoint from this catalog row, not caller input.
-
-
 class ServiceResolveTarget(CredentialContract):
     kind: Literal["service"] = "service"
     service: Literal["vendor_search", "standalone_llm", "clef_workers_ai", "clef_gateway"]
     credential_id: UUID
-    # The ID comes from the server's selection/queued non-secret identity, never an org request.
-
-
-ResolveTarget = Annotated[CatalogResolveTarget | ServiceResolveTarget, Field(discriminator="kind")]
+    # The ID comes from the server selection or a queued non-secret identity.
 
 
 @dataclass(frozen=True)
@@ -364,16 +341,8 @@ class ResolvedCredential:
     api_key: SecretStr = field(repr=False)
 
 
-@dataclass(frozen=True)
-class PlatformOperator:
-    """Created only after platform.identify; no request can instantiate authority by JSON."""
-
-    email: str
-    session_expires_at: AwareDatetime
-
-
 class CredentialReadiness(CredentialContract):
-    """Internal consumer check; never exposes ciphertext or becomes an org credential view."""
+    """Internal consumer check; never exposes ciphertext."""
 
     credential_id: UUID | None
     state: CredentialState | None
@@ -383,55 +352,45 @@ class CredentialReadiness(CredentialContract):
 
 class PlatformCredentialService(Protocol):
     async def list_credentials(
-        self, actor: PlatformOperator, query: CredentialListQuery
+        self, actor: Identity, query: CredentialListQuery
     ) -> tuple[CredentialListData, list[CredentialView]]: ...
 
-    async def show(self, actor: PlatformOperator, credential_id: UUID) -> CredentialData: ...
+    async def show(self, actor: Identity, credential_id: UUID) -> CredentialData: ...
 
-    async def create(self, actor: PlatformOperator, body: CredentialCreate) -> CredentialData: ...
+    async def create(self, actor: Identity, body: CredentialCreate) -> CredentialData: ...
 
     async def replace(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialReplace
+        self, actor: Identity, credential_id: UUID, body: CredentialReplace
     ) -> CredentialData: ...
 
     async def set_active(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialSetActive
+        self, actor: Identity, credential_id: UUID, body: CredentialSetActive
     ) -> CredentialData: ...
 
     async def remove(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialRemove
+        self, actor: Identity, credential_id: UUID, body: CredentialRemove
     ) -> CredentialData: ...
 
     async def test(
-        self, actor: PlatformOperator, credential_id: UUID, body: CredentialTest
+        self, actor: Identity, credential_id: UUID, body: CredentialTest
     ) -> CredentialProbeData | CredentialErrorData: ...
 
     async def import_env(
-        self, actor: PlatformOperator, body: CredentialImportRequest
+        self, actor: Identity, body: CredentialImportRequest
     ) -> tuple[CredentialImportData, list[CredentialImportItem]]: ...
 
 
 class PlatformCredentialResolver(Protocol):
-    async def readiness(self, target: ResolveTarget) -> CredentialReadiness:
+    async def readiness(self, target: ServiceResolveTarget) -> CredentialReadiness:
         """Read only safe consumer metadata, without decrypting or returning ciphertext."""
         ...
 
-    async def resolve_for_call(self, target: ResolveTarget) -> ResolvedCredential:
+    async def resolve_for_call(self, target: ServiceResolveTarget) -> ResolvedCredential:
         """Read committed state anew; reject missing/disabled/removed/mismatched rows."""
         ...
 
     async def resolve_for_probe(self, probe_id: UUID) -> ResolvedCredential:
-        """Require a live operator-authorized probe bound to one revision; allow disabled."""
-        ...
-
-    async def resolve_for_operator_check(
-        self,
-        actor: PlatformOperator,
-        credential_id: UUID,
-        expected_revision: int,
-        purpose: Literal["import", "activate"],
-    ) -> ResolvedCredential:
-        """Private platform service path; permit disabled, reject removed, never serialize."""
+        """Require a live human-authorized probe bound to one revision; allow disabled."""
         ...
 
 
@@ -466,8 +425,8 @@ class ProviderSecretsCipher(Protocol):
         """Verify binding and preserve payload; None means already encrypted by current key."""
         ...
 
-    def rewrap_org(self, ciphertext: str, *, org_id: UUID, config_id: UUID) -> str | None:
-        """Preserve the existing org/config binding and BYOK value for every historical row."""
+    def rewrap(self, ciphertext: str, *, config_id: UUID) -> str | None:
+        """Preserve the configuration binding and value for every historical revision."""
         ...
 
 
@@ -477,8 +436,8 @@ class RotationReport(CredentialContract):
     scope: Literal["provider-secrets"] = "provider-secrets"
     platform_checked: int = Field(ge=0)
     platform_rewritten: int = Field(ge=0)
-    org_revisions_checked: int = Field(ge=0)
-    org_revisions_rewritten: int = Field(ge=0)
+    provider_revisions_checked: int = Field(ge=0)
+    provider_revisions_rewritten: int = Field(ge=0)
     failed: int = Field(ge=0)
     exit_code: Literal[0, 3, 4, 5]
 
