@@ -20,6 +20,9 @@ def upgrade():
 
 
 REMOVE_SQL = r"""
+-- Deferred foreign-key events queued by the row rewrites below would make the
+-- later ALTER TABLE on the same tables fail with "pending trigger events".
+SET CONSTRAINTS ALL IMMEDIATE;
 DROP TRIGGER task_budget_guard ON public.tasks;
 DROP TRIGGER task_budget_initial_revision ON public.tasks;
 DROP TRIGGER task_budget_consistency ON public.tasks;
